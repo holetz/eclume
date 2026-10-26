@@ -1,16 +1,16 @@
-"""Engine `whisperx-local`: ASR, alinhamento, diarização e embeddings com o WhisperX na GPU.
+"""Engine `whisperx-local`: ASR, alignment, diarization and embeddings with WhisperX on the GPU.
 
-O WhisperX (e com ele torch e pyannote) é importado só dentro de `transcribe`, para que o worker
-e os testes importem este módulo sem as dependências pesadas. As chamadas seguem a API do
-WhisperX 3.8.6, fixado no extra `whisperx`.
+WhisperX (and with it torch and pyannote) is imported only inside `transcribe`, so the worker and
+the tests can import this module without the heavy dependencies. The calls follow the WhisperX
+3.8.6 API, pinned in the `whisperx` extra.
 
-Na GTX 1660 (6 GB, Turing, sem tensor cores) há dois lugares para modelos: o do ASR e o da etapa
-(alinhamento ou diarização). O ASR fica residente entre jobs — o que tira ~20 s de carga de cada
-job curto — enquanto a VRAM livre permitir: antes de carregar o modelo de uma etapa, com menos de
-`resident_min_free_mb` livres, o ASR é descarregado; um OOM numa etapa com o ASR residente o
-descarrega e repete a etapa uma vez. No fim do job o modelo da etapa sai e o ASR fica, até a
-descarga por ociosidade do worker. `keep_asr_resident=False` volta ao lugar único (carregar o
-modelo de uma etapa descarrega o da anterior). O `fp16` puro é recusado (NaN na série 16xx).
+On the GTX 1660 (6 GB, Turing, no tensor cores) there are two slots for models: the ASR one and
+the stage one (alignment or diarization). The ASR stays resident between jobs — which saves ~20 s
+of loading on each short job — while the free VRAM allows: before loading a stage model, with fewer
+than `resident_min_free_mb` free, the ASR is unloaded; an OOM in a stage with the ASR resident
+unloads it and repeats the stage once. At the end of the job the stage model leaves and the ASR
+stays, until the worker's idle unload. `keep_asr_resident=False` goes back to the single slot
+(loading a stage model unloads the previous one). Plain `fp16` is refused (NaN on the 16xx series).
 """
 
 from __future__ import annotations
@@ -52,18 +52,18 @@ SAMPLE_RATE = 16_000
 DEFAULT_MODEL = "large-v3-turbo"
 FALLBACK_MODEL = "medium"
 DEFAULT_COMPUTE_TYPE = "int8_float16"
-# Ordem de recuo quando o backend recusa o compute type pedido (nunca `float16`).
+# Fallback order when the backend refuses the requested compute type (never `float16`).
 COMPUTE_TYPE_FALLBACKS = ("int8", "float32")
 FORBIDDEN_COMPUTE_TYPES = frozenset({"float16"})
 DIARIZATION_MODEL = "pyannote/speaker-diarization-community-1"
-# Tipo de cada modelo residente, no vocabulário de `models_loaded` do contrato v1.
+# Kind of each resident model, in the `models_loaded` vocabulary of contract v1.
 _KINDS = {"asr": "asr", "align": "alignment", "diarize": "diarization"}
-# VRAM livre mínima, com o ASR carregado, para ele continuar residente ao carregar uma etapa: o
-# alinhador (~0,6 GB) ou o pyannote (~1 GB) mais a inferência deles, com folga para o Jellyfin.
+# Minimum free VRAM, with the ASR loaded, for it to stay resident when loading a stage: the
+# aligner (~0.6 GB) or pyannote (~1 GB) plus their inference, with headroom for Jellyfin.
 RESIDENT_MIN_FREE_MB = 2500
 EMBEDDING_MODEL = "pyannote/wespeaker-voxceleb-resnet34-LM"
 
-WARN_NO_TOKEN = "diarization_skipped_no_token"  # noqa: S105 — código de aviso, não segredo
+WARN_NO_TOKEN = "diarization_skipped_no_token"  # noqa: S105 — warning code, not a secret
 WARN_NO_ACCESS = "diarization_skipped_no_access"
 WARN_FALLBACK_MEDIUM = "fallback_medium"
 WARN_BATCH_REDUCED = "batch_size_reduced"
@@ -72,11 +72,11 @@ WARN_ALIGN_UNAVAILABLE = "alignment_unavailable"
 
 
 @contextmanager
-def _hotwords(pipeline: Any, vocabulary: tuple[str, ...]) -> Iterator[None]:  # noqa: ANN401 — pipeline do WhisperX
-    """Os termos da conta como `hotwords` do ASR só durante a transcrição.
+def _hotwords(pipeline: Any, vocabulary: tuple[str, ...]) -> Iterator[None]:  # noqa: ANN401 — WhisperX pipeline
+    """The account terms as the ASR's `hotwords`, only during the transcription.
 
-    O WhisperX lê `pipeline.options` a cada chamada, então o modelo residente não recarrega; as
-    opções originais voltam ao sair (mesmo em erro), e o termo de uma conta não chega à seguinte.
+    WhisperX reads `pipeline.options` on every call, so the resident model does not reload; the
+    original options come back on exit (even on error), and one account's term never reaches the next.
     """
     original = getattr(pipeline, "options", None)
     if not vocabulary or original is None or not dataclasses.is_dataclass(original):
@@ -94,11 +94,11 @@ def _noop(_stage: str, _pct: float) -> None:
 
 
 class WhisperXLocalEngine:
-    """Pipeline WhisperX num único processo CUDA."""
+    """WhisperX pipeline in a single CUDA process."""
 
     name = "whisperx-local"
 
-    def __init__(  # noqa: PLR0913 — opções da engine, todas nomeadas
+    def __init__(  # noqa: PLR0913 — engine options, all named
         self,
         *,
         hf_token: str | None = None,
@@ -108,11 +108,11 @@ class WhisperXLocalEngine:
         keep_asr_resident: bool = True,
         resident_min_free_mb: int = RESIDENT_MIN_FREE_MB,
     ) -> None:
-        """`hf_token` libera a diarização; sem ele o job transcreve com um locutor só.
+        """`hf_token` enables diarization; without it the job transcribes with a single speaker.
 
-        `batch_size` fixa o lote inicial do ASR; `None` o escolhe pela VRAM livre.
-        `keep_asr_resident` mantém o ASR carregado entre as etapas e entre jobs, enquanto houver
-        `resident_min_free_mb` livres; `False` é o lugar único de antes.
+        `batch_size` fixes the ASR's initial batch; `None` picks it from the free VRAM.
+        `keep_asr_resident` keeps the ASR loaded between stages and between jobs, while
+        `resident_min_free_mb` is free; `False` is the former single slot.
         """
         self.hf_token = hf_token
         self.device = device
@@ -120,23 +120,23 @@ class WhisperXLocalEngine:
         self.keep_asr_resident = keep_asr_resident
         self.resident_min_free_mb = resident_min_free_mb
         self.vram = vram if vram is not None else VramMonitor()
-        # Um lugar por papel ("asr" e "stage"): {papel: (chave, objeto, (tipo, nome, carregado em, VRAM))}.
-        # Trocado por atribuição inteira: o heartbeat lê de outra thread.
+        # One slot per role ("asr" and "stage"): {role: (key, object, (kind, name, loaded at, VRAM))}.
+        # Replaced by whole assignment: the heartbeat reads it from another thread.
         self._slots: dict[str, tuple[tuple[Any, ...], Any, tuple[str, str, str, int | None]]] = {}
 
-    # -- modelo residente -------------------------------------------------------------------
+    # -- resident model -------------------------------------------------------------------
 
-    def _load(self, key: tuple[Any, ...], loader: Any, name: str) -> Any:  # noqa: ANN401 — objetos do WhisperX
+    def _load(self, key: tuple[Any, ...], loader: Any, name: str) -> Any:  # noqa: ANN401 — WhisperX objects
         role = "asr" if key[0] == "asr" else "stage"
         current = self._slots.get(role)
         if current is not None and current[0] == key:
             return current[1]
         self._unload_role(role)
         if role == "asr" or not self.keep_asr_resident:
-            # Lugar único: o modelo novo tira o outro. O ASR também tira a etapa, que não é mais usada.
+            # Single slot: the new model evicts the other. The ASR also evicts the stage, which is no longer used.
             self._unload_role("stage" if role == "asr" else "asr")
         elif not self._room_for_stage():
-            logger.info("VRAM livre abaixo de %d MB: descarregando o ASR residente", self.resident_min_free_mb)
+            logger.info("Free VRAM below %d MB: unloading the resident ASR", self.resident_min_free_mb)
             self._unload_role("asr")
         before = self.vram.used_mb()
         model = loader()
@@ -147,7 +147,7 @@ class WhisperXLocalEngine:
         return model
 
     def _room_for_stage(self) -> bool:
-        """Cabe o modelo de uma etapa com o ASR residente? Sem NVML (sem medida), cabe."""
+        """Does a stage model fit with the ASR resident? Without NVML (no measure), it fits."""
         free = self.vram.free_mb()
         return free is None or free >= self.resident_min_free_mb
 
@@ -162,26 +162,26 @@ class WhisperXLocalEngine:
         return True
 
     def loaded_models(self) -> list[dict[str, Any]]:
-        """Os modelos residentes na GPU (o ASR e o da etapa, no máximo), para o heartbeat do worker."""
+        """The models resident on the GPU (the ASR and the stage one, at most), for the worker heartbeat."""
         return [
             {"name": name, "kind": kind, "loaded_at": loaded_at, "vram_mb": vram_mb}
             for _key, _model, (kind, name, loaded_at, vram_mb) in self._slots.values()
         ]
 
     def unload(self) -> None:
-        """Descarrega todos os modelos residentes e devolve a VRAM ao driver."""
+        """Unload every resident model and give the VRAM back to the driver."""
         self._unload_role("stage")
         self._unload_role("asr")
 
-    def _stage(self, run: Callable[[], Any]) -> Any:  # noqa: ANN401 — o resultado da etapa
-        """Roda uma etapa; num OOM com o ASR residente, descarrega o ASR e repete uma vez."""
+    def _stage(self, run: Callable[[], Any]) -> Any:  # noqa: ANN401 — the stage result
+        """Run a stage; on an OOM with the ASR resident, unload the ASR and repeat once."""
         try:
             return run()
         except EngineError as exc:
             if exc.code != OUT_OF_MEMORY or "asr" not in self._slots:
                 raise
-        # Fora do `except`: o `exc` já morreu e não segura o frame da etapa com o modelo que estourou.
-        logger.warning("OOM na etapa com o ASR residente; repetindo sem ele")
+        # Outside the `except`: `exc` is already gone and does not hold the stage frame with the model that blew up.
+        logger.warning("OOM in the stage with the ASR resident; repeating without it")
         self._unload_role("stage")
         self._unload_role("asr")
         return run()
@@ -194,7 +194,7 @@ class WhisperXLocalEngine:
         options: EngineOptions,
         progress: ProgressFn | None = None,
     ) -> EngineResult:
-        """Roda ASR → alinhamento → diarização/embeddings sobre o arquivo."""
+        """Run ASR → alignment → diarization/embeddings over the file."""
         progress = progress or _noop
         whisperx = importlib.import_module("whisperx")
         warnings: list[str] = []
@@ -202,14 +202,14 @@ class WhisperXLocalEngine:
         try:
             audio = whisperx.load_audio(str(audio_path))
         except Exception as exc:
-            raise EngineError(AUDIO_DECODE_FAILED, f"falha ao decodificar o áudio: {exc}") from exc
+            raise EngineError(AUDIO_DECODE_FAILED, f"failed to decode the audio: {exc}") from exc
         duration_s = len(audio) / SAMPLE_RATE
 
         try:
             with self.vram.track() as peak:
                 result, model, compute_type, batch_size = self._asr(whisperx, audio, options, progress, warnings)
                 progress("asr", 100.0)
-                # Sem idioma pedido, o WhisperX detecta; o alinhador é o do idioma detectado.
+                # With no requested language, WhisperX detects it; the aligner is the one for the detected language.
                 options = dataclasses.replace(options, language=options.language or result.get("language") or "pt")
                 aligned, align_model = self._stage(lambda: self._align(whisperx, audio, result, options, warnings))
                 progress("align", 100.0)
@@ -218,12 +218,12 @@ class WhisperXLocalEngine:
                 )
                 progress("diarize", 100.0)
         except BaseException as exc:
-            # A falha em voo ainda segura os frames de `_align`/`_diarize` com o modelo da etapa.
+            # The in-flight failure still holds the frames of `_align`/`_diarize` with the stage model.
             _clear_frames(exc)
             raise
         finally:
             if self.keep_asr_resident:
-                # O ASR fica para o próximo job; a VRAM da etapa volta ao host, com sucesso ou falha.
+                # The ASR stays for the next job; the stage's VRAM goes back to the host, on success or failure.
                 self._unload_role("stage")
 
         segments = _to_segments(result.get("segments", []))
@@ -247,7 +247,7 @@ class WhisperXLocalEngine:
     def _compute_types(self, options: EngineOptions, warnings: list[str]) -> list[str]:
         requested = options.compute_type or DEFAULT_COMPUTE_TYPE
         if requested in FORBIDDEN_COMPUTE_TYPES:
-            logger.warning("compute_type %s recusado na GTX 16xx; usando %s", requested, DEFAULT_COMPUTE_TYPE)
+            logger.warning("compute_type %s refused on the GTX 16xx; using %s", requested, DEFAULT_COMPUTE_TYPE)
             warnings.append(WARN_FLOAT16_REJECTED)
             requested = DEFAULT_COMPUTE_TYPE
         return [requested, *(c for c in COMPUTE_TYPE_FALLBACKS if c != requested)]
@@ -261,12 +261,12 @@ class WhisperXLocalEngine:
                     lambda ct=compute_type: whisperx.load_model(model, self.device, compute_type=ct, language=language),
                     model,
                 )
-            except ValueError as exc:  # o CTranslate2 recusa o compute type com ValueError
-                logger.warning("compute_type %s indisponível: %s", compute_type, exc)
+            except ValueError as exc:  # CTranslate2 refuses the compute type with ValueError
+                logger.warning("compute_type %s unavailable: %s", compute_type, exc)
                 last_error = exc
                 continue
             return pipeline, compute_type
-        raise EngineError(ASR_FAILED, f"nenhum compute_type utilizável: {last_error}")
+        raise EngineError(ASR_FAILED, f"no usable compute_type: {last_error}")
 
     def _asr(
         self,
@@ -280,16 +280,16 @@ class WhisperXLocalEngine:
         fallback = options.fallback_model or FALLBACK_MODEL
         models = [requested] if requested == fallback else [requested, fallback]
         compute_types = self._compute_types(options, warnings)
-        # `ECLUME_BATCH_SIZE` (operador do host) vence o lote da configuração do admin.
+        # `ECLUME_BATCH_SIZE` (host operator) wins over the admin configuration's batch.
         first_batch = self.batch_size or options.batch_size or initial_batch_size(self.vram.free_mb())
 
         for model in models:
             if model == fallback and model != requested:
-                logger.warning("OOM persistente com %s; caindo para %s", requested, fallback)
+                logger.warning("Persistent OOM with %s; falling back to %s", requested, fallback)
                 warnings.append(WARN_FALLBACK_MEDIUM)
             batch = first_batch
             while True:
-                pipeline = None  # o `_load_asr` também pode estourar: nenhum modelo da volta anterior sobrevive
+                pipeline = None  # `_load_asr` can also blow up: no model from the previous round survives
                 try:
                     pipeline, compute_type = self._load_asr(whisperx, model, compute_types, options.language)
                     with _hotwords(pipeline, options.vocabulary):
@@ -303,19 +303,19 @@ class WhisperXLocalEngine:
                     raise
                 except Exception as exc:
                     if not is_oom(exc):
-                        raise EngineError(ASR_FAILED, f"falha no ASR: {exc}") from exc
+                        raise EngineError(ASR_FAILED, f"ASR failed: {exc}") from exc
                 else:
                     return result, model, compute_type, batch
-                # Só o OOM chega aqui, já fora do `except`: o traceback morreu com o `exc` e não segura o modelo.
+                # Only the OOM gets here, already outside the `except`: the traceback died with `exc` and does not hold the model.
                 pipeline = None
                 self.unload()
                 if batch == 1:
                     break
                 batch = max(1, batch // 2)
-                logger.warning("OOM no ASR (%s); tentando batch_size=%d", model, batch)
+                logger.warning("OOM in the ASR (%s); trying batch_size=%d", model, batch)
                 if WARN_BATCH_REDUCED not in warnings:
                     warnings.append(WARN_BATCH_REDUCED)
-        raise EngineError(OUT_OF_MEMORY, f"VRAM insuficiente mesmo com batch_size=1 e o modelo {fallback}")
+        raise EngineError(OUT_OF_MEMORY, f"Insufficient VRAM even with batch_size=1 and the {fallback} model")
 
     def _align(
         self,
@@ -329,23 +329,23 @@ class WhisperXLocalEngine:
             align_model, metadata = self._load(
                 ("align", options.language),
                 lambda: whisperx.load_align_model(language_code=options.language, device=self.device),
-                _align_model_name(options.language) or f"alinhamento ({options.language})",
+                _align_model_name(options.language) or f"alignment ({options.language})",
             )
-        except ValueError as exc:  # idioma sem modelo de alinhamento padrão
-            logger.warning("sem alinhamento para %s: %s", options.language, exc)
+        except ValueError as exc:  # language with no default alignment model
+            logger.warning("no alignment for %s: %s", options.language, exc)
             warnings.append(WARN_ALIGN_UNAVAILABLE)
             return result, None
         except Exception as exc:
-            raise _stage_error(ALIGNMENT_FAILED, "alinhamento", exc) from exc
+            raise _stage_error(ALIGNMENT_FAILED, "alignment", exc) from exc
         try:
             aligned = whisperx.align(
                 result["segments"], align_model, metadata, audio, self.device, return_char_alignments=False
             )
         except Exception as exc:
-            raise _stage_error(ALIGNMENT_FAILED, "alinhamento", exc) from exc
+            raise _stage_error(ALIGNMENT_FAILED, "alignment", exc) from exc
         return aligned, _align_model_name(options.language)
 
-    def _diarize(  # noqa: PLR0913, PLR0917 — etapa do pipeline recebe o estado do job explicitamente
+    def _diarize(  # noqa: PLR0913, PLR0917 — pipeline stage receives the job state explicitly
         self,
         whisperx: Any,  # noqa: ANN401
         audio: Any,  # noqa: ANN401
@@ -359,8 +359,8 @@ class WhisperXLocalEngine:
         model_name = options.diarization_model or DIARIZATION_MODEL
         if not self.hf_token:
             logger.warning(
-                "sem token do Hugging Face: transcrevendo sem diarização (um locutor). "
-                "Defina HF_TOKEN ou ECLUME_HF_TOKEN_FILE e aceite os termos de %s.",
+                "no Hugging Face token: transcribing without diarization (a single speaker). "
+                "Set HF_TOKEN or ECLUME_HF_TOKEN_FILE and accept the terms of %s.",
                 model_name,
             )
             warnings.append(WARN_NO_TOKEN)
@@ -376,10 +376,10 @@ class WhisperXLocalEngine:
             )
         except Exception as exc:
             if not _is_access_denied(exc):
-                raise _stage_error(DIARIZATION_FAILED, "diarização", exc) from exc
+                raise _stage_error(DIARIZATION_FAILED, "diarization", exc) from exc
             logger.warning(
-                "sem acesso a %s com o token atual (termos do modelo não aceitos?): transcrevendo "
-                "sem diarização (um locutor). Erro: %s",
+                "no access to %s with the current token (model terms not accepted?): transcribing "
+                "without diarization (a single speaker). Error: %s",
                 model_name,
                 exc,
             )
@@ -396,7 +396,7 @@ class WhisperXLocalEngine:
             diarize_df, embeddings = output if options.embeddings else (output, None)
             result = whisperx.assign_word_speakers(diarize_df, result, fill_nearest=True)
         except Exception as exc:
-            raise _stage_error(DIARIZATION_FAILED, "diarização", exc) from exc
+            raise _stage_error(DIARIZATION_FAILED, "diarization", exc) from exc
         return result, embeddings, model_name
 
 
@@ -414,11 +414,10 @@ _ACCESS_MARKERS = ("401", "403", "gated", "authorized list", "restricted")
 
 
 def _is_access_denied(exc: BaseException) -> bool:
-    """Sem acesso ao modelo gated: token recusado ou termos do modelo não aceitos.
+    """No access to the gated model: token refused or model terms not accepted.
 
-    Num 401/403 o pyannote 4 só imprime o erro e devolve `None` em `Pipeline.from_pretrained`, e
-    o WhisperX então falha em `None.to(device)`; os demais casos chegam como erro do
-    huggingface_hub.
+    On a 401/403 pyannote 4 only prints the error and returns `None` from `Pipeline.from_pretrained`,
+    and WhisperX then fails on `None.to(device)`; the other cases arrive as a huggingface_hub error.
     """
     seen: BaseException | None = exc
     while seen is not None:
@@ -434,7 +433,7 @@ def _is_access_denied(exc: BaseException) -> bool:
 
 
 def _clear_frames(exc: BaseException) -> None:
-    """Solta os locais dos frames da cadeia da exceção (o modelo da etapa entre eles); o traceback segue legível."""
+    """Release the locals of the frames in the exception chain (the stage model among them); the traceback stays readable."""
     pending: list[BaseException | None] = [exc]
     seen: set[int] = set()
     while pending:
@@ -448,8 +447,8 @@ def _clear_frames(exc: BaseException) -> None:
 
 def _stage_error(code: str, stage: str, exc: Exception) -> EngineError:
     if is_oom(exc):
-        return EngineError(OUT_OF_MEMORY, f"VRAM insuficiente na {stage}: {exc}")
-    return EngineError(code, f"falha na {stage}: {exc}")
+        return EngineError(OUT_OF_MEMORY, f"Insufficient VRAM in {stage}: {exc}")
+    return EngineError(code, f"{stage} failed: {exc}")
 
 
 def _score(value: Any) -> float | None:  # noqa: ANN401
