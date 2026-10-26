@@ -408,7 +408,9 @@ def test_diarization_failure_with_a_token_fails_the_job(monkeypatch: pytest.Monk
         type("GatedRepoError", (Exception,), {})("access denied"),
     ],
 )
-def test_without_access_to_the_gated_model_degrades(monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX, error: Exception):
+def test_without_access_to_the_gated_model_degrades(
+    monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX, error: Exception
+):
     class NoAccess:
         def __init__(self, **_kw: Any) -> None:
             raise error
@@ -491,9 +493,7 @@ def test_oom_in_the_stage_frees_the_stage_before_repeating(
     assert "alignment" not in spy.snapshots[0], spy.snapshots
 
 
-@pytest.mark.parametrize(
-    ("stage", "code"), [("alignment", "alignment_failed"), ("diarization", "diarization_failed")]
-)
+@pytest.mark.parametrize(("stage", "code"), [("alignment", "alignment_failed"), ("diarization", "diarization_failed")])
 def test_failing_stage_leaves_the_gpu(
     monkeypatch: pytest.MonkeyPatch, spy: EmptyCacheSpy, fake: FakeWhisperX, stage: str, code: str
 ):
