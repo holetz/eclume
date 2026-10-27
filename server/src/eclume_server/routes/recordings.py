@@ -1,4 +1,4 @@
-"""Gravações do usuário: listar, obter, editar, excluir, áudio e retranscrever."""
+"""The user's recordings: list, get, edit, delete, audio and retranscribe."""
 
 from __future__ import annotations
 
@@ -114,10 +114,10 @@ async def list_recordings(
     person_tag: Many = None,
     awaiting: Annotated[list[Awaiting] | None, Query()] = None,
 ) -> dict[str, Any]:
-    """A biblioteca: por intervalo de `recorded_at` e filtros (OU no mesmo filtro, E entre filtros).
+    """The library: by `recorded_at` range and filters (OR within a filter, AND across filters).
 
-    Os atributos de pessoa (`person_*`) valem para um mesmo participante: alguém ligado a um locutor
-    da gravação que cumpre todos eles.
+    The person attributes (`person_*`) apply to one and the same participant: someone linked to a
+    speaker of the recording who meets all of them.
     """
     library = Library(
         since,
@@ -139,7 +139,7 @@ async def list_recordings(
 
 @router.get("/recordings/{recording_id}")
 async def get_recording(recording_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Gravação e estado do job."""
+    """Recording and job state."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await get_visible(conn, recording_id)
     return (await render(ctx, principal.user_id, [row]))[0]
@@ -147,10 +147,11 @@ async def get_recording(recording_id: UUID, principal: Reader, ctx: Ctx) -> dict
 
 @router.patch("/recordings/{recording_id}")
 async def update_recording(recording_id: UUID, body: RecordingPatch, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Edita os metadados (listas e `metadata` substituem o valor inteiro).
+    """Edits the metadata (lists and `metadata` replace the whole value).
 
-    Escolher o tipo de agenda (origem `edited`) reaplica o padrão de título e as tags padrão e abre
-    um resumo automático novo pelas instruções dele; `null` tira o tipo e devolve a escolha à detecção.
+    Choosing the agenda type (source `edited`) reapplies the title pattern and the default tags and
+    opens a new automatic summary from its instructions; `null` removes the type and hands the choice
+    back to detection.
     """
     values = body.model_dump(exclude_unset=True)
     if not values:
@@ -168,7 +169,7 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
         if "collection_ids" in values:
             await check_collections(conn, values["collection_ids"])
             values["collection_ids"] = list(dict.fromkeys(values["collection_ids"]))
-            # O usuário mexeu nas coleções: o agente não as muda mais.
+            # The user touched the collections: the agent no longer changes them.
             values["collections_origin"] = "edited"
         now = datetime.now(UTC)
         if values:
@@ -176,7 +177,7 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
                 update(t.recordings).where(t.recordings.c.id == recording_id).values(**values, updated_at=now)
             )
             await mark_edited(conn, recording_id, principal.user_id, values)
-        # Título, data e tags aparecem na transcrição: `?since=` precisa enxergar a mudança.
+        # Title, date and tags appear in the transcript: `?since=` must see the change.
         await conn.execute(
             update(t.transcripts).where(t.transcripts.c.recording_id == recording_id).values(updated_at=now)
         )
@@ -190,22 +191,22 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
 
 @router.delete("/recordings/{recording_id}", status_code=204)
 async def delete_recording(recording_id: UUID, principal: Deleter, ctx: Ctx) -> Response:
-    """Exclui a gravação e tudo o que é dela: transcrição, versões do resumo, chat, marcadores e áudio.
+    """Deletes the recording and everything it owns: transcript, summary versions, chat, markers and audio.
 
-    As FKs levam os filhos em cascata; um job ainda na fila encontra a gravação apagada e não faz nada.
+    The FKs cascade to the children; a job still in the queue finds the recording deleted and does nothing.
     """
     await delete_recording_of(ctx, principal.user_id, recording_id)
     return Response(status_code=204)
 
 
 def audio_deleted() -> ApiProblemError:
-    """410 — o áudio foi apagado pela retenção; a transcrição segue."""
+    """410 — the audio was deleted by retention; the transcript remains."""
     return ApiProblemError(410, "audio_deleted", "O áudio desta gravação foi apagado pela política de retenção.")
 
 
 @router.get("/recordings/{recording_id}/audio", status_code=302)
 async def get_audio(recording_id: UUID, request: Request, principal: Reader, ctx: Ctx) -> RedirectResponse:
-    """Redireciona para uma URL temporária e assinada do áudio, que aceita `Range`."""
+    """Redirects to a temporary signed URL of the audio, which accepts `Range`."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await get_visible(conn, recording_id)
     if row["audio_deleted_at"] is not None:
@@ -226,7 +227,7 @@ async def stream_audio(
     sig: str | None = None,
     range_header: Annotated[str | None, Header(alias="Range")] = None,
 ) -> StreamingResponse:
-    """Serve o áudio (URL assinada por `GET .../audio`), com suporte a `Range` para o player."""
+    """Serves the audio (URL signed by `GET .../audio`), with `Range` support for the player."""
     if (
         expires is None
         or not sig
@@ -263,7 +264,7 @@ async def stream_audio(
 async def retranscribe(
     recording_id: UUID, principal: Writer, ctx: Ctx, body: RetranscribeRequest | None = None
 ) -> dict[str, Any]:
-    """Transcreve de novo com a configuração atual; a transcrição sobe de `revision`."""
+    """Transcribes again with the current configuration; the transcript's `revision` goes up."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await lock_recording(conn, recording_id)
         if row["job_state"] in {"queued", "running"}:
@@ -284,14 +285,14 @@ async def retranscribe(
 
 @router.post("/recordings/{recording_id}/cancel", status_code=202)
 async def cancel_recording_transcription(recording_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Cancela a transcrição em curso ou na fila; o worker GPU para no próximo ponto de checagem."""
+    """Cancels the running or queued transcription; the GPU worker stops at its next checkpoint."""
     row = await cancel_transcription(ctx, principal.user_id, recording_id)
     return (await render(ctx, principal.user_id, [row]))[0]
 
 
 @router.post("/recordings/{recording_id}/continue")
 async def continue_without_names(recording_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Solta a gravação parada à espera dos nomes dos locutores: a cadeia segue sem eles."""
+    """Releases the recording held waiting for speaker names: the chain proceeds without them."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await get_visible(conn, recording_id)
         revision = await release(conn, recording_id, CONTINUED)
