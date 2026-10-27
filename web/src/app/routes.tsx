@@ -6,10 +6,10 @@ import { NotFoundPage } from './NotFoundPage'
 import { RequireSession } from './RequireSession'
 import { RootError, RouteError } from './RouteError'
 
-// A biblioteca e o login vão no bundle inicial; as outras áreas carregam sob demanda, cada uma no
-// seu chunk (o react-markdown dos resumos é o mais pesado; o conversor do import carrega com o modal).
-// O `preload` carrega o chunk antes da rota montar: os testes o chamam no `beforeAll` (`preloadRoute`),
-// fora do tempo do `findBy`.
+// The library and the login go in the initial bundle; the other areas load on demand, each in
+// its own chunk (the summaries' react-markdown is the heaviest; the import converter loads with the modal).
+// `preload` loads the chunk before the route mounts: the tests call it in `beforeAll` (`preloadRoute`),
+// outside the `findBy` time.
 const named = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => {
   let loading: Promise<{ default: ComponentType }> | null = null
   const preload = () => (loading ??= load().then((module) => ({ default: module[name] })))
@@ -18,7 +18,7 @@ const named = <K extends string>(load: () => Promise<Record<K, ComponentType>>, 
 
 type LazyPage = ReturnType<typeof named>
 
-/** Os `preload` das páginas sob demanda de uma rota, no `handle` dela. */
+/** The `preload`s of a route's on-demand pages, in its `handle`. */
 export interface RouteHandle {
   preload?: () => Promise<unknown>
 }
@@ -49,7 +49,7 @@ const SignupPage = named(() => import('../features/auth/SignupPage'), 'SignupPag
 const ResetPasswordPage = named(() => import('../features/auth/ResetPasswordPage'), 'ResetPasswordPage')
 const RecordingPage = named(() => import('../features/transcript/RecordingPage'), 'RecordingPage')
 
-/** A rota de uma página sob demanda: o `Suspense` com "Carregando…" e o `preload` no `handle`. */
+/** The route of an on-demand page: the `Suspense` with "Carregando…" and the `preload` in the `handle`. */
 function page(Page: LazyPage): Pick<RouteObject, 'element' | 'handle'> {
   return {
     element: (
@@ -61,20 +61,20 @@ function page(Page: LazyPage): Pick<RouteObject, 'element' | 'handle'> {
   }
 }
 
-// A mesma árvore serve o `createBrowserRouter` do app e o `createMemoryRouter` dos testes.
-// Dois níveis de erro: a raiz cobre as rotas fora do shell com página inteira; a rota sem caminho
-// dentro do `RequireSession` mostra o erro no `Outlet`, com o shell de pé.
+// The same tree serves the app's `createBrowserRouter` and the tests' `createMemoryRouter`.
+// Two error levels: the root covers the routes outside the shell with a full page; the pathless route
+// inside `RequireSession` shows the error in the `Outlet`, with the shell up.
 export const routes: RouteObject[] = [
   {
     errorElement: <RootError />,
     children: [
       { path: '/entrar', element: <LoginPage /> },
       { path: '/cadastro', ...page(SignupPage) },
-      // O link que o admin gera: o segredo vem no fragmento, lido antes de qualquer redirecionamento.
+      // The link the admin generates: the secret comes in the fragment, read before any redirect.
       { path: '/redefinir-senha', ...page(ResetPasswordPage) },
-      // Quem lê o QR com a câmera comum cai aqui, sem sessão.
+      // Whoever reads the QR with the ordinary camera lands here, without a session.
       { path: '/parear', ...page(PairPage) },
-      // O painel admin fica fora da sessão do usuário: conta, login e guarda próprios.
+      // The admin panel stays outside the user session: its own account, login and guard.
       { path: '/admin/entrar', ...page(AdminSignInPage) },
       { path: '/admin/*', ...page(AdminRoutes) },
       {
@@ -85,12 +85,12 @@ export const routes: RouteObject[] = [
             children: [
               { index: true, element: <LibraryPage /> },
               { path: '/gravacoes/:id', ...page(RecordingPage) },
-              // Importar é o modal da biblioteca; a rota antiga abre o modal.
+              // Importing is the library's modal; the old route opens the modal.
               { path: '/importar', element: <Navigate to="/?importar=1" replace /> },
               { path: '/pessoas', ...page(PeoplePage) },
               { path: '/pessoas/:id', ...page(PersonPage) },
               { path: '/busca', ...page(SearchPage) },
-              // O Agente: a conversa (nova ou guardada), a lista de todas e as habilidades; Perguntas era o nome antigo.
+              // The Agent: the conversation (new or saved), the list of all and the skills; Perguntas was the old name.
               { path: '/agente/conversas', ...page(ConversationsPage) },
               { path: '/agente/habilidades', ...page(SkillsPage) },
               { path: '/agente/:sessionId?', ...page(AgentPage) },

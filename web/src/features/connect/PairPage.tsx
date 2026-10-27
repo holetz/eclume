@@ -3,15 +3,15 @@ import { usePageTitle } from '../../app/usePageTitle'
 import { AuthLayout } from '../auth/AuthLayout'
 import styles from './Connect.module.css'
 
-/** "K7Q4MX" vira "K7Q-4MX", como a tela do código mostra. */
+/** "K7Q4MX" becomes "K7Q-4MX", as the code screen shows it. */
 function formatCode(code: string): string {
   const clean = code.replace(/[^0-9a-z]/gi, '').toUpperCase()
   return clean.length === 6 ? `${clean.slice(0, 3)}-${clean.slice(3)}` : clean
 }
 
 /**
- * Onde cai quem lê o QR com a câmera comum, sem o app: explica o que fazer. Pública e sem chamada à
- * API; o código só vale dentro do app.
+ * Where someone lands after reading the QR with the regular camera, without the app: it explains what
+ * to do. Public and with no API call; the code is only valid inside the app.
  */
 export function PairPage() {
   usePageTitle('Parear o celular')

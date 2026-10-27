@@ -4,7 +4,7 @@ import { hasOpenDialog } from './dialogStack'
 import { HelpContext, isEditableTarget, type HelpContextValue } from './help'
 import { HelpDrawer } from './HelpDrawer'
 
-/** Guarda a gaveta de ajuda: `?` fora de campos editáveis abre, Esc fecha e devolve o foco. */
+/** Holds the help drawer: `?` outside editable fields opens it, Esc closes it and returns focus. */
 export function HelpProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [pageKey, setPageKey] = useState<HelpPageKey | null>(null)
@@ -23,7 +23,7 @@ export function HelpProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      // Com um diálogo aberto, o Esc é dele e a gaveta não abre por baixo do modal.
+      // With a dialog open, Esc belongs to it and the drawer does not open beneath the modal.
       if (hasOpenDialog()) return
       if (event.key === 'Escape' && open) {
         closeHelp()

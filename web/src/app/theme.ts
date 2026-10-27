@@ -1,5 +1,5 @@
-// Preferência de tema: segue o sistema por padrão; a escolha explícita fica no localStorage. O
-// Design System só tem o escuro sob `data-theme="dark"`, então "Do sistema" também grava o atributo.
+// Theme preference: follows the system by default; the explicit choice stays in localStorage. The
+// Design System only has dark under `data-theme="dark"`, so "Do sistema" also writes the attribute.
 export type ThemePreference = 'system' | 'light' | 'dark'
 
 const STORAGE_KEY = 'eclume-tema'
@@ -10,12 +10,12 @@ export function readThemePreference(): ThemePreference {
     const value = localStorage.getItem(STORAGE_KEY)
     if (value === 'light' || value === 'dark') return value
   } catch {
-    // Armazenamento bloqueado: segue o sistema.
+    // Storage blocked: follow the system.
   }
   return 'system'
 }
 
-/** O tema do sistema; sem `matchMedia` (jsdom), claro. */
+/** The system theme; without `matchMedia` (jsdom), light. */
 function systemTheme(): 'light' | 'dark' {
   return typeof window.matchMedia === 'function' && window.matchMedia(DARK_QUERY).matches ? 'dark' : 'light'
 }
@@ -26,11 +26,11 @@ export function applyThemePreference(preference: ThemePreference): void {
     if (preference === 'system') localStorage.removeItem(STORAGE_KEY)
     else localStorage.setItem(STORAGE_KEY, preference)
   } catch {
-    // Armazenamento bloqueado: a escolha vale só nesta página.
+    // Storage blocked: the choice holds only on this page.
   }
 }
 
-/** Acompanha a troca de tema do sistema enquanto a preferência for "Do sistema". Devolve o cancelamento. */
+/** Follows the system theme change while the preference is "Do sistema". Returns the cancellation. */
 export function watchSystemTheme(): () => void {
   if (typeof window.matchMedia !== 'function') return () => {}
   const query = window.matchMedia(DARK_QUERY)

@@ -31,8 +31,8 @@ function countsNote(action: AgentAction): string {
 }
 
 /**
- * O cartão de confirmação de uma ação proposta pelo Agente: o que será feito e em quais gravações.
- * Nada muda antes de Confirmar; depois, o cartão acompanha a execução e mostra o resultado por alvo.
+ * The confirmation card of an action the Agent proposes: what will be done and to which recordings.
+ * Nothing changes before Confirmar; afterwards, the card follows the run and shows each target's result.
  */
 export function ActionCard({ action }: { action: AgentAction }) {
   const query = useAgentAction(action)

@@ -150,7 +150,7 @@ once.
 ## 7. `claude -p` on the server
 
 This production's summarization agents use the `claude-cli` provider, this host's choice (the
-matrix of the four providers is in [server-agentes.md](../standards/code/server-agentes.md#o-que-cada-provider-exige)).
+matrix of the four providers is in [server-agentes.md](../standards/code/server-agentes.md#what-each-provider-requires)).
 The CLI that runs in the worker comes from the image built with `ECLUME_CLAUDE_CLI=1` in the deploy's `.env.prod`;
 the host's one only serves to generate the token.
 

@@ -1,43 +1,61 @@
 # eclume
 
-Serviço de transcrição institucional e auto-hospedado. Grava reuniões, transcreve na GPU do
-servidor, separa e reconhece os locutores, organiza as transcrições por pessoa e as resume com o
-agente que o admin da plataforma configurar. Cada usuário tem o próprio espaço, sem organização.
+A self-hosted institutional transcription service. eclume records work meetings, transcribes them
+on your own server's GPU, separates and recognizes the speakers, organizes the transcripts by
+person and summarizes them with the agents the platform admin configures. Every user has their own
+space; there is no organization layer.
 
-> Estado: em produção no host da instituição (`https://192.168.15.199:8443`); o runbook está em
-> [docs/project/deploy-producao.md](docs/project/deploy-producao.md). A direção do produto está em
-> [docs/vision/](docs/vision/index.md); o épico `holetz/eclume#1` é o registro da primeira construção.
+## Features
 
-## Peças
+- **Capture on any device.** A desktop app for Windows and Linux detects meetings, records them,
+  takes voice notes and syncs from the system tray; an Android app works as a portable microphone
+  that keeps recording with the screen locked and marks moments; the web app imports audio and
+  video files, converting them locally before upload.
+- **Automatic processing.** Preprocessing, transcription with word alignment and diarization
+  (WhisperX on CUDA), then agenda type detection, field filling and a summary written by a language
+  model provider the admin registers.
+- **Recognize people by voice.** Speakers are linked to people in each user's directory, by hand
+  or by voiceprint suggestions.
+- **A library in time.** Recordings on a week, month or list calendar, with full-text search,
+  people, collections, tags and filters.
+- **Summary-centered recordings.** Summaries are versioned and editable by hand or through an
+  adjustment chat, and the Agent answers questions across the whole library.
+- **Integrations.** A versioned API contract (OpenAPI v1) with personal access tokens, an MCP
+  server for assistants, and a synced folder on the desktop.
+- **Privacy by design.** Each account sees only its own data, the admin operates the platform
+  without access to recordings, transcripts or summaries, and nothing records without showing it.
 
-- **server/**: API FastAPI com contas de usuário isoladas (cadastro aberto), conta de admin separada, PATs,
-  gravações, pessoas e busca.
-- **worker-gpu/**: WhisperX (ASR, alinhamento, diarização e embeddings de locutor) em CUDA.
-- **web/**: interface do usuário e painel de administração, com conversão local de áudio e vídeo
-  antes do upload.
-- **desktop/**: app Tauri para Windows e Linux (macOS fora enquanto o repositório for privado).
-  Detecta reuniões, grava, sincroniza e fica na bandeja do sistema.
-- **mobile/**: app Tauri 2 para Android, um microfone portátil que grava com o serviço em primeiro
-  plano, marca momentos e sincroniza com o servidor.
-- **engines/**: a interface de engine de ASR, compartilhada pelo server e pelo worker.
-- **contracts/**: OpenAPI v1 e o schema da transcrição, que são o contrato com integrações como o
-  lumea.
-- **deploy/**: composes de desenvolvimento e de teste (Postgres com pgvector, Redis e MinIO), o de
-  produção no host GPU e os scripts de deploy, backup e release do desktop.
-- **docs/**: o conhecimento do projeto, num bundle OKF.
+## Architecture
 
-## Auto-hospedagem
+eclume is a monorepo with one pillar per top-level folder:
 
-Para subir o eclume num servidor seu, com ou sem GPU, siga
+- **server/**: FastAPI API with isolated user accounts (open sign-up), a separate admin account,
+  PATs, recordings, people and search.
+- **worker-gpu/**: WhisperX (ASR, alignment, diarization and speaker embeddings) on CUDA.
+- **web/**: the user interface and the admin panel, with local audio and video conversion before
+  upload.
+- **desktop/**: a Tauri app for Windows and Linux that detects meetings, records, syncs and lives
+  in the system tray.
+- **mobile/**: a Tauri 2 app for Android, a portable microphone that records with a foreground
+  service, marks moments and syncs with the server.
+- **engines/**: the ASR engine interface, shared by the server and the worker.
+- **contracts/**: the OpenAPI v1 and the transcript schema, the contract with external
+  integrations.
+- **deploy/**: the development and test composes (Postgres with pgvector, Redis and MinIO), the
+  production compose for the GPU host, and the deploy, backup and desktop release scripts.
+- **docs/**: the project's knowledge, as an OKF bundle.
+
+## Self-hosting
+
+To run eclume on your own server, with or without a GPU, follow
 [docs/how-to/auto-hospedar.md](docs/how-to/auto-hospedar.md).
 
-## Desenvolvimento
+## Development
 
-Do clone a uma gravação transcrita numa máquina sem GPU:
-[docs/how-to/desenvolver-sem-gpu.md](docs/how-to/desenvolver-sem-gpu.md). Os comandos de build,
-lint e teste de cada peça estão em
-[docs/standards/code/monorepo.md](docs/standards/code/monorepo.md).
+From a fresh clone to a transcribed recording on a machine without a GPU:
+[docs/how-to/desenvolver-sem-gpu.md](docs/how-to/desenvolver-sem-gpu.md). The build, lint and test
+commands of each pillar are in [docs/standards/code/monorepo.md](docs/standards/code/monorepo.md).
 
-## Licença
+## License
 
-MIT. Veja [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

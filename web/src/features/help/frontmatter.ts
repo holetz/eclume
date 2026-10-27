@@ -1,9 +1,9 @@
-// Leitor do cabeçalho dos artigos de ajuda: só o subconjunto que eles usam, sem dependência.
+// Reader for the help articles' header: only the subset they use, with no dependency.
 //   ---
-//   chave: valor
-//   lista: [a, b, c]
+//   key: value
+//   list: [a, b, c]
 //   ---
-//   corpo em Markdown
+//   Markdown body
 
 export type FrontmatterValue = string | string[]
 
@@ -14,7 +14,7 @@ interface Frontmatter {
 
 const LINE = /^([a-z][a-z0-9_-]*):\s*(.*)$/
 
-/** Separa cabeçalho e corpo; lança com o nome do arquivo se o cabeçalho estiver inválido. */
+/** Splits header and body; throws with the file name when the header is invalid. */
 export function parseFrontmatter(raw: string, file: string): Frontmatter {
   const text = raw.replace(/\r\n?/g, '\n')
   if (!text.startsWith('---\n')) throw new Error(`${file}: o artigo precisa começar com o cabeçalho entre "---".`)

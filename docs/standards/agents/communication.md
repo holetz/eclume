@@ -26,7 +26,7 @@ This repo declares its language as **one BCP-47 tag**, on a single line of its *
 file (`CLAUDE.md`):
 
 ```
-Language: pt-BR — the contract is /docs/standards/agents/communication.md
+Language: en — the contract is /docs/standards/agents/communication.md
 ```
 
 That line carries **a value and a citation, and nothing else**. It never paraphrases the rule below:

@@ -38,8 +38,8 @@
   overflow-wrap: anywhere;
 }
 
-/* Em telas estreitas a tabela rola no próprio contêiner, sem rolar a página. */
-/* O `position` segura o `.visually-hidden` do cabeçalho dentro do contêiner que rola. */
+/* On narrow screens the table scrolls inside its own container, without scrolling the page. */
+/* The `position` keeps the header's `.visually-hidden` inside the scrolling container. */
 .tableWrap {
   position: relative;
   overflow-x: auto;

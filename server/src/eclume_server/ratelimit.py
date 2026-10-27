@@ -1,13 +1,13 @@
-"""Limite de tentativas nas rotas que conferem credencial, com contadores no Redis.
+"""Attempt limits on the routes that check a credential, with counters in Redis.
 
-Cada rota conta por IP numa janela fixa de 1 minuto (`attempts`). Os logins por senha contam também
-as **falhas** por conta (`check_login`, `login_failed`, `login_succeeded`), comuns ao navegador e ao
-aparelho: por par (conta, IP), e um teto global da conta que não barra IP que já entrou nela. Assim,
-as tentativas de um IP qualquer não trancam a dona da conta. A troca de código de pareamento tem
-ainda um teto global (`PAIR_GLOBAL_FACTOR`): trocar de IP não multiplica os chutes. O cadastro tem,
-além do teto por minuto, um teto diário de contas criadas por IP (`check_signups`). As duas rotas
-públicas da redefinição de senha (conferir e redefinir) somam as tentativas na mesma chave por IP.
-O IP vem do uvicorn, que com `--proxy-headers` confia no `X-Forwarded-For` do Caddy.
+Each route counts per IP in a fixed 1-minute window (`attempts`). Password logins also count
+**failures** per account (`check_login`, `login_failed`, `login_succeeded`), shared by the browser and
+the device: per (account, IP) pair, plus a global account ceiling that does not block an IP that already
+logged into it. So the attempts of an arbitrary IP do not lock out the account owner. The pairing
+code exchange also has a global ceiling (`PAIR_GLOBAL_FACTOR`): switching IPs does not multiply the
+guesses. Signup has, besides the per-minute ceiling, a daily ceiling of accounts created per IP
+(`check_signups`). The two public password-reset routes (check and reset) add their attempts to the
+same per-IP key. The IP comes from uvicorn, which with `--proxy-headers` trusts Caddy's `X-Forwarded-For`.
 """
 
 from __future__ import annotations
@@ -33,11 +33,11 @@ SIGNUP_WINDOW_SECONDS = 24 * 60 * 60
 
 
 async def count_attempt(ctx: AppContext, key: str, limit: int) -> None:
-    """Conta a tentativa em `eclume:rl:<key>` e responde 429 além de `limit` na janela."""
+    """Count the attempt in `eclume:rl:<key>` and answer 429 beyond `limit` in the window."""
     redis = ctx.queue.pool
     full_key = f"eclume:rl:{key}"
     count = await redis.incr(full_key)
-    # NX: a janela começa na primeira tentativa, e uma chave órfã de TTL também ganha o seu.
+    # NX: the window starts at the first attempt, and a key orphaned of its TTL also gets one.
     await redis.expire(full_key, WINDOW_SECONDS, nx=True)
     if count > limit:
         retry_after = max(await redis.ttl(full_key), 1)
@@ -45,7 +45,7 @@ async def count_attempt(ctx: AppContext, key: str, limit: int) -> None:
 
 
 def client_ip(request: Request) -> str:
-    """O IP do cliente (com `--proxy-headers`, o que o Caddy repassou)."""
+    """The client IP (with `--proxy-headers`, the one Caddy passed on)."""
     return request.client.host if request.client else "desconhecido"
 
 
@@ -55,10 +55,10 @@ def _keys(scope: str, email: str, ip: str) -> tuple[str, str, str]:
 
 
 async def check_login(ctx: AppContext, scope: str, email: str, ip: str) -> None:
-    """429 antes de conferir a senha, se o par (conta, IP) ou a conta passaram do teto de falhas.
+    """429 before checking the password, when the (account, IP) pair or the account exceeded the failure ceiling.
 
-    `scope` é `user` (navegador e aparelho) ou `admin`. O teto da conta não vale para IP que entrou
-    nela com sucesso nos últimos 30 dias.
+    `scope` is `user` (browser and device) or `admin`. The account ceiling does not apply to an IP that
+    logged into it successfully in the last 30 days.
     """
     redis = ctx.queue.pool
     pair, account, known = _keys(scope, email, ip)
@@ -73,7 +73,7 @@ async def check_login(ctx: AppContext, scope: str, email: str, ip: str) -> None:
 
 
 async def login_failed(ctx: AppContext, scope: str, email: str, ip: str) -> None:
-    """Soma a falha no par (conta, IP), janela de 15 min, e na conta, janela de 1 h."""
+    """Add the failure to the (account, IP) pair, 15 min window, and to the account, 1 h window."""
     redis = ctx.queue.pool
     pair, account, _ = _keys(scope, email, ip)
     for key, window in ((pair, FAILURE_WINDOW_SECONDS), (account, ACCOUNT_WINDOW_SECONDS)):
@@ -82,7 +82,7 @@ async def login_failed(ctx: AppContext, scope: str, email: str, ip: str) -> None
 
 
 async def login_succeeded(ctx: AppContext, scope: str, email: str, ip: str) -> None:
-    """Zera as falhas do par e guarda o IP como conhecido da conta por 30 dias."""
+    """Reset the pair's failures and keep the IP as known to the account for 30 days."""
     redis = ctx.queue.pool
     pair, _, known = _keys(scope, email, ip)
     now = time.time()
@@ -97,7 +97,7 @@ def _signup_key(ip: str) -> str:
 
 
 async def check_signups(ctx: AppContext, ip: str) -> None:
-    """429 se o IP já criou o teto diário de contas (janela móvel de 24 h)."""
+    """429 if the IP already created the daily ceiling of accounts (sliding 24 h window)."""
     redis = ctx.queue.pool
     key = _signup_key(ip)
     now = time.time()
@@ -109,7 +109,7 @@ async def check_signups(ctx: AppContext, ip: str) -> None:
 
 
 async def signup_created(ctx: AppContext, ip: str) -> None:
-    """Conta o cadastro criado no teto diário do IP."""
+    """Count the created signup against the IP's daily ceiling."""
     redis = ctx.queue.pool
     key = _signup_key(ip)
     await redis.zadd(key, {str(uuid4()): time.time()})
@@ -121,9 +121,9 @@ async def _ttl(ctx: AppContext, key: str) -> int:
 
 
 def attempts(route: str, *, global_factor: int | None = None) -> Callable[[Request, AppContext], Awaitable[None]]:
-    """Dependência que conta a tentativa em `eclume:rl:<route>:<ip>` e responde 429 além do limite.
+    """Dependency that counts the attempt in `eclume:rl:<route>:<ip>` and answers 429 beyond the limit.
 
-    Com `global_factor`, conta também `eclume:rl:<route>:*`, com teto `global_factor` vezes o por IP.
+    With `global_factor`, it also counts `eclume:rl:<route>:*`, with a ceiling `global_factor` times the per-IP one.
     """
 
     async def dependency(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> None:

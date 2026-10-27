@@ -1,7 +1,7 @@
 ---
 type: standard
-title: Estrutura do app web
-description: O app web do eclume (web/) fala com a API por um cliente gerado do contrato, na mesma origem e com sessão por cookie e CSRF double-submit; o painel de administração é um app à parte, com login, sessão e moldura próprios; organiza-se em shell com navegação agrupada, o item Perguntar em destaque no topo e gaveta de ajuda, features (biblioteca no tempo com o modal Importar, gravação centrada no resumo, pessoas, busca, coleções, organizar, regras com a visão do processamento automático, minhas configurações agrupadas, central de ajuda, admin) e um motor de upload sem React; e é testado com vitest sobre as fixtures do contrato e com um E2E Playwright contra o mock Prism.
+title: Web app structure
+description: The eclume web app (web/) talks to the API through a client generated from the contract, on the same origin and with a cookie session and double-submit CSRF; the admin panel is a separate app, with its own login, session and frame; it is organized into a shell with grouped navigation, the Ask item highlighted at the top and a help drawer, features (library timeline with the Import modal, recording centered on the summary, people, search, collections, organize, rules with the view of automatic processing, grouped my settings, help center, admin) and an upload engine without React; and it is tested with vitest over the contract fixtures and with a Playwright E2E against the Prism mock.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
 timestamp: 2026-10-06
@@ -11,835 +11,835 @@ source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, 
 maintainer: holetz
 ---
 
-# Estrutura do app web
+# Web app structure
 
-O `web/` é uma SPA React + Vite + TS, servida estática e atrás de login. O conteúdo vem da API
-v1 ([contrato-v1.md](../api/contrato-v1.md)); a conversão de mídia vem da biblioteca de
+`web/` is a React + Vite + TS SPA, served statically and behind a login. The content comes from API
+v1 ([contrato-v1.md](../api/contrato-v1.md)); media conversion comes from the library of
 [formato-audio-upload.md](formato-audio-upload.md).
 
-## Cliente da API: gerado, nunca escrito à mão
+## API client: generated, never handwritten
 
-- `npm run gen:api` gera `src/api/schema.gen.ts` a partir de `contracts/openapi-v1.bundled.yaml`
-  com `openapi-typescript`. O arquivo é versionado, e a CI roda `gen:api -- --check`: mudou o
-  contrato, regenere. **Nenhum tipo da API é declarado à mão**; derive de `Schemas['X']` ou de
+- `npm run gen:api` generates `src/api/schema.gen.ts` from `contracts/openapi-v1.bundled.yaml`
+  with `openapi-typescript`. The file is versioned, and CI runs `gen:api -- --check`: the contract
+  changed, regenerate. **No API type is declared by hand**; derive from `Schemas['X']` or from
   `operations[...]`.
-- As chamadas passam por `api` (`src/api/client.ts`, `openapi-fetch`), tipadas pelo caminho.
-  `unwrap()` devolve os dados ou lança `ApiError` com o `Problem`; a UI decide por
-  `problem.code` e mostra `errorMessage()`, nunca o `title`.
-- `quota_exceeded` (holetz/eclume#98) tem mensagem por `quota`, com o `limit` do problem (bytes em
-  GB/MB): tamanho do arquivo, armazenamento cheio, uploads ao mesmo tempo e pedidos ao agente em
-  24 h. O Importar mostra essa mensagem no item recusado, como os demais erros de upload.
-- O `openapi-typescript` declara `typescript ^5` como peer; o `package.json` o sobrepõe com
-  `overrides` para usar o TS do projeto.
+- Calls go through `api` (`src/api/client.ts`, `openapi-fetch`), typed by path.
+  `unwrap()` returns the data or throws `ApiError` with the `Problem`; the UI decides by
+  `problem.code` and shows `errorMessage()`, never the `title`.
+- `quota_exceeded` (holetz/eclume#98) has a message per `quota`, with the problem's `limit` (bytes in
+  GB/MB): file size, storage full, simultaneous uploads and requests to the agent in
+  24 h. Import shows that message on the refused item, like the other upload errors.
+- `openapi-typescript` declares `typescript ^5` as a peer; `package.json` overrides it with
+  `overrides` to use the project's TS.
 
-## Origem única, sessão e CSRF
+## Single origin, session and CSRF
 
-- O app chama `/api/v1/...` relativo à própria origem, com `credentials: 'same-origin'`. Em
-  produção o Caddy serve web e API na mesma origem; em dev, o `vite.config.ts` faz proxy de
-  `/api` para `ECLUME_API_URL` (padrão: o mock em `http://127.0.0.1:4010`). Não há CORS.
-- A sessão do usuário é o cookie `eclume_session`, aberto por `POST /auth/login`. A do painel
-  admin é outra, `eclume_admin_session` (só viaja para `/api/v1/admin`), aberta por
-  `POST /admin/auth/login`. O `csrfMiddleware` copia para `X-CSRF-Token`, em todo método
-  mutável, o cookie da área: `eclume_admin_csrf` quando a URL começa por `/api/v1/admin/`,
-  `eclume_csrf` nos demais casos (`isAdminUrl`).
-- Estado da sessão do usuário = `useMe()` (`GET /me`; 401 vira `null`). O `unauthorizedMiddleware`
-  zera essa sessão no cache a cada 401 fora do login e **fora de `/api/v1/admin/`** (o 401 do
-  painel é da sessão de admin), e a guarda `RequireSession` leva a `/entrar?volta=<rota>`; `volta`
-  só aceita caminho interno.
-- **A sessão não cai por um refetch.** `RequireSession` e `RequireAdmin` só mostram "Tentar de
-  novo" com `isError` **e sem dado em cache**: um refetch de `/me` (ou `/admin/me`) que falha sobre
-  a sessão carregada mantém o shell, a fila de importação, o rascunho do resumo e o chat. A sessão
-  só cai por 401.
-- **Faixa de conexão** (`ConnectionBanner`, no topo do `AppShell`): sem rede (`onlineManager`) ou
-  com `/me` falhando sobre a sessão em cache, um `.alert-warning` com `role="status"` diz "Sem
-  conexão com o servidor. O que está na tela pode estar desatualizado; tentando de novo…", relê
-  `/me` a cada 10 s, dobrando a cada falha até 60 s, enquanto o servidor não responde, e some sozinha. Consultas e mutações já
-  pausam sem rede e retomam na volta (o `networkMode` padrão); a faixa só dá o motivo.
-- **O que é de uma conta não atravessa para outra** (`app/accountScope.ts`): a aba guarda o id da
-  última conta (`eclume-conta` no `sessionStorage`, marcado pelo login, pelo cadastro e pela
-  sessão que já vinha do cookie). Entrar com outra conta remove as consultas fora de `['admin']`
-  (menos a sessão recém-lida) e os rascunhos `eclume-resumo-rascunho:*`. Um 401 com a sessão
-  aberta remove as consultas fora de `['admin']` e zera `['me']`, sem apagar rascunhos: a mesma
-  conta que volta os reencontra. O `useLogout` usa a mesma remoção.
+- The app calls `/api/v1/...` relative to its own origin, with `credentials: 'same-origin'`. In
+  production Caddy serves web and API on the same origin; in dev, `vite.config.ts` proxies
+  `/api` to `ECLUME_API_URL` (default: the mock at `http://127.0.0.1:4010`). There is no CORS.
+- The user session is the `eclume_session` cookie, opened by `POST /auth/login`. The admin panel's
+  is another one, `eclume_admin_session` (it only travels to `/api/v1/admin`), opened by
+  `POST /admin/auth/login`. `csrfMiddleware` copies into `X-CSRF-Token`, on every mutating
+  method, the area's cookie: `eclume_admin_csrf` when the URL starts with `/api/v1/admin/`,
+  `eclume_csrf` otherwise (`isAdminUrl`).
+- User session state = `useMe()` (`GET /me`; 401 becomes `null`). `unauthorizedMiddleware`
+  clears that session in the cache on every 401 outside login and **outside `/api/v1/admin/`** (the
+  panel's 401 belongs to the admin session), and the `RequireSession` guard leads to `/entrar?volta=<rota>`; `volta`
+  only accepts an internal path.
+- **The session does not drop because of a refetch.** `RequireSession` and `RequireAdmin` only show "Tentar de
+  novo" (Try again) with `isError` **and no cached data**: a refetch of `/me` (or `/admin/me`) that fails over
+  the loaded session keeps the shell, the import queue, the summary draft and the chat. The session
+  only drops on a 401.
+- **Connection banner** (`ConnectionBanner`, at the top of `AppShell`): without network (`onlineManager`) or
+  with `/me` failing over the cached session, an `.alert-warning` with `role="status"` says "Sem
+  conexão com o servidor. O que está na tela pode estar desatualizado; tentando de novo…", rereads
+  `/me` every 10 s, doubling on each failure up to 60 s, while the server does not answer, and disappears by itself. Queries and mutations already
+  pause without network and resume when it returns (the default `networkMode`); the banner only gives the reason.
+- **What belongs to one account does not cross into another** (`app/accountScope.ts`): the tab keeps the id of the
+  last account (`eclume-conta` in `sessionStorage`, set by login, by sign-up and by the
+  session that already came from the cookie). Signing in with another account removes the queries outside `['admin']`
+  (except the session just read) and the `eclume-resumo-rascunho:*` drafts. A 401 with the session
+  open removes the queries outside `['admin']` and clears `['me']`, without deleting drafts: the same
+  account that comes back finds them again. `useLogout` uses the same removal.
 
-## Markdown gerado e CSP
+## Generated Markdown and CSP
 
-- **Markdown gerado por LLM nunca carrega imagem.** O resumo (`SummaryDoc`), a cópia para colar
-  (`copy-summary.ts`), as respostas do Agente (`AgentPage`) e a pré-visualização do tipo de agenda
-  (`AgendaTypePreview`) passam ao `react-markdown` os `components` de `src/app/markdown.tsx`
-  (`SAFE_MARKDOWN`, ou `safeMarkdown(próprios)` quando a tela troca outros elementos, que nunca
-  sobrepõem `img` nem `a`): `![alt](url)` vira um link de texto (`alt`, ou a URL sem ele) e todo
-  link abre em outra aba com `rel="noopener noreferrer"`. Um resumo envenenado não faz o navegador
-  buscar uma URL de fora (rastreio, `Referer`). A ajuda, de conteúdo próprio, fica fora disso.
-- **A CSP é das regras do SPA na imagem da borda** (`deploy/web.Caddyfile`, `eclume-edge`): `default-src 'self'`,
+- **LLM-generated Markdown never loads an image.** The summary (`SummaryDoc`), the copy for pasting
+  (`copy-summary.ts`), the Agent's answers (`AgentPage`) and the agenda type preview
+  (`AgendaTypePreview`) pass to `react-markdown` the `components` of `src/app/markdown.tsx`
+  (`SAFE_MARKDOWN`, or `safeMarkdown(próprios)` when the screen swaps other elements, which never
+  override `img` nor `a`): `![alt](url)` becomes a text link (`alt`, or the URL without it) and every
+  link opens in another tab with `rel="noopener noreferrer"`. A poisoned summary does not make the browser
+  fetch an outside URL (tracking, `Referer`). Help, with its own content, stays out of this.
+- **The CSP belongs to the SPA rules in the edge image** (`deploy/web.Caddyfile`, `eclume-edge`): `default-src 'self'`,
   `img-src 'self' data: blob:`, `media-src 'self' blob:`, `connect-src 'self'`,
   `script-src 'self' 'wasm-unsafe-eval'`, `worker-src 'self' blob:`, `frame-ancestors 'none'`,
-  `base-uri 'none'` e `object-src 'none'`, com `X-Content-Type-Options: nosniff` e
-  `Referrer-Policy: no-referrer`. O app respeita: nenhum script ou estilo inline no `index.html`,
-  nenhum recurso de outra origem (fontes e ícones vêm dos assets), o áudio de `/media` na mesma
-  origem e o ffmpeg.wasm dos assets do Vite. Recurso novo de fora pede mudar a CSP junto. A única
-  exceção é a referência da API (`/referencia-api.html` e `/referencia-api/*`, HTML do Redoc gerado
-  no build): o mesmo `script-src 'self'`, mas `style-src 'self' 'unsafe-inline'`, porque o Redoc
-  injeta o CSS em `<style>`; norma em [contrato-v1.md](../api/contrato-v1.md). O Caddy
-  de borda repete `nosniff`, `Referrer-Policy` e `frame-ancestors 'none'` (sem sobrescrever a CSP
-  do web) para `/api`, `/media`, `/mcp` e `/downloads`.
+  `base-uri 'none'` and `object-src 'none'`, with `X-Content-Type-Options: nosniff` and
+  `Referrer-Policy: no-referrer`. The app complies: no inline script or style in `index.html`,
+  no resource from another origin (fonts and icons come from the assets), the `/media` audio on the same
+  origin and ffmpeg.wasm from the Vite assets. A new outside resource requires changing the CSP with it. The only
+  exception is the API reference (`/referencia-api.html` and `/referencia-api/*`, Redoc HTML generated
+  in the build): the same `script-src 'self'`, but `style-src 'self' 'unsafe-inline'`, because Redoc
+  injects the CSS in `<style>`; the standard is in [contrato-v1.md](../api/contrato-v1.md). The edge
+  Caddy repeats `nosniff`, `Referrer-Policy` and `frame-ancestors 'none'` (without overriding the web's
+  CSP) for `/api`, `/media`, `/mcp` and `/downloads`.
 
-## Estrutura de pastas
+## Folder structure
 
-| Pasta | O que tem |
+| Folder | What it holds |
 |---|---|
-| `src/api/` | cliente gerado, `client.ts`, `problem.ts` |
-| `src/app/` | shell, marca (`Brand.tsx`), navegação (`nav.ts`), rotas (`routes.tsx`), `PageHead`, 404, gaveta de ajuda, sessão, providers, tema, e as peças do DS `Dialog`, `ConfirmDialog`, `MenuButton`, `CopyValue`, `HelpHint` e `storage.ts` |
-| `src/features/<área>/` | página, componentes, CSS Module e testes de cada área |
-| `src/upload/` | motor de upload multipart, sem React |
-| `src/styles/` | `global.css` (entrada), `fonts.css`, `eclume.css` (cópia fiel do DS) e `app.css` (produto): [web-design-system.md](web-design-system.md) |
-| `src/test/` | dublê de `fetch`, fixtures tipadas e `renderApp` |
-| `src/lib/media-convert/` | biblioteca de conversão, autocontida |
-| `src/shared/` | o que mais de uma feature usa e não tem dono de domínio: `format.ts` (estado e etapa da gravação, datas, horas, durações, tamanhos e o relógio do áudio) e o `Switch` do DS |
+| `src/api/` | generated client, `client.ts`, `problem.ts` |
+| `src/app/` | shell, brand (`Brand.tsx`), navigation (`nav.ts`), routes (`routes.tsx`), `PageHead`, 404, help drawer, session, providers, theme, and the DS pieces `Dialog`, `ConfirmDialog`, `MenuButton`, `CopyValue`, `HelpHint` and `storage.ts` |
+| `src/features/<área>/` | page, components, CSS Module and tests of each area |
+| `src/upload/` | multipart upload engine, without React |
+| `src/styles/` | `global.css` (entry), `fonts.css`, `eclume.css` (faithful copy of the DS) and `app.css` (product): [web-design-system.md](web-design-system.md) |
+| `src/test/` | `fetch` double, typed fixtures and `renderApp` |
+| `src/lib/media-convert/` | conversion library, self-contained |
+| `src/shared/` | what more than one feature uses and has no domain owner: `format.ts` (recording state and step, dates, times, durations, sizes and the audio clock) and the DS `Switch` |
 
-- **Fronteiras entre features** (`src/test/boundaries.test.ts`, um teste da suíte): o grafo de
-  imports entre `src/features/*` (código de produção, sem testes) não tem ciclo; só o próprio
-  admin e `app/routes.tsx` importam `features/admin/` (o `eslint.config.js` veta o mesmo com
-  `no-restricted-imports`); e `src/shared/` não importa de `features/` nem de `app/`. Peça com
-  dono mora na dona (o `PersonCombobox`, com o seu CSS, em `features/people/`); importar o
-  `queries.ts` de outra feature continua permitido enquanto não fechar ciclo. Sem barril: quem
-  usa importa do arquivo que define.
+- **Boundaries between features** (`src/test/boundaries.test.ts`, a test of the suite): the import
+  graph between `src/features/*` (production code, without tests) has no cycle; only the
+  admin itself and `app/routes.tsx` import `features/admin/` (`eslint.config.js` forbids the same with
+  `no-restricted-imports`); and `src/shared/` imports neither from `features/` nor from `app/`. A piece with
+  an owner lives in its owner (`PersonCombobox`, with its CSS, in `features/people/`); importing another
+  feature's `queries.ts` is still allowed as long as it does not close a cycle. No barrel: whoever
+  uses it imports from the file that defines it.
 
-- **Rotas em pt-BR** (`/entrar`, `/cadastro`, `/redefinir-senha`, `/parear`, `/gravacoes/:id`, `/pessoas`,
+- **Routes in pt-BR** (`/entrar`, `/cadastro`, `/redefinir-senha`, `/parear`, `/gravacoes/:id`, `/pessoas`,
   `/pessoas/:id`, `/busca`, `/agente`, `/agente/:sessionId`, `/agente/conversas`, `/agente/habilidades`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
   `/config/ambiente`, `/tokens`, `/app-desktop`, `/app-movel`, `/ajuda`, `/ajuda/:slug`, `/admin/entrar`, `/admin/*`),
-  nenhuma começando por `/mcp` (o endereço do servidor MCP); `/importar` redireciona para
-  `/?importar=1` (o modal) e `/perguntas`, o nome antigo do Agente, para `/agente`. Os parâmetros também são pt-BR:
-  - biblioteca (`/`): `visao=semana|mes|lista`, `data=AAAA-MM-DD` (qualquer dia do período),
+  none starting with `/mcp` (the MCP server's address); `/importar` redirects to
+  `/?importar=1` (the modal) and `/perguntas`, the Agent's old name, to `/agente`. The parameters are pt-BR too:
+  - library (`/`): `visao=semana|mes|lista`, `data=AAAA-MM-DD` (any day of the period),
     `tipo=reuniao|nota`, `situacao=pronta|processando|falhou`, `tag`, `pessoa`, `colecao`,
-    `campo=<field_id>:<valor>` (todos repetíveis) e `importar=1`;
-  - gravação: `t=<ms>`;
-  - busca: `q`, `pessoa`, `periodo=7d|30d|ano`, `de`, `ate`, `tag`, `colecao` e `campo`
-    (repetível);
-  - pessoa: `aba=gravacoes|falas|amostras`; Campos personalizados: `campo`; Tipos de agenda: `tipo`.
-  A biblioteca mostra só as gravações do usuário: não há filtro Minhas/Compartilhadas.
-- **Rotas sob demanda.** `routes.tsx` carrega por `React.lazy` + `Suspense` toda área além da
-  biblioteca e do login, cada uma no seu chunk. O chunk do WebCodecs (Mediabunny, ~560 KB) só
-  carrega na conversão do import, e o aviso de chunk grande do Vite que ainda aparece é dele.
-- **Orçamento do JS inicial** (`npm run budget`, depois do build, no pilar `web`):
-  `scripts/bundle-budget.mjs` soma o `<script type="module">` e os `modulepreload` do
-  `dist/index.html` (bruto e gzip nível 9) e falha acima de `bundle-budget.json`
-  (`inicial_gzip_kb`). Medido em 2026-10-05: 29 arquivos, 466 KB (155,9 KB gzip), teto de 158 KB
-  gzip; subiu de 155 KB na integração das specs holetz/eclume#141 a #145 (a faixa "Precisam de
-  você" da biblioteca, a etapa Locutores no aviso de processamento e o grupo Agente no menu, todos
-  no shell ou na biblioteca, que carregam de saída). Mudar o teto é editar o JSON no mesmo commit da
-  mudança, com o motivo.
-- **Data router.** `routes.tsx` exporta a árvore como `routes: RouteObject[]`; o `App.tsx` monta
-  `createBrowserRouter(routes)` uma vez, fora do componente, com o `RouterProvider` de
-  `react-router/dom` dentro do `AppProviders`, e o `renderApp` dos testes monta a mesma árvore num
-  `createMemoryRouter`. As telas buscam dados pelo React Query: nada de loaders, actions nem o
-  `lazy` do roteador.
-- **Erro por rota, sem tela branca.** Há dois `errorElement`: o `RootError` na raiz (página
-  inteira, para login, cadastro, parear e `/admin/*`) e o `RouteError` numa rota sem caminho filha
-  do `RequireSession`, que aparece no `Outlet` do shell com a barra, o cabeçalho e a fila de
-  importação de pé; a troca de localização reinicia o boundary, então a barra tira do erro. A
-  falha de chunk (mensagem do `import()` dinâmico do Chromium, Firefox ou WebKit, ou o preload do
-  Vite) vira "O eclume foi atualizado"; a exceção comum, "Algo deu errado nesta tela". As duas têm
-  "Recarregar", nunca mostram pilha e registram no `console.error`.
-- **Recarga única por chunk antigo** (`app/chunkReload.ts`, registrado no `main.tsx`): no
-  `vite:preloadError`, se a última recarga por chunk (carimbo `eclume-recarga-chunk` no
-  `sessionStorage`) tem mais de 60 s, grava o carimbo, cancela o evento e recarrega; senão o erro
-  segue para o `RouteError`. A janela de tempo, e não uma bandeira eterna, deixa um segundo deploy
-  na mesma aba recarregar de novo. O estático da borda (`eclume-edge`) responde `404` sem
-  `immutable` para `/assets/*` ausente, então o `import()` falha rápido e com motivo.
-- **Guarda de saída** (`app/useLeaveGuard.tsx`): com alterações não salvas, fechar ou recarregar a
-  aba dispara o aviso do navegador (`beforeunload`), e ir para outra rota do app pede confirmação
-  pelo `useBlocker`, só quando o `pathname` muda (o `?t=` da gravação e a seleção na URL passam);
-  devolve o diálogo com "Continuar editando" e "Descartar". Usam o guarda a edição do resumo e a
-  seleção de Campos personalizados e Tipos de agenda; o `ImportProvider` fica só com o
-  `beforeunload`, porque vive no shell e não desmonta na navegação interna.
-- **Retentar a transcrição.** Toda gravação `failed` mostra "Tentar de novo"
-  (`RetryTranscription`, `POST .../retranscribe`), sem comparar com `recording.owner` (obsoleto: a
-  conta só vê o que é dela; um 403/404 aparece pelo `errorMessage`), com a falha passageira
-  (`error.retryable`) dita como tal; a Saúde do admin tem o mesmo botão por falha recente, pela retentativa do admin.
-- **Idioma da transcrição.** A lista de idiomas do Whisper vive em `src/lib/languages.ts` (usada
-  pelo admin e pelas telas do usuário, sem cruzar features) e o seletor em
-  `shared/LanguageSelect.tsx`; o padrão aparece sempre nomeado pelo idioma real ("Padrão do
-  servidor: Português", "Padrão da conta: Inglês"), e "Detectar automaticamente" só para `auto`.
-  Conta tem **Idioma da transcrição** (`GET`/`PATCH /me/transcription`, grava na hora; vazio é o
-  padrão do servidor). O Importar tem a coluna **Idioma** por arquivo, partindo do padrão da conta
-  e levada só na criação do upload. A gravação mostra o idioma no kicker e, em `RecordingHeader`,
-  **Transcrever de novo em…** (`RetranscribeAction`, em `RetryTranscription.tsx`) para gravação
-  pronta ou falha, com o diálogo de idioma e a confirmação do que muda (revisão nova, correções à
-  mão perdidas, pessoas dos locutores de volta, campos, tipo e resumo refeitos); o 409 vira "Já há
-  uma transcrição em andamento.". Tudo isso fica em rotas e no modal sob demanda: o motor de upload
-  do bundle inicial só ganhou o campo `language`.
-- **Agente** (`src/features/agent/`, holetz/eclume#142): `agent.ts` tem os hooks sobre
-  `/agent/sessions`; `AgentPage` (`/agente/:sessionId?`, uma rota só, para a primeira pergunta
-  abrir a conversa sem remontar a tela) mostra as conversas recentes ao lado (até 20, com Nova
-  conversa e Todas as conversas), a conversa e o compositor com **Anexar** (`.txt,.md,.csv,.pdf,.docx`,
-  até 5 por pergunta e 10 MB cada, conferidos antes do envio) e os anexos da próxima pergunta, que
-  saem com o ×. Sem conversa na rota, a primeira pergunta ou o primeiro anexo cria a conversa,
-  semeia o cache dela vazia e troca a rota (`replace`). Cada resposta consulta a própria mensagem a
-  cada 2 s até `done` ou `failed`; a conversa tem `staleTime` de 1 min, porque as mutações da tela
-  já atualizam o cache e reler a conversa no meio de uma pergunta apagaria a pergunta enviada. Os
-  arquivos gerados e os anexos são links `download` para `GET /agent/files/{id}/content` (mesma
-  origem, sessão por cookie). `ConversationsPage` (`/agente/conversas`) lista todas por página, com
-  Renomear (diálogo) e Excluir (confirmação).
-- **Habilidades e ações do Agente** (holetz/eclume#145, `features/agent/skills.ts`,
-  `SkillsPage.tsx`, `ActionCard.tsx`): `SkillsPage` (`/agente/habilidades`) lista as habilidades,
-  cria e edita num diálogo (nome normalizado sem barra e em minúsculas, descrição, instruções e, com
-  "Limitar as ferramentas", as permitidas do catálogo `GET /agent/tools`), liga, desliga e exclui
-  com confirmação. No compositor do Agente, o seletor "Habilidade" lista as ligadas e manda
-  `skill`; uma mensagem que começa com `/` vai como está, porque o servidor lê o prefixo. A pergunta
-  mostra o chip `/nome`. Cada proposta da resposta (`AgentMessage.actions`) vira um `ActionCard`
-  (`section` "Ação proposta"): o resumo, o estado, os 10 primeiros alvos com link (e "e mais N") e
-  Confirmar/Descartar enquanto `proposed`; confirmada, consulta `GET /agent/actions/{id}` a cada 2 s
-  até terminar e mostra o resultado por alvo.
-- **Navegação agrupada numa lista só** (`src/app/nav.ts`): cada item tem `section` (`main` ou
-  `header`), `enabled` e, opcionais, `matches` (prefixos que também acendem o item: a Biblioteca
-  fica marcada em `/gravacoes/`) e `excludes` (prefixos sob a rota do item que são de outro e não
-  o acendem); o item comum tem `group`, e `navGroups()` devolve as duas seções.
-  **Agente** (`/agente`, holetz/eclume#142; antes Perguntar, em `/perguntas`) é o único item **destacado** (`featured`, com
-  `icon` e sem grupo): é o primeiro da lista e da barra lateral, `navGroups()` o deixa de fora e
-  `featuredItem()` o entrega ao `AppShell`, que o desenha antes dos grupos como `.btn-primary` do
-  DS em largura total, com o ícone `MessageSquareText` (`aria-hidden`) e `aria-current="page"` em
-  `/agente` e numa conversa (`/agente/:sessionId`), mas não em `/agente/conversas` nem em `/agente/habilidades` (`excludes`), onde fica no tom de "pressionado" (`--color-accent-700`). Enquanto a conta não tem
-  gravação (a mesma pergunta `GET /recordings` com `limit=1` da biblioteca, chave
-  `['recordings', 'any']`), ele perde o destaque, não o lugar: vira `.btn-secondary`, ainda primeiro e
-  acessível. A principal, abaixo dele, tem o grupo **Agente** (Conversas, em `/agente/conversas`, e
-  Habilidades, em `/agente/habilidades`), Gravações (Biblioteca, Busca; importar é o modal da
-  biblioteca), Organizar, com os dados da conta (Pessoas, Coleções, Tags), e Regras, com o que age
-  sozinho depois de cada gravação (Processamento automático, Tipos de agenda, Campos
-  personalizados); as rotas não mudam com o grupo. A `header` vai para os menus do cabeçalho:
-  Minhas configurações e Ajuda (Central de ajuda). Na engrenagem, cada item tem a sua parte
-  (`part`), na ordem **Conta e privacidade** (Conta), **Aparelhos** (App desktop, App móvel),
-  **Integrações** (Conexão MCP, Tokens de acesso) e **Ambiente**; o `AppShell` abre cada parte com
-  um `{ heading }` do `MenuButton`, um `role="separator"` com `aria-label` e o texto em
-  `.menu-heading` (`app.css`), que o teclado não foca. Submenus aninhados não entram, pelo custo
-  de teclado e de toque. Uma área nova entra desligada, com a rota do mapa
-  de telas v6, e ligá-la é mudar `enabled` e registrar a rota. Há um só
-  `<nav aria-label="Principal">`; cada grupo é um `role="group"` rotulado pelo título, e o destaque
-  fica fora deles. Não há item "Painel admin": a conta de usuário não tem papel, e o painel se abre
-  pelo endereço `/admin/entrar`, com conta própria.
-- **Cabeçalho do shell** (`ShellFrame` com `account`): uma faixa de 3,25rem (`--shell-header`),
-  fixa no topo em qualquer largura, com a marca à esquerda e a conta à direita: nome e e-mail, o
-  menu **Ajuda** ("Ajuda desta página", que abre a gaveta, e "Central de ajuda"), o menu
-  **Configurações** (Minhas configurações) e, depois de uma barra de 2px, **Sair**. Escolher um
-  item navega sem mexer na barra lateral, que só tem a navegação principal. Abaixo de 56rem, o
-  nome e o e-mail somem e o botão Menu abre a barra lateral por cima. Telas que grudam elementos no
-  topo (os filtros da biblioteca, o chat da gravação) usam `top: var(--shell-header)`.
-- **Cabeçalho de página** é o `PageHead` (`.page-head` do DS: kicker opcional, `h1`, ações e, no
-  shell, o botão Ajuda); ele também dá o título da aba (`usePageTitle`), com o contador do
-  observador de desfechos na frente quando há. Rota desconhecida mostra
-  `NotFoundPage` dentro do shell, com o link de volta à biblioteca.
-- **Gaveta de ajuda** (`help.ts`, `HelpProvider`, `HelpDrawer`): o `HelpProvider`, montado no
-  `AppShell`, abre a `.help-drawer` com `?` (sem Ctrl, Meta ou Alt, fora de `input`, `textarea`,
-  `select` e `contenteditable`) ou pelo botão Ajuda do `PageHead`, e fecha com Esc, devolvendo o
-  foco a quem abriu. A página declara a sua chave de página com `useHelpTopic(chave)`, e o corpo da
-  gaveta (carregado sob demanda) mostra a busca, os artigos daquela chave e os atalhos, com o link
-  para a central. Artigos, chaves, busca e dicas em linha:
+    `campo=<field_id>:<valor>` (all repeatable) and `importar=1`;
+  - recording: `t=<ms>`;
+  - search: `q`, `pessoa`, `periodo=7d|30d|ano`, `de`, `ate`, `tag`, `colecao` and `campo`
+    (repeatable);
+  - person: `aba=gravacoes|falas|amostras`; Custom fields: `campo`; Agenda types: `tipo`.
+  The library shows only the user's recordings: there is no Mine/Shared filter.
+- **On-demand routes.** `routes.tsx` loads through `React.lazy` + `Suspense` every area besides the
+  library and the login, each in its own chunk. The WebCodecs chunk (Mediabunny, ~560 KB) only
+  loads on the import conversion, and the Vite large-chunk warning that still shows up is its.
+- **Initial JS budget** (`npm run budget`, after the build, in the `web` pillar):
+  `scripts/bundle-budget.mjs` sums the `<script type="module">` and the `modulepreload` of
+  `dist/index.html` (raw and gzip level 9) and fails above `bundle-budget.json`
+  (`inicial_gzip_kb`). Measured on 2026-10-05: 29 files, 466 KB (155.9 KB gzip), ceiling of 158 KB
+  gzip; it went up from 155 KB with the integration of specs holetz/eclume#141 to #145 (the library's "Precisam de
+  você" (Need you) strip, the Speakers step in the processing notice and the Agent group in the menu, all
+  in the shell or in the library, which load up front). Changing the ceiling is editing the JSON in the same commit as the
+  change, with the reason.
+- **Data router.** `routes.tsx` exports the tree as `routes: RouteObject[]`; `App.tsx` mounts
+  `createBrowserRouter(routes)` once, outside the component, with the `RouterProvider` of
+  `react-router/dom` inside `AppProviders`, and the tests' `renderApp` mounts the same tree in a
+  `createMemoryRouter`. Screens fetch data through React Query: no loaders, actions nor the router's
+  `lazy`.
+- **Error per route, no blank screen.** There are two `errorElement`s: `RootError` at the root (whole
+  page, for login, sign-up, pairing and `/admin/*`) and `RouteError` in a pathless route child
+  of `RequireSession`, which shows up in the shell's `Outlet` with the bar, the header and the import
+  queue still standing; a location change resets the boundary, so the bar gets out of the error. A
+  chunk failure (the message of the dynamic `import()` of Chromium, Firefox or WebKit, or Vite's
+  preload) becomes "O eclume foi atualizado" (eclume was updated); a common exception, "Algo deu errado nesta tela" (Something went wrong on this screen). Both have
+  "Recarregar" (Reload), never show a stack and log to `console.error`.
+- **Single reload for an old chunk** (`app/chunkReload.ts`, registered in `main.tsx`): on
+  `vite:preloadError`, if the last chunk reload (stamp `eclume-recarga-chunk` in
+  `sessionStorage`) is more than 60 s old, it writes the stamp, cancels the event and reloads; otherwise the error
+  goes on to `RouteError`. The time window, and not an eternal flag, lets a second deploy
+  in the same tab reload again. The edge static server (`eclume-edge`) answers `404` without
+  `immutable` for a missing `/assets/*`, so `import()` fails fast and with a reason.
+- **Leave guard** (`app/useLeaveGuard.tsx`): with unsaved changes, closing or reloading the
+  tab fires the browser's warning (`beforeunload`), and going to another app route asks for confirmation
+  through `useBlocker`, only when the `pathname` changes (the recording's `?t=` and the selection in the URL go through);
+  it returns the dialog with "Continuar editando" (Keep editing) and "Descartar" (Discard). The summary editing and the
+  selection in Custom fields and Agenda types use the guard; `ImportProvider` keeps only
+  `beforeunload`, because it lives in the shell and does not unmount on internal navigation.
+- **Retry the transcription.** Every `failed` recording shows "Tentar de novo" (Try again)
+  (`RetryTranscription`, `POST .../retranscribe`), without comparing with `recording.owner` (obsolete: the
+  account only sees what is its own; a 403/404 shows up through `errorMessage`), with the transient failure
+  (`error.retryable`) stated as such; the admin's Health has the same button per recent failure, through the admin retry.
+- **Transcription language.** The list of Whisper languages lives in `src/lib/languages.ts` (used
+  by the admin and by the user screens, without crossing features) and the selector in
+  `shared/LanguageSelect.tsx`; the default always shows named by the actual language ("Padrão do
+  servidor: Português", "Padrão da conta: Inglês"), and "Detectar automaticamente" only for `auto`.
+  The account has **Idioma da transcrição** (Transcription language) (`GET`/`PATCH /me/transcription`, saves immediately; empty is the
+  server default). Import has the **Idioma** (Language) column per file, starting from the account default
+  and sent only at upload creation. The recording shows the language in the kicker and, in `RecordingHeader`,
+  **Transcrever de novo em…** (Transcribe again in…) (`RetranscribeAction`, in `RetryTranscription.tsx`) for a ready
+  or failed recording, with the language dialog and the confirmation of what changes (new revision, manual
+  corrections lost, speaker people back, fields, type and summary redone); the 409 becomes "Já há
+  uma transcrição em andamento.". All of this lives in on-demand routes and in the modal: the upload engine
+  of the initial bundle only gained the `language` field.
+- **Agent** (`src/features/agent/`, holetz/eclume#142): `agent.ts` has the hooks over
+  `/agent/sessions`; `AgentPage` (`/agente/:sessionId?`, a single route, so the first question
+  opens the conversation without remounting the screen) shows the recent conversations at the side (up to 20, with New
+  conversation and All conversations), the conversation and the composer with **Anexar** (Attach) (`.txt,.md,.csv,.pdf,.docx`,
+  up to 5 per question and 10 MB each, checked before sending) and the attachments of the next question, which
+  come off with the ×. With no conversation in the route, the first question or the first attachment creates the conversation,
+  seeds its cache empty and swaps the route (`replace`). Each answer polls its own message
+  every 2 s until `done` or `failed`; the conversation has a `staleTime` of 1 min, because the screen's mutations
+  already update the cache and rereading the conversation in the middle of a question would erase the sent question. The
+  generated files and the attachments are `download` links to `GET /agent/files/{id}/content` (same
+  origin, cookie session). `ConversationsPage` (`/agente/conversas`) lists all of them by page, with
+  Rename (dialog) and Delete (confirmation).
+- **Agent skills and actions** (holetz/eclume#145, `features/agent/skills.ts`,
+  `SkillsPage.tsx`, `ActionCard.tsx`): `SkillsPage` (`/agente/habilidades`) lists the skills,
+  creates and edits them in a dialog (name normalized without a slash and in lowercase, description, instructions and, with
+  "Limitar as ferramentas" (Limit the tools), the allowed ones from the `GET /agent/tools` catalog), turns them on, off and deletes them
+  with confirmation. In the Agent's composer, the "Habilidade" (Skill) selector lists the enabled ones and sends
+  `skill`; a message that starts with `/` goes as it is, because the server reads the prefix. The question
+  shows the `/nome` chip. Each proposal of the answer (`AgentMessage.actions`) becomes an `ActionCard`
+  (`section` "Ação proposta"): the summary, the state, the first 10 targets with a link (and "e mais N") and
+  Confirm/Discard while `proposed`; once confirmed, it polls `GET /agent/actions/{id}` every 2 s
+  until it finishes and shows the result per target.
+- **Grouped navigation in a single list** (`src/app/nav.ts`): each item has `section` (`main` or
+  `header`), `enabled` and, optionally, `matches` (prefixes that also light the item up: the Library
+  stays marked on `/gravacoes/`) and `excludes` (prefixes under the item's route that belong to another and do not
+  light it up); the common item has `group`, and `navGroups()` returns the two sections.
+  **Agent** (`/agente`, holetz/eclume#142; formerly Ask, at `/perguntas`) is the only **featured** item (`featured`, with
+  `icon` and no group): it is the first of the list and of the sidebar, `navGroups()` leaves it out and
+  `featuredItem()` hands it to `AppShell`, which draws it before the groups as the DS `.btn-primary`
+  at full width, with the `MessageSquareText` icon (`aria-hidden`) and `aria-current="page"` on
+  `/agente` and in a conversation (`/agente/:sessionId`), but not on `/agente/conversas` nor on `/agente/habilidades` (`excludes`), where it stays in the "pressed" tone (`--color-accent-700`). While the account has no
+  recording (the same `GET /recordings` query with `limit=1` as the library, key
+  `['recordings', 'any']`), it loses the highlight, not the place: it becomes `.btn-secondary`, still first and
+  accessible. The main section, below it, has the **Agente** group (Conversas, at `/agente/conversas`, and
+  Habilidades, at `/agente/habilidades`), Gravações (Biblioteca, Busca; importing is the library's
+  modal), Organizar, with the account's data (Pessoas, Coleções, Tags), and Regras, with what acts
+  by itself after each recording (Processamento automático, Tipos de agenda, Campos
+  personalizados); the routes do not change with the group. `header` goes to the header menus:
+  Minhas configurações and Ajuda (Central de ajuda). In the gear, each item has its part
+  (`part`), in the order **Conta e privacidade** (Conta), **Aparelhos** (App desktop, App móvel),
+  **Integrações** (Conexão MCP, Tokens de acesso) and **Ambiente**; `AppShell` opens each part with
+  a `{ heading }` of `MenuButton`, a `role="separator"` with `aria-label` and the text in
+  `.menu-heading` (`app.css`), which the keyboard does not focus. Nested submenus are not used, for the
+  keyboard and touch cost. A new area goes in disabled, with the route of the v6 screen
+  map, and enabling it is changing `enabled` and registering the route. There is a single
+  `<nav aria-label="Principal">`; each group is a `role="group"` labelled by its title, and the featured item
+  stays outside them. There is no "Painel admin" item: the user account has no role, and the panel opens
+  at the address `/admin/entrar`, with its own account.
+- **Shell header** (`ShellFrame` with `account`): a 3.25rem strip (`--shell-header`),
+  fixed at the top at any width, with the brand on the left and the account on the right: name and e-mail, the
+  **Ajuda** menu ("Ajuda desta página", which opens the drawer, and "Central de ajuda"), the
+  **Configurações** menu (Minhas configurações) and, after a 2px bar, **Sair**. Choosing an
+  item navigates without touching the sidebar, which has only the main navigation. Below 56rem, the
+  name and the e-mail disappear and the Menu button opens the sidebar on top. Screens that stick elements to the
+  top (the library filters, the recording chat) use `top: var(--shell-header)`.
+- **Page header** is `PageHead` (the DS `.page-head`: optional kicker, `h1`, actions and, in the
+  shell, the Help button); it also sets the tab title (`usePageTitle`), with the outcome watcher's
+  counter in front when there is one. An unknown route shows
+  `NotFoundPage` inside the shell, with the link back to the library.
+- **Help drawer** (`help.ts`, `HelpProvider`, `HelpDrawer`): `HelpProvider`, mounted in
+  `AppShell`, opens the `.help-drawer` with `?` (without Ctrl, Meta or Alt, outside `input`, `textarea`,
+  `select` and `contenteditable`) or through the `PageHead` Help button, and closes with Esc, returning
+  focus to whoever opened it. The page declares its help page key with `useHelpTopic(chave)`, and the body of the
+  drawer (loaded on demand) shows the search, the articles of that key and the shortcuts, with the link
+  to the center. Articles, keys, search and inline hints:
   [web-central-de-ajuda.md](web-central-de-ajuda.md).
-- **Chaves do TanStack Query por área**, com prefixo fixo (`['people', ...]`, `['collections']`,
-  `['tags']`, `['recordings', ...]`, `['admin', ...]`): uma mutação que muda contagens ou nomes
-  vistos em outras telas invalida o prefixo inteiro, além de gravar no cache o que a resposta
-  devolveu.
-- **Administração** (`/admin/*`, `src/features/admin/`) é um **app à parte dentro do web**, fora
-  de `RequireSession` e do `AppShell`; `/admin/entrar` e `/admin/*` carregam sob demanda o chunk
-  do painel, e nada dele entra no bundle inicial do usuário.
-  - **Sessão própria.** `adminSession.ts` tem `useAdminMe()` (`GET /admin/me`, chave
-    `['admin', 'me']`, 401 → `null`), `useAdminLogin()` e `useAdminLogout()` (que limpa todo o
-    prefixo `['admin']`). A guarda é o `RequireAdmin`: sem sessão de admin, vai para
-    `/admin/entrar?volta=<rota>`; `volta` só vale dentro de `/admin/`. Um 401 em
-    `/api/v1/admin/` no meio do uso chega pelo `onAdminUnauthorized` do `client.ts` e devolve ao
-    login. O painel nunca lê `useMe`, e o app do usuário nunca lê a chave do admin. Esconder link
-    não é controle de acesso: a fronteira é o cookie de caminho `/api/v1/admin`.
-  - **Entrar como admin** (`/admin/entrar`) usa o `AuthLayout` na variante `admin` (`.auth-admin`
-    do DS, campo da marca em tinta), sem cadastro nem "esqueci a senha": conta e senha de admin
-    ficam no CLI (`eclume-server admin create` e `admin set-password`).
-  - **Moldura** `AdminShell`, sobre o `ShellFrame` que também serve ao `AppShell` (barra lateral
-    fixa e menu compacto abaixo de 56rem; sem `account`, sem o cabeçalho do app): marca, selo "Admin", o grupo "Plataforma" e, no
-    rodapé, o nome e o e-mail do admin com "Sair". A barra vem de `ADMIN_SECTIONS`
-    (`sections.ts`), na ordem Usuários (`/admin/usuarios`), Pré-processamento de áudio
+- **TanStack Query keys per area**, with a fixed prefix (`['people', ...]`, `['collections']`,
+  `['tags']`, `['recordings', ...]`, `['admin', ...]`): a mutation that changes counts or names
+  seen on other screens invalidates the whole prefix, besides writing into the cache what the response
+  returned.
+- **Administration** (`/admin/*`, `src/features/admin/`) is a **separate app inside the web**, outside
+  `RequireSession` and `AppShell`; `/admin/entrar` and `/admin/*` load the panel's chunk on demand,
+  and nothing of it goes into the user's initial bundle.
+  - **Own session.** `adminSession.ts` has `useAdminMe()` (`GET /admin/me`, key
+    `['admin', 'me']`, 401 → `null`), `useAdminLogin()` and `useAdminLogout()` (which clears the whole
+    `['admin']` prefix). The guard is `RequireAdmin`: without an admin session, it goes to
+    `/admin/entrar?volta=<rota>`; `volta` only applies inside `/admin/`. A 401 on
+    `/api/v1/admin/` in the middle of use arrives through `client.ts`'s `onAdminUnauthorized` and returns to
+    login. The panel never reads `useMe`, and the user app never reads the admin key. Hiding a link
+    is not access control: the boundary is the cookie with path `/api/v1/admin`.
+  - **Sign in as admin** (`/admin/entrar`) uses `AuthLayout` in the `admin` variant (the DS `.auth-admin`,
+    brand field in ink), without sign-up nor "esqueci a senha": the admin account and password
+    live in the CLI (`eclume-server admin create` and `admin set-password`).
+  - **Frame** `AdminShell`, over the `ShellFrame` that also serves `AppShell` (fixed sidebar
+    and compact menu below 56rem; without `account`, without the app header): brand, "Admin" badge, the "Plataforma" group and, in the
+    footer, the admin's name and e-mail with "Sair". The bar comes from `ADMIN_SECTIONS`
+    (`sections.ts`), in the order Usuários (`/admin/usuarios`), Pré-processamento de áudio
     (`/admin/audio`), Transcrição (`/admin/transcricao`), Locutores (`/admin/locutores`), Agentes
-    (`/admin/agentes`), Tipos de agenda padrão (`/admin/tipos-de-agenda`) e Saúde
-    (`/admin/saude`). `/admin` vai para Usuários; as rotas antigas redirecionam com `replace`:
-    `/admin/voz` e `/admin/segredos` → Locutores, `/admin/templates` → Tipos de agenda padrão. Rota
-    desconhecida mostra "Página não encontrada" dentro do painel.
-  - **Salvar da configuração** fica desabilitado sem mudança, e cada tela manda só os seus blocos
-    no `PATCH /admin/settings` (merge por bloco), para uma tela não sobrescrever a outra.
-  - **Segredos só de escrita**, no `SecretField` (guardado, Substituir, Apagar com confirmação; a
-    tela nunca mostra parte do valor), cada um junto do que o usa: o token do Hugging Face em
-    Locutores, a chave compartilhada da Anthropic e o token de cada provider em Agentes. Não há
-    tela Segredos.
-  - **Desligar a identificação por voz pede confirmação** (`ConfirmDialog`) antes do `PATCH`,
-    porque o server apaga as impressões de voz da plataforma nesse momento.
-  - **Aviso de dados fora do servidor** (`ExternalDataNotice`, `.alert-warning` com `role="note"`):
-    em Agentes (finalidades de agente) e em Transcrição (a engine remota), lido de `GET /privacy`,
-    diz o que sai e para quem e que os usuários veem isso em Conta › Privacidade e dados e no
-    cadastro. Relê quando a configuração muda (`usePrivacy(revision)`); sem destino externo, nada
-    aparece.
-  - **A Saúde relê a cada 15 s** (`HEALTH_REFRESH_MS`, alinhado ao heartbeat do worker), só com a
-    aba visível (`refetchIntervalInBackground: false`), e mantém os últimos dados num erro.
-  - **Nenhuma tela do painel mostra conteúdo de usuário**: nem título de gravação, nem nome de
-    arquivo, nem link para `/gravacoes`. Usuários mostra nome, e-mail, cadastro, contagem de
-    gravações e estado; as falhas da Saúde mostram etapa e código.
-  - **Gerar link de senha** (Usuários, só nas contas ativas): o diálogo pede confirmar quem pede,
-    `POST /admin/users/{id}/password-reset` e, na resposta, mostra o link uma única vez com o
-    `CopyValue` e a orientação de entregá-lo por fora; fechar o diálogo descarta o link.
+    (`/admin/agentes`), Tipos de agenda padrão (`/admin/tipos-de-agenda`) and Saúde
+    (`/admin/saude`). `/admin` goes to Usuários; the old routes redirect with `replace`:
+    `/admin/voz` and `/admin/segredos` → Locutores, `/admin/templates` → Tipos de agenda padrão. An unknown
+    route shows "Página não encontrada" inside the panel.
+  - **Saving the settings** stays disabled without a change, and each screen sends only its blocks
+    in `PATCH /admin/settings` (merge per block), so one screen does not overwrite another.
+  - **Write-only secrets**, in `SecretField` (stored, Substituir, Apagar with confirmation; the
+    screen never shows part of the value), each next to what uses it: the Hugging Face token in
+    Locutores, the shared Anthropic key and each provider's token in Agentes. There is no
+    Segredos screen.
+  - **Turning voice identification off asks for confirmation** (`ConfirmDialog`) before the `PATCH`,
+    because the server deletes the platform's voiceprints at that moment.
+  - **Notice of data leaving the server** (`ExternalDataNotice`, `.alert-warning` with `role="note"`):
+    in Agentes (agent purposes) and in Transcrição (the remote engine), read from `GET /privacy`,
+    it says what leaves and to whom and that users see this in Conta › Privacidade e dados and at
+    sign-up. It rereads when the settings change (`usePrivacy(revision)`); with no external destination, nothing
+    shows.
+  - **Health rereads every 15 s** (`HEALTH_REFRESH_MS`, aligned with the worker heartbeat), only with the
+    tab visible (`refetchIntervalInBackground: false`), and keeps the last data on an error.
+  - **No panel screen shows user content**: no recording title, no file
+    name, no link to `/gravacoes`. Usuários shows name, e-mail, sign-up, recording count
+    and state; Health's failures show step and code.
+  - **Generate password link** (Usuários, only on active accounts): the dialog asks to confirm who is asking,
+    `POST /admin/users/{id}/password-reset` and, on the response, shows the link a single time with
+    `CopyValue` and the guidance to deliver it out of band; closing the dialog discards the link.
 
-  As regras do server estão em [server-admin.md](server-admin.md).
-- **Rotas públicas:** `/entrar`, `/cadastro`, `/redefinir-senha`, `/parear` e `/admin/entrar`. Criar conta (`SignupPage`) lê
-  de `GET /auth/signup` se o cadastro está aberto e o aviso em vigor, pede nome, e-mail, senha de
-  12+ (`MIN_PASSWORD`, o `minLength` do contrato) e o aceite obrigatório do aviso, e envia a
-  `notice_version` aceita. **Criar conta** fica sempre ativo: enviar com falta não chama a API,
-  mostra no `role=alert` o que falta, na ordem do formulário ("Para criar a conta, falta o nome, o
-  e-mail, a senha com 12 caracteres e o aceite do aviso."), foca o primeiro campo pendente e liga o
-  resumo ao botão por `aria-describedby`; a lista acompanha o preenchimento; a resposta abre a sessão, como o login. `email_taken` vira "Já existe
-  uma conta com este e-mail."; cadastro fechado (`open: false` ou `signup_closed`) mostra o aviso
-  no lugar do formulário. Antes do aceite, quando os resumos ou o chat saem do servidor
-  (`GET /privacy`, `location: external`), uma linha diz quais e para quem ("Neste servidor, os
-  resumos e o chat são feitos fora dele, por Anthropic…"); sem destino externo, nada aparece. O
-  título da entrada (`AuthLayout`, variante `user`) é "Cada palavra, guardada no seu servidor.":
-  o áudio e a transcrição ficam guardados nele, sem prometer que nada sai (holetz/eclume#116; a
-  forma final sai do Claude Design).
-- **Senha esquecida:** a entrada diz "Esqueceu a senha? Peça um link a quem administra o
-  servidor." (o servidor não envia e-mail). `ResetPasswordPage` (`/redefinir-senha#<segredo>`, fora
-  do `RequireSession`) lê o segredo do fragmento ao montar, antes de qualquer redirecionamento, e o
-  manda no corpo de `POST /auth/password-reset/check` (mostra o e-mail da conta) e de
-  `POST /auth/password-reset` (senha nova duas vezes, 12+). Sem segredo ou com
-  `invalid_reset_link`, mostra "Este link venceu ou já foi usado. Peça outro a quem administra o
-  servidor." no lugar do formulário. Redefinida, relê a sessão e leva a `/entrar` com o aviso
-  "Senha redefinida. Entre com a nova." por `state`, como a conta excluída.
-- **Aceite do aviso em vigor:** com `notice_required: true` em `/me`, o `RequireSession` mostra o
-  `NoticePage` (na `.auth`) no lugar do shell, até `POST /me/notice` com a versão lida de
+  The server rules are in [server-admin.md](server-admin.md).
+- **Public routes:** `/entrar`, `/cadastro`, `/redefinir-senha`, `/parear` and `/admin/entrar`. Create account (`SignupPage`) reads
+  from `GET /auth/signup` whether sign-up is open and the notice in force, asks for name, e-mail, a password of
+  12+ (`MIN_PASSWORD`, the contract's `minLength`) and the mandatory acceptance of the notice, and sends the
+  accepted `notice_version`. **Criar conta** stays always enabled: submitting with something missing does not call the API,
+  shows in the `role=alert` what is missing, in the form's order ("Para criar a conta, falta o nome, o
+  e-mail, a senha com 12 caracteres e o aceite do aviso."), focuses the first pending field and links the
+  summary to the button through `aria-describedby`; the list follows the filling in; the response opens the session, like login. `email_taken` becomes "Já existe
+  uma conta com este e-mail."; closed sign-up (`open: false` or `signup_closed`) shows the notice
+  in place of the form. Before the acceptance, when the summaries or the chat leave the server
+  (`GET /privacy`, `location: external`), a line says which and to whom ("Neste servidor, os
+  resumos e o chat são feitos fora dele, por Anthropic…"); with no external destination, nothing shows. The
+  sign-in title (`AuthLayout`, `user` variant) is "Cada palavra, guardada no seu servidor.":
+  the audio and the transcript stay stored in it, without promising that nothing leaves (holetz/eclume#116; the
+  final form comes out of Claude Design).
+- **Forgotten password:** the sign-in says "Esqueceu a senha? Peça um link a quem administra o
+  servidor." (the server sends no e-mail). `ResetPasswordPage` (`/redefinir-senha#<segredo>`, outside
+  `RequireSession`) reads the secret from the fragment on mount, before any redirect, and
+  sends it in the body of `POST /auth/password-reset/check` (shows the account's e-mail) and of
+  `POST /auth/password-reset` (new password twice, 12+). Without a secret or with
+  `invalid_reset_link`, it shows "Este link venceu ou já foi usado. Peça outro a quem administra o
+  servidor." in place of the form. Once reset, it rereads the session and leads to `/entrar` with the notice
+  "Senha redefinida. Entre com a nova." through `state`, like the deleted account.
+- **Acceptance of the notice in force:** with `notice_required: true` in `/me`, `RequireSession` shows
+  `NoticePage` (in `.auth`) in place of the shell, until `POST /me/notice` with the version read from
   `GET /auth/signup`.
-- **Estado de servidor com TanStack Query.** O polling de espera é declarativo e tem um ritmo só
-  (`app/polling.ts`, `pollWhile(estáEsperando, inicial)`): o intervalo inicial (2–3 s) nos
-  primeiros 2 min de espera, depois dobrando a cada minuto até 30 s, e nada com a consulta em
-  `error`; voltar para a aba ou a rede voltar recomeçam do inicial. Vale para gravação, resumo,
-  chat da gravação, chat da base, pré-visualização e código de vínculo. Três leituras têm ritmo
-  próprio (holetz/eclume#153), todas com recuo exponencial (`backoffDelay`, `app/polling.ts`):
-  a **biblioteca** (período e lista) mantém o `pollDelay` (3 s de início, até 30 s), mas com
-  gravação em andamento lê só `GET /recordings?since=` (maior `updated_at` do cache menos
-  `SINCE_MARGIN_MS`, 60 s, com os mesmos `from`/`to`/filtros) e mescla por id no cache com
-  `setQueryData` — no período entram também as novas, na lista só as que já estavam; a releitura
-  completa fica para o foco, a volta da rede e a cada `FULL_EVERY` (20) leituras incrementais
-  (que pega a gravação apagada); a **Saúde do admin** parte de `HEALTH_REFRESH_MS` (15 s) e dobra a
-  cada leitura sem mudança até `HEALTH_MAX_REFRESH_MS` (60 s), comparando os dados sem relógio,
-  latência e uso da GPU (`backoffWhileUnchanged`), recomeçando ao mudar, ao voltar para a aba
-  (que também relê na hora) ou à rede; a **faixa de conexão** tenta `/me` a cada `RETRY_MS` (10 s)
-  dobrando a cada falha até `RETRY_MAX_MS` (60 s). O padrão global é `refetchOnWindowFocus: false`; as
-  gravações (período, lista, gravação), o estado do resumo e o histórico do chat ligam a releitura
-  no foco, para uma gravação do desktop ou do celular aparecer sem recarregar. Formulários
-  (Campos, Tipos de agenda, Conta) não são relidos debaixo de quem edita. Mutações gravam no cache o que a resposta
-  devolve, sem refazer a leitura.
-- **Arquivo `.tsx` exporta só componentes** (regra do react-refresh): hooks, constantes e
-  funções puras ficam em `.ts` ao lado. **Nunca com o mesmo nome em caixa diferente**
-  (`Pipeline.tsx` e `pipeline.ts`): no Windows o sistema de arquivos não distingue caixa, e o Vite
-  resolve `./Pipeline` para `pipeline.ts`; o módulo puro ganha outro nome (`steps.ts`).
-- **Peças compartilhadas do DS** em `src/app/`: o `Dialog` (`.dialog-backdrop` num portal, foco no
-  primeiro controle, Tab preso, Esc e clique no fundo fecham, rolagem travada, foco devolvido;
-  `kicker` põe o cabeçalho com Fechar; o texto de uma confirmação vai em `message`, no
-  `.dialog-body`, e formulário, tabela ou alerta vão em `children` com `plain`, fora do esmaecido;
-  com um diálogo aberto, a gaveta de ajuda não abre nem fecha por atalho), o
-  `ConfirmDialog` (Cancelar primeiro, confirmação em `btn-danger`, ocupado durante a mutação), o
-  `MenuButton` (`.menu` com o teclado ARIA de menu: setas, Home/End, Enter/Espaço, Esc, clique
-  fora; o item focado leva `data-active`), o `CopyValue` (`.code-block` com Copiar e o aviso no
-  `role=status`; `size="lg"` para o código de vínculo) e o `HelpHint` (o `?` em linha com o
-  popover e o link para o artigo; Esc fecha só ele).
+- **Server state with TanStack Query.** Waiting polling is declarative and has a single rhythm
+  (`app/polling.ts`, `pollWhile(estáEsperando, inicial)`): the initial interval (2–3 s) in the
+  first 2 min of waiting, then doubling every minute up to 30 s, and nothing with the query in
+  `error`; coming back to the tab or the network coming back restart from the initial one. It applies to recording, summary,
+  recording chat, base chat, preview and link code. Three reads have their own
+  rhythm (holetz/eclume#153), all with exponential backoff (`backoffDelay`, `app/polling.ts`):
+  the **library** (period and list) keeps `pollDelay` (3 s at the start, up to 30 s), but with a
+  recording in progress it reads only `GET /recordings?since=` (the cache's greatest `updated_at` minus
+  `SINCE_MARGIN_MS`, 60 s, with the same `from`/`to`/filters) and merges by id into the cache with
+  `setQueryData` — in the period the new ones also come in, in the list only those already there; the full
+  reread is left for focus, the network coming back and every `FULL_EVERY` (20) incremental reads
+  (which catches the deleted recording); the **admin Health** starts from `HEALTH_REFRESH_MS` (15 s) and doubles on
+  each read without change up to `HEALTH_MAX_REFRESH_MS` (60 s), comparing the data without clock,
+  latency and GPU use (`backoffWhileUnchanged`), restarting on a change, on coming back to the tab
+  (which also rereads right away) or to the network; the **connection banner** tries `/me` every `RETRY_MS` (10 s)
+  doubling on each failure up to `RETRY_MAX_MS` (60 s). The global default is `refetchOnWindowFocus: false`; the
+  recordings (period, list, recording), the summary state and the chat history turn rereading
+  on focus on, so a recording from the desktop or the phone shows up without reloading. Forms
+  (Fields, Agenda types, Account) are not reread under whoever is editing. Mutations write into the cache what the response
+  returns, without redoing the read.
+- **A `.tsx` file exports only components** (react-refresh rule): hooks, constants and
+  pure functions live in a `.ts` beside it. **Never with the same name in a different case**
+  (`Pipeline.tsx` and `pipeline.ts`): on Windows the file system does not distinguish case, and Vite
+  resolves `./Pipeline` to `pipeline.ts`; the pure module gets another name (`steps.ts`).
+- **Shared DS pieces** in `src/app/`: `Dialog` (`.dialog-backdrop` in a portal, focus on the
+  first control, Tab trapped, Esc and a click on the backdrop close it, scroll locked, focus returned;
+  `kicker` puts the header with Close; the text of a confirmation goes in `message`, in
+  `.dialog-body`, and a form, table or alert goes in `children` with `plain`, outside the muted style;
+  with a dialog open, the help drawer neither opens nor closes by shortcut),
+  `ConfirmDialog` (Cancel first, confirmation in `btn-danger`, busy during the mutation),
+  `MenuButton` (`.menu` with the ARIA menu keyboard: arrows, Home/End, Enter/Space, Esc, click
+  outside; the focused item carries `data-active`), `CopyValue` (`.code-block` with Copy and the notice in
+  `role=status`; `size="lg"` for the link code) and `HelpHint` (the inline `?` with the
+  popover and the link to the article; Esc closes only it).
 
-## Visual e acessibilidade
+## Visuals and accessibility
 
-- A base visual é o Design System do eclume ([web-design-system.md](web-design-system.md)):
-  tokens e classes do `eclume.css`, fontes Archivo e IBM Plex Mono servidas pelo build, ícones
-  Lucide e tema por `data-theme` no `<html>` ("Do sistema" resolve `prefers-color-scheme`; a
-  escolha explícita fica no `localStorage`). Cor nova entra como token no DS. A tela Ambiente
-  acrescenta `data-density="compact"` (a escala `--space-3` a `--space-8` apertada no `app.css`) e
-  `data-motion="reduce"` (as mesmas regras do `prefers-reduced-motion`), aplicados no boot pelo
+- The visual base is the eclume Design System ([web-design-system.md](web-design-system.md)):
+  tokens and classes of `eclume.css`, Archivo and IBM Plex Mono fonts served by the build, Lucide
+  icons and theme by `data-theme` on `<html>` ("Do sistema" resolves `prefers-color-scheme`; the
+  explicit choice stays in `localStorage`). A new color goes in as a token in the DS. The Ambiente screen
+  adds `data-density="compact"` (the `--space-3` to `--space-8` scale tightened in `app.css`) and
+  `data-motion="reduce"` (the same rules as `prefers-reduced-motion`), applied at boot by
   `applyEnvironment()`.
-- As telas de acesso usam o `AuthLayout` (`.auth` do DS: campo da marca e formulário alinhado à
-  esquerda); o resto fica no `AppShell` (`.shell`, `.sidebar`, `.main`), com a barra superior e o
-  menu compacto abaixo de 56rem.
-- CSS Modules por componente, só com o que o DS não tem. Sem framework de CSS e sem fonte
-  externa.
-- Toda ação alcançável por teclado, foco visível, skip link, rótulos em todos os campos,
-  `aria-live` em progresso e confirmações. Estado nunca só por cor: o selo tem texto.
-- **Vocabulário de estados compartilhado** (`src/lib/vocabulario.js`, módulo ES puro com
-  `vocabulario.d.ts`): os nomes em pt-BR dos estados no aparelho, dos estados da gravação no
-  servidor ("Na fila" só para a espera pela transcrição; "Cancelada" para a gravação `failed` com
-  etapa pulada por `cancelled`; "Aguardando locutores", em tom de aviso, para a etapa `speakers` em
-  `waiting`), das sete etapas na ordem de `STEPS` (o estado `waiting` é "aguardando você") e o
-  texto de cada código de motivo (`MOTIVOS`). É a fonte única: o desktop e o celular têm cópias byte a byte, conferidas por
-  teste em cada cliente, e `vocabulario.test.ts` falha quando o servidor grava um código de motivo
-  sem texto. Tela nenhuma escreve esses rótulos à mão.
-- **Motivo em texto visível, nunca só no `title`.** Uma etapa pulada ou que falhou, uma linha que
-  falhou no Importar ou na fila do desktop mostram o motivo em texto na tela; `title` pode repetir,
-  nunca ser o único portador.
-- Enum desconhecido na resposta aparece cru, sem quebrar a tela (o contrato só cresce).
+- The access screens use `AuthLayout` (the DS `.auth`: brand field and form aligned to the
+  left); the rest lives in `AppShell` (`.shell`, `.sidebar`, `.main`), with the top bar and the
+  compact menu below 56rem.
+- CSS Modules per component, only with what the DS lacks. No CSS framework and no external
+  font.
+- Every action reachable by keyboard, visible focus, skip link, labels on every field,
+  `aria-live` on progress and confirmations. State never by color alone: the badge has text.
+- **Shared state vocabulary** (`src/lib/vocabulario.js`, a pure ES module with
+  `vocabulario.d.ts`): the pt-BR names of the device states, of the recording states on the
+  server ("Na fila" only for the wait for transcription; "Cancelada" for the `failed` recording with a
+  step skipped by `cancelled`; "Aguardando locutores", in a warning tone, for the `speakers` step in
+  `waiting`), of the seven steps in the order of `STEPS` (the `waiting` state is "aguardando você") and the
+  text of each reason code (`MOTIVOS`). It is the single source: the desktop and the phone have byte-for-byte copies, checked by
+  a test in each client, and `vocabulario.test.ts` fails when the server writes a reason code
+  without text. No screen writes these labels by hand.
+- **Reason in visible text, never only in `title`.** A skipped or failed step, a row that
+  failed in Import or in the desktop queue show the reason as text on the screen; `title` may repeat it,
+  never be its only carrier.
+- An unknown enum in the response shows raw, without breaking the screen (the contract only grows).
 
-## Biblioteca no tempo
+## Library timeline
 
-A tela inicial (`/`, `src/features/library/`) é um calendário (frame "Library · week", variante A):
+The home screen (`/`, `src/features/library/`) is a calendar (frame "Library · week", variant A):
 
-- **Três visões no `.seg`**: Semana (`.cal-week`, padrão), Mês (`.cal-month`, até três `.cal-dot`
-  por dia e "+N"; o número do dia abre a semana dele) e Lista (`.day-group` com `.rec-row`, da mais
-  recente, "Carregar mais"). Abaixo de 56rem, sem `visao` na URL, abre na Lista, e a semana rola
-  de lado dentro do próprio contêiner (`min-width: 720px`).
-- **Posição por hora e duração** (`calendar.ts`, datas locais do navegador): a semana vai de
-  segunda 00:00 à segunda seguinte; cada gravação ganha `--s` (hora de início local) e `--d`
-  (duração em horas, 0,1 para nota ou duração nula, cortada na meia-noite). A grade mostra o dia
-  inteiro (0–24, com rótulo também em 24:00) e rola por dentro, com a altura que sobra na janela e
-  o cabeçalho dos dias fixo. O expediente (`readWorkHours()`, 8–18 ou o da tela Ambiente) tem fundo de superfície e rótulos
-  na tinta principal, e a semana abre sempre com o zoom enquadrando ele; o resto do dia fica a um
-  pan ou zoom out. Gravações sobrepostas no mesmo dia dividem a coluna
-  em faixas (`lanes()`, guloso por início), que o DS não trata.
-- **Zoom da semana**: os botões do canto sobre as horas e Ctrl + roda sobre a grade mudam
-  `--cal-hour` em passos de 1,25×, mantendo parada a hora sob o cursor (ou no meio, pelos botões).
-  O mínimo é o dia inteiro na altura da grade, o máximo 480px por hora. No mês, as semanas dividem
-  a altura da tela por igual (mínimo de 96px por célula).
-- **Estado em palavra** (`recordingState()`, de `status` e do `pipeline`): falhou (régua de
-  perigo), em andamento com a etapa corrente ("Resumindo", "Transcrevendo", "Na fila"...) ou pronta
-  (com "Sem resumo" quando a etapa do resumo falhou). Nota de voz tem a régua pontilhada;
-  marcadores aparecem como `.marker-count`. O `aria-label` do evento diz tudo:
+- **Three views in the `.seg`**: Week (`.cal-week`, default), Month (`.cal-month`, up to three `.cal-dot`
+  per day and "+N"; the day number opens its week) and List (`.day-group` with `.rec-row`, from the most
+  recent, "Carregar mais"). Below 56rem, without `visao` in the URL, it opens on the List, and the week scrolls
+  sideways inside its own container (`min-width: 720px`).
+- **Position by time and duration** (`calendar.ts`, local browser dates): the week runs from
+  Monday 00:00 to the following Monday; each recording gets `--s` (local start time) and `--d`
+  (duration in hours, 0.1 for a note or a null duration, cut at midnight). The grid shows the whole
+  day (0–24, with a label also at 24:00) and scrolls inside, with the height left in the window and
+  the day header fixed. Working hours (`readWorkHours()`, 8–18 or the one from the Ambiente screen) have a surface background and labels
+  in the main ink, and the week always opens with the zoom framing them; the rest of the day is a
+  pan or a zoom out away. Overlapping recordings on the same day split the column
+  into lanes (`lanes()`, greedy by start), which the DS does not handle.
+- **Week zoom**: the corner buttons over the hours and Ctrl + wheel over the grid change
+  `--cal-hour` in steps of 1.25×, keeping the hour under the cursor still (or in the middle, through the buttons).
+  The minimum is the whole day in the grid height, the maximum 480px per hour. In the month, the weeks split
+  the screen height equally (minimum of 96px per cell).
+- **State in words** (`recordingState()`, from `status` and the `pipeline`): failed (danger
+  rule), in progress with the current step ("Resumindo", "Transcrevendo", "Na fila"...) or ready
+  (with "Sem resumo" when the summary step failed). A voice note has the dotted rule;
+  markers show as `.marker-count`. The event's `aria-label` says everything:
   "Reunião de equipe, 09:00, 58 min, Resumindo, 3 marcadores".
-- **Consulta** (`queries.ts`): o período vai em `GET /recordings` com `from`, `to`,
-  `sort=recorded_asc` e `limit=200`, seguindo o cursor até 5 páginas ("Mostrando as primeiras 1000
-  gravações deste período"); a Lista usa `sort=recorded_desc` e `limit=50`. As duas releem a cada
-  3 s enquanto alguma gravação está em andamento, lendo só o que mudou (`?since=`, ver
-  "Estado de servidor com TanStack Query").
-- **Painel de filtros** à direita (`.with-filters` e `.filters`, recolhível até 48px): Tipo,
-  Precisam de você ("Aguardando locutores", `precisa=locutores` na URL, que vira
-  `awaiting=speakers`), Situação, Tags, Pessoas (o `PersonCombobox` em linha), Participantes (empresa, área e tag de
-  pessoa, com os valores de `GET /people/facets`; `empresa`, `area` e `tag-pessoa` na URL, que
-  viram `person_company`, `person_department` e `person_tag`, e valem para uma mesma pessoa),
-  Coleções (com "Gerenciar coleções") e um grupo por campo próprio do usuário (escolha como `.check`, texto e lista como "Qualquer valor",
-  aplicado no Enter ou ao sair). Os filtros vão na URL (ver as rotas) e viram os filtros
-  repetíveis de `GET /recordings`; `STATUS_GROUPS` mapeia a Situação ao enum de `status` (Pronta =
-  `transcribed`, Processando = `uploading`/`queued`/`processing`, Falhou = `failed`). Um grupo com
-  tudo marcado não manda o parâmetro, e o último marcado não sai. Abaixo de 56rem, o painel é um
-  `Dialog` aberto por "Filtros (N)".
-- **Aviso "Precisam de você"** (holetz/eclume#144): com `GET /me/speaker-naming` dizendo
-  `waiting_count > 0`, uma faixa `alert-warning` acima da barra conta as gravações que aguardam
-  você nomear os locutores; "Ver" liga o filtro na lista. Some com o filtro já ligado.
-- **Persistência** (`src/app/storage.ts`, `localStorage` com `try/catch`): o painel lembra se está
-  recolhido (`eclume-biblioteca-filtros-recolhidos`) e a biblioteca, a última query string sem o
-  `importar` (`eclume-biblioteca-ultima:<user_id>`, por conta, porque guarda ids de pessoa, tag,
-  coleção e campo; a chave global antiga sai na primeira leitura). As outras preferências
-  (densidade, movimento, colunas, expediente, painel recolhido) são por aparelho. "Limpar filtros"
-  tira tudo menos `visao` e `data`.
-- **Restauração uma vez só**: quando `/` abre sem parâmetros, a página volta à última biblioteca
-  guardada (ou abre na visão da tela Ambiente) por um `replace`, e a flag `restoring` cai assim que
-  a URL restaurada chega. Depois disso, marcar e desmarcar filtros, trocar a visão e andar pelas
-  datas são só navegação: o `setParams` do `useSearchParams` muda de identidade a cada mudança da
-  URL, então uma restauração sem essa trava roda de novo a cada filtro e o desfaz (com a abertura
-  "última" chega a alternar com a gravação da guardada, em laço). A flag cai no próprio render, e
-  não num efeito, porque o lint (`react-hooks/set-state-in-effect`) proíbe `setState` síncrono em
-  efeito. Fora da restauração, a guardada acompanha a URL, e uma URL vazia a **apaga**: tirar o
-  último filtro não o ressuscita na próxima visita.
-- **Estados**: carregando (grade com `aria-busy` e "Carregando gravações…"), erro com "Tentar de
-  novo", "Nada gravado neste período." e, numa conta sem nenhuma gravação (`GET /recordings` com
-  `limit=1`), o cartão "Nenhuma gravação ainda", que ensina os caminhos reais: importar, o app
-  desktop, o app do celular (`/app-movel`) e o tipo de agenda que dá título e resumo. A faixa
-  `alert-info` "Enviando 1 de 3 arquivos · Abrir" acompanha a fila de importação.
-- **Primeiros passos** (`FirstSteps`): cartão no topo da biblioteca enquanto há passo pendente, com
-  três passos derivados, sem contrato novo: (1) traga a primeira gravação (a conta tem gravação,
-  `useHasAnyRecording`, em `library/anyRecording.ts`, módulo próprio para o shell não puxar as consultas da biblioteca ao JS inicial), com importar, app desktop e app do celular; (2) confira os tipos de agenda
-  (abrir `/config/agendas` neste navegador grava `eclume-tipos-de-agenda-visto`); (3) ligue um
-  locutor a uma pessoa (a conta tem pessoa, `GET /people` com `limit=1`, `useHasAnyPerson`). Cada
-  passo feito ganha o check e "(feito)" para leitor de tela; com os três feitos o cartão some
-  sozinho, e **Dispensar** grava `eclume-primeiros-passos-dispensado`. As duas chaves são deste
-  navegador, como as preferências de Ambiente, e "Restaurar os padrões" as apaga.
+- **Query** (`queries.ts`): the period goes in `GET /recordings` with `from`, `to`,
+  `sort=recorded_asc` and `limit=200`, following the cursor up to 5 pages ("Mostrando as primeiras 1000
+  gravações deste período"); the List uses `sort=recorded_desc` and `limit=50`. Both reread every
+  3 s while some recording is in progress, reading only what changed (`?since=`, see
+  "Server state with TanStack Query").
+- **Filter panel** on the right (`.with-filters` and `.filters`, collapsible down to 48px): Type,
+  Precisam de você ("Aguardando locutores", `precisa=locutores` in the URL, which becomes
+  `awaiting=speakers`), Status, Tags, People (the inline `PersonCombobox`), Participants (company, department and person
+  tag, with the values of `GET /people/facets`; `empresa`, `area` and `tag-pessoa` in the URL, which
+  become `person_company`, `person_department` and `person_tag`, and apply to one same person),
+  Collections (with "Gerenciar coleções") and one group per user-defined field (choice as `.check`, text and list as "Qualquer valor",
+  applied on Enter or on leaving). The filters go in the URL (see the routes) and become the repeatable
+  filters of `GET /recordings`; `STATUS_GROUPS` maps Status to the `status` enum (Pronta =
+  `transcribed`, Processando = `uploading`/`queued`/`processing`, Falhou = `failed`). A group with
+  everything checked does not send the parameter, and the last checked one cannot be unchecked. Below 56rem, the panel is a
+  `Dialog` opened by "Filtros (N)".
+- **"Precisam de você" notice** (holetz/eclume#144): with `GET /me/speaker-naming` reporting
+  `waiting_count > 0`, an `alert-warning` strip above the bar counts the recordings waiting for
+  you to name the speakers; "Ver" turns the filter on in the list. It disappears with the filter already on.
+- **Persistence** (`src/app/storage.ts`, `localStorage` with `try/catch`): the panel remembers whether it is
+  collapsed (`eclume-biblioteca-filtros-recolhidos`) and the library, the last query string without
+  `importar` (`eclume-biblioteca-ultima:<user_id>`, per account, because it holds person, tag,
+  collection and field ids; the old global key goes away on the first read). The other preferences
+  (density, motion, columns, working hours, collapsed panel) are per device. "Limpar filtros"
+  removes everything except `visao` and `data`.
+- **Restoration only once**: when `/` opens without parameters, the page goes back to the last stored
+  library (or opens on the view of the Ambiente screen) through a `replace`, and the `restoring` flag drops as soon as
+  the restored URL arrives. After that, checking and unchecking filters, switching the view and walking through the
+  dates are just navigation: `useSearchParams`'s `setParams` changes identity on every change of the
+  URL, so a restoration without that lock runs again on every filter and undoes it (with the "última"
+  opening it even alternates with writing the stored one, in a loop). The flag drops in the render itself, and
+  not in an effect, because the lint (`react-hooks/set-state-in-effect`) forbids a synchronous `setState` in an
+  effect. Outside restoration, the stored one follows the URL, and an empty URL **deletes** it: removing the
+  last filter does not resurrect it on the next visit.
+- **States**: loading (grid with `aria-busy` and "Carregando gravações…"), error with "Tentar de
+  novo", "Nada gravado neste período." and, in an account without any recording (`GET /recordings` with
+  `limit=1`), the "Nenhuma gravação ainda" card, which teaches the real paths: importing, the desktop
+  app, the phone app (`/app-movel`) and the agenda type that gives title and summary. The
+  `alert-info` strip "Enviando 1 de 3 arquivos · Abrir" follows the import queue.
+- **First steps** (`FirstSteps`): a card at the top of the library while there is a pending step, with
+  three derived steps, without a new contract: (1) bring the first recording (the account has a recording,
+  `useHasAnyRecording`, in `library/anyRecording.ts`, its own module so the shell does not pull the library queries into the initial JS), with import, desktop app and phone app; (2) check the agenda types
+  (opening `/config/agendas` in this browser writes `eclume-tipos-de-agenda-visto`); (3) link a
+  speaker to a person (the account has a person, `GET /people` with `limit=1`, `useHasAnyPerson`). Each
+  step done gets the check and "(feito)" for screen readers; with the three done the card disappears
+  by itself, and **Dispensar** writes `eclume-primeiros-passos-dispensado`. Both keys belong to this
+  browser, like the Ambiente preferences, and "Restaurar os padrões" deletes them.
 
-## Importar: modal e fila
+## Import: modal and queue
 
-- **Importar é um modal da biblioteca** (`ImportDialog`, variante A): `/?importar=1` o abre, e a
-  rota antiga `/importar` redireciona para lá. O modal (e o conversor que ele puxa) carrega sob
-  demanda. Tem a `.dropzone` e a `.table` com Arquivo (nome e tamanho), **Início da gravação**
-  (`datetime-local` com a origem embaixo: "Dos metadados do arquivo", "Sem data no arquivo · usando
-  a data de modificação, confira" no tom de aviso, ou "Editada por você"), Duração, Situação e
-  remover/cancelar. "Enviar N arquivos" fica desabilitado enquanto há leitura ou data vazia.
-- **A data vem dos metadados, lidos antes da conversão** (`readRecordedAt`,
-  [formato-audio-upload.md](formato-audio-upload.md)). O upload manda `recorded_at` e
-  `recorded_at_source` (`file_metadata` sem edição; `user` quando editada ou vinda do fallback) e
-  não manda `title`.
-- **A fila vive no shell** (`ImportProvider` envolvendo o `ShellFrame` do `AppShell`, `useImportQueue`, `importContext.ts`):
-  fechar o modal ou navegar não perde o envio. Os arquivos são convertidos e enviados **um por
-  vez**; cancelar aborta e apaga o upload; "Tentar de novo" retoma pelo `uploadId` ou reconverte.
-  A fila guarda os itens num ref, a fonte da verdade do laço de envio, e o estado só espelha o ref
-  (o laço não espera o React renderizar). Enquanto há conversão ou envio, o `beforeunload` avisa,
-  e "Sair" pede confirmação ("O envio em andamento será interrompido.").
-  Terminado um envio, a biblioteca é relida (`['recordings']`).
+- **Import is a library modal** (`ImportDialog`, variant A): `/?importar=1` opens it, and the
+  old route `/importar` redirects there. The modal (and the converter it pulls) loads on
+  demand. It has the `.dropzone` and the `.table` with File (name and size), **Início da gravação**
+  (`datetime-local` with the origin below: "Dos metadados do arquivo", "Sem data no arquivo · usando
+  a data de modificação, confira" in the warning tone, or "Editada por você"), Duration, Status and
+  remove/cancel. "Enviar N arquivos" stays disabled while there is a read or an empty date.
+- **The date comes from the metadata, read before the conversion** (`readRecordedAt`,
+  [formato-audio-upload.md](formato-audio-upload.md)). The upload sends `recorded_at` and
+  `recorded_at_source` (`file_metadata` without editing; `user` when edited or coming from the fallback) and
+  does not send `title`.
+- **The queue lives in the shell** (`ImportProvider` wrapping the `ShellFrame` of `AppShell`, `useImportQueue`, `importContext.ts`):
+  closing the modal or navigating does not lose the upload. The files are converted and uploaded **one at a
+  time**; cancelling aborts and deletes the upload; "Tentar de novo" resumes through `uploadId` or reconverts.
+  The queue keeps the items in a ref, the source of truth of the upload loop, and the state only mirrors the ref
+  (the loop does not wait for React to render). While there is a conversion or an upload, `beforeunload` warns,
+  and "Sair" asks for confirmation ("O envio em andamento será interrompido.").
+  Once an upload finishes, the library is reread (`['recordings']`).
 
-## Página da gravação
+## Recording page
 
-`/gravacoes/:id` é centrada no resumo (frames "Recording", "transcript with markers" e "editing the
-summary", variantes A), em largura total com o chat numa coluna de 340px (abaixo de 72rem o chat
-desce; abaixo de 56rem, os campos também):
+`/gravacoes/:id` is centered on the summary (frames "Recording", "transcript with markers" and "editing the
+summary", variants A), at full width with the chat in a 340px column (below 72rem the chat
+moves down; below 56rem, the fields too):
 
-- **Cabeçalho** (`RecordingHeader`): "← Biblioteca" volta à URL de onde a pessoa veio
-  (`location.state.from`, posto pelos links do calendário, da lista e da busca); o kicker diz
-  data, hora e duração ("· data do envio" quando `recorded_at_source` é `upload`); **Exportar** é
-  um `MenuButton` (TXT, SRT, MD — desabilitado sem resumo — e DOCX) que baixa pelo cliente da API
-  (`parseAs: 'blob'`, nome do `Content-Disposition`) e mostra o `Problem` num alerta; um 401 no
-  export encerra a sessão como qualquer outra chamada; **Excluir** pede confirmação, tira a gravação do cache, relê a biblioteca e
-  volta com "Gravação excluída.".
-- **Pipeline** (`Pipeline.tsx`, rótulos em `steps.ts` pelo vocabulário): as sete etapas no
-  `ol.pipeline`, cada uma com o estado em palavra quando não está concluída ("Resumo · pulada"), a
-  lista "Motivos das etapas" sob a barra com o motivo de cada etapa pulada, em espera ou que falhou, o progresso do worker com a
-  transcrição em andamento e o `RetryTranscription` numa falha. A gravação relê no ritmo de
-  `pollWhile` (3 s de início) enquanto está em andamento ou aguardando locutores, e uma etapa de campos, tipo ou resumo que termina relê campos e resumo.
-- **Aguardando locutores** (`AwaitingSpeakers.tsx`, holetz/eclume#144): com a etapa `speakers` em
-  `waiting`, o `Pipeline` mostra um `alert-warning` (`role="status"`) que leva a `#locutores` e
-  oferece **Seguir sem nomear** (`ConfirmDialog`, `POST /recordings/{id}/continue`). Ligar ou
-  mesclar locutor no painel muda a transcrição em cache; o aviso percebe a troca dos vínculos e relê
-  a gravação, que o servidor já soltou se o último ganhou pessoa. O aviso fica no `Pipeline`, não no
-  `children` do `SpeakersDisclosure`: parada à espera, a `RecordingPage` abre o bloco Locutores
-  sozinha, e um `hashchange` para `#locutores` o reabre se a pessoa o recolheu.
-- **A linha da espera** (holetz/eclume#117): com a gravação `queued`, o `Pipeline` mostra em
-  `role="status"` a frase de `fraseDaEspera(job.queue)` do vocabulário compartilhado — posição e
-  início estimado ("3ª na fila · começa em cerca de 12 min (estimativa)"), as gravações da própria
-  conta antes, a hora em que a janela de minutos libera ou "O processador está fora do ar desde
-  14:02; sua gravação está guardada e entra quando ele voltar". Sem `queue` (servidor anterior),
-  "Aguardando a vez na fila de transcrição.". A previsão vem sempre rotulada como estimativa; o
-  cartão da biblioteca segue "Na fila". Os textos são provisórios até a referência visual da
-  holetz/eclume#117 (tarefa 1.1).
-- **Reprodução compartilhada** (`PlaybackProvider`, `playback.ts`): um único `<audio>` liga o
-  player compacto (tocar, trilha com `range` para teclado, um `.player-tick` por marcador, a
-  velocidade 1×–2×), a `.marker-bar` (ficha por marcador, que toca dali, e "Marcado no
-  <dispositivo>" quando é um só) e as falas. O `src` é `/recordings/{id}/audio`, que responde 302
-  para uma URL assinada de 1 h: no `error` do `<audio>`, o provider troca o `src`
-  (`?renovacao=<n>`, para não reaproveitar o 302), volta ao mesmo instante e à velocidade no
-  `loadedmetadata` e retoma tocando se tocava, uma vez sozinho (de novo depois de voltar a tocar);
-  a segunda falha expõe `error` no contexto e o player mostra "O áudio não carregou" com "Tentar de
-  novo", com o tocar desabilitado. Erro antes do primeiro carregamento num navegador cujo
-  `canPlayType('audio/ogg; codecs=opus')` é vazio vira o aviso de que ele não toca Ogg Opus.
-  **O instante não passa pelo contexto**: fica numa store (`PlaybackClock`, escrita no `timeupdate`
-  e no `seek`), lida por `usePlaybackTime()` (o player) ou por `usePlaybackSelect(seletor)`, que só
-  renderiza quando o valor primitivo selecionado muda (a fala ativa). O contexto leva duração,
-  tocando, velocidade, erro e comandos, e só muda quando um deles muda: a `.marker-bar` e quem só
-  comanda não renderizam por tick. **O player fica fixo** (`position: sticky` abaixo de
-  `--shell-header`, sobre `--color-bg`, sem a `.marker-bar`): pausar está a um clique em qualquer
-  ponto da página, inclusive lendo o resumo (holetz/eclume#143).
-- **Locutores** (`SpeakersDisclosure`, `details.disclosure` próprio, fechado, entre a `.marker-bar`
-  e a transcrição): recolhido, o resumo mostra cada locutor em linha, na horizontal, no `.speaker`
-  da cor dele; aberto, o `SpeakersPanel` (região "Locutores", `id="locutores"`) traz um card por
-  locutor numa grade (`repeat(auto-fill, minmax(15rem, 1fr))`, fundo `--color-surface`) com
-  renomear, ligar pessoa, sugestões por voz e, abaixo da grade, juntar. O aberto é estado da
-  `RecordingPage`, e o `children` do componente é o lugar de um aviso sobre os locutores, antes dos
-  cards. Os locutores não aparecem dentro da transcrição nem no painel de campos.
-- **Transcrição recolhida** (`TranscriptDisclosure`, `details.disclosure` fechado): o resumo diz
-  locutores, falas e marcadores; aberta, tem "Acompanhar o áudio" e as falas no `.segment` do DS, com a `.segment-marker` antes da
-  primeira fala que começa no marcador (`placeMarkers`), editar a nota (até 500) e excluir o
-  marcador. As falas só renderizam com ela aberta. Com `?t=<ms>`, abre sozinha, posiciona o áudio
-  sem tocar e, **uma vez**, traz a lista à janela (`scrollIntoView` com `block: 'nearest'` no
-  contêiner, nunca na fala) e centra nela a fala do instante, independente do seguir.
-  - **Área de rolagem própria** (holetz/eclume#143): a lista de falas (`role="list"` "Falas") é o
-    contêiner que rola, mais baixo que a janela (`max-height: min(28rem, 55vh)`, `overflow-y:
-    auto`, `overscroll-behavior: contain`). O `?t=` e o acompanhar rolam só ela, pelo `scrollTop`
-    de `scrollTopFor` (`scroll.ts`: `nearest` com folga de 16 px, ou `center`) aplicado com
-    `scrollTo`; `scrollIntoView` numa fala é proibido, porque rola todos os ancestrais, a janela
-    inclusive, e tirava o player da tela. A lista não precisa de `tabIndex`: os botões das falas
-    a tornam alcançável pelo teclado.
-  - **Transcrição longa.** Cada fala é um `SegmentRow` memoizado com props estáveis (nome e cor do
-    locutor e marcadores por índice saem de mapas em `useMemo` por transcrição; `active` e
-    `editing` booleanos; `seek` e `setEditingId` como callbacks), e a fala ativa vem de
-    `usePlaybackSelect` com o `findSegmentAt` (busca binária): um tick sem troca renderiza zero
-    falas e uma troca renderiza duas. O item da fala tem `content-visibility: auto` com
-    `contain-intrinsic-size: auto 5.5rem` no CSS Module: fora da tela não é pintado, mas fica no
-    DOM, também dentro da área de rolagem. A virtualização foi descartada: o Ctrl+F do navegador e
-    o leitor de tela precisam das falas no DOM.
-  - **"Acompanhar o áudio"** (ligado por padrão) rola a lista por dentro a cada troca de fala, com
-    `smooth`, esteja ela na janela ou não: a página nunca se mexe, e quem volta à lista a acha na
-    fala certa. Desligado, nada rola.
-  - **A medida é contrato**: `TranscriptDisclosure.test.tsx` conta renders sobre 3.000 falas (0 por
-    tick sem troca, 2 na troca, a `.marker-bar` nenhum), e `TranscriptDisclosure.browser.test.tsx`
-    (`npm run test:browser`, no host) mede o commit por `React.Profiler`: mediana de 20
-    ticks abaixo de 8 ms sem troca e de 16 ms com troca. `TranscriptDisclosure.test.tsx` também
-    prova que o `?t=` e o acompanhar chamam `scrollTo` na lista e nunca `scrollIntoView` numa fala,
-    e o E2E prova, com 3.000 falas e o áudio avançando, o `scrollY` parado e o pausar na janela.
-- **Documento do resumo** (`SummaryDoc`, `summary.ts`): o `SummaryState` (atual, gerada de
-  referência e geração em andamento, relido no ritmo de `pollWhile` com pendência) com a `.doc-bar` (tipo,
-  origem e versão; Copiar com título, Editar, Comparar com a gerada, Regenerar, Trocar tipo e
-  Excluir resumo; o selo do tipo é o instantâneo do resumo e só vira link, "ajustar o modelo deste
-  tipo" para `/config/agendas?tipo=`, se o tipo ainda existe em `GET /agenda-types`) e o Markdown pelo `react-markdown`, sem HTML cru. Sem tipo de agenda, gerar pede
-  um ("Escolha um tipo de agenda para gerar o resumo."). Sem agente de resumo (etapa `skipped` com
-  `no_provider`), diz "Sem resumo: nenhum agente configurado; fale com quem administra." e troca o
-  "Gerar resumo" primário por um "Tentar de novo" secundário; o 422 de `provider_id` vira a mesma
-  frase, nunca cru.
-  **Regenerar** gera outra versão pelo tipo da gravação (`POST /transcripts/{id}/summaries` sem
-  `agenda_type_id`) e sempre confirma antes, porque a nova versão passa a ser a atual e uma edição à
-  mão deixa de ser a mostrada, embora fique guardada; fica desabilitado enquanto há geração em
-  andamento e, sem tipo, abre o diálogo de trocar o tipo. **Copiar com título** põe na área de
-  transferência `text/html` e `text/plain` (`copy-summary.ts`, o mesmo `react-markdown`, carregado
-  sob demanda): o título da gravação e os de seção saem em negrito, sem `#`, porque o Teams não
-  guarda o estilo de título ao colar; sem `ClipboardItem` cai no texto sem as hashtags dos títulos.
-  O `ClipboardItem` nasce ainda no clique, com o conteúdo como promessa de `Blob`, porque o Safari
-  recusa uma escrita na área de transferência começada depois de um `await`.
-- **Edição** (`SummaryEditor`): o Markdown num `textarea` na tipografia do `.doc`, salvo com
-  `base_version` = a versão aberta. O 409 `summary_changed` guarda o rascunho e oferece "Ver a
-  versão N" (a comparação do rascunho com a nova) e "Salvar sobre a versão N". "Voltar à gerada"
-  pede confirmação. O rascunho sobrevive a recarregar a aba (`summaryDraft.ts`): fica no
-  `sessionStorage` em `eclume-resumo-rascunho:<recording_id>`, com a `base_version`, gravado ~500 ms
-  depois da última tecla; ao reabrir a edição, volta direto se a base é a versão aberta e com o
-  aviso de conflito se a base ficou para trás. Salvar, descartar (pelo Cancelar ou pelo guarda de
-  saída) e voltar à gerada apagam o rascunho guardado. Sair da gravação com rascunho pede
-  "Descartar a edição?" (o guarda de saída). **Comparar** é um diff por linha no cliente (`summary-diff.ts`, LCS), com
-  `<del>`/`<ins>` e o sinal −/+ para quem não enxerga cor.
-- **Campos** (`FieldsPanel`, `fields.ts`, componente "Filled fields" variante A): título e tags
-  primeiro, depois os campos do usuário, com o selo de origem (Automático tracejado, Editado
-  sólido, aceito sem selo), Aceitar, Aceitar tudo e Editar pelo tipo (texto até 300, lista por
-  vírgula, escolha com "Nenhum"); o tipo de agenda com Trocar; as coleções (com "Nova coleção…");
-  e, quando há, os "Dados anteriores" do `metadata` antigo, só leitura (os locutores ficam no bloco
-  deles, acima da transcrição). Cada campo tem **Editar a regra**, que leva
-  ao dono da regra: o campo personalizado a `/config/campos?campo=`, o título ao tipo da gravação
-  (`/config/agendas?tipo=`) e as tags a `/tags`.
-- **Chat "Ajustar o resumo"** (`ChatPanel`, `chat.ts`): o histórico no `role=log`, com uma
-  `.msg-note` por leitura do agente ("Leu a transcrição, 00:03:20–00:04:20", "Buscou “orçamento”
-  na transcrição · 3 trechos"); enviar recebe o 202 com as duas mensagens, e a resposta é
-  consultada no ritmo de `pollWhile` (2 s de início) até `done` ou `failed`. O composer espera com um pedido em aberto (e no
-  409 `chat_busy`) e sem resumo atual. Depois do último ajuste que mudou o resumo (`done` com
-  `summary_id`), com a gravação num tipo, o painel oferece **Levar este pedido para as instruções do
-  tipo**: abre `/config/agendas?tipo=` com o pedido no `state` da navegação
-  (`InstructionsRequestState`, em `organize/queries.ts` para o grafo de features seguir sem ciclo), e o `AgendaTypeEditor` o acrescenta ao fim do rascunho das
-  instruções do resumo, com um `role=status` explicando, sem salvar; o rascunho sujo fica sob o
-  "Descartar alterações?" e o guarda de saída.
+- **Header** (`RecordingHeader`): "← Biblioteca" goes back to the URL the person came from
+  (`location.state.from`, set by the calendar, list and search links); the kicker states
+  date, time and duration ("· data do envio" when `recorded_at_source` is `upload`); **Exportar** is
+  a `MenuButton` (TXT, SRT, MD — disabled without a summary — and DOCX) that downloads through the API client
+  (`parseAs: 'blob'`, name from `Content-Disposition`) and shows the `Problem` in an alert; a 401 on
+  export ends the session like any other call; **Excluir** asks for confirmation, removes the recording from the cache, rereads the library and
+  goes back with "Gravação excluída.".
+- **Pipeline** (`Pipeline.tsx`, labels in `steps.ts` through the vocabulary): the seven steps in the
+  `ol.pipeline`, each with its state in words when it is not completed ("Resumo · pulada"), the
+  "Motivos das etapas" list under the bar with the reason of each skipped, waiting or failed step, the worker's progress with the
+  transcription in progress and `RetryTranscription` on a failure. The recording rereads at the rhythm of
+  `pollWhile` (3 s at the start) while it is in progress or awaiting speakers, and a fields, type or summary step that finishes rereads fields and summary.
+- **Awaiting speakers** (`AwaitingSpeakers.tsx`, holetz/eclume#144): with the `speakers` step in
+  `waiting`, `Pipeline` shows an `alert-warning` (`role="status"`) that leads to `#locutores` and
+  offers **Seguir sem nomear** (`ConfirmDialog`, `POST /recordings/{id}/continue`). Linking or
+  merging a speaker in the panel changes the cached transcript; the notice notices the change of the links and rereads
+  the recording, which the server already released if the last one got a person. The notice stays in `Pipeline`, not in
+  the `children` of `SpeakersDisclosure`: stopped and waiting, `RecordingPage` opens the Speakers block
+  by itself, and a `hashchange` to `#locutores` reopens it if the person collapsed it.
+- **The waiting line** (holetz/eclume#117): with the recording `queued`, `Pipeline` shows in
+  `role="status"` the sentence from `fraseDaEspera(job.queue)` of the shared vocabulary — position and
+  estimated start ("3ª na fila · começa em cerca de 12 min (estimativa)"), the account's own recordings
+  ahead, the time at which the minutes window frees up or "O processador está fora do ar desde
+  14:02; sua gravação está guardada e entra quando ele voltar". Without `queue` (an earlier server),
+  "Aguardando a vez na fila de transcrição.". The forecast is always labelled as an estimate; the
+  library card keeps "Na fila". The texts are provisional until the visual reference of
+  holetz/eclume#117 (task 1.1).
+- **Shared playback** (`PlaybackProvider`, `playback.ts`): a single `<audio>` links the
+  compact player (play, track with `range` for the keyboard, one `.player-tick` per marker, the
+  speed 1×–2×), the `.marker-bar` (a chip per marker, which plays from there, and "Marcado no
+  <dispositivo>" when there is only one) and the segments. The `src` is `/recordings/{id}/audio`, which answers 302
+  to a 1 h signed URL: on the `<audio>`'s `error`, the provider swaps the `src`
+  (`?renovacao=<n>`, so as not to reuse the 302), goes back to the same instant and speed on
+  `loadedmetadata` and resumes playing if it was playing, once by itself (again after playing resumes);
+  the second failure exposes `error` in the context and the player shows "O áudio não carregou" with "Tentar de
+  novo", with play disabled. An error before the first load in a browser whose
+  `canPlayType('audio/ogg; codecs=opus')` is empty becomes the notice that it does not play Ogg Opus.
+  **The instant does not go through the context**: it stays in a store (`PlaybackClock`, written on `timeupdate`
+  and on `seek`), read by `usePlaybackTime()` (the player) or by `usePlaybackSelect(seletor)`, which only
+  renders when the selected primitive value changes (the active segment). The context carries duration,
+  playing, speed, error and commands, and only changes when one of them changes: the `.marker-bar` and whoever only
+  commands do not render per tick. **The player stays fixed** (`position: sticky` below
+  `--shell-header`, over `--color-bg`, without the `.marker-bar`): pausing is one click away at any
+  point of the page, including while reading the summary (holetz/eclume#143).
+- **Speakers** (`SpeakersDisclosure`, its own `details.disclosure`, closed, between the `.marker-bar`
+  and the transcript): collapsed, the summary shows each speaker inline, horizontally, in the `.speaker`
+  of its color; open, `SpeakersPanel` (region "Locutores", `id="locutores"`) brings one card per
+  speaker in a grid (`repeat(auto-fill, minmax(15rem, 1fr))`, `--color-surface` background) with
+  rename, link person, voice suggestions and, below the grid, merge. Being open is state of
+  `RecordingPage`, and the component's `children` is the place for a notice about the speakers, before the
+  cards. The speakers do not show inside the transcript nor in the fields panel.
+- **Collapsed transcript** (`TranscriptDisclosure`, closed `details.disclosure`): the summary states
+  speakers, segments and markers; open, it has "Acompanhar o áudio" and the segments in the DS `.segment`, with the `.segment-marker` before the
+  first segment that starts at the marker (`placeMarkers`), edit the note (up to 500) and delete the
+  marker. The segments only render with it open. With `?t=<ms>`, it opens by itself, positions the audio
+  without playing and, **once**, brings the list into the window (`scrollIntoView` with `block: 'nearest'` on the
+  container, never on the segment) and centers on it the segment of the instant, regardless of following.
+  - **Own scroll area** (holetz/eclume#143): the segment list (`role="list"` "Falas") is the
+    container that scrolls, lower than the window (`max-height: min(28rem, 55vh)`, `overflow-y:
+    auto`, `overscroll-behavior: contain`). `?t=` and following scroll only it, through the `scrollTop`
+    of `scrollTopFor` (`scroll.ts`: `nearest` with a 16 px margin, or `center`) applied with
+    `scrollTo`; `scrollIntoView` on a segment is forbidden, because it scrolls every ancestor, the window
+    included, and took the player off the screen. The list needs no `tabIndex`: the segments' buttons
+    make it reachable by keyboard.
+  - **Long transcript.** Each segment is a memoized `SegmentRow` with stable props (speaker name and color
+    and markers by index come out of `useMemo` maps per transcript; `active` and
+    `editing` booleans; `seek` and `setEditingId` as callbacks), and the active segment comes from
+    `usePlaybackSelect` with `findSegmentAt` (binary search): a tick without a change renders zero
+    segments and a change renders two. The segment item has `content-visibility: auto` with
+    `contain-intrinsic-size: auto 5.5rem` in the CSS Module: off screen it is not painted, but it stays in the
+    DOM, also inside the scroll area. Virtualization was discarded: the browser's Ctrl+F and
+    the screen reader need the segments in the DOM.
+  - **"Acompanhar o áudio"** (on by default) scrolls the list internally on every segment change, with
+    `smooth`, whether it is in the window or not: the page never moves, and whoever comes back to the list finds it on the
+    right segment. Off, nothing scrolls.
+  - **The measurement is a contract**: `TranscriptDisclosure.test.tsx` counts renders over 3,000 segments (0 per
+    tick without a change, 2 on a change, the `.marker-bar` none), and `TranscriptDisclosure.browser.test.tsx`
+    (`npm run test:browser`, on the host) measures the commit through `React.Profiler`: median of 20
+    ticks below 8 ms without a change and 16 ms with a change. `TranscriptDisclosure.test.tsx` also
+    proves that `?t=` and following call `scrollTo` on the list and never `scrollIntoView` on a segment,
+    and the E2E proves, with 3,000 segments and the audio advancing, that `scrollY` stays still and pausing works in the window.
+- **Summary document** (`SummaryDoc`, `summary.ts`): the `SummaryState` (current, generated
+  reference and generation in progress, reread at the rhythm of `pollWhile` while pending) with the `.doc-bar` (type,
+  origin and version; Copy with title, Edit, Compare with the generated one, Regenerate, Change type and
+  Delete summary; the type badge is the summary's snapshot and only becomes a link, "ajustar o modelo deste
+  tipo" to `/config/agendas?tipo=`, if the type still exists in `GET /agenda-types`) and the Markdown through `react-markdown`, without raw HTML. Without an agenda type, generating asks for
+  one ("Escolha um tipo de agenda para gerar o resumo."). Without a summary agent (step `skipped` with
+  `no_provider`), it says "Sem resumo: nenhum agente configurado; fale com quem administra." and swaps the
+  primary "Gerar resumo" for a secondary "Tentar de novo"; the `provider_id` 422 becomes the same
+  sentence, never raw.
+  **Regenerate** generates another version through the recording's type (`POST /transcripts/{id}/summaries` without
+  `agenda_type_id`) and always confirms first, because the new version becomes the current one and a manual
+  edit stops being the one shown, although it stays stored; it stays disabled while a generation is in
+  progress and, without a type, opens the change-type dialog. **Copy with title** puts on the
+  clipboard `text/html` and `text/plain` (`copy-summary.ts`, the same `react-markdown`, loaded
+  on demand): the recording's title and the section titles come out in bold, without `#`, because Teams does not
+  keep the heading style on paste; without `ClipboardItem` it falls back to the text without the headings' hashes.
+  The `ClipboardItem` is born still within the click, with the content as a `Blob` promise, because Safari
+  refuses a clipboard write started after an `await`.
+- **Editing** (`SummaryEditor`): the Markdown in a `textarea` in the `.doc` typography, saved with
+  `base_version` = the opened version. The 409 `summary_changed` keeps the draft and offers "Ver a
+  versão N" (the comparison of the draft with the new one) and "Salvar sobre a versão N". "Voltar à gerada"
+  asks for confirmation. The draft survives a tab reload (`summaryDraft.ts`): it stays in
+  `sessionStorage` in `eclume-resumo-rascunho:<recording_id>`, with the `base_version`, written ~500 ms
+  after the last keystroke; on reopening the editor, it comes back directly if the base is the opened version and with the
+  conflict notice if the base fell behind. Saving, discarding (through Cancel or the leave
+  guard) and going back to the generated one delete the stored draft. Leaving the recording with a draft asks
+  "Descartar a edição?" (the leave guard). **Compare** is a client-side line diff (`summary-diff.ts`, LCS), with
+  `<del>`/`<ins>` and the −/+ sign for whoever does not see color.
+- **Fields** (`FieldsPanel`, `fields.ts`, component "Filled fields" variant A): title and tags
+  first, then the user's fields, with the origin badge (Automático dashed, Editado
+  solid, accepted without a badge), Accept, Accept all and Edit by type (text up to 300, list by
+  comma, choice with "Nenhum"); the agenda type with Change; the collections (with "Nova coleção…");
+  and, when there are any, the "Dados anteriores" of the old `metadata`, read-only (the speakers stay in their
+  block, above the transcript). Each field has **Editar a regra**, which leads
+  to the rule's owner: the custom field to `/config/campos?campo=`, the title to the recording's type
+  (`/config/agendas?tipo=`) and the tags to `/tags`.
+- **"Ajustar o resumo" chat** (`ChatPanel`, `chat.ts`): the history in `role=log`, with one
+  `.msg-note` per agent read ("Leu a transcrição, 00:03:20–00:04:20", "Buscou “orçamento”
+  na transcrição · 3 trechos"); sending receives the 202 with the two messages, and the answer is
+  polled at the rhythm of `pollWhile` (2 s at the start) until `done` or `failed`. The composer waits with an open request (and on the
+  409 `chat_busy`) and without a current summary. After the last adjustment that changed the summary (`done` with
+  `summary_id`), with the recording in a type, the panel offers **Levar este pedido para as instruções do
+  tipo**: it opens `/config/agendas?tipo=` with the request in the navigation `state`
+  (`InstructionsRequestState`, in `organize/queries.ts` so the feature graph stays without a cycle), and `AgendaTypeEditor` appends it to the end of the draft of the
+  summary instructions, with a `role=status` explaining, without saving; the dirty draft stays under
+  "Descartar alterações?" and the leave guard.
 
-## Pessoas, busca e coleções
+## People, search and collections
 
-- **Abrir a gravação num instante** é o link `/gravacoes/:id?t=<ms>`: a página abre a transcrição,
-  destaca a fala daquele instante, rola até ela e posiciona o áudio (sem tocar, pela política de
-  autoplay). A busca e a página da pessoa geram o link com `recordingAt()`.
-- **Busca** (`/busca`, frame "Search"): a barra de termos e uma segunda `.toolbar` com as fichas
-  (`FilterChip`: `tag-neutral`, ou `tag-accent` ativa, com "Rótulo: valor" e um popover no estilo do
-  `.menu`) de Período (qualquer, últimos 7 ou 30 dias, este ano, intervalo), Pessoa, Tag, Coleção e
-  um por campo próprio do usuário; "Limpar" tira tudo menos os termos. Os acertos saem agrupados por
-  gravação (`group.ts`): só os consecutivos da mesma transcrição se juntam, para o ranking ficar
-  como veio; o total diz "7 trechos em 3 gravações" (com "ou mais" quando há outra página).
-- **`highlight` da busca nunca vira `innerHTML`.** `parseHighlight()` separa o texto em pedaços
-  marcados e não marcados, desfaz o escape e o React renderiza texto puro dentro de `<mark>`.
-- **Datas da busca** são dias locais: `de` vira o início do dia e `ate` o início do dia seguinte
-  (`to` é exclusivo no contrato); o período rápido vira só o `from`, na meia-noite local.
-- **Ligar locutor a pessoa** usa `PersonCombobox`: combobox ARIA 1.2 com lista em popup (setas,
-  Enter, Esc, `aria-activedescendant`), busca no diretório por prefixo e a opção "Cadastrar
-  “nome”" quando ninguém tem aquele nome. Sem `onCancel`, o combobox fica em linha (filtros da
-  biblioteca e da busca): sem foco automático, lista só com texto e sem cadastro. Cada sugestão por
-  voz pendente aparece como "Parece ser <pessoa> — NN%", com Aceitar e Recusar; nunca é aplicada
-  sozinha.
-- **Pessoas** (`/pessoas`) é a `table.table` do DS com busca em `?q=`, o cadastro em linha na
-  primeira linha (nome e empresa, com as empresas em uso num `datalist`; Enter envia, e o erro
-  aparece na linha) e as colunas que o usuário escolhe no botão **Colunas** (popover com uma
-  `.check` por coluna: empresa, área, cargo, tags, e-mail, telefone, gravações, amostras de voz e
-  última gravação). O nome é fixo; o padrão esconde e-mail, telefone, cargo e última gravação, e a
-  escolha fica em `eclume-pessoas-colunas` (`features/people/columns.ts`). A **pessoa**
-  (`/pessoas/:id`) mostra cargo · área · empresa, as tags de pessoa e os contatos, tem Editar (o
-  cadastro inteiro; empresa e área sugerem os valores de `GET /people/facets`) e Excluir em
-  `Dialog`, três `.stat` (gravações, tempo de fala, amostras de voz) e as abas Gravações, Falas e Amostras de voz, com a escolhida em `?aba=`.
-- **Voz** ([identificacao-por-voz.md](identificacao-por-voz.md)): a aba Amostras de voz lista as
-  amostras e tem "Esquecer a voz", com confirmação; não há consentimento por pessoa, que o aceite
-  do aviso no cadastro substitui. O admin liga a identificação e ajusta o limiar em Locutores
+- **Opening the recording at an instant** is the link `/gravacoes/:id?t=<ms>`: the page opens the transcript,
+  highlights the segment at that instant, scrolls to it and positions the audio (without playing, per the
+  autoplay policy). Search and the person page generate the link with `recordingAt()`.
+- **Search** (`/busca`, frame "Search"): the terms bar and a second `.toolbar` with the chips
+  (`FilterChip`: `tag-neutral`, or `tag-accent` when active, with "Rótulo: valor" and a popover in the style of
+  `.menu`) for Period (any, last 7 or 30 days, this year, range), Person, Tag, Collection and
+  one per user-defined field; "Limpar" removes everything except the terms. The hits come out grouped by
+  recording (`group.ts`): only consecutive ones from the same transcript are joined, so the ranking stays
+  as it came; the total says "7 trechos em 3 gravações" (with "ou mais" when there is another page).
+- **Search `highlight` never becomes `innerHTML`.** `parseHighlight()` splits the text into marked
+  and unmarked pieces, undoes the escaping and React renders plain text inside `<mark>`.
+- **Search dates** are local days: `de` becomes the start of the day and `ate` the start of the following day
+  (`to` is exclusive in the contract); the quick period becomes only `from`, at local midnight.
+- **Linking a speaker to a person** uses `PersonCombobox`: an ARIA 1.2 combobox with a popup list (arrows,
+  Enter, Esc, `aria-activedescendant`), directory search by prefix and the option "Cadastrar
+  “nome”" when nobody has that name. Without `onCancel`, the combobox stays inline (library and search
+  filters): without autofocus, a text-only list and no creation. Each pending voice
+  suggestion shows as "Parece ser <pessoa> — NN%", with Accept and Decline; it is never applied
+  by itself.
+- **People** (`/pessoas`) is the DS `table.table` with search in `?q=`, inline creation in the
+  first row (name and company, with the companies in use in a `datalist`; Enter submits, and the error
+  shows in the row) and the columns the user chooses in the **Colunas** button (a popover with one
+  `.check` per column: company, department, role, tags, e-mail, phone, recordings, voice samples and
+  last recording). The name is fixed; the default hides e-mail, phone, role and last recording, and the
+  choice stays in `eclume-pessoas-colunas` (`features/people/columns.ts`). The **person**
+  (`/pessoas/:id`) shows role · department · company, the person tags and the contacts, has Edit (the
+  whole record; company and department suggest the values of `GET /people/facets`) and Delete in a
+  `Dialog`, three `.stat` (recordings, speaking time, voice samples) and the tabs Recordings, Segments and Voice samples, with the chosen one in `?aba=`.
+- **Voice** ([identificacao-por-voz.md](identificacao-por-voz.md)): the Voice samples tab lists the
+  samples and has "Esquecer a voz", with confirmation; there is no per-person consent, which the acceptance
+  of the notice at sign-up replaces. The admin turns identification on and adjusts the threshold in Locutores
   (`/admin/locutores`).
-- **Campos personalizados** (`/config/campos`) e **Tipos de agenda** (`/config/agendas`) usam o `.split`
-  do DS: lista à esquerda (seleção em `?campo=`/`?tipo=`, `novo` para o rascunho) e painel à
-  direita. Trocar de item com alterações pede "Descartar alterações?", e sair da rota também (o
-  guarda de saída, com o aviso do navegador ao fechar a aba). Campos
-  personalizados não lista o título embutido (o título vem do tipo de agenda) e mostra as tags
-  como embutido (tipo fixo, sem excluir); o `.switch` "Automático" da lista grava na hora. Em Tipos
-  de agenda, o tipo padrão (`fallback`) fica no topo com o `.badge` "Padrão", sem Excluir e sem
-  "Como identificar"; todo tipo tem "Como escrever o assunto" (`title_instructions`), e a
-  pré-visualização manda o `agenda_type_id` do tipo editado e diz quando ficaria o tipo padrão.
-- **Pré-visualização por consulta ao job** (`organize/usePreview.ts`): "Testar numa gravação"
-  (`POST /fields/preview`, sem `recording_ids`: as 3 últimas transcritas) e "Pré-visualizar numa
-  gravação" (`POST /agenda-types/preview`) devolvem 202 com o job, e a tela consulta
-  `GET /previews/{id}` no ritmo de `pollWhile` (2 s de início) até `done` ou `failed`; 404 vira expirada, e um pedido novo
-  descarta o anterior. Nada é gravado, e a pré-visualização de tipo some quando o rascunho muda.
-- **Coleção convive com tag**: a coleção agrupa gravações; a tag marca assuntos. Ela aparece no
-  painel de campos da gravação, no filtro da biblioteca (`colecao`) e numa ficha da busca, e
-  `/colecoes` fica em Organizar, como decidido na holetz/eclume#38.
-- **Coleções automáticas** (`/colecoes`): o diálogo da coleção tem "Quando incluir" (a regra, com o
-  `HelpHint` e um `<details>` "Exemplos de regras", cada um com "Usar", que copia para o campo) e o
-  `.switch` "Incluir automaticamente depois da transcrição"; a linha mostra o `.badge`
-  "Automática" quando há regra e o interruptor ligado. "Mesclar em…" (com duas coleções ou mais)
-  abre um `Dialog` com o `<select>` da coleção que recebe e manda `POST /collections/{id}/merge`.
-- **Vazios que ensinam o caminho real**, no tom do vazio de Tags: Coleções diz que as gravações
-  entram pela página da gravação ou sozinhas pela regra em "Quando incluir"; Pessoas, que as pessoas
-  nascem ao ligar um locutor na transcrição ou se cadastram na linha de cadastro; Campos
-  personalizados dá um exemplo de campo com a regra ("Cliente", "A empresa cliente citada na
+- **Custom fields** (`/config/campos`) and **Agenda types** (`/config/agendas`) use the DS `.split`:
+  a list on the left (selection in `?campo=`/`?tipo=`, `novo` for the draft) and a panel on the
+  right. Switching items with changes asks "Descartar alterações?", and so does leaving the route (the
+  leave guard, with the browser's warning on closing the tab). Custom
+  fields does not list the built-in title (the title comes from the agenda type) and shows the tags
+  as built-in (fixed type, no delete); the list's "Automático" `.switch` saves immediately. In Agenda
+  types, the fallback type (`fallback`) stays at the top with the "Padrão" `.badge`, without Delete and without
+  "Como identificar"; every type has "Como escrever o assunto" (`title_instructions`), and the
+  preview sends the edited type's `agenda_type_id` and says when the fallback type would apply.
+- **Preview by polling the job** (`organize/usePreview.ts`): "Testar numa gravação"
+  (`POST /fields/preview`, without `recording_ids`: the last 3 transcribed) and "Pré-visualizar numa
+  gravação" (`POST /agenda-types/preview`) return 202 with the job, and the screen polls
+  `GET /previews/{id}` at the rhythm of `pollWhile` (2 s at the start) until `done` or `failed`; 404 becomes expired, and a new request
+  discards the previous one. Nothing is saved, and the type preview disappears when the draft changes.
+- **Collections coexist with tags**: the collection groups recordings; the tag marks subjects. It shows in the
+  recording's fields panel, in the library filter (`colecao`) and in a search chip, and
+  `/colecoes` lives in Organizar, as decided in holetz/eclume#38.
+- **Auto collections** (`/colecoes`): the collection dialog has "Quando incluir" (the rule, with the
+  `HelpHint` and a `<details>` "Exemplos de regras", each with "Usar", which copies into the field) and the
+  `.switch` "Incluir automaticamente depois da transcrição"; the row shows the `.badge`
+  "Automática" when there is a rule and the switch is on. "Mesclar em…" (with two or more collections)
+  opens a `Dialog` with the `<select>` of the receiving collection and sends `POST /collections/{id}/merge`.
+- **Empty states that teach the real path**, in the tone of the Tags empty state: Collections says that recordings
+  come in through the recording page or by themselves through the rule in "Quando incluir"; People, that people
+  are born when linking a speaker in the transcript or are created in the creation row; Custom
+  fields gives an example field with its rule ("Cliente", "A empresa cliente citada na
   reunião; vazio se nenhuma for citada").
-- **Tags** (`/tags`, em Organizar depois de Coleções): o cartão de configuração grava na hora o
-  `.switch` do automático, o modo (`.seg`: "Só as tags cadastradas" ou "O agente pode criar tags")
-  e o limite de tags novas por gravação, e a regra geral com Salvar (`PATCH /me/tag-assignment`); a
-  lista mostra a descrição, a contagem, "Ver gravações" (`/?tag=`) e o `.badge` "Criada pelo
-  agente", com Nova tag, Editar (409 `tag_exists` sugere mesclar), "Mesclar em…" e Excluir em
-  `Dialog`. "Campos personalizados" lista só os campos do usuário: o título vem dos tipos de agenda
-  e as tags, desta tela.
-- **Processamento automático** (`/config/automacao`, `automation/AutomationPage.tsx`, pasta própria para não criar ciclo entre `people` e `organize`, chave de ajuda
-  `automacao`, primeiro item de Regras): a visão geral, na ordem do pipeline de
-  [processamento-automatico.md](processamento-automatico.md), do que acontece sozinho depois de
-  cada gravação, numa `<ol class="list">` de `.list-row`: pré-processamento e transcrição (da
-  plataforma, sem link), locutores pela voz (`/me/voice-assignment`, "Voz: liga sozinho a partir
-  de 75%"), marcação dos locutores (`/me/speaker-naming`, a única linha com a chave na própria
-  tela: o `Switch` "Exigir a marcação dos locutores", e o estado "Não exigida", "Exigida" ou
-  "Exigida · N gravações esperando você"), tipo de agenda (`/agenda-types`), campos personalizados (`/fields`, só os do usuário
-  com `auto_fill`), tags (`/me/tag-assignment`, "Tags: só as cadastradas (N)"), coleções com
-  regra (`/collections` com `auto_assign`) e resumo (tipos com `summary_instructions`). Cada etapa
-  mostra o estado e um link "Configurar" (rotulado pela tela de destino); a página só lê, e as
-  chaves continuam no `TagAssignmentCard`, no `AutoAssignCard` e na regra da coleção. A falha de
-  uma consulta aparece só na etapa dela. Campos, Tags, Pessoas e Coleções apontam para ela no
-  texto de abertura, e Campos personalizados e Tipos de agenda usam o kicker "Regras".
+- **Tags** (`/tags`, in Organizar after Collections): the settings card saves immediately the
+  automatic `.switch`, the mode (`.seg`: "Só as tags cadastradas" or "O agente pode criar tags")
+  and the limit of new tags per recording, and the general rule with Save (`PATCH /me/tag-assignment`); the
+  list shows the description, the count, "Ver gravações" (`/?tag=`) and the `.badge` "Criada pelo
+  agente", with New tag, Edit (409 `tag_exists` suggests merging), "Mesclar em…" and Delete in a
+  `Dialog`. "Campos personalizados" lists only the user's fields: the title comes from the agenda types
+  and the tags, from this screen.
+- **Automatic processing** (`/config/automacao`, `automation/AutomationPage.tsx`, its own folder so as not to create a cycle between `people` and `organize`, help key
+  `automacao`, first item of Regras): the overview, in the pipeline order of
+  [processamento-automatico.md](processamento-automatico.md), of what happens by itself after
+  each recording, in an `<ol class="list">` of `.list-row`: preprocessing and transcription (of the
+  platform, without a link), speakers by voice (`/me/voice-assignment`, "Voz: liga sozinho a partir
+  de 75%"), speaker naming (`/me/speaker-naming`, the only row with the switch on the screen
+  itself: the `Switch` "Exigir a marcação dos locutores", and the state "Não exigida", "Exigida" or
+  "Exigida · N gravações esperando você"), agenda type (`/agenda-types`), custom fields (`/fields`, only the user's
+  with `auto_fill`), tags (`/me/tag-assignment`, "Tags: só as cadastradas (N)"), collections with a
+  rule (`/collections` with `auto_assign`) and summary (types with `summary_instructions`). Each step
+  shows its state and a "Configurar" link (labelled by the destination screen); the page only reads, and the
+  switches stay in `TagAssignmentCard`, in `AutoAssignCard` and in the collection's rule. The failure of
+  a query shows only in its step. Fields, Tags, People and Collections point to it in their
+  opening text, and Custom fields and Agenda types use the "Regras" kicker.
 
-## Minhas configurações
+## My settings
 
-- **Conta** (`/config/conta`, o primeiro item da engrenagem): o nome e o e-mail, o painel "Trocar a
-  senha" (atual, nova e repetição; a repetição diferente e a senha curta não enviam, e a senha
-  atual errada aparece no campo; a `.check` "Encerrar também aparelhos e tokens", marcada por
-  padrão, manda `revoke_tokens`) e a zona de perigo "Excluir a conta", com o `.alert-error` do que
-  é apagado e um `Dialog` que só habilita "Excluir minha conta" com a senha e a `.check` "Entendo
-  que tudo será apagado para sempre". Excluída, o app limpa o cache e volta a `/entrar` com o aviso
-  no `state`, que a tela de entrada mostra. Entre os dados e a senha, o painel **Privacidade e
-  dados** lista, gerado de `GET /privacy` (`app/privacy.ts`, `usePrivacy`, sem `staleTime`
-  infinito), onde ficam o áudio e a transcrição e o destino de cada finalidade ("Neste servidor",
-  "Na rede local", "Fora do servidor: <quem>", "Desligado: nada é enviado"), e, de
-  `/me/voice-assignment`, quantas pessoas têm impressão de voz e quantas amostras a conta guarda.
-  Com a voz ligada na plataforma, a chave "Guardar amostras de voz desta conta"; desligar pede
-  confirmação (`ConfirmDialog`, "Apagar e deixar de guardar") antes do `PATCH keep_samples: false`.
-- **Ambiente** (`/config/ambiente`, `features/environment/`, chave de ajuda `ambiente`) guarda as
-  preferências deste navegador no `localStorage` (`app/preferences.ts`), sem conta nem servidor:
-  tema (`theme.ts`), densidade (confortável ou compacta), movimento (seguir o sistema ou reduzir),
-  expediente (início e fim em horas cheias, padrão 8–18, com o fim sempre depois do início), a
-  visão em que a biblioteca abre sem parâmetros (última usada, semana, mês ou lista) e a lista de
-  atalhos de teclado, e o aviso do navegador (abaixo). "Restaurar os padrões" apaga tudo e volta o
-  tema ao do sistema. Cada valor padrão apaga a própria chave em vez de gravá-la.
-- **Observador de desfechos** (`app/processingWatch.ts`, holetz/eclume#118, ritmo em
-  holetz/eclume#153): montado no `AppShell` (só com sessão), lê a cada 30 s (`WATCH_MS`)
-  `GET /recordings?since=` (todas as páginas) — **só com a aba visível e numa aba por vez**: a aba
-  visível pede o lock `eclume-processing-watch` (Web Locks, `WATCH_LOCK`) e o segura até ocultar ou
-  fechar, quando ele passa para a próxima aba visível; sem `navigator.locks`, cada aba visível lê a
-  sua. Ao reaparecer a aba lê na hora e a marca d'água recupera o que terminou enquanto ela esteve
-  oculta (o aviso chega ao voltar, não durante). Aplica a
-  regra do desfecho e a marca d'água do desktop
-  ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md#aviso-do-fim-do-processamento)), com
-  os mesmos casos de teste: resumo pronto, resumo que falhou, pronta sem resumo (motivo pelo
-  `motivo()` do vocabulário), transcrição que falhou e, desde a 2.22.0, "Precisa de você" (etapa
-  `speakers` em `waiting`, instante = `finished_at` da espera); cancelar e `summary_deleted` não avisam. A
-  marca vive na memória da aba e começa na montagem: atualizar ou reabrir o navegador não dispara
-  aviso antigo. Com a aba oculta, cada desfecho soma no título ("(2) Biblioteca · eclume",
-  `setTitleCount`), zerado no `visibilitychange` de volta. Erro de rede ou sessão só espera a
-  próxima volta.
-- **Aviso do navegador, opcional**: a notificação do sistema (`new Notification(título, { body,
-  tag: id })`; o `tag` impede que várias abas empilhem o mesmo aviso; o clique foca a aba e abre
-  `/gravacoes/<id>`) sai só com a chave `eclume-aviso-navegador` ligada **e** a permissão dada
-  (`notifyOutcomesOn()`). A permissão só é pedida num gesto — a chave "Avisar no navegador…" em
-  Ambiente ou "Avisar quando ficar pronta" na linha enviada do Importar (`enableNotifyOutcomes()`),
-  nunca ao carregar; negada, a chave fica desligada e a tela diz onde liberar; sem a API (http),
-  a chave fica desabilitada e a oferta some. Sem Web Push nem service worker: com todas as abas
-  fechadas, não há aviso (quem quer, usa o desktop).
+- **Account** (`/config/conta`, the first item of the gear): the name and the e-mail, the "Trocar a
+  senha" panel (current, new and repeat; a different repeat and a short password do not submit, and a wrong current
+  password shows in the field; the `.check` "Encerrar também aparelhos e tokens", checked by
+  default, sends `revoke_tokens`) and the "Excluir a conta" danger zone, with the `.alert-error` of what
+  is deleted and a `Dialog` that only enables "Excluir minha conta" with the password and the `.check` "Entendo
+  que tudo será apagado para sempre". Once deleted, the app clears the cache and goes back to `/entrar` with the notice
+  in `state`, which the sign-in screen shows. Between the data and the password, the **Privacidade e
+  dados** panel lists, generated from `GET /privacy` (`app/privacy.ts`, `usePrivacy`, without an infinite
+  `staleTime`), where the audio and the transcript are kept and the destination of each purpose ("Neste servidor",
+  "Na rede local", "Fora do servidor: <quem>", "Desligado: nada é enviado"), and, from
+  `/me/voice-assignment`, how many people have a voiceprint and how many samples the account keeps.
+  With voice turned on in the platform, the "Guardar amostras de voz desta conta" switch; turning it off asks for
+  confirmation (`ConfirmDialog`, "Apagar e deixar de guardar") before the `PATCH keep_samples: false`.
+- **Ambiente** (`/config/ambiente`, `features/environment/`, help key `ambiente`) keeps this
+  browser's preferences in `localStorage` (`app/preferences.ts`), without account or server:
+  theme (`theme.ts`), density (comfortable or compact), motion (follow the system or reduce),
+  working hours (start and end on the hour, default 8–18, with the end always after the start), the
+  view the library opens on without parameters (last used, week, month or list) and the list of
+  keyboard shortcuts, and the browser notification (below). "Restaurar os padrões" deletes everything and returns the
+  theme to the system's. Each default value deletes its own key instead of writing it.
+- **Outcome watcher** (`app/processingWatch.ts`, holetz/eclume#118, rhythm in
+  holetz/eclume#153): mounted in `AppShell` (only with a session), it reads every 30 s (`WATCH_MS`)
+  `GET /recordings?since=` (every page) — **only with the tab visible and in one tab at a time**: the visible
+  tab requests the `eclume-processing-watch` lock (Web Locks, `WATCH_LOCK`) and holds it until it hides or
+  closes, when it passes to the next visible tab; without `navigator.locks`, each visible tab reads its
+  own. On reappearing, the tab reads right away and the watermark recovers what finished while it was
+  hidden (the notice arrives on coming back, not during). It applies the
+  outcome rule and the watermark of the desktop
+  ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md#processing-end-notice)), with
+  the same test cases: summary ready, summary that failed, ready without a summary (reason through the
+  vocabulary's `motivo()`), transcription that failed and, since 2.22.0, "Precisa de você" (step
+  `speakers` in `waiting`, instant = the wait's `finished_at`); cancelling and `summary_deleted` do not notify. The
+  mark lives in the tab's memory and starts at mount: refreshing or reopening the browser does not fire an
+  old notice. With the tab hidden, each outcome adds to the title ("(2) Biblioteca · eclume",
+  `setTitleCount`), reset on `visibilitychange` back. A network or session error just waits for the
+  next round.
+- **Browser notification, optional**: the system notification (`new Notification(título, { body,
+  tag: id })`; the `tag` prevents several tabs from stacking the same notice; the click focuses the tab and opens
+  `/gravacoes/<id>`) only goes out with the `eclume-aviso-navegador` key on **and** the permission granted
+  (`notifyOutcomesOn()`). Permission is only asked in a gesture — the "Avisar no navegador…" switch in
+  Ambiente or "Avisar quando ficar pronta" on the uploaded row of Import (`enableNotifyOutcomes()`),
+  never on load; denied, the switch stays off and the screen says where to allow it; without the API (http),
+  the switch stays disabled and the offer disappears. No Web Push nor service worker: with every tab
+  closed, there is no notice (whoever wants one uses the desktop).
 
-- **Grupos de escopo** (`tokens/scopes.ts`) são a escolha principal de um token: Buscar e ler
+- **Scope groups** (`tokens/scopes.ts`) are the main choice of a token: Buscar e ler
   gravações (`recordings:read`, `transcripts:read`), Ler e editar resumos (`summaries:*`), Editar
-  campos e tags (`recordings:write`) e Excluir gravações (`recordings:delete`). Os escopos soltos
-  ficam em "Escopos individuais" (com a combinação do lumea). A tabela mostra o resumo curto
-  (`ler, resumos, campos`, "+N" pelos soltos) e marca os tokens `kind: device` com "Aparelho ·
-  <plataforma>". Validade: 30 dias, 90 dias ou nunca. O segredo aparece uma vez, no
+  campos e tags (`recordings:write`) and Excluir gravações (`recordings:delete`). The loose scopes
+  stay in "Escopos individuais" (with the lumea combination). The table shows the short summary
+  (`ler, resumos, campos`, "+N" for the loose ones) and marks `kind: device` tokens with "Aparelho ·
+  <plataforma>". Validity: 30 days, 90 days or never. The secret shows once, in
   `CopyValue`.
-- **Conexão MCP** (`/config/mcp`) copia o `mcp_url` do descritor (`GET /server`, `staleTime:
-  Infinity`) e cria o token do assistente com o `TokenForm`: "Claude Desktop", os três primeiros
-  grupos, sem "Excluir gravações" e 90 dias; criado, mostra o segredo e o comando
+- **MCP Connection** (`/config/mcp`) copies the `mcp_url` from the descriptor (`GET /server`, `staleTime:
+  Infinity`) and creates the assistant's token with `TokenForm`: "Claude Desktop", the first three
+  groups, without "Excluir gravações" and 90 days; once created, it shows the secret and the command
   `claude mcp add --transport http eclume <mcp_url> --header "Authorization: Bearer <segredo>"`.
-- **Código de vínculo** (`connect/pairing.ts`): cada página gera o seu (App desktop por botão, App
-  móvel ao abrir), porque um código novo anula o anterior. A contagem regressiva ancora em
-  `expires_at` menos o header `Date` da resposta, medida por `performance.now()`, e não depende do
-  relógio do computador. O estado é consultado no ritmo de `pollWhile` (3 s de início) enquanto `pending` e a contagem não
-  zerou; `used` atualiza as listas de tokens e mostra "Pareado: <aparelho>". O leitor de tela só
-  ouve "Falta 1 minuto" e "Código vencido".
-- **QR gerado no navegador** (`connect/qr.ts`, `QrCode.tsx`): a matriz do pacote `qrcode`
-  (correção M, carregado só com o QR) vira um `<svg>` próprio, com um `<path>` por linha, zona de
-  silêncio de 4 módulos e preto sobre branco nos dois temas. O conteúdo é o `pair_url` do
-  contrato. `/parear` é a página pública onde cai quem lê o QR com a câmera comum: explica que o
-  código é do app e não chama a API.
-- **Instaladores** (`web/src/features/desktop/installers.ts`): o App desktop lê `/downloads/instaladores.json`
-  (mesma origem, fora do `/api`), valida `versao` e `instaladores[]`
-  ([desktop-distribuicao.md](desktop-distribuicao.md)) e mostra o `recomendado` de cada sistema,
-  com o sistema atual primeiro; sem manifesto ou com ele inválido, os cartões dizem que os
-  instaladores ainda não foram publicados.
-- **Aparelhos vinculados** (`connect/DevicesList.tsx`) vêm de `GET /tokens?kind=device`, filtrados
-  pela plataforma da página; Desvincular revoga a credencial (`DELETE /tokens/{id}`).
+- **Link code** (`connect/pairing.ts`): each page generates its own (App desktop by a button, App
+  móvel on open), because a new code voids the previous one. The countdown anchors on
+  `expires_at` minus the response's `Date` header, measured by `performance.now()`, and does not depend on the
+  computer's clock. The state is polled at the rhythm of `pollWhile` (3 s at the start) while `pending` and the countdown has not
+  reached zero; `used` updates the token lists and shows "Pareado: <aparelho>". The screen reader only
+  hears "Falta 1 minuto" and "Código vencido".
+- **QR generated in the browser** (`connect/qr.ts`, `QrCode.tsx`): the matrix of the `qrcode` package
+  (correction M, loaded only with the QR) becomes its own `<svg>`, with one `<path>` per row, a quiet
+  zone of 4 modules and black on white in both themes. The content is the contract's `pair_url`.
+  `/parear` is the public page where whoever reads the QR with the ordinary camera lands: it explains that the
+  code is for the app and does not call the API.
+- **Installers** (`web/src/features/desktop/installers.ts`): App desktop reads `/downloads/instaladores.json`
+  (same origin, outside `/api`), validates `versao` and `instaladores[]`
+  ([desktop-distribuicao.md](desktop-distribuicao.md)) and shows the `recomendado` of each system,
+  with the current system first; without a manifest or with an invalid one, the cards say the
+  installers have not been published yet.
+- **Linked devices** (`connect/DevicesList.tsx`) come from `GET /tokens?kind=device`, filtered
+  by the page's platform; Desvincular revokes the credential (`DELETE /tokens/{id}`).
 
 ## Upload: `src/upload/multipart.ts`
 
-`runUpload(file, options)` segue o contrato:
+`runUpload(file, options)` follows the contract:
 
-1. `POST /uploads` com `sha256` (da conversão), `size_bytes`, `content_type`
-   `audio/ogg; codecs=opus`, `source: upload` e, do import, `recorded_at` e
-   `recorded_at_source` (sem `title`). Um 200 `deduplicated` encerra com a gravação
-   existente, sem transferir nada.
-2. Número de partes = `ceil(tamanho / part_size)`, calculado do arquivo. Partes sem URL recebem
-   URL por `POST part-urls`. Três `PUT` em paralelo na `url` opaca, com os `headers` recebidos,
-   guardando o `ETag` (o armazenamento precisa expô-lo por CORS se estiver em outra origem).
-3. Falha de rede, 408, 429 e 5xx: nova tentativa com espera (3 no total). 403: pede URL nova
-   para a parte e reenvia. Falha de uma parte aborta as outras.
-4. Retomar = chamar de novo com `uploadId`: `GET /uploads/{id}` e só as partes fora de
-   `parts_received`. Upload `expired`/`aborted` no servidor exige recomeçar.
-5. `POST complete` com as partes em ordem. Cancelar = abortar o sinal e `cancelUpload()`
+1. `POST /uploads` with `sha256` (from the conversion), `size_bytes`, `content_type`
+   `audio/ogg; codecs=opus`, `source: upload` and, from import, `recorded_at` and
+   `recorded_at_source` (without `title`). A 200 `deduplicated` ends with the existing
+   recording, without transferring anything.
+2. Number of parts = `ceil(tamanho / part_size)`, computed from the file. Parts without a URL get a
+   URL through `POST part-urls`. Three parallel `PUT`s to the opaque `url`, with the received `headers`,
+   keeping the `ETag` (the storage must expose it through CORS if it is on another origin).
+3. Network failure, 408, 429 and 5xx: a new attempt with a wait (3 in total). 403: asks for a new URL
+   for the part and resends. A failure of one part aborts the others.
+4. Resuming = calling again with `uploadId`: `GET /uploads/{id}` and only the parts outside
+   `parts_received`. An `expired`/`aborted` upload on the server requires starting over.
+5. `POST complete` with the parts in order. Cancelling = aborting the signal and `cancelUpload()`
    (`DELETE /uploads/{id}`).
 
-A retomada vale enquanto a página está aberta: o Opus convertido (~15 MB/h) fica em memória.
-Depois de recarregar, o import recomeça pela conversão.
+Resuming holds while the page is open: the converted Opus (~15 MB/h) stays in memory.
+After a reload, the import starts over from the conversion.
 
-## Como é testado
+## How it is tested
 
-- **Unitários** (`npm test`, vitest + jsdom + Testing Library): `mockFetch()` substitui o `fetch`
-  por rotas `"MÉTODO /caminho/:param"`, respondendo com as fixtures de `contracts/fixtures/`
-  (`src/test/fixtures.ts`, tipadas pelo schema). `renderApp(rota)` monta o app inteiro numa
-  rota, com a mesma árvore `routes` num `createMemoryRouter` (o `useBlocker` só funciona dentro de
-  um data router). O motor de upload roda no ambiente `node` (o `Blob` do jsdom não serve de corpo para o
-  `fetch` do Node).
-- **Sem depender do tempo de carga nem do relógio real.** Cada página sob demanda de `routes.tsx`
-  tem `preload()` no `handle` da rota, e `preloadRoute(...caminhos)` (`src/test/render.tsx`)
-  carrega os chunks das rotas que o arquivo monta: todo arquivo de teste que monta rota lazy o
-  chama no `beforeAll`, onde vale o `hookTimeout`, e não no tempo do primeiro `findBy`. Teste que
-  depende de data fixa o relógio só onde importa (`vi.useFakeTimers({ toFake: ['Date',
-  'performance'] })` com `vi.setSystemTime`, como a validade do App móvel), com os temporizadores
-  reais para o React Query e o Testing Library. A suíte passa três vezes seguidas na estação e no
+- **Unit tests** (`npm test`, vitest + jsdom + Testing Library): `mockFetch()` replaces `fetch`
+  with routes `"MÉTODO /caminho/:param"`, answering with the fixtures of `contracts/fixtures/`
+  (`src/test/fixtures.ts`, typed by the schema). `renderApp(rota)` mounts the whole app on a
+  route, with the same `routes` tree in a `createMemoryRouter` (`useBlocker` only works inside
+  a data router). The upload engine runs in the `node` environment (jsdom's `Blob` does not work as a body for
+  Node's `fetch`).
+- **Without depending on load time nor on the real clock.** Each on-demand page of `routes.tsx`
+  has `preload()` in the route's `handle`, and `preloadRoute(...caminhos)` (`src/test/render.tsx`)
+  loads the chunks of the routes the file mounts: every test file that mounts a lazy route
+  calls it in `beforeAll`, where `hookTimeout` applies, and not in the time of the first `findBy`. A test that
+  depends on a date fixes the clock only where it matters (`vi.useFakeTimers({ toFake: ['Date',
+  'performance'] })` with `vi.setSystemTime`, like the App móvel validity), with real
+  timers for React Query and Testing Library. The suite passes three times in a row on the workstation and on the
   host.
-- **Fuso fixo**: os unitários rodam em `America/Sao_Paulo` (`process.env.TZ` no `vite.config.ts`)
-  e o Playwright também (`timezoneId`), o fuso das fixtures; a biblioteca posiciona pela hora local.
-- **E2E** (`npm run test:e2e`, Playwright): o `webServer` sobe o Vite dev com o proxy apontando
-  para o mock. Os cenários percorrem a biblioteca na semana de 21/09/2026 (o primeiro exemplo de
-  `GET /recordings`), no mês e na lista, com o filtro conferido na requisição (o mock não filtra);
-  o modal Importar com o `audio.m4a` de `npm run fixtures` (data dos metadados, conversão real e
-  upload); a gravação (pipeline, marcadores, transcrição, edição, chat, exportar e excluir); e a
-  busca com a ficha de campo, a gravação no segundo do trecho, pessoas, coleções e PAT; e
-  `e2e/organizar-config.spec.ts` percorre Campos, Tipos de agenda, Conexão MCP, Tokens, App
-  desktop, App móvel, a central de ajuda e a gaveta (o mock só tem o exemplo "usado" do estado do
-  código de vínculo e um `expires_at` fixo: o teste reescreve os dois quando precisa do código
-  pendente). O painel admin tem o seu `e2e/admin.spec.ts`: entra por `/admin/entrar`, percorre
-  as sete telas, salva em cada uma e confere os redirecionamentos. O Prism não emite cookies nem
-  guarda estado, então o teste põe os cookies de sessão na resposta do login (o de admin com
-  `Path=/api/v1/admin`), responde o `PATCH /admin/settings` com o exemplo do `GET` (o mock gera
-  valores sem sentido, que estragariam o cache), pede o upload com `Prefer: code=201` e encaminha o `PUT` de parte (URL
-  absoluta das fixtures em `127.0.0.1:4010`) com credencial e CORS, e responde a consulta da
-  mensagem do chat com o id pedido. `ECLUME_MOCK_URL` aponta para outra porta quando a 4010 está
-  ocupada (no host compartilhado, um mock próprio: `ECLUME_MOCK_PORT=4037 docker compose -p
-  eclume-mock-<spec> -f deploy/docker-compose.mock.yml up -d`, com `E2E_PORT` próprio); `E2E_SCREENSHOTS=1` salva telas claro e escuro em
-  `test-results/screens/`; `E2E_CHANNEL=chrome` usa o Google Chrome instalado
-  (`msedge` na estação Windows, que não tem Chrome). O helper `navTo()`
-  usa a barra lateral ou, para configurações e ajuda, os menus do cabeçalho. `e2e/visual.spec.ts`,
-  `e2e/visual-organizar.spec.ts` e `e2e/admin-visual.spec.ts` são a verificação visual contra o DS
-  ([web-design-system.md](web-design-system.md)); com `ECLUME_DS_DIR`, salvam também os quadros
-  de `examples/*.html` para a comparação lado a lado.
-- **Três motores.** O E2E roda tudo no Chromium e, no WebKit e no Firefox do Playwright, só o
-  smoke (`@smoke` no título, com uma nova tentativa): cadastro, login, biblioteca, gravação com
-  copiar o resumo e o player (o relatório anota o `canPlayType` de Ogg Opus de cada motor) e um
-  import pequeno com um WAV gerado no teste, sem codec proprietário. Os testes de navegador
-  (`npm run test:browser`: a conversão, a data dos metadados e a transcrição longa) rodam no
-  Google Chrome, no Firefox e no WebKit; a conversão segue o caminho de cada motor (WebCodecs
-  quando decodifica a faixa e codifica Opus, a reserva ffmpeg.wasm quando não), e o que depende só
-  do WebCodecs é pulado com o motivo (o WebKit trava decodificando Vorbis).
-- A CI roda os unitários, o build e o orçamento no job `web` e o E2E, junto dos testes de
-  navegador, no job `web-browser`.
-- **E2E contra o backend real** (`npm run test:e2e:real`, `playwright.real.config.ts`,
-  `e2e-real/`): nada simulado — login com os cookies do servidor, import com conversão no
-  navegador e upload pelas URLs de parte assinadas, transcrição pelo worker e o resumo automático
-  do `claude -p`. Roda no host GPU por `bash deploy/e2e-real.sh` (da estação:
-  `remote-run . 'bash deploy/e2e-real.sh'`), que sobe um stack efêmero próprio
-  (`deploy/docker-compose.e2e.yml`, projeto `eclume-e2e`, Caddy em `127.0.0.1:18443`, dados em
-  tmpfs, worker na engine CPU sem GPU), cria o admin descartável pelo `eclume-server admin create`
-  e o usuário pelo cadastro (`POST /auth/signup`), roda o cenário e
-  sai sempre com `down -v` e as imagens `:e2e` apagadas. Nunca toca a produção. Leva ~1 min além
-  do build; fica fora da CI (exige o daemon, o Chrome e o login do Claude do host).
+- **Fixed time zone**: the unit tests run in `America/Sao_Paulo` (`process.env.TZ` in `vite.config.ts`)
+  and Playwright too (`timezoneId`), the fixtures' time zone; the library positions by local time.
+- **E2E** (`npm run test:e2e`, Playwright): the `webServer` brings up Vite dev with the proxy pointing
+  to the mock. The scenarios walk through the library in the week of 2026-09-21 (the first example of
+  `GET /recordings`), in the month and in the list, with the filter checked in the request (the mock does not filter);
+  the Import modal with the `audio.m4a` of `npm run fixtures` (date from the metadata, real conversion and
+  upload); the recording (pipeline, markers, transcript, editing, chat, export and delete); and
+  search with the field chip, the recording at the second of the excerpt, people, collections and PAT; and
+  `e2e/organizar-config.spec.ts` walks through Fields, Agenda types, MCP Connection, Tokens, App
+  desktop, App móvel, the help center and the drawer (the mock only has the "used" example of the link code
+  state and a fixed `expires_at`: the test rewrites both when it needs the code
+  pending). The admin panel has its own `e2e/admin.spec.ts`: it enters through `/admin/entrar`, walks through
+  the seven screens, saves on each one and checks the redirects. Prism emits no cookies nor
+  keeps state, so the test puts the session cookies in the login response (the admin one with
+  `Path=/api/v1/admin`), answers `PATCH /admin/settings` with the `GET` example (the mock generates
+  meaningless values, which would spoil the cache), requests the upload with `Prefer: code=201` and forwards the part `PUT` (absolute
+  URL of the fixtures at `127.0.0.1:4010`) with credentials and CORS, and answers the chat message
+  query with the requested id. `ECLUME_MOCK_URL` points to another port when 4010 is
+  taken (on the shared host, a mock of its own: `ECLUME_MOCK_PORT=4037 docker compose -p
+  eclume-mock-<spec> -f deploy/docker-compose.mock.yml up -d`, with its own `E2E_PORT`); `E2E_SCREENSHOTS=1` saves light and dark screens in
+  `test-results/screens/`; `E2E_CHANNEL=chrome` uses the installed Google Chrome
+  (`msedge` on the Windows station, which has no Chrome). The `navTo()` helper
+  uses the sidebar or, for settings and help, the header menus. `e2e/visual.spec.ts`,
+  `e2e/visual-organizar.spec.ts` and `e2e/admin-visual.spec.ts` are the visual check against the DS
+  ([web-design-system.md](web-design-system.md)); with `ECLUME_DS_DIR`, they also save the frames
+  of `examples/*.html` for the side-by-side comparison.
+- **Three engines.** The E2E runs everything in Chromium and, in Playwright's WebKit and Firefox, only the
+  smoke (`@smoke` in the title, with one retry): sign-up, login, library, recording with
+  copying the summary and the player (the report notes each engine's Ogg Opus `canPlayType`) and a
+  small import with a WAV generated in the test, without a proprietary codec. The browser tests
+  (`npm run test:browser`: the conversion, the metadata date and the long transcript) run in
+  Google Chrome, Firefox and WebKit; the conversion follows each engine's path (WebCodecs
+  when it decodes the track and encodes Opus, the ffmpeg.wasm fallback when not), and what depends only
+  on WebCodecs is skipped with the reason (WebKit hangs decoding Vorbis).
+- CI runs the unit tests, the build and the budget in the `web` job and the E2E, together with the browser
+  tests, in the `web-browser` job.
+- **E2E against the real backend** (`npm run test:e2e:real`, `playwright.real.config.ts`,
+  `e2e-real/`): nothing simulated — login with the server's cookies, import with conversion in the
+  browser and upload through the signed part URLs, transcription by the worker and the automatic summary
+  by `claude -p`. It runs on the GPU host through `bash deploy/e2e-real.sh` (from the workstation:
+  `remote-run . 'bash deploy/e2e-real.sh'`), which brings up its own ephemeral stack
+  (`deploy/docker-compose.e2e.yml`, project `eclume-e2e`, Caddy on `127.0.0.1:18443`, data in
+  tmpfs, worker on the CPU engine without a GPU), creates the throwaway admin through `eclume-server admin create`
+  and the user through sign-up (`POST /auth/signup`), runs the scenario and
+  always exits with `down -v` and the `:e2e` images deleted. It never touches production. It takes ~1 min beyond
+  the build; it stays out of CI (it needs the daemon, Chrome and the host's Claude login).

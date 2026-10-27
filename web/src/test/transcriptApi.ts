@@ -4,8 +4,8 @@ import { fixtures } from './fixtures'
 import { mockFetch } from './http'
 
 /**
- * API da página de gravação transcrita (3 locutores): transcrição, resumo com versões, campos,
- * marcadores e chat, com rotas extras ou substitutas.
+ * API of the transcribed recording page (3 speakers): transcript, summary with versions, fields,
+ * markers and chat, with extra or replacement routes.
  */
 export function mockTranscriptApi(extra: Parameters<typeof mockFetch>[0] = {}) {
   return mockFetch({
@@ -28,7 +28,7 @@ export function mockTranscriptApi(extra: Parameters<typeof mockFetch>[0] = {}) {
 
 export const RECORDING_ID = '01928f3a-1c00-7a00-8000-000000000401'
 
-/** Abre a transcrição recolhida da página da gravação. */
+/** Opens the collapsed transcript on the recording page. */
 export async function openTranscript() {
   const summary = await screen.findByText(
     (_, element) => element?.tagName === 'SUMMARY' && Boolean(element.textContent?.startsWith('Transcrição')),
@@ -36,7 +36,7 @@ export async function openTranscript() {
   await userEvent.click(summary)
 }
 
-/** Abre o bloco Locutores da página da gravação e devolve a região dele. */
+/** Opens the Speakers block of the recording page and returns its region. */
 export async function openSpeakers() {
   const summary = await screen.findByText(
     (_, element) => element?.tagName === 'SUMMARY' && Boolean(element.textContent?.startsWith('Locutores')),

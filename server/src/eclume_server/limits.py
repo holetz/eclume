@@ -1,4 +1,4 @@
-"""Teto do corpo da requisição por rota, antes de qualquer leitura inteira."""
+"""Per-route request body ceiling, before any full read."""
 
 from __future__ import annotations
 
@@ -14,30 +14,30 @@ CREDENTIAL_LIMIT = 64 * 1024
 DEFAULT_LIMIT = 1024 * 1024
 _CREDENTIAL_PREFIXES = ("/api/v1/auth/", "/api/v1/admin/auth/", "/api/v1/devices/")
 _PART_PATH = re.compile(r"/api/v1/uploads/[^/]+/parts/[^/]+")
-# O anexo do Agente: o teto do arquivo (`agent_files.MAX_INPUT_BYTES`) mais o envelope do multipart.
+# The Agent attachment: the file ceiling (`agent_files.MAX_INPUT_BYTES`) plus the multipart envelope.
 _AGENT_FILE_PATH = re.compile(r"/api/v1/agent/sessions/[^/]+/files")
 AGENT_FILE_LIMIT = 10 * 1024 * 1024 + 64 * 1024
 
 
 class _BodyTooLargeError(Exception):
-    """O corpo passou do teto enquanto era lido."""
+    """The body exceeded the ceiling while being read."""
 
 
 class BodyLimitMiddleware:
-    """Recusa com 413 `payload_too_large` o corpo acima do teto da rota.
+    """Refuse with 413 `payload_too_large` a body above the route's ceiling.
 
-    Credenciais públicas aceitam 64 KiB, a parte de upload até `part_size` (a rota confere o tamanho
-    exato) e o resto 1 MiB. Recusa pelo `Content-Length` sem ler e, sem o cabeçalho, conta os bytes
-    recebidos: ao passar do teto, descarta o que o app responderia e devolve o 413.
+    Public credentials accept 64 KiB, the upload part up to `part_size` (the route checks the exact
+    size) and the rest 1 MiB. Refuses by `Content-Length` without reading and, without the header,
+    counts the received bytes: past the ceiling, discards what the app would answer and returns 413.
     """
 
     def __init__(self, app: ASGIApp, *, part_size: int) -> None:
-        """Envolve `app`; `part_size` é o teto do `PUT` de uma parte."""
+        """Wrap `app`; `part_size` is the ceiling of a part's `PUT`."""
         self.app = app
         self.part_size = part_size
 
     def limit_for(self, path: str) -> int:
-        """O teto do corpo para `path`."""
+        """The body ceiling for `path`."""
         if path.startswith(_CREDENTIAL_PREFIXES):
             return CREDENTIAL_LIMIT
         if _PART_PATH.fullmatch(path):
@@ -47,7 +47,7 @@ class BodyLimitMiddleware:
         return DEFAULT_LIMIT
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Atende a requisição dentro do teto, ou responde 413."""
+        """Serve the request within the ceiling, or answer 413."""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -67,7 +67,7 @@ class BodyLimitMiddleware:
 
 
 class _Guard:
-    """Conta os bytes recebidos e, passado o teto, segura a resposta que o app tentaria dar."""
+    """Count the received bytes and, past the ceiling, hold back the response the app would give."""
 
     def __init__(self, limit: int, receive: Receive, send: Send) -> None:
         self.limit = limit

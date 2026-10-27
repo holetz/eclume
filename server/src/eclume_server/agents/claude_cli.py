@@ -1,9 +1,10 @@
-"""Provider `claude-cli`: o `claude -p` do servidor, sem nenhuma ferramenta.
+"""Provider `claude-cli`: the server's `claude -p`, without any tool.
 
-Segue o padrão do `agent_launcher.py` do lumea: subprocess, credencial (`ANTHROPIC_API_KEY`, o
-token de longa duração do `claude setup-token` em `CLAUDE_CODE_OAUTH_TOKEN`, ou o OAuth de uma sessão
-logada do Claude Code em `$HOME/.claude/.credentials.json`) checada antes de rodar, e a causa de uma falha lida do JSON que a própria CLI devolve. O agente não tem
-ferramentas nem configurações do usuário ou do projeto: só texto de entrada e de saída.
+It follows the pattern of lumea's `agent_launcher.py`: subprocess, credential (`ANTHROPIC_API_KEY`, the
+long-lived token of `claude setup-token` in `CLAUDE_CODE_OAUTH_TOKEN`, or the OAuth of a logged-in Claude
+Code session in `$HOME/.claude/.credentials.json`) checked before running, and the cause of a failure read
+from the JSON the CLI itself returns. The agent has no tools nor user or project settings: only input and
+output text.
 """
 
 from __future__ import annotations
@@ -34,8 +35,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 API_KEY_ENV = "ANTHROPIC_API_KEY"
-OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"  # noqa: S105 — nome da variável, não o segredo
-OAUTH_TOKEN_PREFIX = "sk-ant-oat"  # noqa: S105 — prefixo do token do `claude setup-token`
+OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"  # noqa: S105 — the variable's name, not the secret
+OAUTH_TOKEN_PREFIX = "sk-ant-oat"  # noqa: S105 — prefix of the `claude setup-token` token
 OAUTH_CREDENTIALS = Path(".claude") / ".credentials.json"
 _AUTH_MARKERS = ("authentication_failed", "not logged in", "please run /login", "invalid api key", "401", "oauth")
 _RATE_MARKERS = ("rate limit", "rate_limit", "429", "overloaded", "529", "usage limit")
@@ -45,7 +46,7 @@ _DETAIL_LIMIT = 300
 
 
 def claude_command(claude_bin: str, config: ProviderConfig, system: str) -> list[str]:
-    """Linha de comando do `claude -p`: saída JSON, sem ferramentas, sem sessão nem settings."""
+    """Command line of `claude -p`: JSON output, no tools, no session nor settings."""
     cmd = [
         claude_bin,
         "-p",
@@ -72,9 +73,9 @@ def claude_command(claude_bin: str, config: ProviderConfig, system: str) -> list
 
 
 def missing_credentials(env: Mapping[str, str]) -> bool:
-    """Sem `ANTHROPIC_API_KEY`, sem `CLAUDE_CODE_OAUTH_TOKEN` e sem o OAuth do Claude Code no `HOME`.
+    """Without `ANTHROPIC_API_KEY`, without `CLAUDE_CODE_OAUTH_TOKEN` and without Claude Code's OAuth in `HOME`.
 
-    Um arquivo vazio conta como ausente, como o `/dev/null` que um deploy antigo montava no lugar.
+    An empty file counts as missing, like the `/dev/null` an old deploy mounted in its place.
     """
     if env.get(API_KEY_ENV, "").strip() or env.get(OAUTH_TOKEN_ENV, "").strip():
         return False
@@ -86,7 +87,7 @@ def missing_credentials(env: Mapping[str, str]) -> bool:
 
 
 def classify_failure(detail: str) -> str:
-    """Código de erro a partir da causa que a CLI declarou."""
+    """Error code from the cause the CLI declared."""
     lowered = detail.lower()
     if any(marker in lowered for marker in _AUTH_MARKERS):
         return PROVIDER_AUTH
@@ -100,7 +101,7 @@ def classify_failure(detail: str) -> str:
 
 
 def _parse(stdout: str) -> dict[str, Any] | None:
-    """O objeto `type: result` da saída `--output-format json` (último objeto JSON)."""
+    """The `type: result` object of the `--output-format json` output (the last JSON object)."""
     text = stdout.strip()
     if not text:
         return None
@@ -125,24 +126,24 @@ def _model(result: dict[str, Any], fallback: str) -> str:
 
 
 class ClaudeCliProvider:
-    """`claude -p` num subprocesso, com o prompt pelo stdin."""
+    """`claude -p` in a subprocess, with the prompt through stdin."""
 
     def __init__(
         self, config: ProviderConfig, *, claude_bin: str = "claude", env: Mapping[str, str] | None = None
     ) -> None:
-        """Provider para `config`; `env` substitui o ambiente do processo (testes)."""
+        """Provider for `config`; `env` replaces the process environment (tests)."""
         self.config = config
         self.claude_bin = claude_bin
         self.env = dict(os.environ if env is None else env)
         if config.api_key:
-            # O segredo cadastrado no provider vence o do ambiente: o token do `claude setup-token`
-            # autentica por CLAUDE_CODE_OAUTH_TOKEN, uma chave de API por ANTHROPIC_API_KEY.
+            # The secret registered on the provider beats the environment's: the `claude setup-token` token
+            # authenticates through CLAUDE_CODE_OAUTH_TOKEN, an API key through ANTHROPIC_API_KEY.
             token = config.api_key.startswith(OAUTH_TOKEN_PREFIX)
             self.env.pop(API_KEY_ENV if token else OAUTH_TOKEN_ENV, None)
             self.env[OAUTH_TOKEN_ENV if token else API_KEY_ENV] = config.api_key
 
     async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
-        """Roda `claude -p` e devolve o `result` do JSON."""
+        """Runs `claude -p` and returns the JSON's `result`."""
         if missing_credentials(self.env):
             raise ProviderError(
                 PROVIDER_NOT_CONFIGURED,
@@ -150,7 +151,7 @@ class ClaudeCliProvider:
                 "setup-token) ou ANTHROPIC_API_KEY no worker.",
             )
         cmd = claude_command(self.claude_bin, self.config, system)
-        # Diretório vazio: nenhum CLAUDE.md nem configuração de projeto entra no agente.
+        # Empty directory: no CLAUDE.md nor project settings reach the agent.
         with tempfile.TemporaryDirectory(prefix="eclume-claude-") as cwd:
             try:
                 proc = await asyncio.create_subprocess_exec(
@@ -174,8 +175,8 @@ class ClaudeCliProvider:
                     PROVIDER_TIMEOUT, f"claude -p passou de {self.config.timeout_s:.0f} s sem responder."
                 ) from exc
             finally:
-                # O processo não sobrevive ao job: teto próprio, timeout do arq (`CancelledError`) ou
-                # parada do worker o matam aqui.
+                # The process does not outlive the job: its own ceiling, the arq timeout (`CancelledError`)
+                # or the worker's stop kill it here.
                 if proc.returncode is None:
                     proc.kill()
                     await proc.wait()

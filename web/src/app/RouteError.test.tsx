@@ -7,7 +7,7 @@ import { preloadRoute, renderApp } from '../test/render'
 
 beforeAll(() => preloadRoute('/busca'))
 
-// A busca simula o chunk que não carregou depois de um deploy; o login, uma exceção comum fora do shell.
+// The search simulates the chunk that did not load after a deploy; the login, an ordinary exception outside the shell.
 vi.mock('../features/search/SearchPage', () => ({
   SearchPage: () => {
     throw new TypeError('Failed to fetch dynamically imported module: /assets/SearchPage-velho.js')
@@ -15,7 +15,7 @@ vi.mock('../features/search/SearchPage', () => ({
 }))
 vi.mock('../features/auth/LoginPage', () => ({
   LoginPage: () => {
-    throw new Error('quebrou')
+    throw new Error('broke')
   },
 }))
 vi.mock('../features/library/LibraryPage', () => ({
@@ -28,8 +28,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('erro por rota', () => {
-  it('mostra o chunk que falhou dentro do shell, e a barra sai do erro', async () => {
+describe('per-route error', () => {
+  it('shows the failed chunk inside the shell, and the sidebar leaves the error', async () => {
     mockFetch({ 'GET /api/v1/me': () => fixtures.me() })
     renderApp('/busca')
     const main = await screen.findByRole('main')
@@ -42,7 +42,7 @@ describe('erro por rota', () => {
     expect(screen.queryByRole('heading', { name: 'O eclume foi atualizado' })).not.toBeInTheDocument()
   })
 
-  it('fora do shell, o erro ocupa a página inteira', async () => {
+  it('outside the shell, the error takes the whole page', async () => {
     mockFetch({})
     renderApp('/entrar')
     expect(await screen.findByRole('heading', { level: 1, name: 'Algo deu errado nesta tela' })).toBeInTheDocument()

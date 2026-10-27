@@ -3,11 +3,11 @@ import { useState } from 'react'
 
 interface CopyValueProps {
   value: string
-  /** `lg` desenha o código de vínculo: 22px, letras espaçadas e largura curta. */
+  /** `lg` draws the link code: 22px, spaced letters and a short width. */
   size?: 'lg'
 }
 
-/** O `.code-block` do Design System: o valor, o botão Copiar e o anúncio "Copiado". */
+/** The Design System `.code-block`: the value, the "Copiar" button and the "Copiado" announcement. */
 export function CopyValue({ value, size }: CopyValueProps) {
   const [status, setStatus] = useState('')
 

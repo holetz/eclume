@@ -1,9 +1,9 @@
-"""Chat de ajuste do resumo: o pedido, a resposta em aberto e o job `summary_chat` do worker CPU.
+"""Summary adjustment chat: the request, the open reply and the CPU worker's `summary_chat` job.
 
-O pedido e a resposta nascem juntos (a resposta `queued`, com a versão atual em
-`base_summary_id`); o job chama o agente marcado para `chat` pelo protocolo de `agents/chat.py`,
-com as ferramentas restritas à transcrição da mensagem, e grava a resposta. Um `summary_md` vira
-uma versão `chat`, se a atual ainda for a de base. Contrato em docs/standards/code/server-agentes.md.
+The request and the reply are born together (the reply `queued`, with the current version in
+`base_summary_id`); the job calls the agent marked for `chat` through the protocol of `agents/chat.py`,
+with the tools restricted to the message's transcript, and writes the reply. A `summary_md` becomes
+a `chat` version, if the current one is still the base one. Contract in docs/standards/code/server-agentes.md.
 """
 
 from __future__ import annotations
@@ -57,13 +57,13 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 CHAT_BUSY = "chat_busy"
-# O teto de um ajuste inteiro (todas as chamadas do laço): um chat não espera como um resumo.
+# The ceiling of a whole adjustment (every call of the loop): a chat does not wait like a summary.
 CHAT_TIMEOUT_S = 5 * 60
 CHAT_RETRY_S = 10
-# Além do pior caso do job (duas tentativas no teto do arq e a espera entre elas), a resposta em
-# aberto não vai mais terminar: o worker morreu ou o job nunca chegou à fila.
+# Beyond the job's worst case (two attempts at the arq ceiling and the wait between them), the open
+# reply will no longer finish: the worker died or the job never reached the queue.
 CHAT_STALE_S = 15 * 60
-# Falha passageira do outro lado: uma nova tentativa só.
+# Transient failure on the other side: one retry only.
 _RETRYABLE = {PROVIDER_TIMEOUT, PROVIDER_RATE_LIMITED, PROVIDER_UNAVAILABLE}
 GONE = "gravação apagada"
 
@@ -96,11 +96,11 @@ def chat_message_json(row: Row) -> dict[str, Any]:
     }
 
 
-# --- o pedido (API, sob a RLS do dono) -----------------------------------------------------------
+# --- the request (API, under the owner's RLS) ----------------------------------------------------
 
 
 async def open_request(conn: AsyncConnection, transcript: Row, message: str, user_id: UUID) -> tuple[Row, Row]:
-    """Grava o pedido e a resposta em aberto; já havendo um pedido em aberto, 409 `chat_busy`."""
+    """Writes the request and the open reply; with a request already open, 409 `chat_busy`."""
     m = t.summary_chat_messages.c
     busy = await conn.execute(
         select(m.id).where(
@@ -110,7 +110,7 @@ async def open_request(conn: AsyncConnection, transcript: Row, message: str, use
     if busy.first() is not None:
         raise conflict("Já há um pedido de ajuste em andamento nesta gravação.", code=CHAT_BUSY)
     current = await current_version(conn, transcript["id"])
-    # `clock_timestamp()`: o pedido e a resposta nascem na mesma transação e precisam de ordem.
+    # `clock_timestamp()`: the request and the reply are born in the same transaction and need an order.
     base = {
         "owner_id": transcript["owner_id"],
         "recording_id": transcript["recording_id"],
@@ -150,21 +150,21 @@ async def open_request(conn: AsyncConnection, transcript: Row, message: str, use
     return request, reply
 
 
-# --- o job `summary_chat` (worker CPU, papel de conexão) -------------------------------------------
+# --- the `summary_chat` job (CPU worker, connection role) ------------------------------------------
 
 
 class TranscriptTools:
-    """As ferramentas do chat, restritas à transcrição da mensagem."""
+    """The chat tools, restricted to the message's transcript."""
 
     def __init__(self, engine: AsyncEngine, transcript_id: UUID, speakers: dict[str, str]) -> None:
-        """A transcrição e os nomes dos locutores (`S1` → nome), como no resumo."""
+        """The transcript and the speakers' names (`S1` → name), as in the summary."""
         self.engine, self.transcript_id, self.speakers = engine, transcript_id, speakers
 
     def _line(self, speaker_id: str, start_ms: int, content: str) -> str:
         return f"[{hms(start_ms)}] {self.speakers.get(speaker_id, speaker_id)}: {content.strip()}"
 
     async def read(self, from_ms: int, to_ms: int) -> list[tuple[int, str]]:
-        """As falas que cruzam `[from_ms, to_ms]`, em ordem."""
+        """The utterances that cross `[from_ms, to_ms]`, in order."""
         g = t.segments.c
         query = (
             select(g.speaker_id, g.start_ms, g.text)
@@ -176,7 +176,7 @@ class TranscriptTools:
         return [(row.start_ms, self._line(row.speaker_id, row.start_ms, row.text)) for row in rows if row.text.strip()]
 
     async def search(self, query: str, limit: int) -> list[str]:
-        """O full-text `eclume_pt` da busca, só nesta transcrição: os mais relevantes, em ordem de tempo."""
+        """The search's `eclume_pt` full-text, in this transcript only: the most relevant, in time order."""
         sql = text(
             """
             SELECT speaker_id, start_ms, text FROM (
@@ -194,7 +194,7 @@ class TranscriptTools:
 
 
 async def _context(conn: AsyncConnection, reply: Row) -> tuple[ChatContext, dict[str, str]]:
-    """O cabeçalho (com duração e marcadores com nota), o resumo de base, a conversa e o pedido."""
+    """The header (with duration and markers with a note), the base summary, the conversation and the request."""
     transcript = await transcript_text(conn, reply["transcript_id"])
     duration = (
         await conn.execute(select(t.transcripts.c.duration_ms).where(t.transcripts.c.id == reply["transcript_id"]))
@@ -256,17 +256,17 @@ async def _fail(engine: AsyncEngine, message_id: UUID, code: str, message: str) 
             .where(t.summary_chat_messages.c.id == message_id)
             .values(status="failed", error_code=code, error_message=message, completed_at=func.now())
         )
-    log.warning("chat %s falhou: %s — %s", message_id, code, message)
+    log.warning("chat %s failed: %s — %s", message_id, code, message)
     return f"falhou: {code}"
 
 
 async def abandon_reply(engine: AsyncEngine, message_id: UUID) -> None:
-    """Falha a resposta cujo job não entrou na fila: sem isso, a gravação ficaria em `chat_busy`."""
+    """Fails the reply whose job did not enter the queue: without this, the recording would stay in `chat_busy`."""
     await _fail(engine, message_id, INTERNAL_ERROR, "O pedido de ajuste não chegou ao worker; peça de novo.")
 
 
 async def reap_stalled_chats(engine: AsyncEngine) -> int:
-    """Falha as respostas em aberto há mais de `CHAT_STALE_S`, que ninguém mais vai terminar."""
+    """Fails the replies open for longer than `CHAT_STALE_S`, which nobody will finish anymore."""
     m = t.summary_chat_messages.c
     async with system_tx(engine) as conn:
         result = await conn.execute(
@@ -284,12 +284,12 @@ async def reap_stalled_chats(engine: AsyncEngine) -> int:
             )
         )
     if result.rowcount:
-        log.warning("chat: %d resposta(s) em aberto abandonada(s)", result.rowcount)
+        log.warning("chat: %d open reply(ies) abandoned", result.rowcount)
     return result.rowcount
 
 
 async def _save(engine: AsyncEngine, reply: Row, provider: Row, result: ChatResult) -> str:
-    """Grava a resposta; o resumo novo vira versão `chat` se a atual ainda for a de base."""
+    """Writes the reply; the new summary becomes a `chat` version if the current one is still the base one."""
     model = result.completion.model if result.completion else provider["model"]
     async with system_tx(engine) as conn:
         await lock_versions(conn, reply["transcript_id"])
@@ -331,7 +331,7 @@ async def _save(engine: AsyncEngine, reply: Row, provider: Row, result: ChatResu
 
 @dataclass(frozen=True)
 class _Claim:
-    """A resposta em curso, o provider de chat (com o segredo da plataforma) e o que o agente vê."""
+    """The reply in progress, the chat provider (with the platform secret) and what the agent sees."""
 
     reply: Row
     provider: Row | None
@@ -341,7 +341,7 @@ class _Claim:
 
 
 async def _claim(engine: AsyncEngine, message_id: UUID) -> _Claim | str:
-    """Passa a resposta a `running` com o provider de chat; o desfecho, se não há o que fazer."""
+    """Moves the reply to `running` with the chat provider; the outcome, if there is nothing to do."""
     async with system_tx(engine) as conn:
         m = t.summary_chat_messages.c
         reply = (
@@ -369,7 +369,7 @@ async def _claim(engine: AsyncEngine, message_id: UUID) -> _Claim | str:
 
 
 async def _on_error(ctx: dict[str, Any], reply: Row, exc: ProviderError) -> str:
-    """A GPU ocupada falha na hora; falha passageira tenta de novo uma vez; o resto falha."""
+    """A busy GPU fails at once; a transient failure retries once; the rest fails."""
     engine: AsyncEngine = ctx["engine"]
     if exc.code == GPU_BUSY:
         return await _fail(engine, reply["id"], GPU_BUSY, "A GPU está transcrevendo; tente em instantes.")
@@ -380,15 +380,15 @@ async def _on_error(ctx: dict[str, Any], reply: Row, exc: ProviderError) -> str:
                 .where(t.summary_chat_messages.c.id == reply["id"])
                 .values(status="queued")
             )
-        # Fora da transação: o `Retry` dentro dela desfaria a volta à fila.
+        # Outside the transaction: the `Retry` inside it would undo the requeue.
         raise Retry(defer=ctx.get("retry_delays", (CHAT_RETRY_S,))[0]) from exc
     return await _fail(engine, reply["id"], exc.code, exc.message)
 
 
-async def run_summary_chat(ctx: dict[str, Any], message_id: UUID) -> str:  # noqa: PLR0911 — um desfecho por caminho do job
-    """O job `summary_chat`: roda o laço do agente e grava a resposta (e a versão `chat`).
+async def run_summary_chat(ctx: dict[str, Any], message_id: UUID) -> str:  # noqa: PLR0911 — one outcome per job path
+    """The `summary_chat` job: runs the agent loop and writes the reply (and the `chat` version).
 
-    `ctx` é o do worker arq; nos testes, com `provider_factory` e `retry_delays`.
+    `ctx` is the arq worker's; in the tests, with `provider_factory` and `retry_delays`.
     """
     engine: AsyncEngine = ctx["engine"]
     claim = await _claim(engine, message_id)
@@ -410,6 +410,6 @@ async def run_summary_chat(ctx: dict[str, Any], message_id: UUID) -> str:  # noq
     except ProviderError as exc:
         return await _on_error(ctx, claim.reply, exc)
     except Exception:
-        log.exception("chat %s: falha inesperada", message_id)
+        log.exception("chat %s: unexpected failure", message_id)
         return await _fail(engine, message_id, INTERNAL_ERROR, "Falha inesperada no ajuste do resumo.")
     return await _save(engine, claim.reply, claim.provider, result)

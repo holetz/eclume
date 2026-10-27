@@ -8,7 +8,7 @@ import { searchArticles } from './search'
 
 const MAX_RESULTS = 6
 
-/** O corpo da gaveta de ajuda: a busca, os artigos da página ("Nesta página") e os atalhos. */
+/** The help drawer body: search, the page's articles ("Nesta página") and the shortcuts. */
 export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | null }) {
   const [query, setQuery] = useState('')
   const input = useRef<HTMLInputElement>(null)

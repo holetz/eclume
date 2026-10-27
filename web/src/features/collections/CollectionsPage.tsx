@@ -19,12 +19,12 @@ interface CollectionFields {
 }
 
 type Editing =
-  | { mode: 'nova' }
-  | { mode: 'editar'; collection: Collection }
-  | { mode: 'mesclar'; collection: Collection }
-  | { mode: 'excluir'; collection: Collection }
+  | { mode: 'new' }
+  | { mode: 'edit'; collection: Collection }
+  | { mode: 'merge'; collection: Collection }
+  | { mode: 'delete'; collection: Collection }
 
-/** Regras de exemplo para "Quando incluir": assunto, tipo de agenda e dados dos participantes. */
+/** Example rules for "Quando incluir": subject, agenda type and participant data. */
 const RULE_EXAMPLES = [
   'Reuniões em que participa alguém da empresa Agro Sul.',
   'Conversas do tipo Conversa com cliente com alguém que tenha a tag de pessoa "diretoria".',
@@ -45,7 +45,7 @@ export function CollectionsPage() {
         kicker="Organizar"
         title="Coleções"
         actions={
-          <button type="button" className="btn btn-primary" onClick={() => setEditing({ mode: 'nova' })}>
+          <button type="button" className="btn btn-primary" onClick={() => setEditing({ mode: 'new' })}>
             Nova coleção
           </button>
         }
@@ -79,24 +79,24 @@ export function CollectionsPage() {
             <CollectionRow
               key={collection.id}
               collection={collection}
-              onEdit={() => setEditing({ mode: 'editar', collection })}
-              onMerge={items.length > 1 ? () => setEditing({ mode: 'mesclar', collection }) : undefined}
-              onDelete={() => setEditing({ mode: 'excluir', collection })}
+              onEdit={() => setEditing({ mode: 'edit', collection })}
+              onMerge={items.length > 1 ? () => setEditing({ mode: 'merge', collection }) : undefined}
+              onDelete={() => setEditing({ mode: 'delete', collection })}
             />
           ))}
         </ul>
       )}
 
-      {editing?.mode === 'nova' && <CreateDialog onClose={close} />}
-      {editing?.mode === 'editar' && <EditDialog collection={editing.collection} onClose={close} />}
-      {editing?.mode === 'mesclar' && (
+      {editing?.mode === 'new' && <CreateDialog onClose={close} />}
+      {editing?.mode === 'edit' && <EditDialog collection={editing.collection} onClose={close} />}
+      {editing?.mode === 'merge' && (
         <MergeDialog
           collection={editing.collection}
           targets={items.filter((item) => item.id !== editing.collection.id)}
           onClose={close}
         />
       )}
-      {editing?.mode === 'excluir' && <DeleteDialog collection={editing.collection} onClose={close} />}
+      {editing?.mode === 'delete' && <DeleteDialog collection={editing.collection} onClose={close} />}
     </section>
   )
 }
@@ -109,7 +109,7 @@ function CollectionRow({
 }: {
   collection: Collection
   onEdit: () => void
-  /** Sem outra coleção, não há onde mesclar. */
+  /** Without another collection, there is nowhere to merge. */
   onMerge?: () => void
   onDelete: () => void
 }) {

@@ -14,7 +14,7 @@ type Asr = Schemas['AsrSettings']
 
 const FORM_ID = 'admin-transcricao'
 
-/** Motor, modelo e idioma da transcrição; a separação e a identificação ficam em Locutores. */
+/** Transcription engine, model and language; diarization and identification live in Locutores. */
 export function TranscriptionPage() {
   const settings = useAdminSettings()
   if (settings.data) return <TranscriptionForm settings={settings.data} />
@@ -40,7 +40,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
   const [batchSize, setBatchSize] = useState(settings.asr.batch_size?.toString() ?? '')
   const [fallbackModel, setFallbackModel] = useState(settings.asr.fallback_model ?? '')
   const [endpoint, setEndpoint] = useState(settings.asr.endpoint_url ?? '')
-  // O que foi salvo por último: o aviso vale até o form mudar de novo.
+  // What was saved last: the notice holds until the form changes again.
   const [sent, setSent] = useState<string | null>(null)
   const languages = useMemo(() => whisperLanguages(), [])
   const ids = {
@@ -64,7 +64,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
     fallback_model: fallbackModel.trim() || null,
     endpoint_url: endpoint.trim() || null,
   }
-  // Sem idioma salvo, o server usa o português: o form já parte dele.
+  // With no saved language, the server uses Portuguese: the form starts from it.
   const current = { ...settings.asr, default_language: settings.asr.default_language ?? 'pt' }
   const changed = (Object.keys(asr) as (keyof Asr)[]).some((key) => asr[key] !== current[key])
   const valid = !remote || Boolean(asr.endpoint_url)
@@ -83,7 +83,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
       <AdminPageHead
         title="Transcrição"
         actions={
-          // Fora do form, no cabeçalho: `form=` o liga ao form, e Enter nos campos também salva.
+          // Outside the form, in the header: `form=` ties it to the form; Enter in the fields also saves.
           <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={!canSave}>
             {update.isPending ? 'Salvando…' : 'Salvar'}
           </button>

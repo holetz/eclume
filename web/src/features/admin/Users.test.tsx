@@ -12,7 +12,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 const PAULO_ID = '01928f3a-1c00-7a00-8000-000000000102'
 
-/** As duas páginas do cursor: a fixture e uma conta desativada depois dela. */
+/** The two cursor pages: the fixture and a deactivated account after it. */
 function pages(): Schemas['AdminUserPage'][] {
   const first = fixtures.adminUserPage()
   const second = fixtures.adminUserPage()
@@ -40,8 +40,8 @@ function mockUsersApi(extra: Parameters<typeof mockFetch>[0] = {}) {
   })
 }
 
-describe('Usuários', () => {
-  it('lê todas as páginas e mostra a tabela do DS com o contador', async () => {
+describe('Users', () => {
+  it('reads every page and shows the DS table with the counter', async () => {
     const http = mockUsersApi()
     renderApp('/admin/usuarios')
     expect(await screen.findByRole('heading', { level: 1, name: 'Usuários' })).toBeInTheDocument()
@@ -61,7 +61,7 @@ describe('Usuários', () => {
     ])
   })
 
-  it('busca por nome ou e-mail, sem acento e sem caixa', async () => {
+  it('searches by name or e-mail, ignoring accents and case', async () => {
     mockUsersApi()
     renderApp('/admin/usuarios')
     const search = await screen.findByRole('searchbox', { name: 'Buscar por nome ou e-mail' })
@@ -69,7 +69,7 @@ describe('Usuários', () => {
     await userEvent.type(search, 'JULIA')
     expect(screen.getByRole('row', { name: /Júlia Araújo/ })).toBeInTheDocument()
     expect(screen.queryByRole('row', { name: /Paulo Andrade/ })).not.toBeInTheDocument()
-    // O contador é da lista inteira.
+    // The counter covers the whole list.
     expect(screen.getByText('3 contas · 2 ativas')).toBeInTheDocument()
     await userEvent.clear(search)
     await userEvent.type(search, 'example')
@@ -79,7 +79,7 @@ describe('Usuários', () => {
     expect(screen.getByText('Nenhuma conta com “ninguém”.')).toBeInTheDocument()
   })
 
-  it('desativa só depois de confirmar no diálogo', async () => {
+  it('deactivates only after confirming in the dialog', async () => {
     const paulo = fixtures.adminUserPage().items[1]
     const http = mockUsersApi({ 'PATCH /api/v1/admin/users/:id': () => ({ ...paulo, active: false }) })
     renderApp('/admin/usuarios')
@@ -101,7 +101,7 @@ describe('Usuários', () => {
     expect(screen.getByText('3 contas · 1 ativa')).toBeInTheDocument()
   })
 
-  it('gera o link de senha depois de confirmar e o mostra uma vez para copiar', async () => {
+  it('generates the password link after confirming and shows it once to copy', async () => {
     const link = fixtures.passwordResetLink()
     const http = mockUsersApi({ 'POST /api/v1/admin/users/:id/password-reset': () => link })
     renderApp('/admin/usuarios')
@@ -124,7 +124,7 @@ describe('Usuários', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('reativa na hora', async () => {
+  it('reactivates at once', async () => {
     const [, second] = pages()
     const http = mockUsersApi({ 'PATCH /api/v1/admin/users/:id': () => ({ ...second.items[0], active: true }) })
     renderApp('/admin/usuarios')
@@ -133,7 +133,7 @@ describe('Usuários', () => {
     expect(await http.requests('PATCH /api/v1/admin/users/:id')[0].json()).toEqual({ active: true })
   })
 
-  it('sem contas, aponta o cadastro', async () => {
+  it('with no accounts, points to sign-up', async () => {
     mockFetch({
       'GET /api/v1/admin/me': () => fixtures.adminMe(),
       'GET /api/v1/admin/users': () => ({ items: [], next_cursor: null }),

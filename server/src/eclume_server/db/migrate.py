@@ -1,4 +1,4 @@
-"""Runner das migrations SQL versionadas (`migrations/NNN_nome.sql`)."""
+"""Runner of the versioned SQL migrations (`migrations/NNN_name.sql`)."""
 
 from __future__ import annotations
 
@@ -11,17 +11,17 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
 MIGRATIONS = Path(__file__).with_name("migrations")
-# Chave arbitrária do advisory lock: dois processos subindo juntos não aplicam a mesma migration.
+# Arbitrary advisory-lock key: two processes starting together do not apply the same migration.
 _LOCK_KEY = 0x0EC1_0E00
 
 
 def migration_files() -> list[Path]:
-    """Migrations em ordem de versão."""
+    """Migrations in version order."""
     return sorted(MIGRATIONS.glob("[0-9][0-9][0-9]_*.sql"))
 
 
 async def pending(engine: AsyncEngine) -> list[str]:
-    """As versões das migrations desta árvore que o banco ainda não aplicou, em ordem; não aplica nada."""
+    """The versions of this tree's migrations the database has not applied yet, in order; applies nothing."""
     async with engine.connect() as conn:
         if (await conn.execute(text("SELECT to_regclass('schema_migrations')"))).scalar() is None:
             done: set[str] = set()
@@ -31,17 +31,17 @@ async def pending(engine: AsyncEngine) -> list[str]:
 
 
 async def migrate(engine: AsyncEngine, until: str | None = None) -> list[str]:
-    """Aplica, cada uma na sua transação, as migrations ainda não aplicadas; devolve as aplicadas.
+    """Apply, each in its own transaction, the migrations not yet applied; return the ones applied.
 
-    Com `until` (a versão, como `007_purga_de_embeddings`), para nela: os testes de uma migration
-    semeiam o banco no formato da anterior.
+    With `until` (the version, such as `007_purga_de_embeddings`), stop at it: a migration's tests
+    seed the database in the previous one's shape.
     """
     applied_now: list[str] = []
     async with engine.connect() as conn:
         await conn.execute(text("SELECT pg_advisory_lock(:key)"), {"key": _LOCK_KEY})
         try:
-            # Só cria quando falta: o papel de conexão da aplicação (`eclume_server`) não tem
-            # CREATE no schema e roda `migrate` no `admin bootstrap` com o schema já em dia.
+            # Create only when missing: the application's connection role (`eclume_server`) has no
+            # CREATE on the schema and runs `migrate` in `admin bootstrap` with the schema already up to date.
             if (await conn.execute(text("SELECT to_regclass('schema_migrations')"))).scalar() is None:
                 await conn.execute(
                     text(
@@ -58,7 +58,7 @@ async def migrate(engine: AsyncEngine, until: str | None = None) -> list[str]:
                     break
                 if version in done:
                     continue
-                # SQL com vários comandos e blocos `DO $$`: vai pelo protocolo simples do asyncpg.
+                # SQL with several statements and `DO $$` blocks: goes through asyncpg's simple protocol.
                 raw = (await conn.get_raw_connection()).driver_connection
                 async with raw.transaction():
                     await raw.execute(path.read_text(encoding="utf-8"))
@@ -74,9 +74,9 @@ RUNTIME_ROLE = "eclume_server"
 
 
 async def enable_runtime_login(engine: AsyncEngine, password: str) -> None:
-    """Liga o LOGIN do papel de conexão da aplicação (criado pela migration 006) com esta senha."""
+    """Enable LOGIN for the application's connection role (created by migration 006) with this password."""
     async with engine.begin() as conn:
-        # `ALTER ROLE` não aceita parâmetro: o literal sai do `format(%L)` do próprio Postgres.
+        # `ALTER ROLE` takes no parameter: the literal comes from Postgres's own `format(%L)`.
         statement = (
             await conn.execute(
                 text("SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', CAST(:role AS text), CAST(:password AS text))"),

@@ -1,4 +1,4 @@
-"""Montagem do servidor MCP no app FastAPI: HTTP streamable sem estado, atrás do `BearerGate`."""
+"""Mounting the MCP server on the FastAPI app: stateless streamable HTTP, behind the `BearerGate`."""
 
 from __future__ import annotations
 
@@ -27,14 +27,14 @@ INSTRUCTIONS = (
 
 
 class BearerGate:
-    """ASGI do `/mcp`: só `Authorization: Bearer eclp_…` válido passa; o `Principal` vai no scope."""
+    """ASGI of `/mcp`: only a valid `Authorization: Bearer eclp_…` passes; the `Principal` goes in the scope."""
 
     def __init__(self, server: MCPServer) -> None:
-        """O servidor cujo session manager atende a requisição autenticada."""
+        """The server whose session manager serves the authenticated request."""
         self.server = server
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """401 problem+json sem credencial válida; senão, a requisição segue para o SDK."""
+        """401 problem+json without a valid credential; otherwise the request goes on to the SDK."""
         request = Request(scope, receive)
         try:
             principal = await authenticate(request, request.app.state.ctx, bearer_only=True)
@@ -46,13 +46,13 @@ class BearerGate:
 
 
 def mount_mcp(app: FastAPI) -> MCPServer:
-    """Registra `/mcp` (rota exata: um `Mount` redirecionaria `/mcp` para `/mcp/`).
+    """Register `/mcp` (an exact route: a `Mount` would redirect `/mcp` to `/mcp/`).
 
-    Cada app tem o próprio `MCPServer`: o session manager só roda uma vez, no lifespan do app.
+    Each app has its own `MCPServer`: the session manager runs only once, in the app's lifespan.
     """
     server = MCPServer("eclume", instructions=INSTRUCTIONS)
     register(server)
-    # Cria o session manager. O Host já é controlado pelo Caddy e toda chamada exige Bearer.
+    # Creates the session manager. Caddy already controls the Host and every call requires a Bearer.
     server.streamable_http_app(
         streamable_http_path=MCP_PATH,
         stateless_http=True,

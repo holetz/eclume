@@ -1,14 +1,14 @@
--- 010_campos_e_valores — campos do usuário e os valores de cada gravação (holetz/eclume#33).
+-- 010_campos_e_valores — the user's fields and each recording's values (holetz/eclume#33).
 --
--- Título e tags são campos embutidos (o valor continua em `recordings.title`/`tags`, que a busca, a
--- biblioteca e a exportação leem; `field_values` guarda a origem). Os demais campos são do
--- usuário: texto, lista ou escolha, cada um com a regra que o agente segue. Padrões em
+-- Title and tags are built-in fields (the value stays in `recordings.title`/`tags`, which search, the
+-- library and export read; `field_values` keeps the source). The other fields are the
+-- user's: text, list or choice, each with the rule the agent follows. Patterns in
 -- docs/standards/code/processamento-automatico.md.
 
 CREATE TABLE fields (
     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id      uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    -- Slug do nome, único por dono: o marcador do campo no padrão de título.
+    -- Slug of the name, unique per owner: the field's placeholder in the title pattern.
     key           text NOT NULL CHECK (key ~ '^[a-z0-9_]{1,64}$'),
     name          text NOT NULL CHECK (name <> ''),
     kind          text NOT NULL CHECK (kind IN ('text', 'list', 'choice')),
@@ -31,10 +31,10 @@ CREATE TABLE field_values (
     recording_id         uuid NOT NULL,
     field_id             uuid NOT NULL,
     owner_id             uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    -- Texto ou escolha → string; lista → array de strings; `null` = nada encontrado.
+    -- Text or choice → string; list → array of strings; `null` = nothing found.
     value                jsonb NOT NULL DEFAULT 'null',
     origin               text NOT NULL CHECK (origin IN ('auto', 'edited', 'accepted')),
-    -- Revisão da transcrição que o preencheu (automático).
+    -- Transcript revision that filled it (automatic).
     transcript_revision  integer,
     provider_name        text,
     model                text,
@@ -45,7 +45,7 @@ CREATE TABLE field_values (
 );
 CREATE INDEX field_values_field_idx ON field_values (field_id);
 
--- Os embutidos de uma conta, com a regra padrão. Idempotente.
+-- An account's built-in fields, with the default rule. Idempotent.
 CREATE FUNCTION eclume_seed_builtin_fields(target uuid) RETURNS void
     LANGUAGE sql
     AS $$
@@ -59,7 +59,7 @@ CREATE FUNCTION eclume_seed_builtin_fields(target uuid) RETURNS void
 $$;
 REVOKE ALL ON FUNCTION eclume_seed_builtin_fields(uuid) FROM PUBLIC;
 
--- A semeadura da conta nova passa a criar também os embutidos.
+-- Seeding a new account now also creates the built-in fields.
 CREATE OR REPLACE FUNCTION eclume_seed_user_defaults(target uuid) RETURNS void
     LANGUAGE plpgsql
     AS $$
@@ -86,6 +86,6 @@ CREATE POLICY field_values_own ON field_values
     USING (owner_id = eclume_user()) WITH CHECK (owner_id = eclume_user());
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON fields, field_values TO eclume_app;
--- Já coberto pelo ALTER DEFAULT PRIVILEGES da 006 (mesmo migrador); repetido por clareza.
+-- Already covered by the ALTER DEFAULT PRIVILEGES of 006 (same migrator); repeated for clarity.
 GRANT SELECT, INSERT, UPDATE, DELETE ON fields, field_values TO eclume_server;
 GRANT EXECUTE ON FUNCTION eclume_seed_builtin_fields(uuid) TO eclume_server;

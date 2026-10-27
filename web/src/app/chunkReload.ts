@@ -1,5 +1,5 @@
-// Depois de um deploy, a aba aberta pede chunks de hash antigo: recarrega uma vez e chega na versão
-// nova. Se o chunk falhar de novo logo em seguida, o erro segue para o `RouteError`, sem laço.
+// After a deploy, an open tab requests chunks with an old hash: it reloads once and reaches the new
+// version. If the chunk fails again right after, the error goes on to `RouteError`, with no loop.
 
 const KEY = 'eclume-recarga-chunk'
 const WINDOW_MS = 60_000
@@ -21,9 +21,9 @@ function writeStamp(value: number): boolean {
   }
 }
 
-/** Trata um `vite:preloadError`: recarrega se não houve recarga por chunk nos últimos 60 s. */
+/** Handles a `vite:preloadError`: reloads if there was no chunk reload in the last 60 s. */
 export function handlePreloadError(event: Event, now = Date.now(), reload = () => window.location.reload()): void {
-  // Sem `sessionStorage` não há como provar que não é laço: o erro segue para a tela.
+  // Without `sessionStorage` there is no way to prove it is not a loop: the error goes on to the screen.
   if (now - readStamp() <= WINDOW_MS || !writeStamp(now)) return
   event.preventDefault()
   reload()

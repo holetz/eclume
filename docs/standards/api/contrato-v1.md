@@ -1,7 +1,7 @@
 ---
 type: standard
-title: Contrato de API v1
-description: As convenções da API v1 do eclume — conta por usuário, sessão de usuário e PAT com escopos, sessão de admin própria para /admin/*, credencial de dispositivo e descritor público, o /mcp fora do /api/v1, erros RFC 9457, paginação por cursor, upload multipart S3 com dedup por hash, transcrição em JSON Schema, a referência navegável gerada do bundle e servida pelo web em /referencia-api.html — e a regra de que a v1 só evolui de forma aditiva, com a linha 2.x do redesign como exceção única.
+title: API contract v1
+description: The conventions of the eclume API v1 — one account per user, user session and PAT with scopes, a separate admin session for /admin/*, device credential and public descriptor, /mcp outside /api/v1, RFC 9457 errors, cursor pagination, S3 multipart upload with hash dedup, transcript in JSON Schema, the browsable reference generated from the bundle and served by the web at /referencia-api.html — and the rule that v1 only evolves additively, with the redesign's 2.x line as the single exception.
 resource: contracts/**, deploy/docker-compose.mock.yml, server/**
 tags: [api, contrato, openapi, pat, upload, evolucao]
 timestamp: 2026-10-05
@@ -11,104 +11,109 @@ source: holetz/eclume#3, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, h
 maintainer: holetz
 ---
 
-# Contrato de API v1
+# API contract v1
 
-O contrato fica em `contracts/`: `openapi-v1.yaml` e `transcript.schema.json` são a fonte da
-verdade, `fixtures/` traz os exemplos e `openapi-v1.bundled.yaml` é o derivado de arquivo único
-que o mock (Prism) e os geradores de tipos leem. O servidor **conforma** ao contrato; o contrato
-nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento para
-`transcricao.md`) está em [contracts/README.md](/contracts/README.md).
+The contract lives in `contracts/`: `openapi-v1.yaml` and `transcript.schema.json` are the source
+of truth, `fixtures/` holds the examples and `openapi-v1.bundled.yaml` is the single-file
+derivative that the mock (Prism) and the type generators read. The server **conforms** to the
+contract; the contract is never generated from the code. The usage manual (mock, lumea, desktop,
+mapping to `transcricao.md`) is in [contracts/README.md](/contracts/README.md).
 
-## Convenções
+## Conventions
 
-- **Prefixo e formatos.** Tudo sob `/api/v1`, menos o servidor MCP em `/mcp` (JSON-RPC do Model
-  Context Protocol, fora do OpenAPI; ver
-  [server-mcp-e-dispositivos.md](../code/server-mcp-e-dispositivos.md)). Datas em RFC 3339 UTC, durações em milissegundos
-  inteiros (`*_ms`), ids em UUID; locutores têm id `S<n>` único na transcrição.
-- **Conta por usuário.** Não há organização: cada conta vê e muda só o que é dela. A conta nasce
-  no cadastro aberto (`POST /auth/signup`), com o aceite do aviso em vigor; uma conta sem o
-  aceite vigente recebe `notice_required: true` em `GET /me` e aceita por `POST /me/notice`.
-  Desde a 2.3.0, a **sessão** dessa conta recebe **403** `notice_required` em toda rota de
-  usuário, menos `GET /me`, `POST /me/notice` e `/auth/*`; o PAT não é barrado (o desktop e o
-  lumea de contas migradas seguem funcionando, e quem pede o aceite é o web).
-- **Autenticação.** Três esquemas.
-  - **Sessão de usuário** (`sessionCookie`): cookie `eclume_session` (HttpOnly, Secure,
-    SameSite=Lax) com CSRF por double-submit (`X-CSRF-Token` = cookie `eclume_csrf`) em método
-    mutável.
-  - **PAT** (`pat`) em `Authorization: Bearer eclp_<segredo>`, guardado só como hash e mostrado
-    uma vez. `Token.kind` distingue o PAT **pessoal** (`personal`, criado em `POST /tokens`) da
-    **credencial de dispositivo** (`device`, com `platform`), que só nasce de
-    `POST /devices/login` (e-mail e senha) ou `POST /devices/pair` (código de pareamento) e
-    responde como qualquer PAT; `GET /tokens?kind=` separa as duas listas.
-  - **Sessão de admin** (`adminSessionCookie`): conta de admin separada das contas de usuário,
-    aberta por `POST /admin/auth/login`. Cookie `eclume_admin_session` (HttpOnly, Secure,
-    SameSite=Strict, `Path=/api/v1/admin`) e CSRF por `X-CSRF-Token` = cookie `eclume_admin_csrf`.
-- **Fronteira do admin.** `/api/v1/admin/*` (menos o login) declara só `adminSessionCookie`:
-  sessão de usuário, PAT ou nada ali dão **401** `unauthorized`. A sessão de admin é ignorada em
-  qualquer outra rota. O admin vê só a plataforma (configuração, segredos, agentes, contas,
-  saúde); nenhuma rota de admin devolve conteúdo de usuário. Desde a 2.15.0, `AdminUser` traz o
-  uso da conta (`usage`) e a sobreposição das cotas (`quotas`, só os campos sobrepostos ou `null`),
-  `PATCH /admin/users/{id}` aceita `quotas` (troca a sobreposição inteira; `null` volta ao padrão)
-  com `active` opcional, e `DELETE /admin/users/{id}` (204; inexistente, 404) exclui a conta como
-  o `POST /me/delete`, sem a senha, e libera o e-mail. Desde a 2.18.0,
-  `POST /admin/users/{id}/password-reset` (201 `PasswordResetLink`; conta desativada, **409**
-  `conflict`) gera o link de redefinição de senha da conta; o admin nunca vê nem define a senha.
-- **Escopos do PAT:** `recordings:read`, `recordings:write`, `recordings:delete` (2.3.0, a
-  exclusão de gravação), `transcripts:read`,
-  `transcripts:write`, `people:read`, `people:write`, `summaries:read`, `summaries:write`. Nenhum
-  implica outro; a operação lista no requisito `pat: [...]` todos os que exige. Quando basta um de
-  vários, a operação declara um requisito `pat` por escopo e a rota usa `requires_any` (desde a
-  2.4.0, `GET /agenda-types` aceita `summaries:read` ou `recordings:read`, para a credencial de
-  dispositivo escolher o tipo ao parar). A credencial de dispositivo tem `recordings:read`,
-  `recordings:write`, `summaries:read` (2.6.0) e `transcripts:read` (2.8.0, a pasta sincronizada do
-  desktop). Sessão tem todas as permissões do usuário.
-- **Agente (2.23.0, `agent`):** `GET`/`POST /agent/sessions` (as conversas, por cursor, da
-  última atividade para trás; criar, com título opcional), `GET`/`PATCH`/`DELETE
-  /agent/sessions/{session_id}` (a conversa com as mensagens e os anexos não enviados; renomear;
-  excluir), `POST /agent/sessions/{session_id}/files` (multipart, 201; .txt, .md, .csv, .pdf e .docx
-  até 10 MB, 415 `unsupported_media_type` fora disso, 409 `too_many_files` acima de 20 por
-  conversa), `DELETE .../files/{file_id}` (só anexo não enviado; o enviado é 409), `POST
-  .../messages` (202 com `question` e `answer`; 409 com outra resposta em aberto na conversa, 429
-  com duas na conta, cota de 24 h do agente), `GET .../messages/{message_id}` (consulta até `done`
-  ou `failed`, com `agent_expired` depois de 15 minutos em aberto) e `GET
-  /agent/files/{file_id}/content` (o arquivo como anexo). Todas com `summaries:read`, como o chat
-  sobre a base; o escopo `transcripts:read` vale para as ferramentas. Outra conta é 404. Aditivo:
-  `/base-chat` segue igual e passa a `deprecated`.
-- **Habilidades e ações do Agente (2.24.0, `agent`):** `GET /agent/tools` (o catálogo de
-  ferramentas, com a natureza `read`, `produce` ou `action`), `GET`/`POST /agent/skills` e
-  `GET`/`PATCH`/`DELETE /agent/skills/{skill_id}` (as habilidades: nome `/nome` único na conta, 409
-  `skill_exists`; até 50; `allowed_tools` nulo libera todas), todas com `summaries:read`.
-  `AgentMessageCreate.skill` (ou `/nome` no começo da mensagem) escolhe a habilidade (422 se
-  inexistente ou desligada) e `AgentMessage` ganha `skill` e `actions` (as propostas da resposta).
-  `GET /agent/actions` (a auditoria, por cursor), `GET /agent/actions/{action_id}`, `POST
-  .../confirm` (202, idempotente; exige `summaries:write` para `regenerate_summaries` ou
-  `recordings:write` para as demais; 409 `action_expired` ou `action_cancelled`) e `POST
-  .../cancel` (só de `proposed`; 409 `action_not_proposed`). Aditivo: nada muda para quem não usa.
-- **Locutores ao retranscrever (2.25.0, `recordings`):** `RetranscribeRequest` ganha `min_speakers` e
-  `max_speakers` (inteiros de 1 a 30, opcionais; 422 se o mínimo passa do máximo). O par vale só
-  para a revisão pedida e vence os limites do admin. Sem pedido, a nota de voz (`kind: note`) é
-  transcrita com 1 locutor. Aditivo: quem não envia os campos não vê mudança nas reuniões.
-  **Teto de 30 (2.26.0):** o mesmo `maximum` vale para `min_speakers`/`max_speakers` do bloco
-  `diarization` do admin; acima dele, ou com um booleano no lugar do número, a resposta é 422. O
-  teto é do produto (reuniões institucionais) e fica abaixo do `uint8` da diarização, que estourava
-  em 256 depois de gastar a GPU. Exceção deliberada a "apertar validação": o campo tinha horas de
-  vida e todo valor acima do teto já terminava em `DIARIZATION_FAILED`.
-- **Nome de pessoa limitado (2.27.0, `people`):** `PersonCreate.name` e `PersonPatch.name` ganham
-  `maxLength: 200`; acima disso a resposta é 422. O vocabulário que vai ao ASR tem 400 caracteres no
-  total, e um nome só não pode consumir a metade dele. Nomes já gravados acima do teto continuam
-  legíveis e editáveis: só a escrita nova é limitada. Exceção deliberada a "apertar validação": um
-  nome de mais de 200 caracteres não é um nome, e o servidor passa a pular, em vez de parar, o
-  nome que não cabe no vocabulário.
-- **Tetos de tamanho nas escritas (2.28.0, `input-limits`):** campos que só tinham o limite do
-  corpo da requisição ganham teto, e acima dele a resposta é 422: `SegmentPatch.text` (20000
-  caracteres); `PersonCreate`/`PersonPatch` `notes` (4000) e `email` (254); `CollectionCreate`/
-  `CollectionPatch` `name` (200) e `description` (2000); `RecordingPatch` `tags` (50 itens de até
-  64), `collection_ids` (100) e `metadata` (50 entradas, chaves de até 64 e valores de até 1000);
-  `AgentSkillCreate`/`AgentSkillPatch` `allowed_tools` (100 itens de até 64). Valores já gravados
-  acima do teto continuam legíveis, e um PATCH que não envia o campo não é afetado: só a escrita
-  nova é limitada. Exceção deliberada a "apertar validação", campo a campo, como em 2.27.0: um
-  valor acima do teto nunca foi legítimo e hoje só infla listagens, resumos, busca, embeddings e
-  prompts do Agente. Minor.
+- **Prefix and formats.** Everything under `/api/v1`, except the MCP server at `/mcp` (Model
+  Context Protocol JSON-RPC, outside the OpenAPI; see
+  [server-mcp-e-dispositivos.md](../code/server-mcp-e-dispositivos.md)). Dates in RFC 3339 UTC, durations in integer
+  milliseconds (`*_ms`), ids in UUID; speakers have an id `S<n>` unique within the transcript.
+- **One account per user.** There is no organization: each account sees and changes only what is
+  its own. The account is born at open sign-up (`POST /auth/signup`), with acceptance of the notice
+  in force; an account without the current acceptance gets `notice_required: true` in `GET /me`
+  and accepts through `POST /me/notice`. Since 2.3.0, that account's **session** gets **403**
+  `notice_required` on every user route except `GET /me`, `POST /me/notice` and `/auth/*`; the PAT
+  is not blocked (the desktop and the lumea of migrated accounts keep working, and the web is what
+  asks for the acceptance).
+- **Authentication.** Three schemes.
+  - **User session** (`sessionCookie`): cookie `eclume_session` (HttpOnly, Secure,
+    SameSite=Lax) with double-submit CSRF (`X-CSRF-Token` = cookie `eclume_csrf`) on mutating
+    methods.
+  - **PAT** (`pat`) in `Authorization: Bearer eclp_<segredo>`, stored only as a hash and shown
+    once. `Token.kind` tells the **personal** PAT (`personal`, created at `POST /tokens`) from the
+    **device credential** (`device`, with `platform`), which is only born from
+    `POST /devices/login` (e-mail and password) or `POST /devices/pair` (pairing code) and
+    answers like any PAT; `GET /tokens?kind=` separates the two lists.
+  - **Admin session** (`adminSessionCookie`): an admin account separate from user accounts,
+    opened by `POST /admin/auth/login`. Cookie `eclume_admin_session` (HttpOnly, Secure,
+    SameSite=Strict, `Path=/api/v1/admin`) and CSRF by `X-CSRF-Token` = cookie `eclume_admin_csrf`.
+- **The admin boundary.** `/api/v1/admin/*` (except the login) declares only `adminSessionCookie`:
+  a user session, a PAT or nothing there give **401** `unauthorized`. The admin session is ignored
+  on any other route. The admin sees only the platform (settings, secrets, agents, accounts,
+  health); no admin route returns user content. Since 2.15.0, `AdminUser` carries the account's
+  usage (`usage`) and the quota override (`quotas`, only the overridden fields, or `null`),
+  `PATCH /admin/users/{id}` accepts `quotas` (replaces the whole override; `null` returns to the
+  default) with `active` optional, and `DELETE /admin/users/{id}` (204; nonexistent, 404) deletes
+  the account like `POST /me/delete`, without the password, and frees the e-mail. Since 2.18.0,
+  `POST /admin/users/{id}/password-reset` (201 `PasswordResetLink`; deactivated account, **409**
+  `conflict`) generates the account's password reset link; the admin never sees nor sets the
+  password.
+- **PAT scopes:** `recordings:read`, `recordings:write`, `recordings:delete` (2.3.0, recording
+  deletion), `transcripts:read`,
+  `transcripts:write`, `people:read`, `people:write`, `summaries:read`, `summaries:write`. None
+  implies another; the operation lists in the `pat: [...]` requirement every one it demands. When
+  one of several is enough, the operation declares one `pat` requirement per scope and the route
+  uses `requires_any` (since 2.4.0, `GET /agenda-types` accepts `summaries:read` or
+  `recordings:read`, so the device credential can pick the type on stop). The device credential
+  has `recordings:read`, `recordings:write`, `summaries:read` (2.6.0) and `transcripts:read`
+  (2.8.0, the desktop's synced folder). A session has all of the user's permissions.
+- **Agent (2.23.0, `agent`):** `GET`/`POST /agent/sessions` (the conversations, by cursor, from
+  the latest activity backwards; create, with an optional title), `GET`/`PATCH`/`DELETE
+  /agent/sessions/{session_id}` (the conversation with its messages and the unsent attachments;
+  rename; delete), `POST /agent/sessions/{session_id}/files` (multipart, 201; .txt, .md, .csv, .pdf
+  and .docx up to 10 MB, 415 `unsupported_media_type` otherwise, 409 `too_many_files` above 20 per
+  conversation), `DELETE .../files/{file_id}` (only an unsent attachment; a sent one is 409), `POST
+  .../messages` (202 with `question` and `answer`; 409 with another answer open in the
+  conversation, 429 with two in the account, the agent's 24 h quota), `GET
+  .../messages/{message_id}` (poll until `done` or `failed`, with `agent_expired` after 15 minutes
+  open) and `GET /agent/files/{file_id}/content` (the file as an attachment). All with
+  `summaries:read`, like the chat over the base; the `transcripts:read` scope applies to the tools.
+  Another account is 404. Additive: `/base-chat` stays the same and becomes `deprecated`.
+- **Agent skills and actions (2.24.0, `agent`):** `GET /agent/tools` (the tool catalog, with the
+  nature `read`, `produce` or `action`), `GET`/`POST /agent/skills` and
+  `GET`/`PATCH`/`DELETE /agent/skills/{skill_id}` (the skills: name `/nome` unique in the account,
+  409 `skill_exists`; up to 50; a null `allowed_tools` allows all), all with `summaries:read`.
+  `AgentMessageCreate.skill` (or `/nome` at the start of the message) picks the skill (422 if
+  nonexistent or switched off) and `AgentMessage` gains `skill` and `actions` (the answer's
+  proposals). `GET /agent/actions` (the audit, by cursor), `GET /agent/actions/{action_id}`, `POST
+  .../confirm` (202, idempotent; requires `summaries:write` for `regenerate_summaries` or
+  `recordings:write` for the others; 409 `action_expired` or `action_cancelled`) and `POST
+  .../cancel` (only from `proposed`; 409 `action_not_proposed`). Additive: nothing changes for
+  those who do not use it.
+- **Speakers on retranscription (2.25.0, `recordings`):** `RetranscribeRequest` gains
+  `min_speakers` and `max_speakers` (integers from 1 to 30, optional; 422 if the minimum exceeds the
+  maximum). The pair applies only to the requested revision and overrides the admin's limits.
+  Without a request, the voice note (`kind: note`) is transcribed with 1 speaker. Additive: those
+  who do not send the fields see no change in meetings.
+  **Ceiling of 30 (2.26.0):** the same `maximum` applies to `min_speakers`/`max_speakers` of the
+  admin's `diarization` block; above it, or with a boolean instead of the number, the answer is
+  422. The ceiling is the product's (institutional meetings) and sits below diarization's `uint8`,
+  which overflowed at 256 after spending the GPU. A deliberate exception to "tightening
+  validation": the field was hours old and every value above the ceiling already ended in
+  `DIARIZATION_FAILED`.
+- **Bounded person name (2.27.0, `people`):** `PersonCreate.name` and `PersonPatch.name` gain
+  `maxLength: 200`; above that the answer is 422. The vocabulary sent to the ASR has 400 characters
+  in total, and a single name cannot consume half of it. Names already stored above the ceiling
+  stay readable and editable: only new writes are bounded. A deliberate exception to "tightening
+  validation": a name of more than 200 characters is not a name, and the server now skips, instead
+  of stopping at, the name that does not fit in the vocabulary.
+- **Size ceilings on writes (2.28.0, `input-limits`):** fields that only had the request body's
+  limit gain a ceiling, and above it the answer is 422: `SegmentPatch.text` (20000 characters);
+  `PersonCreate`/`PersonPatch` `notes` (4000) and `email` (254); `CollectionCreate`/
+  `CollectionPatch` `name` (200) and `description` (2000); `RecordingPatch` `tags` (50 items of up
+  to 64), `collection_ids` (100) and `metadata` (50 entries, keys of up to 64 and values of up to
+  1000); `AgentSkillCreate`/`AgentSkillPatch` `allowed_tools` (100 items of up to 64). Values
+  already stored above the ceiling stay readable, and a PATCH that does not send the field is not
+  affected: only new writes are bounded. A deliberate exception to "tightening validation", field
+  by field, as in 2.27.0: a value above the ceiling was never legitimate and today only inflates
+  listings, summaries, search, embeddings and the Agent's prompts. Minor.
 - **Audio retention (2.29.0, `audio-retention`):** `GET`/`PATCH /me/audio-retention` (read with
   `recordings:read`, write by session only) carry `{days, max_days, effective_days}`: `days` is the
   account's choice in days (1 to 3650, `null` is off, the default), `max_days` is the admin's
@@ -119,203 +124,215 @@ nunca é gerado do código. O manual de uso (mock, lumea, desktop, mapeamento pa
   `audio_deleted` on `GET /recordings/{id}/audio` and on the signed media URL, and 409
   `audio_deleted` on every route that starts a new revision (retranscribe, retry). Transcript,
   summary and chat stay. All additive. Minor.
-- **Exemplos anonimizados (2.27.1, `fixtures`):** os e-mails, nomes e o exemplo de `device_name`
-  dos fixtures e do contrato passam a ser neutros, sem pessoa ou organização real. Só exemplos e
-  descrições mudam: nenhum schema, rota ou validação. Patch, sem efeito para clientes.
-- **Chat sobre a base (2.7.0, `base-chat`):** `POST /base-chat` (202, com a pergunta e até 10
-  mensagens de histórico, que o cliente guarda) e `GET /base-chat/{chat_id}` (consulta até `done`
-  ou `failed`), ambos com `summaries:read`. O estado vive 1 h no Redis; a de outra conta é 404; a
-  conta tem até 2 perguntas em aberto (429 `rate_limited`). A resposta traz `sources`, só as
-  gravações que o agente consultou. É aditivo: nenhuma rota existente mudou. Desde a 2.14.0, o
-  escopo vale para as **ferramentas** do agente, não para a rota: um PAT sem `transcripts:read`
-  pergunta normalmente, mas o agente só busca e lê resumos (sem `search_transcripts` nem
-  `read_transcript`); sessão e credencial de aparelho leem as duas fontes. Exigir
-  `transcripts:read` na rota seria escopo a mais numa rota existente.
-- **Rotas públicas** (sem credencial): `GET /health` (estático, sinal de vida), `GET /health/ready`
-  (prontidão desde a 2.13.0: 200 ou 503 com só o nome e `ok`/`down` de Postgres, Redis e
-  armazenamento), `GET /server` (descritor: nome, endereço,
-  endereço MCP, impressão digital da CA raiz e versões; desde a 2.21.0, `ca_next_sha256`, a
-  impressão digital da próxima raiz durante a rotação, opcional e `null` fora dela), `GET /privacy` (desde a 2.19.0: para
-  onde vai cada dado, `PrivacyInfo` com um `DataDestination` por finalidade — transcrição e as de
-  agente — em `server`, `local_network`, `external` ou `disabled`, e quem processa só quando sai;
-  nunca endereço, modelo, chave nem nome do provider; separada de `/server` porque muda em
-  runtime e o cadastro precisa dela antes do aceite), login e cadastro, login de admin,
-  `POST /devices/login` e `POST /devices/pair`. As que conferem credencial (login, cadastro, login
-  de admin, `/devices/*` e, desde a 2.18.0, as duas rotas da redefinição de senha, que somam a
-  mesma chave) têm limite de tentativas por IP e rota: estourado, **429**
-  `rate_limited` com `Retry-After`. Desde a 2.14.0, os logins por senha (navegador, aparelho e
-  admin, este com contadores próprios) contam também as **falhas** da conta: por par (conta, IP),
-  10 em 15 min, e um teto da conta, 100 em 1 h, que não barra IP que entrou nela com sucesso nos
-  últimos 30 dias; o sucesso zera o par. Assim as tentativas de um IP qualquer não trancam a dona
-  da conta. Código de pareamento inválido, vencido ou usado é **401** `invalid_pairing_code`.
-- **Troca de senha** (`POST /me/password`): desde a 2.14.0, `revoke_tokens` opcional; `true`
-  revoga, além das outras sessões, as credenciais de aparelho e os PATs da conta. Ausente vale
-  `false`, o comportamento anterior (os tokens continuam). O web manda `true` por padrão.
-- **Redefinição de senha por link** (desde a 2.18.0): o link `<url pública>/redefinir-senha#<segredo>`
-  leva o segredo no fragmento, que a página manda no corpo de `POST /auth/password-reset/check`
-  (200 `PasswordResetInfo`, o e-mail e a validade, sem consumir) e de `POST /auth/password-reset`
-  (204; troca a senha, consome o link e encerra todas as sessões da conta, sem abrir outra;
-  aparelhos e PATs seguem valendo). Ambas são públicas (`security: []`). Link inexistente,
-  vencido, usado ou de conta desativada é sempre **401** `invalid_reset_link`, a mesma resposta
-  para não servir de oráculo; senha curta é **422** `validation_failed` sem consumir o link.
-- **Só sessão de usuário:** gestão de PATs, o código de pareamento, o aceite do aviso e as rotas de voz (tag `voice`:
-  impressão, recusa de sugestão e a atribuição automática `/me/voice-assignment`, desde a 2.9.0;
-  desde a 2.19.0 ela traz `keep_samples`, `sample_count` e `voiceprint_people`, e
-  `keep_samples: false` no `PATCH` apaga na hora as amostras, os vetores e as sugestões pendentes
-  da conta). Um PAT vazado não cria outro PAT e não lê nem apaga dado
-  biométrico. PAT numa dessas rotas é **403** `session_required` desde a 1.4.0 (antes, 401): a
-  credencial é válida, só não é a aceita ali. Sem credencial, ou sessão sem o CSRF, segue 401.
-- **Idioma da transcrição** (desde a 2.20.0): `GET /me/transcription` (sessão ou PAT com
-  `recordings:read`) devolve o idioma preferido da conta (`null` é o padrão do servidor) e
-  `platform_default`; o `PATCH` só com sessão. `language` no upload, no `PATCH` da gravação e no
-  retranscrever aceita `auto` (afrouxamento de entrada, aditivo); a ordem de resolução está em
-  [jobs-transcricao.md](jobs-transcricao.md).
-- **Marcação obrigatória dos locutores** (desde a 2.22.0): `GET /me/speaker-naming` (sessão ou
-  PAT com `recordings:read`) devolve `required` e `waiting_count`; o `PATCH` só com sessão.
-  `Recording.pipeline` passou de seis a sete etapas (`speakers`, entre a transcrição e o tipo), com
-  o estado novo `waiting` e os motivos `unnamed_speakers`, `continued_by_user` e
-  `naming_not_required`: valor de enum e item novos em resposta, que os clientes já toleram.
-  `Recording.awaiting` (`speakers` ou `null`), o filtro `GET /recordings?awaiting=speakers` e
-  `POST /recordings/{id}/continue` (`recordings:write`; 409 fora da espera) completam. Regras em
-  [processamento-automatico.md](../code/processamento-automatico.md#marcação-dos-locutores).
-- **Falha de job** (`Job.error`): `code`, `message` e, desde a 1.4.0, `retryable` — falha
-  passageira (worker perdido, job sumido ou parado, falta de VRAM), que retranscrever ou
-  `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver.
-- **Erros** em `application/problem+json` (RFC 9457) com o campo estável `code`; o cliente decide
-  por `code`, nunca por `title`. 404 não distingue "não existe" de "não é visível". Desde a
-  2.14.0, qualquer operação pode responder **500** `internal_error` (o detalhe e o traceback ficam
-  só no log, com o `X-Request-ID`).
-- **Cotas por conta** (2.15.0): armazenamento total, tamanho por arquivo, uploads abertos, minutos
-  de áudio e pedidos ao agente em 24 h (janela móvel); a cota efetiva é a sobreposição da conta
-  sobre o padrão da plataforma, `null` é sem limite. `GET /me/usage` (qualquer credencial, sem
-  escopo) devolve `{usage, quotas}`. Estourada, **403** `quota_exceeded` com `quota`, `limit` e
-  `used` — no `POST /uploads` novo (armazenamento, tamanho, abertos; deduplicar e retomar não
-  contam) e nos pedidos ao agente (gerar resumo, chat do resumo, chat da base, pré-visualizações).
-  Os minutos de áudio nunca recusam: a gravação espera na fila até a janela abrir. A conta tem no
-  máximo 3 resumos na fila ou rodando; além disso, **429** `rate_limited`.
-- **Espera na fila** (2.16.0): enquanto o job está `queued`, `Job.queue` (`JobQueue`) diz por que
-  a gravação espera — `reason` em `processor_queue` (já na fila do processador, com `ahead`, os
-  jobs que começam antes, contando o que roda), `account_turn` (retida pela fila justa, com
-  `account_ahead`, as gravações da própria conta antes) ou `quota_window` (minutos de 24 h
-  esgotados, com `resumes_at`) — e `processor` (`online`, `offline_since`). `estimated_start_at` é
-  previsão pela duração real das últimas transcrições, `null` sem histórico ou com o processador
-  fora do ar, e todo cliente a rotula como estimativa. Fora de `queued`, `queue` é `null`. Só
-  contagens e horários: nada de outra conta. `reason` é enum aberto.
-- **Teto do corpo** (2.14.0): **413** `payload_too_large` em qualquer operação com corpo, com
-  `limit` (bytes), recusado pelo `Content-Length` antes de ler ou contado enquanto chega quando o
-  cabeçalho falta. Tetos: 64 KiB nas rotas públicas de credencial (`/auth/*`, `/admin/auth/*`,
-  `/devices/*`), os bytes da parte no `PUT` de parte e 1 MiB no resto da API e no `/mcp`. O Caddy
-  de borda recusa acima de 9 MiB (sem problem+json, porque só dispara acima do maior teto do app).
-- **Paginação** por cursor opaco: `?cursor=&limit=` (1–200), resposta `{items, next_cursor}`,
-  `next_cursor: null` na última página. Listagem incremental por `?since=` compara
-  `updated_at >= since` (inclusivo) e o cliente deduplica por `id` + `revision`. Desde a 2.8.0, um
-  resumo que termina ou é editado também move o `updated_at` da gravação e da transcrição, então
-  `?since=` percebe resumo novo ou refeito. Desde a 2.17.0, a etapa `summary` que termina `failed`
-  ou `skipped` move o `updated_at` **só da gravação** (o da transcrição só se move com resumo novo,
-  para não acordar o importador do lumea), e o `?since=` de `GET /recordings` é a leitura do aviso
-  do fim do processamento no desktop e no web (holetz/eclume#118). Um cursor vale
-  só para a ordenação (`sort`) que o gerou.
-- **Filtros repetíveis.** Um filtro de listagem declarado como array (`?tag=a&tag=b`) combina os
-  valores repetidos por OU, e filtros diferentes combinam por E: `?tag=a&tag=b&kind=note` é nota
-  com a tag `a` ou `b`. Intervalo de tempo é `from` (inclusivo) e `to` (exclusivo) sobre
-  `recorded_at`, como na busca.
-- **Exportação** por `GET /recordings/{id}/export?format=`: `txt` (`text/plain`, cabeçalho e uma
-  linha `[HH:MM:SS] Nome: texto` por segmento), `srt` (`application/x-subrip`, uma legenda por
-  segmento), `md` (`text/markdown`, título, data e o resumo atual; sem resumo, 409
-  `summary_missing`) e `docx` (Word, com o resumo e a transcrição). O nome do arquivo vem em
-  `Content-Disposition`, em slug do título. `GET /transcripts/{id}/export?format=md` segue como o
-  export da transcrição com frontmatter, que o lumea lê.
-- **Concorrência otimista.** Uma escrita sobre um estado que o cliente leu leva a versão lida
-  (`base_version` na edição do resumo); se o estado mudou, a resposta é 409 com um `code` próprio
-  (`summary_changed`) e nada é sobrescrito.
-- **Upload** resumível em partes (multipart S3 orquestrado pela API): `POST /uploads` com o
-  `sha256` do arquivo → partes por `PUT` em URLs opacas que expiram → `POST /uploads/{id}/complete`.
-  Mesmo hash de uma gravação do usuário responde 200 `deduplicated` sem transferir nada. Retomar é
-  `GET /uploads/{id}` mais `POST /uploads/{id}/part-urls`. Desde a 2.14.0, um `complete` com outro
-  do mesmo upload em andamento responde **409** `upload_completing` com `Retry-After`: é
-  passageiro, o cliente tenta de novo (o desktop no próximo ciclo; o web, ao reenviar, cai na
-  deduplicação por hash). O navegador sobe o áudio já convertido
-  ([formato-audio-upload.md](../code/formato-audio-upload.md)): `audio/ogg; codecs=opus` e o
-  `sha256` em hex minúsculo que a biblioteca de conversão devolve.
-- **Origem do áudio** (`source`): `desktop` e `mobile` são os apps que gravam, `upload` é o import
-  pela web e `api` é o PAT. Sem `recorded_at_source`, um upload com `recorded_at` vindo de
-  `desktop` ou `mobile` fica com `capture` (o relógio do app que gravou); de outra origem, `user`;
-  sem `recorded_at`, `upload`.
-- **Transcrição** no schema de `contracts/transcript.schema.json`: segmentos
-  `{id, speaker_id, start_ms, end_ms, text}` (palavras só com `?include=words`), locutores
-  `{id, label, person, suggestions}`, `content_hash` do áudio e `revision`, que sobe a cada edição.
-  Sugestão por voz nunca é identidade até alguém confirmar: aceitar é o `PATCH` do locutor com
-  `person_id`, recusar é o `DELETE` da sugestão
+- **Anonymized examples (2.27.1, `fixtures`):** the e-mails, names and the `device_name` example
+  of the fixtures and of the contract become neutral, with no real person or organization. Only
+  examples and descriptions change: no schema, route or validation. Patch, with no effect for
+  clients.
+- **Chat over the base (2.7.0, `base-chat`):** `POST /base-chat` (202, with the question and up to
+  10 history messages, which the client keeps) and `GET /base-chat/{chat_id}` (poll until `done` or
+  `failed`), both with `summaries:read`. The state lives 1 h in Redis; another account's is 404;
+  the account has at most 2 open questions (429 `rate_limited`). The answer carries `sources`, only
+  the recordings the agent consulted. It is additive: no existing route changed. Since 2.14.0, the
+  scope applies to the agent's **tools**, not to the route: a PAT without `transcripts:read` asks
+  normally, but the agent only searches and reads summaries (without `search_transcripts` or
+  `read_transcript`); a session and a device credential read both sources. Requiring
+  `transcripts:read` on the route would be an extra scope on an existing route.
+- **Public routes** (no credential): `GET /health` (static, sign of life), `GET /health/ready`
+  (readiness since 2.13.0: 200 or 503 with only the name and `ok`/`down` of Postgres, Redis and
+  storage), `GET /server` (descriptor: name, address,
+  MCP address, root CA fingerprint and versions; since 2.21.0, `ca_next_sha256`, the fingerprint
+  of the next root during rotation, optional and `null` outside it), `GET /privacy` (since 2.19.0:
+  where each piece of data goes, `PrivacyInfo` with one `DataDestination` per purpose —
+  transcription and the agent ones — in `server`, `local_network`, `external` or `disabled`, and
+  who processes it only when it leaves; never the address, model, key or provider name; separate
+  from `/server` because it changes at runtime and sign-up needs it before the acceptance), login
+  and sign-up, admin login, `POST /devices/login` and `POST /devices/pair`. Those that check a
+  credential (login, sign-up, admin login, `/devices/*` and, since 2.18.0, the two password reset
+  routes, which add to the same key) have an attempt limit per IP and route: exceeded, **429**
+  `rate_limited` with `Retry-After`. Since 2.14.0, the password logins (browser, device and admin,
+  the latter with its own counters) also count the account's **failures**: per (account, IP) pair,
+  10 in 15 min, and an account ceiling, 100 in 1 h, which does not block an IP that signed into it
+  successfully in the last 30 days; success resets the pair. That way the attempts of an arbitrary
+  IP do not lock the account's owner out. An invalid, expired or used pairing code is **401**
+  `invalid_pairing_code`.
+- **Password change** (`POST /me/password`): since 2.14.0, optional `revoke_tokens`; `true`
+  revokes, besides the other sessions, the account's device credentials and PATs. Absent means
+  `false`, the previous behaviour (the tokens remain). The web sends `true` by default.
+- **Password reset by link** (since 2.18.0): the link `<url pública>/redefinir-senha#<segredo>`
+  carries the secret in the fragment, which the page sends in the body of
+  `POST /auth/password-reset/check` (200 `PasswordResetInfo`, the e-mail and the validity, without
+  consuming it) and of `POST /auth/password-reset` (204; changes the password, consumes the link
+  and ends every session of the account, without opening another; devices and PATs stay valid).
+  Both are public (`security: []`). A nonexistent, expired or used link, or one of a deactivated
+  account, is always **401** `invalid_reset_link`, the same answer so it does not serve as an
+  oracle; a short password is **422** `validation_failed` without consuming the link.
+- **User session only:** PAT management, the pairing code, the notice acceptance and the voice
+  routes (tag `voice`: voiceprint, suggestion refusal and automatic assignment
+  `/me/voice-assignment`, since 2.9.0; since 2.19.0 it carries `keep_samples`, `sample_count` and
+  `voiceprint_people`, and `keep_samples: false` on the `PATCH` immediately deletes the account's
+  samples, vectors and pending suggestions). A leaked PAT does not create another PAT and does not
+  read nor delete biometric data. A PAT on one of these routes is **403** `session_required` since
+  1.4.0 (before, 401): the credential is valid, it is just not the one accepted there. Without a
+  credential, or a session without the CSRF, it stays 401.
+- **Transcription language** (since 2.20.0): `GET /me/transcription` (session or PAT with
+  `recordings:read`) returns the account's preferred language (`null` is the server default) and
+  `platform_default`; the `PATCH` by session only. `language` on upload, on the recording's
+  `PATCH` and on retranscribe accepts `auto` (an input loosening, additive); the resolution order
+  is in [jobs-transcricao.md](jobs-transcricao.md).
+- **Required speaker naming** (since 2.22.0): `GET /me/speaker-naming` (session or PAT with
+  `recordings:read`) returns `required` and `waiting_count`; the `PATCH` by session only.
+  `Recording.pipeline` went from six to seven steps (`speakers`, between transcription and type),
+  with the new state `waiting` and the reasons `unnamed_speakers`, `continued_by_user` and
+  `naming_not_required`: a new enum value and new item in a response, which clients already
+  tolerate. `Recording.awaiting` (`speakers` or `null`), the filter
+  `GET /recordings?awaiting=speakers` and `POST /recordings/{id}/continue` (`recordings:write`;
+  409 outside the wait) complete it. Rules in
+  [processamento-automatico.md](../code/processamento-automatico.md#speaker-naming).
+- **Job failure** (`Job.error`): `code`, `message` and, since 1.4.0, `retryable` — a transient
+  failure (lost worker, vanished or stalled job, lack of VRAM), which retranscribing or
+  `POST /api/v1/admin/jobs/{job_id}/retry` tends to resolve.
+- **Errors** in `application/problem+json` (RFC 9457) with the stable field `code`; the client
+  decides by `code`, never by `title`. 404 does not distinguish "does not exist" from "is not
+  visible". Since 2.14.0, any operation may answer **500** `internal_error` (the detail and the
+  traceback stay only in the log, with the `X-Request-ID`).
+- **Per-account quotas** (2.15.0): total storage, size per file, open uploads, audio minutes and
+  agent requests in 24 h (rolling window); the effective quota is the account's override over the
+  platform default, `null` is no limit. `GET /me/usage` (any credential, no scope) returns
+  `{usage, quotas}`. Exceeded, **403** `quota_exceeded` with `quota`, `limit` and `used` — on a new
+  `POST /uploads` (storage, size, open; deduplicating and resuming do not count) and on agent
+  requests (generate summary, summary chat, base chat, previews). Audio minutes never refuse: the
+  recording waits in the queue until the window opens. The account has at most 3 summaries queued
+  or running; beyond that, **429** `rate_limited`.
+- **Queue wait** (2.16.0): while the job is `queued`, `Job.queue` (`JobQueue`) says why the
+  recording is waiting — `reason` in `processor_queue` (already in the processor's queue, with
+  `ahead`, the jobs that start before, counting the running one), `account_turn` (held by the fair
+  queue, with `account_ahead`, the account's own recordings before it) or `quota_window` (24 h
+  minutes exhausted, with `resumes_at`) — and `processor` (`online`, `offline_since`).
+  `estimated_start_at` is a forecast from the real duration of the latest transcriptions, `null`
+  with no history or with the processor down, and every client labels it as an estimate. Outside
+  `queued`, `queue` is `null`. Only counts and times: nothing of another account. `reason` is an
+  open enum.
+- **Body ceiling** (2.14.0): **413** `payload_too_large` on any operation with a body, with
+  `limit` (bytes), refused by `Content-Length` before reading or counted as it arrives when the
+  header is missing. Ceilings: 64 KiB on the public credential routes (`/auth/*`, `/admin/auth/*`,
+  `/devices/*`), the part's bytes on the part `PUT` and 1 MiB on the rest of the API and on `/mcp`.
+  The edge Caddy refuses above 9 MiB (without problem+json, because it only fires above the app's
+  largest ceiling).
+- **Pagination** by opaque cursor: `?cursor=&limit=` (1–200), response `{items, next_cursor}`,
+  `next_cursor: null` on the last page. Incremental listing by `?since=` compares
+  `updated_at >= since` (inclusive) and the client deduplicates by `id` + `revision`. Since 2.8.0, a
+  summary that finishes or is edited also moves the `updated_at` of the recording and of the
+  transcript, so `?since=` notices a new or redone summary. Since 2.17.0, the `summary` step that
+  ends `failed` or `skipped` moves the `updated_at` **of the recording only** (the transcript's only
+  moves with a new summary, so as not to wake the lumea importer), and the `?since=` of
+  `GET /recordings` is how the desktop and the web read the end-of-processing notice
+  (holetz/eclume#118). A cursor is valid
+  only for the ordering (`sort`) that produced it.
+- **Repeatable filters.** A listing filter declared as an array (`?tag=a&tag=b`) combines the
+  repeated values with OR, and different filters combine with AND: `?tag=a&tag=b&kind=note` is a
+  note with tag `a` or `b`. A time range is `from` (inclusive) and `to` (exclusive) over
+  `recorded_at`, as in search.
+- **Export** by `GET /recordings/{id}/export?format=`: `txt` (`text/plain`, a header and one
+  line `[HH:MM:SS] Nome: texto` per segment), `srt` (`application/x-subrip`, one subtitle per
+  segment), `md` (`text/markdown`, title, date and the current summary; without a summary, 409
+  `summary_missing`) and `docx` (Word, with the summary and the transcript). The file name comes in
+  `Content-Disposition`, as a slug of the title. `GET /transcripts/{id}/export?format=md` stays as
+  the transcript export with frontmatter, which lumea reads.
+- **Optimistic concurrency.** A write over a state the client read carries the version read
+  (`base_version` in the summary edit); if the state changed, the answer is 409 with its own `code`
+  (`summary_changed`) and nothing is overwritten.
+- **Upload**, resumable in parts (S3 multipart orchestrated by the API): `POST /uploads` with the
+  file's `sha256` → parts by `PUT` to opaque URLs that expire → `POST /uploads/{id}/complete`.
+  The same hash as one of the user's recordings answers 200 `deduplicated` without transferring
+  anything. Resuming is `GET /uploads/{id}` plus `POST /uploads/{id}/part-urls`. Since 2.14.0, a
+  `complete` while another one of the same upload is in progress answers **409**
+  `upload_completing` with `Retry-After`: it is transient, the client tries again (the desktop on
+  the next cycle; the web, on resending, falls into hash deduplication). The browser uploads the
+  already converted audio
+  ([formato-audio-upload.md](../code/formato-audio-upload.md)): `audio/ogg; codecs=opus` and the
+  `sha256` in lowercase hex that the conversion library returns.
+- **Audio origin** (`source`): `desktop` and `mobile` are the recording apps, `upload` is the web
+  import and `api` is the PAT. Without `recorded_at_source`, an upload with `recorded_at` coming from
+  `desktop` or `mobile` gets `capture` (the clock of the app that recorded); from another origin,
+  `user`; without `recorded_at`, `upload`.
+- **Transcript** in the schema of `contracts/transcript.schema.json`: segments
+  `{id, speaker_id, start_ms, end_ms, text}` (words only with `?include=words`), speakers
+  `{id, label, person, suggestions}`, the audio's `content_hash` and `revision`, which goes up with
+  each edit. A voice suggestion is never identity until someone confirms it: accepting is the
+  speaker's `PATCH` with `person_id`, refusing is the `DELETE` of the suggestion
   ([identificacao-por-voz.md](../code/identificacao-por-voz.md)).
 
-## Referência navegável
+## Browsable reference
 
-- **Todo servidor serve a referência do contrato que implementa** em `/referencia-api.html`: o
-  `npm run build` do web roda `web/scripts/referencia-api.mjs` depois do `vite build`, que gera
-  com o Redoc (`@redocly/cli build-docs`, telemetria desligada, modelo
-  `web/scripts/referencia-api.hbs`) um HTML do `contracts/openapi-v1.bundled.yaml`. O bundle entra
-  no contexto da imagem do web ([monorepo.md](../code/monorepo.md)), e o Caddy do web serve o
-  arquivo como qualquer outro do `dist`.
-- **Nada de fora da origem.** O modelo não carrega fontes externas (fontes do sistema, cores do
-  DS); o script do Redoc que o `build-docs` aponta para a CDN vira a cópia local do pacote `redoc`
-  (versão exata no `package.json`, conferida pelo `integrity` que o `build-docs` grava), e o
-  estado da página sai do `<script>` inline para `dist/referencia-api/estado.js`. O build falha se
-  o HTML ainda carregar recurso de outra origem (`src`, `srcset`, `<link href>`, `url()`,
-  `@import`); links de navegação nos exemplos não contam. A CSP desse caminho é a do web com
-  `style-src 'unsafe-inline'`, porque o Redoc injeta o CSS em `<style>`
-  ([frontend-web.md](../code/frontend-web.md)).
-- **O server não serve `/docs` nem `/redoc`** (`docs_url=None`, `redoc_url=None` no
-  `create_app`). O esquema que o FastAPI deriva das rotas não é o contrato (diverge em exemplos,
-  descrições, escopos e no `/mcp`), e as UIs dele buscam JS e fontes em CDN. A referência é
-  sempre a do bundle, na versão que o servidor roda.
-- **Quem leva à referência:** a tela Tokens de acesso, o artigo de ajuda `criar-token`, o guia
-  [integrar-com-a-api.md](../../how-to/integrar-com-a-api.md) e o `contracts/README.md`.
+- **Every server serves the reference of the contract it implements** at `/referencia-api.html`:
+  the web's `npm run build` runs `web/scripts/referencia-api.mjs` after `vite build`, which
+  generates with Redoc (`@redocly/cli build-docs`, telemetry off, template
+  `web/scripts/referencia-api.hbs`) an HTML from `contracts/openapi-v1.bundled.yaml`. The bundle
+  enters the web image's context ([monorepo.md](../code/monorepo.md)), and the web's Caddy serves
+  the file like any other in `dist`.
+- **Nothing from outside the origin.** The template loads no external fonts (system fonts, DS
+  colors); the Redoc script that `build-docs` points at the CDN becomes the local copy of the
+  `redoc` package (exact version in `package.json`, checked by the `integrity` that `build-docs`
+  writes), and the page state moves from the inline `<script>` to `dist/referencia-api/estado.js`.
+  The build fails if the HTML still loads a resource from another origin (`src`, `srcset`,
+  `<link href>`, `url()`, `@import`); navigation links in the examples do not count. The CSP of
+  that path is the web's with `style-src 'unsafe-inline'`, because Redoc injects the CSS in
+  `<style>` ([frontend-web.md](../code/frontend-web.md)).
+- **The server does not serve `/docs` nor `/redoc`** (`docs_url=None`, `redoc_url=None` in
+  `create_app`). The schema FastAPI derives from the routes is not the contract (it diverges in
+  examples, descriptions, scopes and `/mcp`), and its UIs fetch JS and fonts from a CDN. The
+  reference is always the bundle's, at the version the server runs.
+- **What leads to the reference:** the Access tokens screen, the help article `criar-token`, the
+  guide [integrar-com-a-api.md](../../how-to/integrar-com-a-api.md) and `contracts/README.md`.
 
-## Evolução: a v1 só cresce
+## Evolution: v1 only grows
 
-- **Permitido:** rota nova; campo ou parâmetro de requisição novo e opcional; campo de resposta
-  novo; valor de enum novo em resposta; `code` de erro novo; formato de export novo.
-- **Proibido:** remover ou renomear; mudar tipo ou significado; tornar obrigatório o que era
-  opcional; apertar validação de entrada existente; exigir escopo ou papel a mais numa rota
-  existente; trocar o status de sucesso.
-- **Clientes toleram o desconhecido:** ignoram propriedades novas e valores de enum novos em
-  respostas. Por isso nenhum schema de resposta fecha `additionalProperties`.
-- **Cada mudança** sobe `info.version` (e `schema_version` se tocar a transcrição), atualiza as
-  fixtures, regenera o bundle e passa em `uv run pytest contracts/tests`, que a CI roda no job
-  `contracts` junto com o smoke do mock.
-- **Linha própria.** O `info.version` não acompanha a versão do produto nem a dos apps
-  ([versionamento.md](../code/versionamento.md)): cada entrada do `CHANGELOG.md` do produto cita a
-  versão do contrato que leva, e as dos apps compatíveis.
-- **Quebra** vira `/api/v2` num `openapi-v2.yaml` próprio; a v1 segue servida na transição,
-  anunciando o fim com `Deprecation` e `Sunset`.
-- **Campo obsoleto dentro da v1 é anotação, não remoção.** A propriedade ganha `deprecated: true`
-  (OpenAPI 3.1 e JSON Schema 2020-12) e uma descrição que diz o que ela vale hoje e onde sai; segue
-  em `required` e preenchida, e o minor sobe como em toda mudança. `contracts/tests` fixa a lista
-  (`DEPRECATED_V1`) e falha se um obsoleto sair de `required` ou perder a marca. Os clientes não
-  leem campo obsoleto em código novo (o `schema.gen.ts` do web os marca `@deprecated`).
-- **O que a `/api/v2` remove** (obsoletos desde a 2.11.0 e o schema 1.2 da transcrição,
+- **Allowed:** a new route; a new optional request field or parameter; a new response field; a new
+  enum value in a response; a new error `code`; a new export format.
+- **Forbidden:** removing or renaming; changing a type or meaning; making required what was
+  optional; tightening existing input validation; requiring an extra scope or role on an existing
+  route; changing the success status.
+- **Clients tolerate the unknown:** they ignore new properties and new enum values in responses.
+  That is why no response schema closes `additionalProperties`.
+- **Every change** bumps `info.version` (and `schema_version` if it touches the transcript),
+  updates the fixtures, regenerates the bundle and passes `uv run pytest contracts/tests`, which CI
+  runs in the `contracts` job together with the mock smoke test.
+- **Its own line.** `info.version` does not follow the product version nor the apps' versions
+  ([versionamento.md](../code/versionamento.md)): each entry of the product's `CHANGELOG.md` cites
+  the contract version it carries, and the versions of the compatible apps.
+- **A break** becomes `/api/v2` in its own `openapi-v2.yaml`; v1 stays served during the
+  transition, announcing the end with `Deprecation` and `Sunset`.
+- **An obsolete field within v1 is an annotation, not a removal.** The property gains
+  `deprecated: true` (OpenAPI 3.1 and JSON Schema 2020-12) and a description that says what it is
+  worth today and where it leaves; it stays in `required` and filled, and the minor goes up as in
+  every change. `contracts/tests` pins the list (`DEPRECATED_V1`) and fails if an obsolete field
+  leaves `required` or loses the mark. Clients do not read an obsolete field in new code (the web's
+  `schema.gen.ts` marks them `@deprecated`).
+- **What `/api/v2` removes** (obsolete since 2.11.0 and transcript schema 1.2,
   holetz/eclume#100): `Recording.owner`, `TranscriptSummary.owner`, `Transcript.owner`,
-  `VoiceSample.created_by`, `Summary.created_by` e `SummaryChatMessage.created_by` — resquícios do
-  modelo com organização; com cada conta isolada, valem sempre o próprio usuário.
-  Também sai o chat sobre a base (`/base-chat`, obsoleto desde a 2.23.0), que o Agente substitui.
-- **Exceção do redesign: a linha 2.x sob `/api/v1`.** O fim da organização (2.0.0, holetz/eclume#32)
-  removeu grupos, compartilhamento, convites, consentimento de voz por pessoa e a auditoria de voz,
-  e tirou `organization`, `groups`, `role`, `visibility` e `scope` das respostas. As specs seguintes
-  do redesign (holetz/eclume#33 a #41) ainda quebram rotas que só o web do próprio repositório usa
-  (a 2.1.0 tira os templates de resumo e o bloco de resumo das configurações; a 2.2.0 torna
-anuláveis `agenda_type`, `provider` e `model` do `Summary`, que passa a ter versões editadas à
-mão, e troca os filtros de `GET /recordings` por listas repetíveis, compatíveis com um valor só;
-a 2.3.0 exige `recordings:delete` no `DELETE /recordings/{id}`, com a migração concedendo o escopo
-a todo token que tinha `recordings:write`, e barra a sessão sem o aceite do aviso). Os dois clientes de
-  fora do repositório (desktop e lumea) só usam uploads, gravações, transcrições e `/me`, que seguem
-  compatíveis; manter a v1 antiga em paralelo exigiria duas RLS. Por isso a linha 2.x evolui no
-  mesmo prefixo até o redesign terminar, e os contract tests exigem a 2.x. Depois dele a 2.x
-  congela, e a **próxima** quebra vai para `/api/v2`, sem outra exceção.
+  `VoiceSample.created_by`, `Summary.created_by` and `SummaryChatMessage.created_by` — leftovers of
+  the model with an organization; with each account isolated, they are always the user themself.
+  The chat over the base (`/base-chat`, obsolete since 2.23.0), which the Agent replaces, also
+  leaves.
+- **The redesign exception: the 2.x line under `/api/v1`.** The end of the organization (2.0.0,
+  holetz/eclume#32) removed groups, sharing, invitations, per-person voice consent and the voice
+  audit, and took `organization`, `groups`, `role`, `visibility` and `scope` out of the responses.
+  The following redesign specs (holetz/eclume#33 to #41) still break routes that only this
+  repository's own web uses (2.1.0 removes the summary templates and the summary block of the
+  settings; 2.2.0 makes `agenda_type`, `provider` and `model` of `Summary` nullable, which gains
+  hand-edited versions, and replaces the filters of `GET /recordings` with repeatable lists,
+  compatible with a single value; 2.3.0 requires `recordings:delete` on `DELETE /recordings/{id}`,
+  with the migration granting the scope to every token that had `recordings:write`, and blocks the
+  session without the notice acceptance). The two clients outside the repository (desktop and
+  lumea) only use uploads, recordings, transcripts and `/me`, which stay compatible; keeping the
+  old v1 in parallel would require two RLS setups. That is why the 2.x line evolves under the same
+  prefix until the redesign ends, and the contract tests require 2.x. After it, 2.x freezes, and
+  the **next** break goes to `/api/v2`, with no other exception.
 
-## Por quê
+## Why
 
-O contrato existe antes do backend para que o servidor, o frontend, o desktop e o importador do
-lumea desenvolvam em paralelo contra o mesmo mock. Isso só funciona se ninguém precisar acompanhar
-mudanças do contrato: daí a regra aditiva e a tolerância obrigatória do cliente. O upload é
-multipart S3 e não tus porque o MinIO já fala o protocolo, a API fica fora do caminho dos bytes e
-o cliente Rust e o navegador só precisam de `PUT` HTTP.
+The contract exists before the backend so that the server, the frontend, the desktop and the
+lumea importer develop in parallel against the same mock. That only works if nobody has to track
+contract changes: hence the additive rule and the mandatory client tolerance. The upload is S3
+multipart and not tus because MinIO already speaks the protocol, the API stays out of the bytes'
+path and the Rust client and the browser only need HTTP `PUT`.

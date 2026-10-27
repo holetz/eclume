@@ -1,7 +1,7 @@
 ---
 type: standard
-title: Contrato de jobs de transcrição (server ↔ worker GPU)
-description: As filas arq (`eclume:gpu` e `eclume:default`), o job `transcribe` que o server enfileira (com a configuração do admin, o pré-processamento e o token do HF cifrado nas options), o pré-processamento do áudio com ffmpeg antes do ASR, os artefatos por revisão e os jobs `ingest_transcript`/`transcription_failed` que o worker GPU devolve com a revisão no `_job_id`, o progresso e o heartbeat no Redis, a idempotência por `(recording_id, revision)`, a retentativa da falha passageira nos retornos, a detecção de job morto pelo server, o ASR residente entre jobs, a serialização JSON sem pickle irrestrito e a lista permitida de contêineres com `-protocol_whitelist` e tempo limite no ffmpeg, e a espera na fila (`Job.queue`) com o último visto do processador e a estimativa pelo histórico.
+title: Transcription job contract (server ↔ GPU worker)
+description: The arq queues (`eclume:gpu` and `eclume:default`), the `transcribe` job the server enqueues (with the admin settings, the preprocessing and the encrypted HF token in the options), the audio preprocessing with ffmpeg before ASR, the per-revision artifacts and the `ingest_transcript`/`transcription_failed` jobs the GPU worker returns with the revision in the `_job_id`, progress and heartbeat in Redis, idempotency by `(recording_id, revision)`, the retry of transient failures in the returns, dead-job detection by the server, the ASR kept resident between jobs, JSON serialization without unrestricted pickle and the container allowlist with `-protocol_whitelist` and a timeout in ffmpeg, and the queue wait (`Job.queue`) with the processor's last seen and the estimate from history.
 resource: engines/src/eclume_engines/fila.py, server/src/eclume_server/queue.py, server/src/eclume_server/queue_status.py, server/src/eclume_server/dispatch.py, server/src/eclume_server/worker.py, server/src/eclume_server/transcripts.py, worker-gpu/**
 tags: [api, jobs, arq, redis, worker, transcricao]
 timestamp: 2026-10-05
@@ -11,436 +11,458 @@ source: holetz/eclume#5, holetz/eclume#8, holetz/eclume#12, holetz/eclume#15, ho
 maintainer: holetz
 ---
 
-# Contrato de jobs de transcrição (server ↔ worker GPU)
+# Transcription job contract (server ↔ GPU worker)
 
-O server (`server/`, holetz/eclume#5) e o worker GPU (`worker-gpu/`, holetz/eclume#8) só se
-falam por filas e pelo bucket. Este é o contrato entre os dois; nenhum lado o reinterpreta, e
-mudá-lo é mudar os dois lados juntos.
+The server (`server/`, holetz/eclume#5) and the GPU worker (`worker-gpu/`, holetz/eclume#8) only
+talk through queues and the bucket. This is the contract between the two; neither side
+reinterprets it, and changing it means changing both sides together.
 
-## Filas
+## Queues
 
-Arq sobre Redis (`ECLUME_REDIS_URL`), com três filas (holetz/eclume#96):
+Arq over Redis (`ECLUME_REDIS_URL`), with three queues (holetz/eclume#96):
 
-- `eclume:gpu`, consumida só pelo `worker-gpu` com `max_jobs=1`;
-- `eclume:default`, consumida pelo worker CPU do pacote `server` (`WorkerSettings`, `max_jobs`
-  explícito): `ingest_transcript`, `transcription_failed`, `purge_embedding_objects` e todos os
-  crons (reaper, retomada, uploads vencidos);
-- `eclume:agents`, consumida pelo worker de agentes (`AgentWorkerSettings`, serviço
-  `worker`, `max_jobs = ECLUME_AGENT_MAX_JOBS`, padrão 4 no código e 2 no compose de produção): `detect_agenda_type`,
-  `fill_fields`, `summarize`, `summary_chat`, `base_chat`, `agent_turn` (o Agente), `agent_action` (a ação
-  confirmada do Agente, alvo a alvo, reagendada em 30 s com os resumos em aberto no teto) e `run_preview`. A ingestão não divide
-  vaga com chamada a agente. Na transição, o worker de `eclume:default` mantém as funções de agente
-  registradas por uma versão, para drenar o que já estava na fila dele.
+- `eclume:gpu`, consumed only by `worker-gpu` with `max_jobs=1`;
+- `eclume:default`, consumed by the CPU worker of the `server` package (`WorkerSettings`, explicit
+  `max_jobs`): `ingest_transcript`, `transcription_failed`, `purge_embedding_objects` and every
+  cron (reaper, resume, expired uploads);
+- `eclume:agents`, consumed by the agent worker (`AgentWorkerSettings`, service
+  `worker`, `max_jobs = ECLUME_AGENT_MAX_JOBS`, default 4 in the code and 2 in the production compose): `detect_agenda_type`,
+  `fill_fields`, `summarize`, `summary_chat`, `base_chat`, `agent_turn` (the Agent), `agent_action` (the Agent's
+  confirmed action, target by target, rescheduled in 30 s with open summaries at the ceiling) and `run_preview`. Ingestion does not share
+  a slot with an agent call. During the transition, the `eclume:default` worker keeps the agent
+  functions registered for one version, to drain what was already in its queue.
 
-O worker GPU não muda de fila: os retornos continuam em `eclume:default`.
+The GPU worker does not change queues: the returns stay on `eclume:default`.
 
-**Despacho na vez da conta (holetz/eclume#98).** A fila da GPU é justa sem mexer no arq: cada conta
-tem no máximo um `transcribe` em `eclume:gpu`. O job nasce `queued` sem
-`transcription_jobs.dispatched_at` — retido no banco — e `dispatch.next_for(owner)` o despacha:
-numa transação com `pg_advisory_xact_lock` da conta, se ela não tem job despachado em aberto e está
-dentro dos minutos de áudio de 24 h (`quotas.gpu_minutes_24h`, soma de `recordings.duration_ms` dos
-jobs despachados na janela), marca `dispatched_at` no retido mais antigo e o enfileira depois do
-commit, com o `_job_id` `transcribe:{recording_id}:{revision}`. Com um job por conta na fila FIFO do
-arq, o rodízio entre contas sai sozinho: dez arquivos de uma pessoa não atrasam o primeiro de
-outra. Despacham: o `complete` do upload, retranscrever, a retentativa do admin, `ingest_transcript`
-e `transcription_failed` (a GPU ficou livre para a conta) e o cron `dispatch_transcriptions` do
-worker CPU (a cada minuto, `unique`), rede para o que nenhum desses cobre — reaper, cancelamento,
-exclusão e a janela de minutos que reabre. A conta que passou dos minutos não perde nada: a
-gravação espera retida até a janela abrir. O worker GPU não lê o banco e não sabe do despacho.
+**Dispatch on the account's turn (holetz/eclume#98).** The GPU queue is fair without touching arq:
+each account has at most one `transcribe` in `eclume:gpu`. The job is born `queued` without
+`transcription_jobs.dispatched_at` — held in the database — and `dispatch.next_for(owner)`
+dispatches it: in a transaction with the account's `pg_advisory_xact_lock`, if it has no open
+dispatched job and is within the 24 h audio minutes (`quotas.gpu_minutes_24h`, the sum of
+`recordings.duration_ms` of the jobs dispatched in the window), it stamps `dispatched_at` on the
+oldest held job and enqueues it after the commit, with the `_job_id`
+`transcribe:{recording_id}:{revision}`. With one job per account in arq's FIFO queue, the rotation
+between accounts comes for free: ten files from one person do not delay another person's first.
+Dispatching happens on: the upload `complete`, retranscribe, the admin retry, `ingest_transcript`
+and `transcription_failed` (the GPU became free for the account) and the CPU worker's
+`dispatch_transcriptions` cron (every minute, `unique`), a safety net for what none of those cover
+— reaper, cancellation, deletion and the minutes window reopening. An account over its minutes
+loses nothing: the recording waits, held, until the window opens. The GPU worker does not read the
+database and does not know about dispatch.
 
-**Serialização (holetz/eclume#94).** Nenhum job nem resultado é desserializado com `pickle`
-irrestrito: `eclume_engines.fila` tem `serializar` (JSON, `default=str`, que nunca falha) e
-`desserializar` (JSON; bytes com o marcador de protocolo do pickle passam por um `Unpickler` cujo
-`find_class` recusa toda classe, então só tipos primitivos abrem). Todo leitor usa o
-`desserializar`: o pool do server (`job_deserializer`), o `WorkerSettings` dos workers CPU e GPU e o
-`Job` do reaper. A troca é em duas fases (expandir/contrair): na fase A, só os leitores mudam e o
-serializador continua pickle; depois do deploy dela, a fase B passa `serializar` como
-`job_serializer` em todo produtor e worker. Assim, nenhum leitor antigo recebe JSON e nenhum job na
-fila se perde. Argumento de job é sempre `str`, `int`, `float`, `bool`, `None`, `dict` ou `list`.
+**Serialization (holetz/eclume#94).** No job or result is deserialized with unrestricted
+`pickle`: `eclume_engines.fila` has `serializar` (JSON, `default=str`, which never fails) and
+`desserializar` (JSON; bytes with pickle's protocol marker go through an `Unpickler` whose
+`find_class` refuses every class, so only primitive types open). Every reader uses
+`desserializar`: the server pool (`job_deserializer`), the `WorkerSettings` of the CPU and GPU
+workers and the reaper's `Job`. The switch is in two phases (expand/contract): in phase A, only the
+readers change and the serializer stays pickle; after it is deployed, phase B passes `serializar`
+as `job_serializer` in every producer and worker. That way, no old reader receives JSON and no job
+in the queue is lost. A job argument is always `str`, `int`, `float`, `bool`, `None`, `dict` or
+`list`.
 
-## Cancelamento
+## Cancellation
 
-Cooperativo, por chave no Redis — não `Job.abort()`, que cancela a task mas deixa o ASR rodando
-na thread e libera a vaga de `max_jobs=1` com a GPU ainda ocupada.
+Cooperative, by a key in Redis — not `Job.abort()`, which cancels the task but leaves the ASR
+running in the thread and frees the `max_jobs=1` slot with the GPU still busy.
 
-- **Quem cancela.** `POST /api/v1/recordings/{id}/cancel` (o dono, `recordings:write`; 409 sem
-  job `queued`/`running`), a exclusão da gravação (API, web e MCP) e a exclusão da conta. Numa
-  transação, travando a gravação antes de ler o job: job `cancelled` com `finished_at` e
-  `error_code` `cancelled` (recuperável), gravação `failed` e a etapa em curso — o
-  pré-processamento, se o progresso da revisão está em `download` ou `preprocess`; senão, a
-  transcrição — `skipped` com o motivo `cancelled`. Retranscrever é a volta.
-- **A chave.** Depois do commit, o server grava `eclume:cancel:{recording_id}:{revision}` (TTL 7
-  dias). Se a gravação falhar, só custa GPU: o resultado chega obsoleto e é descartado.
-- **O worker.** Confere a chave ao pegar o job (antes do download) e a cada ~5 s enquanto ele roda,
-  ligando um `threading.Event`; a callback de progresso, na thread da engine, levanta a interrupção
-  no próximo lote do ASR ou da diarização, e há checagem entre download, pré-processamento, ASR e
-  upload. O alinhamento e as passadas do ffmpeg não têm ponto de checagem: o pedido vale ao fim
-  deles. Cancelado, o job não enfileira retorno, apaga o hash de progresso e o diretório de
-  trabalho e só então libera a vaga. Um worker antigo ignora a chave e só deixa de cancelar.
+- **Who cancels.** `POST /api/v1/recordings/{id}/cancel` (the owner, `recordings:write`; 409
+  without a `queued`/`running` job), recording deletion (API, web and MCP) and account deletion. In
+  one transaction, locking the recording before reading the job: job `cancelled` with
+  `finished_at` and `error_code` `cancelled` (recoverable), recording `failed` and the step in
+  progress — preprocessing, if the revision's progress is at `download` or `preprocess`; otherwise,
+  transcription — `skipped` with the reason `cancelled`. Retranscribing is the way back.
+- **The key.** After the commit, the server writes `eclume:cancel:{recording_id}:{revision}` (TTL 7
+  days). If writing fails, it only costs GPU: the result arrives obsolete and is discarded.
+- **The worker.** Checks the key when it picks up the job (before the download) and every ~5 s
+  while it runs, setting a `threading.Event`; the progress callback, in the engine's thread, raises
+  the interruption at the next ASR or diarization batch, and there is a check between download,
+  preprocessing, ASR and upload. Alignment and the ffmpeg passes have no check point: the request
+  takes effect at their end. Once cancelled, the job enqueues no return, deletes the progress hash
+  and the working directory and only then frees the slot. An old worker ignores the key and simply
+  does not cancel.
 
-## `transcribe` — o server enfileira
+## `transcribe` — the server enqueues
 
-Enfileirar é papel do server. Quando o upload completa (ou numa retranscrição), ele chama
-`transcribe` em `eclume:gpu` com `_job_id="transcribe:{recording_id}:{revision}"` e estes
-argumentos:
+Enqueueing is the server's role. When the upload completes (or on a retranscription), it calls
+`transcribe` on `eclume:gpu` with `_job_id="transcribe:{recording_id}:{revision}"` and these
+arguments:
 
 - `recording_id: str` (UUID);
-- `audio_key: str` — chave S3 do áudio, no bucket `ECLUME_S3_BUCKET`;
-- `options: dict`, com `language` (padrão `"pt"`), `min_speakers`, `max_speakers`, `engine`,
-  `model`, `compute_type`, `diarize: bool` e `embeddings: bool`. A configuração do admin chega por
-  aqui; **o worker não lê o banco**.
-- Acrescentados pela holetz/eclume#12 (aditivos: um worker antigo os ignora), todos opcionais:
-  - `batch_size` — lote inicial do ASR; `ECLUME_BATCH_SIZE` do worker vence;
-  - `fallback_model` — modelo depois de um OOM persistente (padrão `medium`);
-  - `diarization_model` — pipeline de diarização (padrão `pyannote/speaker-diarization-community-1`);
-  - `endpoint_url` — base da engine `openai-compatible`; vence `ECLUME_REMOTE_BASE_URL`;
-  - `hf_token_encrypted` — o token do Hugging Face da plataforma (`platform_secrets`), cifrado. Vai só no payload
-    enfileirado, nunca em `transcription_jobs.options`. Formato: `v1:` + base64(nonce de 12 bytes +
-    cifra AES-256-GCM + tag), com a chave de `ECLUME_ENCRYPTION_KEY` (base64 de 32 bytes) ou, sem
-    ela, HKDF-SHA256 de `ECLUME_SECRET_KEY` com `info=eclume-secrets-v1` — **as mesmas no server
-    e no worker**. Vence `HF_TOKEN` e o arquivo; se não abrir, o job segue com o token do ambiente e
-    o aviso `hf_token_undecryptable`.
-- Acrescentados pela holetz/eclume#33 (aditivos, opcionais):
-  - `language: null` — o idioma automático (`asr.default_language: "auto"`): a engine detecta, o
-    alinhador segue o detectado e o raw guarda o detectado. Sem a chave (job antigo), vale `pt`;
-  - `preprocess` — o bloco `preprocessing` da plataforma (`denoise`, `loudnorm`, `trim_silence`,
-    `split_channels`), que o worker aplica antes do ASR. Sem ele, o worker só converte o formato.
-- Acrescentado pela holetz/eclume#174 (aditivo, opcional):
-  - `vocabulary` — lista de termos (até 50 e ~400 caracteres): os nomes de `people` da conta dona da
-    gravação, montados pelo server ao enfileirar, só no payload arq (nunca em `transcription_jobs.options`;
-    um reenfileiramento recalcula). O `whisperx-local` os repassa ao ASR como `hotwords` durante aquele
-    job e devolve as opções originais ao fim, mesmo em erro: o modelo residente não recarrega e o termo
-    de uma conta não chega à seguinte. A engine `openai-compatible` os ignora.
+- `audio_key: str` — the S3 key of the audio, in the `ECLUME_S3_BUCKET` bucket;
+- `options: dict`, with `language` (default `"pt"`), `min_speakers`, `max_speakers`, `engine`,
+  `model`, `compute_type`, `diarize: bool` and `embeddings: bool`. The admin settings arrive
+  through here; **the worker does not read the database**.
+- Added by holetz/eclume#12 (additive: an old worker ignores them), all optional:
+  - `batch_size` — the initial ASR batch; the worker's `ECLUME_BATCH_SIZE` wins;
+  - `fallback_model` — the model after a persistent OOM (default `medium`);
+  - `diarization_model` — the diarization pipeline (default `pyannote/speaker-diarization-community-1`);
+  - `endpoint_url` — the base of the `openai-compatible` engine; wins over `ECLUME_REMOTE_BASE_URL`;
+  - `hf_token_encrypted` — the platform's Hugging Face token (`platform_secrets`), encrypted. It goes only in the enqueued
+    payload, never in `transcription_jobs.options`. Format: `v1:` + base64(12-byte nonce +
+    AES-256-GCM ciphertext + tag), with the key from `ECLUME_ENCRYPTION_KEY` (base64 of 32 bytes)
+    or, without it, HKDF-SHA256 of `ECLUME_SECRET_KEY` with `info=eclume-secrets-v1` — **the same
+    on the server and on the worker**. It wins over `HF_TOKEN` and the file; if it does not open,
+    the job goes on with the environment's token and the warning `hf_token_undecryptable`.
+- Added by holetz/eclume#33 (additive, optional):
+  - `language: null` — automatic language (`asr.default_language: "auto"`): the engine detects,
+    the aligner follows the detected one and the raw stores the detected one. Without the key (an
+    old job), `pt` applies;
+  - `preprocess` — the platform's `preprocessing` block (`denoise`, `loudnorm`, `trim_silence`,
+    `split_channels`), which the worker applies before ASR. Without it, the worker only converts
+    the format.
+- Added by holetz/eclume#174 (additive, optional):
+  - `vocabulary` — a list of terms (up to 50 and ~400 characters): the names of the `people` of the
+    account that owns the recording, assembled by the server when enqueueing, only in the arq
+    payload (never in `transcription_jobs.options`; a requeue recomputes it). `whisperx-local`
+    passes them to the ASR as `hotwords` during that job and restores the original options at the
+    end, even on error: the resident model does not reload and one account's term does not reach
+    the next. The `openai-compatible` engine ignores them.
 
-## Pré-processamento
+## Preprocessing
 
-`eclume_worker/preprocess.py`, entre o download e o ASR, com o `ffmpeg` da imagem, numa thread.
-A ordem é fixa:
+`eclume_worker/preprocess.py`, between the download and the ASR, with the image's `ffmpeg`, in a
+thread. The order is fixed:
 
-0. **Contêiner pela lista permitida** (holetz/eclume#94): os bytes iniciais do arquivo escolhem o
-   demuxer — `OggS` → `ogg`; EBML `1A45DFA3` → `matroska` (Matroska e WebM); `ftyp` na posição 4 →
-   `mov` (MP4, MOV, M4A); `RIFF…WAVE` → `wav`; `fLaC` → `flac`; `ID3` ou sincronia MPEG → `mp3`;
-   cabeçalho ADTS → `aac`. O ffmpeg nunca adivinha o formato: todo `ffprobe`/`ffmpeg` recebe `-f`
-   explícito, `-protocol_whitelist file` e a entrada como `file:<caminho>`, inclusive nos WAV
-   intermediários. Playlist HLS, `concat`, SDP e qualquer outro contêiner terminam em
-   `audio_decode_failed` com o motivo (`contêiner fora da lista permitida`), sem chamar o ffmpeg.
-   **Tempo limite:** 60 s no `ffprobe`; em cada `ffmpeg`, 300 s mais a duração do áudio, com teto
-   de 4 h (o teto também vale quando a duração é desconhecida). Estourar o tempo é uma falha como
-   outra (cai no passo 5). O WhisperX só recebe o WAV que o próprio pré-processamento gerou.
-1. **Sonda** (`ffprobe`): os canais do áudio.
-2. **Separar canais** (ligado e só com 2 canais): `pan=mono|c0=c0-c1,volumedetect` com
-   `mean_volume` abaixo de −60 dB é mono duplicado, e a etapa sai `skipped` (`dual_mono`); senão,
-   cada canal é uma entrada (`pan=mono|c0=c0` e `pan=mono|c0=c1`). Sem separação, a entrada é a
-   mistura (`aformat=channel_layouts=mono`).
-3. **Cadeia de render**, uma passada por entrada: `aresample=48000` (o RNNoise exige 48 kHz);
-   redução de ruído `arnndn=m=$ECLUME_RNNOISE_MODEL:mix=<strength>` ou
-   `afftdn=nr=<6 + 24·strength>:nf=-50`; `loudnorm=I:TP:LRA` (depois do ruído, para não
-   amplificá-lo); `aresample=16000`; saída `-ac 1 -ar 16000 pcm_s16le`.
-4. **Cortar silêncio** (ligado): `silencedetect` no arquivo já normalizado; um silêncio que começa
-   no início define o começo da fala, e um que vai até o fim define o fim. Com canais separados,
-   vale o menor começo e o maior fim, e o mesmo `atrim` corta os dois. Silêncios no meio ficam.
-5. **Falha:** a cadeia com código ≠ 0 cai para só o formato (`aresample=16000`, mono), com as
-   etapas `failed` e o aviso `preprocess_failed`, e a transcrição segue. Se nem o formato sai,
-   `audio_decode_failed`. Sem o arquivo do modelo RNNoise (dev, CI), usa `afftdn` com o aviso
-   `rnnoise_model_missing`.
+0. **Container by allowlist** (holetz/eclume#94): the file's first bytes choose the demuxer —
+   `OggS` → `ogg`; EBML `1A45DFA3` → `matroska` (Matroska and WebM); `ftyp` at position 4 →
+   `mov` (MP4, MOV, M4A); `RIFF…WAVE` → `wav`; `fLaC` → `flac`; `ID3` or MPEG sync → `mp3`;
+   ADTS header → `aac`. ffmpeg never guesses the format: every `ffprobe`/`ffmpeg` gets an explicit
+   `-f`, `-protocol_whitelist file` and the input as `file:<caminho>`, including the intermediate
+   WAVs. HLS playlists, `concat`, SDP and any other container end in `audio_decode_failed` with the
+   reason (`contêiner fora da lista permitida`), without calling ffmpeg.
+   **Timeout:** 60 s on `ffprobe`; on each `ffmpeg`, 300 s plus the audio's duration, capped at
+   4 h (the cap also applies when the duration is unknown). Exceeding the time is a failure like
+   any other (it falls into step 5). WhisperX only receives the WAV the preprocessing itself
+   produced.
+1. **Probe** (`ffprobe`): the audio's channels.
+2. **Split channels** (on and only with 2 channels): `pan=mono|c0=c0-c1,volumedetect` with
+   `mean_volume` below −60 dB is duplicated mono, and the step ends `skipped` (`dual_mono`);
+   otherwise, each channel is an input (`pan=mono|c0=c0` and `pan=mono|c0=c1`). Without splitting,
+   the input is the mix (`aformat=channel_layouts=mono`).
+3. **Render chain**, one pass per input: `aresample=48000` (RNNoise requires 48 kHz); noise
+   reduction `arnndn=m=$ECLUME_RNNOISE_MODEL:mix=<strength>` or
+   `afftdn=nr=<6 + 24·strength>:nf=-50`; `loudnorm=I:TP:LRA` (after the noise, so as not to
+   amplify it); `aresample=16000`; output `-ac 1 -ar 16000 pcm_s16le`.
+4. **Trim silence** (on): `silencedetect` on the already normalized file; a silence that starts at
+   the beginning defines where speech starts, and one that runs to the end defines where it ends.
+   With split channels, the smallest start and the largest end apply, and the same `atrim` cuts
+   both. Silences in the middle stay.
+5. **Failure:** the chain with a code ≠ 0 falls back to the format only (`aresample=16000`, mono),
+   with the steps `failed` and the warning `preprocess_failed`, and the transcription goes on. If
+   not even the format comes out, `audio_decode_failed`. Without the RNNoise model file (dev, CI),
+   it uses `afftdn` with the warning `rnnoise_model_missing`.
 
-O áudio tratado vive só no diretório de trabalho: o bucket guarda o original, que o usuário ouve.
-O **deslocamento** do corte (`offset_ms`) é somado a todo `start_ms`/`end_ms` de segmento e palavra
-do raw: as marcas de tempo são as do áudio original. A `duration_ms` do raw é a do original (pelo
-`ffprobe`), com os silêncios cortados. O corte vale para todos os canais ou para nenhum: cada canal
-é cortado num temporário, e a troca acontece só quando todos saíram.
+The treated audio lives only in the working directory: the bucket keeps the original, which the
+user listens to. The trim **offset** (`offset_ms`) is added to every segment and word
+`start_ms`/`end_ms` of the raw: the timestamps are those of the original audio. The raw's
+`duration_ms` is the original's (by `ffprobe`), with the trimmed silences. The trim applies to all
+channels or to none: each channel is trimmed into a temporary file, and the swap only happens when
+all of them are out.
 
-**Canais separados no ASR:** a engine roda uma vez por canal com `min_speakers = max_speakers = 1`
-(o que mantém o embedding do locutor para a identificação por voz); as falas de cada canal ganham
-um rótulo próprio, os segmentos se mesclam pelo início e os locutores viram `S1`, `S2` na ordem da
-primeira fala. A engine não muda.
+**Split channels in the ASR:** the engine runs once per channel with
+`min_speakers = max_speakers = 1` (which keeps the speaker embedding for voice identification);
+each channel's speech gets its own label, the segments merge by start and the speakers become
+`S1`, `S2` in order of first speech. The engine does not change.
 
-## O worker GPU devolve
+## The GPU worker returns
 
-1. Baixa o áudio do S3, roda o pipeline e grava `recordings/{recording_id}/r{revision}/transcript.raw.json`
-   no mesmo bucket (a `revision` é a do `_job_id` do `transcribe`).
-2. O arquivo segue [`contracts/transcript.schema.json`](/contracts/transcript.schema.json):
-   segmentos, palavras e locutores com `label` "Locutor N", **sem** `person`/`suggestions`, que
-   são do server.
-3. Grava também um `speaker_embeddings` com `{speaker_id: [float, ...]}` e `embedding_model`,
-   num arquivo à parte: `recordings/{recording_id}/r{revision}/speaker_embeddings.json`. O server
-   o põe na fila de exclusão do bucket na transação da ingestão, guardado ou descartado o vetor:
-   a biometria vive só no banco (holetz/eclume#97).
-4. Em seguida enfileira `ingest_transcript(recording_id, transcript_key, embeddings_key,
-   engine_info)` em `eclume:default`, com `_job_id="ingest_transcript:{recording_id}:{revision}"`.
-   O `engine_info` traz engine, modelo, `compute_type`, duração, tempo real e VRAM de pico.
-5. Em falha, enfileira `transcription_failed(recording_id, error_code, message, stage)` em
-   `eclume:default`, com `_job_id="transcription_failed:{recording_id}:{revision}"`. `stage` é a
-   última etapa do progresso (`preprocess`, `asr`…), que o server usa para marcar a etapa certa do
-   pipeline; um worker antigo não o manda, e vale a transcrição.
+1. Downloads the audio from S3, runs the pipeline and writes `recordings/{recording_id}/r{revision}/transcript.raw.json`
+   in the same bucket (the `revision` is the one in the `transcribe`'s `_job_id`).
+2. The file follows [`contracts/transcript.schema.json`](/contracts/transcript.schema.json):
+   segments, words and speakers with `label` "Locutor N", **without** `person`/`suggestions`, which
+   belong to the server.
+3. Also writes a `speaker_embeddings` with `{speaker_id: [float, ...]}` and `embedding_model`, in
+   a separate file: `recordings/{recording_id}/r{revision}/speaker_embeddings.json`. The server
+   puts it in the bucket deletion queue in the ingestion transaction, whether the vector was kept
+   or discarded: the biometrics live only in the database (holetz/eclume#97).
+4. Then enqueues `ingest_transcript(recording_id, transcript_key, embeddings_key,
+   engine_info)` on `eclume:default`, with `_job_id="ingest_transcript:{recording_id}:{revision}"`.
+   `engine_info` carries engine, model, `compute_type`, duration, real time and peak VRAM.
+5. On failure, enqueues `transcription_failed(recording_id, error_code, message, stage)` on
+   `eclume:default`, with `_job_id="transcription_failed:{recording_id}:{revision}"`. `stage` is
+   the last progress step (`preprocess`, `asr`…), which the server uses to mark the right pipeline
+   step; an old worker does not send it, and transcription applies.
 
-A revisão viaja só no `_job_id` (holetz/eclume#95): os argumentos posicionais não mudam, e um
-server antigo ingere o retorno do worker novo. O server lê a revisão exigindo o prefixo
-`{job}:{recording_id}:` e um inteiro ≥ 1; sem isso (worker antigo, id sorteado pelo arq), vale a
-regra antiga, o job mais recente da gravação, e as chaves que o job traz (inclusive as antigas, sem
-`r{revision}/`). O mesmo `_job_id` deduplica o retorno repetido da mesma revisão.
+The revision travels only in the `_job_id` (holetz/eclume#95): the positional arguments do not
+change, and an old server ingests the new worker's return. The server reads the revision requiring
+the prefix `{job}:{recording_id}:` and an integer ≥ 1; without that (old worker, an id drawn by
+arq), the old rule applies, the recording's most recent job, and the keys the job carries
+(including the old ones, without `r{revision}/`). The same `_job_id` deduplicates a repeated return
+of the same revision.
 
-## Progresso
+## Progress
 
-O worker grava `HSET eclume:progress:{recording_id}` com `revision`, `stage` (`download`,
-`preprocess`, `asr`, `align`, `diarize`, `embed` ou `upload`), `pct` (0–100) e `updated_at`, com TTL
-de 1 dia. O server lê para o estado do job. O hash traz também `started_at` (RFC 3339 UTC), o início
-do job, gravado desde a primeira escrita.
+The worker writes `HSET eclume:progress:{recording_id}` with `revision`, `stage` (`download`,
+`preprocess`, `asr`, `align`, `diarize`, `embed` or `upload`), `pct` (0–100) and `updated_at`, with
+a TTL of 1 day. The server reads it for the job state. The hash also carries `started_at` (RFC 3339
+UTC), the job's start, written from the first write on.
 
-`transcription_jobs.started_at` é o início real do job no worker GPU (holetz/eclume#93): no
-sucesso, o `engine_info.started_at` do `ingest_transcript`; na falha, o `started_at` do hash de
-progresso lido pelo `transcription_failed` (nunca depois do fim). Sem nenhum dos dois, fica o já
-gravado ou a entrada na fila. As durações do pré-processamento e da transcrição partem desse início,
-sem a espera na fila.
+`transcription_jobs.started_at` is the job's real start on the GPU worker (holetz/eclume#93): on
+success, the `engine_info.started_at` of `ingest_transcript`; on failure, the `started_at` of the
+progress hash read by `transcription_failed` (never after the end). With neither, what was already
+stored or the queue entry stays. The preprocessing and transcription durations start from that
+start, without the queue wait.
 
-O `revision` (holetz/eclume#95) diz de qual revisão é o progresso: a tela da gravação, a Saúde do
-admin e o reaper só usam o hash cuja revisão é a do job em aberto; o hash sem o campo (worker
-antigo) vale. A chave não muda, para o server novo ver o progresso do worker antigo.
+The `revision` (holetz/eclume#95) says which revision the progress belongs to: the recording
+screen, the admin's Health and the reaper only use the hash whose revision is that of the open job;
+a hash without the field (old worker) counts. The key does not change, so the new server sees the
+old worker's progress.
 
-## Heartbeat do worker GPU
+## GPU worker heartbeat
 
-Acrescentado pela holetz/eclume#12. A cada 15 s o worker **substitui** o hash
-`eclume:gpu:health` (`DEL` + `HSET` + `EXPIRE 45`, numa transação) e o apaga no desligamento.
-Hash ausente = worker parado há mais de 45 s. Campos, todos texto:
+Added by holetz/eclume#12. Every 15 s the worker **replaces** the hash
+`eclume:gpu:health` (`DEL` + `HSET` + `EXPIRE 45`, in a transaction) and deletes it on shutdown.
+Missing hash = worker stopped for more than 45 s. Fields, all text:
 
-| Campo | O que é |
+| Field | What it is |
 |---|---|
-| `updated_at` | instante do heartbeat (RFC 3339 UTC) |
-| `worker_version`, `engine`, `device` | versão do `eclume_worker`, engine do processo (a forçada por `ECLUME_ENGINE`, a última usada ou `whisperx-local`) e dispositivo |
-| `busy` | `1` do início ao fim de um `transcribe` (download, pré-processamento, ASR, upload e o enfileiramento do retorno), `0` ocioso |
-| `job_id` | o `_job_id` do `transcribe` em curso (`transcribe:{recording_id}:{revision}`); ausente quando ocioso e no worker antigo |
-| `models` | JSON `[{name, kind, loaded_at, vram_mb}]` do modelo residente (`kind` em `asr`, `alignment`, `diarization`); `[]` sem modelo |
-| `gpu_name`, `vram_total_mb`, `vram_used_mb`, `utilization_pct` | leitura da NVML do dispositivo inteiro; ausentes sem NVML (engine `cpu`) |
+| `updated_at` | the heartbeat instant (RFC 3339 UTC) |
+| `worker_version`, `engine`, `device` | the `eclume_worker` version, the process's engine (the one forced by `ECLUME_ENGINE`, the last used or `whisperx-local`) and device |
+| `busy` | `1` from start to end of a `transcribe` (download, preprocessing, ASR, upload and enqueueing the return), `0` idle |
+| `job_id` | the `_job_id` of the `transcribe` in progress (`transcribe:{recording_id}:{revision}`); absent when idle and on an old worker |
+| `models` | JSON `[{name, kind, loaded_at, vram_mb}]` of the resident model (`kind` in `asr`, `alignment`, `diarization`); `[]` with no model |
+| `gpu_name`, `vram_total_mb`, `vram_used_mb`, `utilization_pct` | NVML reading of the whole device; absent without NVML (`cpu` engine) |
 
-O `vram_mb` do modelo é o uso do dispositivo depois de carregá-lo menos o de antes. O server lê o
-hash para `GET /api/v1/admin/health` ([server-admin.md](../code/server-admin.md)).
+A model's `vram_mb` is the device's usage after loading it minus the usage before. The server reads
+the hash for `GET /api/v1/admin/health` ([server-admin.md](../code/server-admin.md)).
 
-**Último visto.** O cron `reap_stalled_jobs` (a cada minuto) grava em `eclume:gpu:last_seen` o
-`updated_at` do heartbeat presente, antes de olhar os jobs e mesmo sem job aberto. Com o hash
-ausente, esse valor é o "fora do ar desde" da espera na fila (precisão de 1 min); sem ele, nunca
-houve heartbeat. Nada muda no worker GPU.
+**Last seen.** The `reap_stalled_jobs` cron (every minute) writes the `updated_at` of the present
+heartbeat to `eclume:gpu:last_seen`, before looking at the jobs and even with no open job. With the
+hash missing, that value is the queue wait's "offline since" (1 min precision); without it, there
+never was a heartbeat. Nothing changes in the GPU worker.
 
-## O server ingere
+## The server ingests
 
-`ingest_transcript` persiste a transcrição no Postgres, indexa para FTS e guarda os embeddings
-(coluna pgvector, dimensão pelo modelo). Na mesma transação, restaura os vínculos
-locutor↔pessoa de uma retranscrição e compara os locutores com as impressões de voz das pessoas
-do diretório da conta (com a identificação por voz ligada na plataforma), gravando as sugestões
-acima do limiar
-([identificacao-por-voz.md](/docs/standards/code/identificacao-por-voz.md)). Depois muda o estado
-da gravação para `transcribed` e grava a etapa `speakers`: com a conta exigindo a marcação dos
-locutores e algum locutor sem pessoa, `waiting`, e o `ingest_transcript` não enfileira
-`detect_agenda_type` (`Ingested.waiting`); sem isso, `done` e a cadeia segue
-([processamento-automatico.md](/docs/standards/code/processamento-automatico.md#marcação-dos-locutores)).
+`ingest_transcript` persists the transcript in Postgres, indexes it for FTS and stores the
+embeddings (pgvector column, dimension by model). In the same transaction, it restores the
+speaker↔person links of a retranscription and compares the speakers with the voiceprints of the
+people in the account's directory (with voice identification on at the platform), storing the
+suggestions above the threshold
+([identificacao-por-voz.md](/docs/standards/code/identificacao-por-voz.md)). Then it changes the
+recording's state to `transcribed` and writes the `speakers` step: with the account requiring
+speaker naming and some speaker without a person, `waiting`, and `ingest_transcript` does not
+enqueue `detect_agenda_type` (`Ingested.waiting`); otherwise, `done` and the chain goes on
+([processamento-automatico.md](/docs/standards/code/processamento-automatico.md#speaker-naming)).
 
-- **Embedding não finito.** A ingestão também descarta o vetor com NaN ou infinito (worker antigo,
-  arquivo já no bucket): o pgvector o recusaria e desfaria a ingestão inteira.
-- **Só o job da revisão da mensagem.** `ingest_transcript` e `transcription_failed` fecham só o job
-  `(recording_id, revision)` da mensagem. Se esse job não está `queued`/`running` — já ingerido,
-  falho pelo reaper, ou de uma revisão anterior a uma retranscrição —, a mensagem é obsoleta: é
-  logada e ignorada, sem gravar transcrição, sem marcar falha, sem tocar no hash de progresso nem
-  nos artefatos. Só quem fecha o job apaga o hash.
-- **Falha passageira retenta.** Conexão recusada, caída ou com timeout com o Postgres ou o S3
-  (família `ConnectionError`/`TimeoutError`, `socket.gaierror`, `botocore` de conexão e timeout,
-  `ClientError` HTTP ≥ 500 ou `SlowDown`), pool esgotado, `OperationalError`/`InterfaceError` ou
-  `DBAPIError` com `connection_invalidated`, deadlock e falha de serialização — na exceção ou na
-  causa (`__cause__`, `orig`) — voltam à fila por `Retry`, levantado fora da transação, com as
-  esperas `INGEST_RETRY_DELAYS_S = (15, 60, 240)` s; as duas funções são registradas com
-  `max_tries=4`. As esperas somam 315 s, abaixo de `ECLUME_JOB_STALL_SECONDS`, e o reaper não
-  decide no meio delas. Classificação em `eclume_server/transient.py`.
-- **Ingestão que falha.** Qualquer exceção desfaz a transação inteira (nem transcrição nem etapas
-  do worker GPU ficam). A definitiva — dado inválido, JSON malformado, `NoSuchKey`, violação de
-  integridade —, ou a passageira na quarta tentativa, faz `ingest_transcript` marcar, numa
-  transação nova, o job da revisão e a gravação com o `fail()` de sempre, código `ingest_failed`
-  (recuperável), e logar a exceção. Retranscrever resolve. O `transcription_failed` que esgota as
-  tentativas relança, e o reaper cobre o job.
+- **Non-finite embedding.** Ingestion also discards a vector with NaN or infinity (old worker, file
+  already in the bucket): pgvector would refuse it and undo the whole ingestion.
+- **Only the message's revision job.** `ingest_transcript` and `transcription_failed` close only
+  the message's `(recording_id, revision)` job. If that job is not `queued`/`running` — already
+  ingested, failed by the reaper, or from a revision before a retranscription —, the message is
+  obsolete: it is logged and ignored, without writing a transcript, without marking a failure,
+  without touching the progress hash or the artifacts. Only whoever closes the job deletes the
+  hash.
+- **A transient failure retries.** A refused, dropped or timed-out connection to Postgres or S3
+  (the `ConnectionError`/`TimeoutError` family, `socket.gaierror`, `botocore` connection and
+  timeout errors, `ClientError` HTTP ≥ 500 or `SlowDown`), an exhausted pool,
+  `OperationalError`/`InterfaceError` or `DBAPIError` with `connection_invalidated`, deadlock and
+  serialization failure — in the exception or in its cause (`__cause__`, `orig`) — go back to the
+  queue through `Retry`, raised outside the transaction, with the waits
+  `INGEST_RETRY_DELAYS_S = (15, 60, 240)` s; both functions are registered with `max_tries=4`. The
+  waits add up to 315 s, below `ECLUME_JOB_STALL_SECONDS`, and the reaper does not decide in the
+  middle of them. Classification in `eclume_server/transient.py`.
+- **Ingestion that fails.** Any exception undoes the whole transaction (neither the transcript nor
+  the GPU worker's steps remain). A definitive one — invalid data, malformed JSON, `NoSuchKey`, an
+  integrity violation —, or a transient one on the fourth attempt, makes `ingest_transcript` mark,
+  in a new transaction, the revision's job and the recording with the usual `fail()`, code
+  `ingest_failed` (recoverable), and log the exception. Retranscribing resolves it. A
+  `transcription_failed` that exhausts its attempts re-raises, and the reaper covers the job.
 
-## Idempotência
+## Idempotency
 
-Reprocessar a mesma `revision` sobrescreve os artefatos de `r{revision}/`; `ingest_transcript` é
-idempotente por `(recording_id, revision)`.
+Reprocessing the same `revision` overwrites the artifacts of `r{revision}/`; `ingest_transcript`
+is idempotent by `(recording_id, revision)`.
 
-**Uma revisão guardada.** Depois do commit da ingestão que grava a revisão N, o server apaga sob
-`recordings/{recording_id}/` tudo o que não está em `r{N}/`, inclusive as chaves antigas sem
-revisão. Uma falha nessa limpeza só vai para o log; o resto sai na próxima ingestão ou na exclusão
-da gravação, que apaga o prefixo inteiro. Guardar todas as revisões multiplicaria cópias de dado
-biométrico (LGPD) sem consumidor.
+**One revision kept.** After the commit of the ingestion that writes revision N, the server deletes
+under `recordings/{recording_id}/` everything not in `r{N}/`, including the old keys without a
+revision. A failure in that cleanup only goes to the log; the rest goes on the next ingestion or on
+the recording's deletion, which deletes the whole prefix. Keeping every revision would multiply
+copies of biometric data (LGPD) with no consumer.
 
-## Job morto
+## Dead job
 
-Com `max_tries=1`, um worker GPU que morre no meio do `transcribe` (OOM kill, restart, deploy)
-não enfileira `transcription_failed`. O server percebe sozinho: o cron `reap_stalled_jobs` do
-worker CPU (`eclume_server/stalled.py`, a cada minuto, `unique`) examina os jobs `queued`/`running`
-**despachados** há mais de `ECLUME_JOB_GRACE_SECONDS` (120 s) e cruza o estado do job no arq, o hash
-de progresso e o heartbeat:
+With `max_tries=1`, a GPU worker that dies in the middle of `transcribe` (OOM kill, restart,
+deploy) does not enqueue `transcription_failed`. The server notices on its own: the CPU worker's
+`reap_stalled_jobs` cron (`eclume_server/stalled.py`, every minute, `unique`) examines the
+`queued`/`running` jobs **dispatched** more than `ECLUME_JOB_GRACE_SECONDS` (120 s) ago and crosses
+the job's state in arq, the progress hash and the heartbeat:
 
-| Situação | Veredito |
+| Situation | Verdict |
 |---|---|
-| retido no banco, sem `dispatched_at` (aguarda a vez da conta ou a janela de minutos) | nada — não está no arq, não é job morto |
-| no arq `queued`/`deferred` (fila atrasada) | nada — fila não é falha |
-| arq `complete` com sucesso há até `ECLUME_JOB_STALL_SECONDS` (a ingestão pode estar na fila `eclume:default`) | nada |
-| arq `complete` com sucesso há mais de `ECLUME_JOB_STALL_SECONDS` e o job ainda aberto no banco (a ingestão se perdeu) | `ingest_failed` |
-| arq `complete` com falha (o retry do arq encerrou o job de um worker morto) | `worker_lost` |
-| `queued` no banco, sumido do arq (`not_found`) e sem hash de progresso, pela primeira vez | reenfileirado com o mesmo `_job_id`, as `options` do job e o token do HF cifrado; marca `eclume:reaper:requeued:<_job_id>` (7 dias) |
-| sumido do arq (`not_found`) e sem hash de progresso, com a marca (ou já `running`) | `job_lost` |
-| progresso sem escrita há mais de `ECLUME_JOB_STALL_SECONDS` (1800 s), mesmo com worker vivo | `job_stalled` |
-| o worker não está neste job (heartbeat ausente, `busy=0`, ou `job_id` de outro `transcribe`) e o progresso da revisão ausente ou sem escrita há mais que a graça | `worker_lost` |
+| held in the database, without `dispatched_at` (waiting for the account's turn or the minutes window) | nothing — it is not in arq, it is not a dead job |
+| in arq `queued`/`deferred` (delayed queue) | nothing — a queue is not a failure |
+| arq `complete` with success up to `ECLUME_JOB_STALL_SECONDS` ago (the ingestion may be in the `eclume:default` queue) | nothing |
+| arq `complete` with success more than `ECLUME_JOB_STALL_SECONDS` ago and the job still open in the database (the ingestion was lost) | `ingest_failed` |
+| arq `complete` with failure (arq's retry ended the job of a dead worker) | `worker_lost` |
+| `queued` in the database, gone from arq (`not_found`) and without a progress hash, for the first time | requeued with the same `_job_id`, the job's `options` and the encrypted HF token; marks `eclume:reaper:requeued:<_job_id>` (7 days) |
+| gone from arq (`not_found`) and without a progress hash, with the mark (or already `running`) | `job_lost` |
+| progress without a write for more than `ECLUME_JOB_STALL_SECONDS` (1800 s), even with a live worker | `job_stalled` |
+| the worker is not on this job (heartbeat missing, `busy=0`, or a `job_id` of another `transcribe`) and the revision's progress missing or without a write for longer than the grace | `worker_lost` |
 
-O worker está "neste job" com heartbeat presente, `busy=1` e `job_id` igual a
-`transcribe:{recording_id}:{revision}` (ou sem `job_id`, worker antigo). O hash de progresso de
-outra revisão conta como ausente. O heartbeat é o sinal de vida; o progresso mede travamento.
+The worker is "on this job" with the heartbeat present, `busy=1` and a `job_id` equal to
+`transcribe:{recording_id}:{revision}` (or without `job_id`, an old worker). A progress hash of
+another revision counts as missing. The heartbeat is the sign of life; the progress measures
+stalling.
 
-- **Deploy drena, não mata.** O `WorkerSettings` do GPU tem `job_completion_wait = job_timeout`:
-  no SIGTERM o arq para de pegar jobs e termina o atual, e os jobs na fila `eclume:gpu` seguem
-  para o worker novo. O `deploy.sh` lê `busy` no heartbeat e, com a GPU ocupada, espera até
-  `--espera-gpu` (30 min) antes de recriar o `worker-gpu` (`stop_grace_period: 40m`); ao fim da
-  espera recusa, salvo `--interromper-gpu`. Sem essa flag, um deploy não produz `worker_lost`.
-- **Duas observações.** Nada é marcado na primeira vez: a suspeita fica em
-  `eclume:reaper:suspect:<_job_id>` (código e instante) e só vira falha se o mesmo diagnóstico
-  durar a graça inteira. Isso cobre o worker que acabou de pegar o job e ainda não publicou
-  progresso nem heartbeat.
-- **Falha recuperável.** O veredito vai pelo mesmo `fail()` do `transcription_failed`, com a
-  revisão da linha (job e gravação `failed`, hash apagado), com mensagem em pt-BR. `worker_lost`, `job_lost`,
-  `job_stalled`, `ingest_failed`, `gpu_oom`, `out_of_memory`, `audio_download_failed` e
-  `upload_failed` saem com `Job.error.retryable = true` (contrato 1.4.0; `ingest_failed` desde a
-  2.5.0). A ingestão que falha
-  com exceção marca `ingest_failed` sozinha ([O server ingere](#o-server-ingere)); o reaper
-  cobre a que nunca chegou a rodar.
-- **Retentar é explícito.** O dono retranscreve (`POST /recordings/{id}/retranscribe`); o admin
-  retenta a gravação de qualquer usuário por `POST /admin/jobs/{job_id}/retry`
-  ([server-admin.md](../code/server-admin.md)). Os dois criam a revisão seguinte com a
-  configuração atual. Não há retentativa automática do `transcribe`: repetiria um OOM ou um áudio
-  ruim em laço; só os jobs de retorno retentam a falha passageira. A exceção é o `transcribe` cujo
-  enfileiramento se perdeu: ele nunca rodou, então volta à fila uma vez (tabela acima).
-- **Prova.** `server/tests/test_stalled.py`, um teste por linha da tabela; a ingestão que falha em
+- **Deploy drains, it does not kill.** The GPU `WorkerSettings` has
+  `job_completion_wait = job_timeout`: on SIGTERM arq stops picking up jobs and finishes the
+  current one, and the jobs in the `eclume:gpu` queue go on to the new worker. `deploy.sh` reads
+  `busy` in the heartbeat and, with the GPU busy, waits up to `--espera-gpu` (30 min) before
+  recreating `worker-gpu` (`stop_grace_period: 40m`); at the end of the wait it refuses, unless
+  `--interromper-gpu`. Without that flag, a deploy does not produce `worker_lost`.
+- **Two observations.** Nothing is marked the first time: the suspicion stays in
+  `eclume:reaper:suspect:<_job_id>` (code and instant) and only becomes a failure if the same
+  diagnosis lasts the whole grace. That covers the worker that just picked up the job and has not
+  published progress or heartbeat yet.
+- **Recoverable failure.** The verdict goes through the same `fail()` as `transcription_failed`,
+  with the row's revision (job and recording `failed`, hash deleted), with a message in pt-BR.
+  `worker_lost`, `job_lost`, `job_stalled`, `ingest_failed`, `gpu_oom`, `out_of_memory`,
+  `audio_download_failed` and `upload_failed` come out with `Job.error.retryable = true` (contract
+  1.4.0; `ingest_failed` since 2.5.0). An ingestion that fails
+  with an exception marks `ingest_failed` on its own ([The server ingests](#the-server-ingests));
+  the reaper covers the one that never got to run.
+- **Retrying is explicit.** The owner retranscribes (`POST /recordings/{id}/retranscribe`); the
+  admin retries any user's recording through `POST /admin/jobs/{job_id}/retry`
+  ([server-admin.md](../code/server-admin.md)). Both create the next revision with the current
+  settings. There is no automatic retry of `transcribe`: it would repeat an OOM or a bad audio in a
+  loop; only the return jobs retry transient failures. The exception is the `transcribe` whose
+  enqueueing was lost: it never ran, so it goes back to the queue once (table above).
+- **Proof.** `server/tests/test_stalled.py`, one test per table row; the ingestion that fails in
   `server/tests/test_pipeline.py`.
 
-## Sem GPU: dev e produção
+## Without a GPU: dev and production
 
-`ECLUME_ENGINE=cpu` (faster-whisper `small` int8, sem alinhamento e **sem diarização**: o raw sai
-com um locutor). Vale no dev ([desenvolver-sem-gpu.md](../../how-to/desenvolver-sem-gpu.md)), no
-E2E e também **em produção** num host sem GPU NVIDIA: `deploy/deploy.sh --sem-gpu` acrescenta
-`deploy/docker-compose.cpu.yml`, que define `ECLUME_ENGINE=cpu` e `ECLUME_DEVICE=cpu` no
-`worker-gpu` e zera a reserva de GPU dele (`deploy: !reset {}`, Compose 2.24+), com a mesma
-imagem. A fila, o contrato do job e o raw são os mesmos; o heartbeat sai sem os campos da NVML
-([auto-hospedar.md](../../how-to/auto-hospedar.md#without-a-gpu)). Os testes do server usam um worker
-fake que publica um `transcript.raw.json` de fixture de `contracts/fixtures/`.
+`ECLUME_ENGINE=cpu` (faster-whisper `small` int8, without alignment and **without diarization**:
+the raw comes out with one speaker). It applies in dev
+([desenvolver-sem-gpu.md](../../how-to/desenvolver-sem-gpu.md)), in E2E and also **in production**
+on a host without an NVIDIA GPU: `deploy/deploy.sh --sem-gpu` adds
+`deploy/docker-compose.cpu.yml`, which sets `ECLUME_ENGINE=cpu` and `ECLUME_DEVICE=cpu` on
+`worker-gpu` and zeroes its GPU reservation (`deploy: !reset {}`, Compose 2.24+), with the same
+image. The queue, the job contract and the raw are the same; the heartbeat comes out without the
+NVML fields ([auto-hospedar.md](../../how-to/auto-hospedar.md#without-a-gpu)). The server tests use a
+fake worker that publishes a fixture `transcript.raw.json` from `contracts/fixtures/`.
 
-## Como o server cumpre a sua parte
+## How the server does its part
 
-- **Opções.** `options` sai da configuração da plataforma (`platform_settings`) e da conta. O
-  idioma se resolve **uma vez, ao enfileirar** (upload, retranscrever e o retentar do admin passam
-  por `insert_job`), nesta ordem: o do arquivo (`recordings.language`, dito no upload, no `PATCH` ou
-  no retranscrever), o preferido da conta (`users.transcription_language`, `GET`/`PATCH
-  /me/transcription`), o padrão do servidor (`asr.default_language`) e `pt`; vai sem região
-  (`pt-BR` → `pt`). Mudar a preferência da conta não mexe nos jobs já enfileirados. `auto` em
-  qualquer nível é um pedido de detecção (`options.language = null`), nunca um resultado: a
-  ingestão grava em `recordings.language` e na transcrição o idioma detectado (o do raw) e, sem
-  ele, o padrão resolvido; `auto` só aparece na gravação enquanto a detecção não roda. `diarize` é
-  a diarização ligada; `embeddings` só é `true` com a identificação por voz ligada na plataforma (LGPD).
-- **Revisão.** A `revision` do job é a da transcrição que ele vai produzir: 1 no primeiro;
-  numa retranscrição, uma acima da maior entre a transcrição e o último job. Todo caminho que cria
-  uma revisão ou fecha o job (retranscrever, retentar do admin, `ingest`, `fail`) trava a linha de
-  `recordings` com `SELECT … FOR UPDATE` num comando próprio e só então lê o job em outro: em READ
-  COMMITTED, quem esperou o lock vê o job novo, e o segundo de dois pedidos simultâneos recebe 409
-  em problem+json.
-- **Estado do job.** Com o hash de progresso presente, o job aparece `running` e a gravação
-  `processing`; `stage` vira `Job.stage` do contrato v1 (`download`/`asr` → `asr`, `align` →
-  `alignment`, `diarize` → `diarization`, `embed` → `embeddings`, `upload` → `finalizing`) e
-  `progress = pct / 100`, só com o hash da revisão do job em aberto (ou sem `revision`). O
-  `ingest_transcript` e o `transcription_failed` apagam o hash só quando fecham o job.
-- **Ingestão tolerante.** O raw é lido com padrões para o que faltar e ignorando o que não se
-  conhece; um id de locutor fora de `S<n>` é renumerado na ordem em que aparece, e o mesmo mapa
-  vale para os embeddings. Com o job já `succeeded`, `ingest_transcript` não faz nada.
-- **Espera na fila** (`queue_status.py`, holetz/eclume#117). `Job.queue` é calculado na leitura
-  (`render`), só para as gravações com job `queued` sem progresso, uma vez por resposta: um
-  `ZRANGE` de `eclume:gpu`, a presença do heartbeat, o último visto e, para os retidos, uma
-  consulta da conta. Despachado (`dispatched_at`): `processor_queue` com `ahead` = posição do
-  `_job_id` no ZSET, que inclui o job rodando. Retido: `quota_window` com `resumes_at` quando a
-  conta, sem job despachado, está fora dos minutos de 24 h (o instante em que o despacho mais
-  antigo que a põe abaixo da cota sai da janela); senão `account_turn` com `account_ahead` = os
-  jobs abertos da conta antes dele (o despachado primeiro, depois os retidos por `queued_at`).
-  `processor.online` = heartbeat presente.
-- **Estimativa.** Ritmo = mediana de `(finished_at − started_at) / duration_ms` das últimas 20
-  transcrições bem-sucedidas em 7 dias, de toda a plataforma (só números, papel de conexão), e a
-  mediana do processamento; guardado 5 min em `eclume:queue:pace`; com menos de 5 amostras, sem
-  estimativa. Início estimado = agora + a soma, para cada job à frente, de `duration_ms × ritmo`
-  (sem duração, a mediana do processamento), descontado do que roda o tempo decorrido desde o
-  `started_at` do hash de progresso (nunca negativo). Processador fora do ar: `null`.
-- **Prova.** `server/tests/test_pipeline.py` roda o ciclo com o worker GPU fake de
-  `server/tests/eclume_server_testing/fakes.py` e o worker CPU real.
+- **Options.** `options` comes from the platform settings (`platform_settings`) and the account.
+  The language is resolved **once, when enqueueing** (upload, retranscribe and the admin retry go
+  through `insert_job`), in this order: the file's (`recordings.language`, given on upload, on the
+  `PATCH` or on retranscribe), the account's preferred one (`users.transcription_language`,
+  `GET`/`PATCH /me/transcription`), the server default (`asr.default_language`) and `pt`; it goes
+  without a region (`pt-BR` → `pt`). Changing the account's preference does not touch jobs already
+  enqueued. `auto` at any level is a request for detection (`options.language = null`), never a
+  result: ingestion writes to `recordings.language` and to the transcript the detected language
+  (the raw's) and, without it, the resolved default; `auto` only appears on the recording while
+  detection has not run. `diarize` is diarization switched on; `embeddings` is only `true` with
+  voice identification on at the platform (LGPD).
+- **Revision.** The job's `revision` is that of the transcript it will produce: 1 on the first;
+  on a retranscription, one above the largest between the transcript and the last job. Every path
+  that creates a revision or closes the job (retranscribe, admin retry, `ingest`, `fail`) locks the
+  `recordings` row with `SELECT … FOR UPDATE` in its own statement and only then reads the job in
+  another: under READ COMMITTED, whoever waited for the lock sees the new job, and the second of two
+  simultaneous requests gets 409 in problem+json.
+- **Job state.** With the progress hash present, the job shows `running` and the recording
+  `processing`; `stage` becomes contract v1's `Job.stage` (`download`/`asr` → `asr`, `align` →
+  `alignment`, `diarize` → `diarization`, `embed` → `embeddings`, `upload` → `finalizing`) and
+  `progress = pct / 100`, only with the hash of the open job's revision (or without `revision`).
+  `ingest_transcript` and `transcription_failed` delete the hash only when they close the job.
+- **Tolerant ingestion.** The raw is read with defaults for whatever is missing and ignoring what
+  is unknown; a speaker id outside `S<n>` is renumbered in order of appearance, and the same map
+  applies to the embeddings. With the job already `succeeded`, `ingest_transcript` does nothing.
+- **Queue wait** (`queue_status.py`, holetz/eclume#117). `Job.queue` is computed on read
+  (`render`), only for the recordings with a `queued` job without progress, once per response: a
+  `ZRANGE` of `eclume:gpu`, the presence of the heartbeat, the last seen and, for the held ones, a
+  query of the account. Dispatched (`dispatched_at`): `processor_queue` with `ahead` = the position
+  of the `_job_id` in the ZSET, which includes the running job. Held: `quota_window` with
+  `resumes_at` when the account, with no dispatched job, is outside its 24 h minutes (the instant
+  when the oldest dispatch that brings it below the quota leaves the window); otherwise
+  `account_turn` with `account_ahead` = the account's open jobs before it (the dispatched one
+  first, then the held ones by `queued_at`). `processor.online` = heartbeat present.
+- **Estimate.** Pace (ritmo) = the median of `(finished_at − started_at) / duration_ms` of the last 20
+  successful transcriptions in 7 days, across the whole platform (numbers only, connection role),
+  and the median processing time; kept 5 min in `eclume:queue:pace`; with fewer than 5 samples, no
+  estimate. Estimated start = now + the sum, for each job ahead, of `duration_ms × ritmo` (without a
+  duration, the median processing time), minus, for the running one, the time elapsed since the
+  progress hash's `started_at` (never negative). Processor offline: `null`.
+- **Proof.** `server/tests/test_pipeline.py` runs the cycle with the fake GPU worker of
+  `server/tests/eclume_server_testing/fakes.py` and the real CPU worker.
 
-## Como o worker cumpre a sua parte
+## How the worker does its part
 
-- **Execução.** `max_jobs=1` e `max_tries=1`. Uma falha não relança exceção: o worker enfileira
-  `transcription_failed` e encerra o job, e o retry é decisão do server. A `revision` é lida do
-  `_job_id`; sem ela, vale 1. Ela vai ao hash de progresso, às chaves `r{revision}/` e ao `_job_id`
-  dos dois retornos. O job em curso fica marcado do início ao fim (inclusive o enfileiramento do
-  retorno), e o heartbeat publica `busy` e `job_id` por ele.
-- **Engine.** `ECLUME_ENGINE`, quando definido no processo do worker, força a engine (dev sem
-  GPU e o E2E: `cpu`). Vazio, vale `options.engine`, e na falta dele, `whisperx-local`. Uma engine
-  forçada diferente de `options.engine` ignora `model`, `compute_type`, `batch_size` e
-  `fallback_model` do job — são da engine que o admin escolheu — e usa os padrões dela. A engine
-  `cpu` não diariza, e o raw sai com um locutor.
-- **ASR residente.** Na `whisperx-local`, o ASR fica carregado entre jobs, ao lado de um lugar
-  para o modelo da etapa (alinhamento ou diarização). Antes de carregar o modelo de uma etapa com
-  menos de `ECLUME_RESIDENT_MIN_FREE_MB` (2500) livres, o ASR sai; um OOM numa etapa com o ASR
-  residente o descarrega e repete a etapa uma vez. Em todo recuo por OOM (do ASR ou da etapa), o
-  modelo anterior sai da VRAM antes da nova tentativa. No fim do job, o modelo da etapa sai,
-  também quando uma etapa falha, e o ASR fica até a descarga por ociosidade
+- **Execution.** `max_jobs=1` and `max_tries=1`. A failure does not re-raise the exception: the
+  worker enqueues `transcription_failed` and ends the job, and the retry is the server's decision.
+  The `revision` is read from the `_job_id`; without it, 1 applies. It goes to the progress hash,
+  to the `r{revision}/` keys and to the `_job_id` of both returns. The job in progress stays marked
+  from start to end (including enqueueing the return), and the heartbeat publishes `busy` and
+  `job_id` from it.
+- **Engine.** `ECLUME_ENGINE`, when set in the worker's process, forces the engine (dev without a
+  GPU and E2E: `cpu`). Empty, `options.engine` applies, and failing it, `whisperx-local`. A forced
+  engine different from `options.engine` ignores the job's `model`, `compute_type`, `batch_size`
+  and `fallback_model` — they belong to the engine the admin chose — and uses its own defaults. The
+  `cpu` engine does not diarize, and the raw comes out with one speaker.
+- **Resident ASR.** In `whisperx-local`, the ASR stays loaded between jobs, next to a slot for the
+  step's model (alignment or diarization). Before loading a step's model with less than
+  `ECLUME_RESIDENT_MIN_FREE_MB` (2500) free, the ASR leaves; an OOM in a step with the ASR resident
+  unloads it and repeats the step once. On every OOM fallback (of the ASR or of the step), the
+  previous model leaves VRAM before the new attempt. At the end of the job, the step's model
+  leaves, also when a step fails, and the ASR stays until unloaded for idleness
   (`ECLUME_MODEL_IDLE_SECONDS`, 300 s).
-  `ECLUME_KEEP_ASR_RESIDENT=0` volta a um modelo por vez. O heartbeat declara os residentes.
-- **Idioma.** A engine recebe só o idioma de `language` (`pt-BR` → `pt`), e o raw guarda o valor
-  recebido; com `language: null`, a engine detecta e o raw guarda o detectado.
-- **Raw.** Locutores `S1..Sn` na ordem da primeira fala, `label` `Locutor N`, `talk_ms` e
-  `person: null`, que o schema exige; nunca `suggestions`. Sem diarização, um locutor só (`S1`).
-  O worker preenche `recording_id`, `language`, `duration_ms`, `content_hash` (sha256 do áudio
-  baixado), `revision`, `engine`, `speakers` e `segments` com palavras. Os campos que só o server
-  conhece (`id`, `title`, `owner`, `recorded_at`, `source`, `created_at`, `updated_at`) saem
-  **provisórios**, só para o arquivo validar no schema; a ingestão os ignora.
-- **Embeddings.** O arquivo é sempre gravado, com chaves nos ids do raw:
+  `ECLUME_KEEP_ASR_RESIDENT=0` goes back to one model at a time. The heartbeat declares the
+  resident ones.
+- **Language.** The engine receives only the language of `language` (`pt-BR` → `pt`), and the raw
+  stores the value received; with `language: null`, the engine detects and the raw stores the
+  detected one.
+- **Raw.** Speakers `S1..Sn` in order of first speech, `label` `Locutor N`, `talk_ms` and
+  `person: null`, which the schema requires; never `suggestions`. Without diarization, a single
+  speaker (`S1`). The worker fills `recording_id`, `language`, `duration_ms`, `content_hash`
+  (sha256 of the downloaded audio), `revision`, `engine`, `speakers` and `segments` with words. The
+  fields only the server knows (`id`, `title`, `owner`, `recorded_at`, `source`, `created_at`,
+  `updated_at`) come out **provisional**, only so the file validates against the schema; ingestion
+  ignores them.
+- **Embeddings.** The file is always written, keyed by the raw's ids:
   `{"embedding_model": "pyannote/wespeaker-voxceleb-resnet34-LM", "dimension": 256,
-  "speaker_embeddings": {"S1": [...]}}`. Sem diarização, `speaker_embeddings` é `{}`, e
-  `embedding_model` e `dimension` são `null`. Vetor com qualquer componente não finito (NaN ou
-  infinito — o pyannote o produz para fala curta demais) fica de fora: o locutor segue no raw, só
-  sem embedding. Não é erro.
-- **Diarização degradada.** Sem token do Hugging Face, ou sem acesso ao modelo gated (termos não
-  aceitos), o worker transcreve com um locutor e avisa em `engine_info.warnings`
-  (`diarization_skipped_no_token`, `diarization_skipped_no_access`). Qualquer outro erro da
-  diarização falha o job.
-- **Progresso.** O `pct` é o geral do job e nunca recua, com uma faixa por etapa: `download`
-  0–3, `preprocess` 3–10, `asr` 10–55, `align` 55–70, `diarize` 70–90, `embed` 90–95 e `upload` 95–100. Uma etapa que
-  não roda é pulada. O `pct` 100 é gravado **antes** de `ingest_transcript` ser enfileirado, para
-  não recriar o hash que a ingestão apaga.
+  "speaker_embeddings": {"S1": [...]}}`. Without diarization, `speaker_embeddings` is `{}`, and
+  `embedding_model` and `dimension` are `null`. A vector with any non-finite component (NaN or
+  infinity — pyannote produces it for speech that is too short) is left out: the speaker stays in
+  the raw, just without an embedding. It is not an error.
+- **Degraded diarization.** Without a Hugging Face token, or without access to the gated model
+  (terms not accepted), the worker transcribes with one speaker and warns in
+  `engine_info.warnings` (`diarization_skipped_no_token`, `diarization_skipped_no_access`). Any
+  other diarization error fails the job.
+- **Progress.** The `pct` is the job's overall one and never goes back, with one band per step:
+  `download` 0–3, `preprocess` 3–10, `asr` 10–55, `align` 55–70, `diarize` 70–90, `embed` 90–95 and
+  `upload` 95–100. A step that does not run is skipped. `pct` 100 is written **before**
+  `ingest_transcript` is enqueued, so as not to recreate the hash the ingestion deletes.
 
 `engine_info`:
 
-| Campo | O que é |
+| Field | What it is |
 |---|---|
-| `started_at` | início do job (RFC 3339 UTC), o mesmo do hash de progresso |
-| `preprocess` | `{steps: [{step, state, params?, reason?, error?}], ms, offset_ms, channels, split, fallback, warnings, ffmpeg_version}`: o que o pré-processamento fez |
-| `engine`, `model`, `compute_type`, `batch_size` | como o ASR rodou (o modelo cai para `medium` num OOM persistente) |
-| `language` | idioma passado à engine, ou o detectado com o idioma automático |
-| `duration_ms` | duração do áudio |
-| `processing_ms`, `job_ms` | tempo da engine e tempo total do job, com download e upload |
+| `started_at` | the job's start (RFC 3339 UTC), the same as the progress hash's |
+| `preprocess` | `{steps: [{step, state, params?, reason?, error?}], ms, offset_ms, channels, split, fallback, warnings, ffmpeg_version}`: what the preprocessing did |
+| `engine`, `model`, `compute_type`, `batch_size` | how the ASR ran (the model falls back to `medium` on a persistent OOM) |
+| `language` | the language passed to the engine, or the detected one with automatic language |
+| `duration_ms` | the audio's duration |
+| `processing_ms`, `job_ms` | the engine's time and the job's total time, with download and upload |
 | `realtime_factor` | `processing_ms / duration_ms` |
-| `peak_vram_mb` | pico de VRAM acima da linha de base anterior ao job (NVML), ou `null` |
-| `align_model`, `diarization_model`, `embedding_model` | modelos usados; `null` quando a etapa não rodou |
-| `warnings` | avisos (`diarization_skipped_no_token`, `diarization_skipped_no_access`, `fallback_medium` — também com outro `fallback_model` —, `batch_size_reduced`, `compute_type_float16_rejected`, `alignment_unavailable`, `hf_token_undecryptable`, `preprocess_failed`, `rnnoise_model_missing`) |
-| `worker_version` | versão do `eclume_worker` |
+| `peak_vram_mb` | VRAM peak above the baseline before the job (NVML), or `null` |
+| `align_model`, `diarization_model`, `embedding_model` | the models used; `null` when the step did not run |
+| `warnings` | warnings (`diarization_skipped_no_token`, `diarization_skipped_no_access`, `fallback_medium` — also with another `fallback_model` —, `batch_size_reduced`, `compute_type_float16_rejected`, `alignment_unavailable`, `hf_token_undecryptable`, `preprocess_failed`, `rnnoise_model_missing`) |
+| `worker_version` | the `eclume_worker` version |
 
-`error_code` de `transcription_failed`:
+`error_code` of `transcription_failed`:
 
-| `error_code` | Quando |
+| `error_code` | When |
 |---|---|
-| `audio_download_failed` | o `audio_key` não existe ou o S3 falhou |
-| `audio_decode_failed` | o contêiner está fora da lista permitida, ou o ffmpeg não decodifica o áudio nem para só converter o formato (dentro do tempo limite) |
-| `out_of_memory` | falta VRAM mesmo com lote 1 e o modelo `medium` |
-| `asr_failed` | erro no ASR que não é falta de memória |
-| `alignment_failed` | erro no alinhamento por palavra |
-| `diarization_failed` | erro na diarização com o modelo acessível |
-| `upload_failed` | falha ao gravar os artefatos no bucket |
-| `internal_error` | engine desconhecida ou mal configurada, ou erro inesperado |
+| `audio_download_failed` | the `audio_key` does not exist or S3 failed |
+| `audio_decode_failed` | the container is outside the allowlist, or ffmpeg cannot decode the audio even just to convert the format (within the timeout) |
+| `out_of_memory` | VRAM runs out even with batch 1 and the `medium` model |
+| `asr_failed` | an ASR error that is not lack of memory |
+| `alignment_failed` | an error in word alignment |
+| `diarization_failed` | an error in diarization with the model accessible |
+| `upload_failed` | failure writing the artifacts to the bucket |
+| `internal_error` | an unknown or misconfigured engine, or an unexpected error |
 
-A prova do lado do worker é `worker-gpu/tests/test_jobs.py` (fakes) e
-`worker-gpu/tests/test_gpu_e2e.py`, que roda no host GPU contra `deploy/docker-compose.gpu-test.yml`.
+The worker-side proof is `worker-gpu/tests/test_jobs.py` (fakes) and
+`worker-gpu/tests/test_gpu_e2e.py`, which runs on the GPU host against `deploy/docker-compose.gpu-test.yml`.

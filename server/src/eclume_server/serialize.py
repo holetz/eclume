@@ -1,4 +1,4 @@
-"""Formas JSON compartilhadas pelas rotas."""
+"""JSON shapes shared by the routes."""
 
 from __future__ import annotations
 
@@ -28,15 +28,15 @@ def user_json(row: Row) -> dict[str, Any]:
     }
 
 
-def requester_name() -> Any:  # noqa: ANN401 — ScalarSelect do SQLAlchemy
-    """O nome do usuário da transação (`eclume_user()`), numa leitura só por consulta.
+def requester_name() -> Any:  # noqa: ANN401 — SQLAlchemy ScalarSelect
+    """The name of the transaction's user (`eclume_user()`), read once per query.
 
-    Preenche os campos obsoletos `owner`/`created_by` do contrato v1: sob a RLS, todo registro
-    devolvido é do próprio usuário, então nenhuma consulta junta `users` para isso.
+    Fills the obsolete `owner`/`created_by` fields of contract v1: under RLS, every returned record
+    belongs to the user themselves, so no query joins `users` for this.
     """
     return select(t.users.c.name).where(t.users.c.id == func.eclume_user()).scalar_subquery()
 
 
-def user_ref(user_id: Any, name: str) -> dict[str, str]:  # noqa: ANN401 — UUID ou texto
+def user_ref(user_id: Any, name: str) -> dict[str, str]:  # noqa: ANN401 — UUID or text
     """Schema `UserRef`."""
     return {"id": str(user_id), "name": name}

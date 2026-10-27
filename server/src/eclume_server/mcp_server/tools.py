@@ -1,18 +1,18 @@
-"""Ferramentas do servidor MCP: as mesmas operações da API, com os escopos do token.
+"""The MCP server tools: the same operations as the API, under the token's scopes.
 
-Nomes em inglês (convenção dos clientes MCP), descrições e erros em pt-BR. Escopo faltando,
-gravação inexistente ou de outro usuário e validação voltam como erro de ferramenta
-(`isError: true`) que o assistente explica ao usuário.
+Names in English (the MCP clients' convention), descriptions and errors in pt-BR. A missing scope,
+a recording that does not exist or belongs to another user, and validation come back as a tool error
+(`isError: true`) that the assistant explains to the user.
 """
 
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime  # noqa: TC003 — o SDK lê as anotações para o schema da ferramenta
+from datetime import datetime  # noqa: TC003 — the SDK reads the annotations for the tool schema
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import UUID
 
-from mcp.server.mcpserver import Context  # noqa: TC002 — o SDK injeta o contexto pela anotação
+from mcp.server.mcpserver import Context  # noqa: TC002 — the SDK injects the context through the annotation
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 from pydantic import Field
@@ -53,17 +53,17 @@ _TAGS = text(
 
 
 def principal_of(ctx: Context) -> Principal:
-    """O dono do token, que o `BearerGate` pôs no scope da requisição HTTP."""
+    """The token's owner, which the `BearerGate` put in the HTTP request scope."""
     return ctx.request_context.request.scope["eclume.principal"]
 
 
 def app_of(ctx: Context) -> AppContext:
-    """O `AppContext` do app FastAPI que atende o `/mcp`."""
+    """The `AppContext` of the FastAPI app that serves `/mcp`."""
     return ctx.request_context.request.app.state.ctx
 
 
 def need(ctx: Context, *scopes: str) -> Principal:
-    """O `Principal`, ou erro de ferramenta que nomeia o escopo que falta."""
+    """The `Principal`, or a tool error naming the missing scope."""
     principal = principal_of(ctx)
     missing = [scope for scope in scopes if scope not in principal.scopes]
     if missing:
@@ -75,7 +75,7 @@ def need(ctx: Context, *scopes: str) -> Principal:
 
 @contextmanager
 def as_tool_error() -> Iterator[None]:
-    """Os problemas da API (404, 409, 422) viram erro de ferramenta com a mensagem em pt-BR."""
+    """API problems (404, 409, 422) become a tool error carrying the pt-BR message."""
     try:
         yield
     except ApiProblemError as problem:
@@ -85,7 +85,7 @@ def as_tool_error() -> Iterator[None]:
 
 
 def uuid_of(value: str, name: str = "recording_id") -> UUID:
-    """O UUID do argumento, ou erro de ferramenta."""
+    """The argument's UUID, or a tool error."""
     try:
         return UUID(value)
     except ValueError as exc:
@@ -120,7 +120,7 @@ def _hit(hit: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def _search(  # noqa: PLR0913 — os filtros da busca
+async def _search(  # noqa: PLR0913 — the search filters
     app: AppContext,
     principal: Principal,
     *,
@@ -146,7 +146,7 @@ async def _search(  # noqa: PLR0913 — os filtros da busca
 
 
 def register(server: MCPServer) -> None:
-    """Registra as ferramentas no servidor."""
+    """Register the tools on the server."""
     _read_tools(server)
     _write_tools(server)
 
@@ -162,7 +162,7 @@ def _read_tools(server: MCPServer) -> None:
             "awaiting vale sem query."
         ),
     )
-    async def search_recordings(  # noqa: PLR0913, PLR0917 — os filtros da biblioteca
+    async def search_recordings(  # noqa: PLR0913, PLR0917 — the library filters
         ctx: Context,
         query: Annotated[str | None, Field(description="Texto a buscar nas falas (aspas para frase).")] = None,
         started_from: Annotated[datetime | None, Field(description="Início da gravação a partir de.")] = None,
@@ -361,7 +361,7 @@ def _write_tools(server: MCPServer) -> None:
                         _, reply = await open_request(conn, transcript, instruction.strip(), principal.user_id)
                         charge.token = await charge_agent(conn, app.queue.pool, principal.user_id)
                     else:
-                        # A mesma operação que o Agente usa para regenerar resumos em lote.
+                        # The same operation the Agent uses to regenerate summaries in bulk.
                         summary_id, charge.token = await regenerate_summary(
                             conn, app.queue.pool, principal.user_id, rid
                         )
@@ -429,7 +429,7 @@ def _write_tools(server: MCPServer) -> None:
 
 
 def summary_view(recording_id: str, state: dict[str, Any]) -> dict[str, Any]:
-    """A versão atual e a geração em aberto, do schema `SummaryState`."""
+    """The current version and the open generation, of the `SummaryState` schema."""
     current, pending = state["current"], state["pending"]
     return {
         "recording_id": recording_id,

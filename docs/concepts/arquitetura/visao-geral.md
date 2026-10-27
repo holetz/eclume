@@ -82,7 +82,7 @@ flowchart LR
 ## The queues
 
 Three arq queues on Redis, each with its own worker
-([jobs-transcricao.md](../../standards/api/jobs-transcricao.md#filas)):
+([jobs-transcricao.md](../../standards/api/jobs-transcricao.md#queues)):
 
 | Queue | Worker | What runs |
 |---|---|---|
@@ -147,5 +147,5 @@ enabled by admin configuration:
 
 Where each piece of data goes in the configuration in force is the answer of `GET /api/v1/privacy`, public,
 which the Account, the sign-up and the admin panel show; what each provider requires is in the matrix of
-[server-agentes.md](../../standards/code/server-agentes.md#o-que-cada-provider-exige). This doc
+[server-agentes.md](../../standards/code/server-agentes.md#what-each-provider-requires). This doc
 does not repeat the list, so the two do not diverge.

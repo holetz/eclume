@@ -15,8 +15,8 @@ const FORM_ID = 'admin-audio'
 const TITLE = 'Pré-processamento de áudio'
 const decimal = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 })
 
-// Os parâmetros numéricos, nos limites de `PreprocessingSettings` do contrato. O campo guarda o
-// texto digitado, para o admin poder apagar e redigitar; o número sai na hora de salvar.
+// The numeric parameters, within the contract's `PreprocessingSettings` limits. The field keeps the
+// typed text, so the admin can delete and retype; the number comes out at save time.
 const LIMITS = {
   'loudnorm.target_lufs': { label: 'Alvo (LUFS)', min: -30, max: -10, step: 0.5 },
   'loudnorm.true_peak_db': { label: 'Pico verdadeiro (dB)', min: -9, max: 0, step: 0.1 },
@@ -42,7 +42,7 @@ function inLimits(field: NumberField, value: string): boolean {
   return value.trim() !== '' && Number.isFinite(number) && number >= LIMITS[field].min && number <= LIMITS[field].max
 }
 
-/** As etapas do tratamento do áudio antes da transcrição; a ordem é fixa (holetz/eclume#33). */
+/** The audio treatment steps before transcription; the order is fixed (holetz/eclume#33). */
 export function AudioPage() {
   const settings = useAdminSettings()
   if (settings.data) return <AudioForm settings={settings.data} />
@@ -149,7 +149,7 @@ function AudioForm({ settings }: { settings: Settings }) {
     </button>
   )
 
-  // A ordem em que o worker roda (preprocess.py): canais, ruído, loudness, 16 kHz mono, silêncio.
+  // The order the worker runs in (preprocess.py): channels, noise, loudness, 16 kHz mono, silence.
   const steps: { key: Step | 'resample'; title: string; summary: string; panel?: ReactNode }[] = [
     {
       key: 'split_channels',
@@ -289,7 +289,7 @@ function AudioForm({ settings }: { settings: Settings }) {
 
 const MAX_RETENTION_DAYS = 3650
 
-/** O teto da retenção do áudio: limita o que cada conta escolhe e nunca apaga o áudio de quem não ligou a retenção. */
+/** The audio retention ceiling: limits what each account chooses and never deletes the audio of anyone who did not turn retention on. */
 function RetentionCeiling({ settings }: { settings: Settings }) {
   const update = useUpdateSettings()
   const id = useId()

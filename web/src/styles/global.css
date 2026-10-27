@@ -1,6 +1,6 @@
-/* Ponto de entrada do CSS global: fontes locais, a base do Design System e a camada de produto. O
-   layout de cada tela fica no CSS Module do componente. O DS vai na camada `ds`: o CSS sem camada
-   (app.css e os CSS Modules) vence qualquer regra dele, seja qual for a ordem dos chunks no build. */
+/* Entry point of the global CSS: local fonts, the Design System base and the product layer. Each
+   screen's layout lives in the component's CSS Module. The DS goes in the `ds` layer: unlayered CSS
+   (app.css and the CSS Modules) beats any of its rules, whatever the chunk order in the build. */
 @import './fonts.css';
 @import './eclume.css' layer(ds);
 @import './app.css';

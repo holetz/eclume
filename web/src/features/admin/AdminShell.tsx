@@ -16,8 +16,8 @@ function AdminBrand() {
 }
 
 /**
- * Moldura do painel (`templates/admin` do DS), à parte do app do usuário: marca com o selo Admin, o
- * grupo "Plataforma" e o rodapé com a conta de admin. Sem seletor de tema: vale a preferência salva.
+ * The panel frame (the DS `templates/admin`), apart from the user app: brand with the Admin badge, the
+ * "Plataforma" group and the footer with the admin account. No theme selector: the saved preference holds.
  */
 export function AdminShell({ admin, children }: { admin: AdminAccount; children: ReactNode }) {
   const logout = useAdminLogout()

@@ -1,4 +1,4 @@
-// Renderiza o app inteiro numa rota, com um QueryClient novo e sem retry.
+// Renders the whole app at a route, with a fresh QueryClient and no retry.
 import { render } from '@testing-library/react'
 import { createMemoryRouter, matchRoutes } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -18,9 +18,9 @@ export function renderApp(path: string) {
 }
 
 /**
- * Carrega antes os chunks das páginas sob demanda que as rotas dadas montam. Chamado no `beforeAll`
- * do arquivo de teste, o carregamento cai no `hookTimeout`, e não no `asyncUtilTimeout` do primeiro
- * `findBy`, que estourava com a suíte inteira em paralelo.
+ * Loads ahead the on-demand page chunks that the given routes mount. Called in the test file's
+ * `beforeAll`, the load falls under `hookTimeout`, and not under the `asyncUtilTimeout` of the first
+ * `findBy`, which ran out with the whole suite in parallel.
  */
 export async function preloadRoute(...paths: string[]): Promise<void> {
   const loads = paths.flatMap((path) =>

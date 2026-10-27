@@ -1,7 +1,7 @@
-"""As habilidades do Agente e o catálogo de ferramentas, sob a RLS do dono.
+"""The Agent's skills and the tool catalogue, under the owner's RLS.
 
-Escopo `summaries:read`, como as demais rotas do Agente: a habilidade é configuração do próprio
-agente da pessoa. Outra conta: 404. Contrato em docs/standards/code/server-agentes.md §Agente.
+Scope `summaries:read`, like the other Agent routes: a skill is configuration of the person's own
+agent. Another account: 404. Contract in docs/standards/code/server-agentes.md `§Agente`.
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ class AgentSkillCreate(BaseModel):
 
 
 class AgentSkillPatch(BaseModel):
-    """Schema `AgentSkillPatch`: os campos enviados mudam; `allowed_tools: null` libera todas."""
+    """Schema `AgentSkillPatch`: the fields sent change; `allowed_tools: null` allows them all."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -62,35 +62,35 @@ class AgentSkillPatch(BaseModel):
 
 
 @router.get("/agent/tools")
-async def get_tools(principal: Reader) -> dict[str, Any]:  # noqa: ARG001 — só autentica
-    """O catálogo de ferramentas do Agente, com a natureza de cada uma."""
+async def get_tools(principal: Reader) -> dict[str, Any]:  # noqa: ARG001 — authenticates only
+    """The Agent's tool catalogue, with the nature of each tool."""
     return {"items": default_registry().catalog()}
 
 
 @router.get("/agent/skills")
 async def get_skills(principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """As habilidades da conta, por nome."""
+    """The account's skills, by name."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await list_skills(conn)
 
 
 @router.post("/agent/skills", status_code=201)
 async def post_skill(body: AgentSkillCreate, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Cadastra uma habilidade; nome repetido é 409."""
+    """Register a skill; a repeated name is 409."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await create_skill(conn, principal.user_id, body.model_dump())
 
 
 @router.get("/agent/skills/{skill_id}")
 async def get_one_skill(skill_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Uma habilidade."""
+    """One skill."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await get_skill(conn, skill_id)
 
 
 @router.patch("/agent/skills/{skill_id}")
 async def patch_skill(skill_id: UUID, body: AgentSkillPatch, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Edita a habilidade."""
+    """Edit the skill."""
     values = body.model_dump(exclude_unset=True)
     for key in ("name", "description", "instructions", "enabled"):
         if key in values and values[key] is None:
@@ -101,7 +101,7 @@ async def patch_skill(skill_id: UUID, body: AgentSkillPatch, principal: Reader, 
 
 @router.delete("/agent/skills/{skill_id}", status_code=204)
 async def remove_skill(skill_id: UUID, principal: Reader, ctx: Ctx) -> Response:
-    """Exclui a habilidade."""
+    """Delete the skill."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await delete_skill(conn, skill_id)
     return Response(status_code=204)

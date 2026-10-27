@@ -1,8 +1,8 @@
-"""Busca full-text sobre os segmentos do usuário, em português sem acento (config `eclume_pt`).
+"""Full-text search over the user's segments, in accent-insensitive Portuguese (config `eclume_pt`).
 
-Tudo roda sob a RLS. O GIN de `segments.tsv` entra pela função `eclume_segment_matches`, que só
-devolve as chaves candidatas do usuário da transação; a política de `segments` confirma (migrations
-003 e 008).
+Everything runs under RLS. The `segments.tsv` GIN index comes in through the `eclume_segment_matches`
+function, which only returns the transaction user's candidate keys; the `segments` policy confirms
+(migrations 003 and 008).
 """
 
 from __future__ import annotations
@@ -30,14 +30,14 @@ if TYPE_CHECKING:
     from eclume_server.serialize import Row
 
 CONFIG = "eclume_pt"
-# Marcadores que não aparecem em fala transcrita; o texto é escapado antes de virarem `<mark>`.
+# Markers that do not appear in transcribed speech; the text is escaped before they become `<mark>`.
 _START, _STOP = "\x02", "\x03"
 _HEADLINE_OPTIONS = f'StartSel="{_START}", StopSel="{_STOP}", HighlightAll=true'
 
 
 @dataclass(frozen=True)
 class SearchFilters:
-    """Parâmetros de `GET /search` já validados; `q` ou `person` presente."""
+    """`GET /search` parameters, already validated; `q` or `person` present."""
 
     q: str | None
     person: UUID | None
@@ -45,7 +45,7 @@ class SearchFilters:
     date_to: datetime | None
     tag: str | None
     collection: UUID | None
-    # `<field_id>:<valor>`, repetível: OU no mesmo campo, E entre campos (como em `GET /recordings`).
+    # `<field_id>:<valor>`, repeatable: OR within the same field, AND between fields (as in `GET /recordings`).
     fields: tuple[str, ...] = ()
 
 
@@ -54,12 +54,12 @@ def _config() -> ColumnElement[Any]:
 
 
 def highlight(raw: str) -> str:
-    """Texto escapado com os termos entre `<mark>` e `</mark>`: nenhum outro HTML passa."""
+    """Escaped text with the terms between `<mark>` and `</mark>`: no other HTML gets through."""
     return html.escape(raw, quote=False).replace(_START, "<mark>").replace(_STOP, "</mark>")
 
 
 async def search(conn: AsyncConnection, filters: SearchFilters, offset: int, limit: int) -> list[dict[str, Any]]:
-    """Até `limit + 1` trechos a partir de `offset` (a sobra só diz que há próxima página)."""
+    """Up to `limit + 1` excerpts from `offset` (the extra one only says there is a next page)."""
     s = t.segments.alias("s")
     sp = t.speakers.alias("sp")
     tr, r, pe = t.transcripts, t.recordings, t.people
@@ -111,13 +111,13 @@ async def search(conn: AsyncConnection, filters: SearchFilters, offset: int, lim
 
     def order(q: Any) -> list[Any]:  # noqa: ANN401 — colunas da consulta ou da subconsulta
         if tsquery is not None:
-            # Relevância; no empate, a gravação mais recente e a ordem da fala.
+            # Relevance; on a tie, the most recent recording and the speech order.
             return [q.rank.desc(), q.recorded_at.desc(), q.transcript_id, q.position]
-        # Só `person`: as falas da pessoa em ordem cronológica.
+        # Only `person`: the person's utterances in chronological order.
         return [q.recorded_at, q.transcript_id, q.position]
 
     page = hits.order_by(*order(hits.selected_columns)).offset(offset).limit(limit + 1).subquery("hit")
-    # Um marcador que já estivesse no texto viraria um `<mark>` falso: sai antes do destaque.
+    # A marker already in the text would become a false `<mark>`: it is removed before highlighting.
     clean = func.translate(page.c.text, _START + _STOP, "")
     marked = func.ts_headline(_config(), clean, tsquery, _HEADLINE_OPTIONS) if tsquery is not None else clean
     rows = (await conn.execute(select(page, marked.label("marked")).order_by(*order(page.c)))).mappings().all()

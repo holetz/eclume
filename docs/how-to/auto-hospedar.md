@@ -54,7 +54,7 @@ A server without an NVIDIA GPU brings up the same stack with `--sem-gpu`: the de
 (faster-whisper `small` int8), without a GPU reservation. The limit: **no diarization** (the transcription
 comes out with a single speaker, and voice identification has nothing to suggest) and several times slower
 than on the GPU. The engine's contract is in
-[jobs-transcricao.md](../standards/api/jobs-transcricao.md#como-o-worker-cumpre-a-sua-parte).
+[jobs-transcricao.md](../standards/api/jobs-transcricao.md#how-the-worker-does-its-part).
 Pass `--sem-gpu` on **every** deploy of that server: without it, compose asks for the GPU and the worker does not
 come up.
 
@@ -118,7 +118,7 @@ in `<ECLUME_DATA_DIR>/secrets/admin-password` (600), and never passes through th
 Transcription needs no provider; the summary does. Register one in **Admin → Agentes**. The
 types and what each requires — an API key, an OpenAI-API-compatible server on your network,
 or the Claude CLI, which only goes into the image with `ECLUME_CLAUDE_CLI=1` — are in the matrix of
-[server-agentes.md](../standards/code/server-agentes.md#o-que-cada-provider-exige). With
+[server-agentes.md](../standards/code/server-agentes.md#what-each-provider-requires). With
 `ECLUME_CLAUDE_CLI=0`, the server image has free software only.
 
 ## 6. Clients on the local network

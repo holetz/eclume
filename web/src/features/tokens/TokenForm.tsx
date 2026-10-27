@@ -8,16 +8,16 @@ import styles from './TokensPage.module.css'
 
 interface TokenFormProps {
   defaults?: { name?: string; scopes?: Scope[]; expiration?: string }
-  /** Mostra a disclosure "Escopos individuais" e as combinações prontas. */
+  /** Shows the "Escopos individuais" disclosure and the ready-made combinations. */
   showIndividual?: boolean
-  /** Uma dica ao lado de um grupo, pelo `id` do grupo. */
+  /** A hint beside a group, keyed by the group's `id`. */
   groupHints?: Partial<Record<string, ReactNode>>
   onCreated: (created: Schemas['TokenCreated']) => void
-  /** Com ele, o formulário ganha "Cancelar" nas `.dialog-actions`. */
+  /** With it, the form gains "Cancelar" in the `.dialog-actions`. */
   onCancel?: () => void
 }
 
-/** Nome, escopos por grupo e validade de um token pessoal; cria e devolve o segredo a quem chamou. */
+/** Name, scopes by group and expiry of a personal token; creates it and returns the secret to the caller. */
 export function TokenForm({ defaults, showIndividual = false, groupHints, onCreated, onCancel }: TokenFormProps) {
   const queryClient = useQueryClient()
   const [name, setName] = useState(defaults?.name ?? '')
@@ -94,7 +94,7 @@ export function TokenForm({ defaults, showIndividual = false, groupHints, onCrea
           <details className="disclosure">
             <summary>Escopos individuais</summary>
             <div className={styles.presets}>
-              {/* Fora do summary: um botão dentro dele seria controle interativo aninhado. */}
+              {/* Outside the summary: a button inside it would be a nested interactive control. */}
               <HelpHint subject="os escopos individuais" title="Escopos individuais" article="criar-token">
                 Para integrações que pedem um escopo fora dos grupos, como o importador do lumea.
               </HelpHint>

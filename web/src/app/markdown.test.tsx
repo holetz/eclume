@@ -7,8 +7,8 @@ function html(markdown: string, components = SAFE_MARKDOWN): HTMLElement {
   return render(<ReactMarkdown components={components}>{markdown}</ReactMarkdown>).container
 }
 
-describe('Markdown seguro', () => {
-  it('troca a imagem por um link de texto, sem carregar nada', () => {
+describe('safe Markdown', () => {
+  it('replaces the image with a text link, loading nothing', () => {
     const root = html('Veja ![o gráfico](https://fora.example/pixel.png) aqui.')
     expect(root.querySelector('img')).toBeNull()
     const link = root.querySelector('a')
@@ -17,17 +17,17 @@ describe('Markdown seguro', () => {
     expect(link?.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
-  it('imagem sem texto alternativo mostra a URL', () => {
+  it('an image without alt text shows the URL', () => {
     expect(html('![](https://fora.example/a.png)').querySelector('a')?.textContent).toBe('https://fora.example/a.png')
   })
 
-  it('link abre em outra aba sem opener nem referer', () => {
+  it('a link opens in another tab with neither opener nor referer', () => {
     const link = html('[o site](https://exemplo.com.br)').querySelector('a')
     expect(link?.getAttribute('target')).toBe('_blank')
     expect(link?.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
-  it('mantém os components da tela, mas não deixa trocar img', () => {
+  it('keeps the screen components, but does not let them replace img', () => {
     const root = html('# Título\n\n![x](https://fora.example/x.png)', safeMarkdown({ h1: ({ children }) => <h2>{children}</h2>, img: () => <img alt="" /> }))
     expect(root.querySelector('h2')?.textContent).toBe('Título')
     expect(root.querySelector('img')).toBeNull()

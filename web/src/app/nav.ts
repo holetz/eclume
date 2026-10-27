@@ -1,16 +1,16 @@
-// Navegação do shell em duas seções: a principal, na barra lateral, e a do cabeçalho, nos menus da
-// engrenagem (Minhas configurações) e da ajuda. Todas as áreas estão ligadas: para acrescentar uma,
-// a spec dona registra o item aqui e a rota em routes.tsx, e `enabled: false` a mantém fora do menu
-// até ficar pronta. As rotas seguem o mapa de telas v6. O painel admin não entra: ele tem conta e
-// login próprios (/admin/entrar). Um item pode ser o destacado (`featured`): a barra lateral o desenha
-// antes dos grupos, como ação primária com ícone. A barra lateral separa os dados da conta (Organizar)
-// das regras que agem sozinhas depois de cada gravação (Regras); a engrenagem agrupa os itens por
-// natureza (`part`), com um rótulo por parte. O grupo Agente reúne o que é do Agente além da conversa
-// (Conversas e Habilidades), logo abaixo do item destacado.
+// Shell navigation in two sections: the main one, in the sidebar, and the header one, in the gear
+// menu ("Minhas configurações") and the help menu. Every area is enabled: to add one, the owning spec
+// registers the item here and the route in routes.tsx, and `enabled: false` keeps it out of the menu
+// until it is ready. The routes follow the v6 screen map. The admin panel is not here: it has its own
+// account and login (/admin/entrar). One item can be the featured one (`featured`): the sidebar draws it
+// before the groups, as a primary action with an icon. The sidebar separates the account's data
+// ("Organizar") from the rules that act on their own after each recording ("Regras"); the gear menu groups
+// the items by nature (`part`), with one label per part. The "Agente" group gathers what belongs to the
+// Agent beyond the conversation ("Conversas" and "Habilidades"), right below the featured item.
 import { MessageSquareText, type LucideIcon } from 'lucide-react'
 
 type NavGroup = 'Agente' | 'Gravações' | 'Organizar' | 'Regras' | 'Minhas configurações' | 'Ajuda'
-/** As partes da engrenagem, na ordem em que aparecem. */
+/** The parts of the gear menu, in the order they appear. */
 export type NavPart = 'Conta e privacidade' | 'Aparelhos' | 'Integrações' | 'Ambiente'
 type NavSection = 'main' | 'header'
 
@@ -19,11 +19,11 @@ interface NavEntry {
   label: string
   section: NavSection
   enabled: boolean
-  /** Prefixos de rota que também acendem o item (a gravação pertence à Biblioteca). */
+  /** Route prefixes that also light the item (a recording belongs to the Library). */
   matches?: string[]
-  /** Prefixos sob a rota do item que são de outro item e não o acendem (Conversas, sob o Agente). */
+  /** Prefixes under the item's route that belong to another item and do not light it (Conversations, under Agent). */
   excludes?: string[]
-  /** A parte da engrenagem em que o item mora (só na seção `header`). */
+  /** The part of the gear menu the item lives in (only in the `header` section). */
   part?: NavPart
 }
 
@@ -33,8 +33,8 @@ interface GroupedItem extends NavEntry {
 }
 
 /**
- * O item destacado da barra lateral: a ação primária, acima dos grupos, sem grupo nem título. Com a
- * conta sem gravação, o shell o desenha como secundário, sem tirá-lo do lugar.
+ * The sidebar's featured item: the primary action, above the groups, with neither group nor title. With
+ * the account having no recording, the shell draws it as secondary, without moving it.
  */
 export interface FeaturedItem extends NavEntry {
   featured: true
@@ -45,8 +45,8 @@ export interface FeaturedItem extends NavEntry {
 type NavItem = GroupedItem | FeaturedItem
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  // O Agente é o primeiro da barra lateral, acima dos grupos; /perguntas, o nome antigo, redireciona
-  // (holetz/eclume#142). As páginas do grupo Agente moram sob /agente/ e não acendem o destacado.
+  // The Agent comes first in the sidebar, above the groups; /perguntas, the old name, redirects
+  // (holetz/eclume#142). The pages of the Agent group live under /agente/ and do not light the featured item.
   {
     to: '/agente',
     label: 'Agente',
@@ -61,11 +61,11 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/', label: 'Biblioteca', group: 'Gravações', section: 'main', enabled: true, matches: ['/gravacoes/'] },
   { to: '/busca', label: 'Busca', group: 'Gravações', section: 'main', enabled: true },
   { to: '/pessoas', label: 'Pessoas', group: 'Organizar', section: 'main', enabled: true },
-  // A coleção convive com a tag e fica em Organizar (holetz/eclume#38).
+  // The collection coexists with the tag and sits in "Organizar" (holetz/eclume#38).
   { to: '/colecoes', label: 'Coleções', group: 'Organizar', section: 'main', enabled: true },
-  // O cadastro de tags fica ao lado das coleções (holetz/eclume#78).
+  // The tag registry sits next to the collections (holetz/eclume#78).
   { to: '/tags', label: 'Tags', group: 'Organizar', section: 'main', enabled: true },
-  // Regras: o que o eclume faz sozinho depois de cada gravação, com a visão geral à frente (holetz/eclume#120).
+  // Rules: what eclume does on its own after each recording, with the overview first (holetz/eclume#120).
   { to: '/config/automacao', label: 'Processamento automático', group: 'Regras', section: 'main', enabled: true },
   { to: '/config/agendas', label: 'Tipos de agenda', group: 'Regras', section: 'main', enabled: true },
   { to: '/config/campos', label: 'Campos personalizados', group: 'Regras', section: 'main', enabled: true },
@@ -83,14 +83,14 @@ export interface NavGroupEntry {
   items: GroupedItem[]
 }
 
-/** O item destacado, quando ligado: a barra lateral o desenha antes dos grupos. */
+/** The featured item, when enabled: the sidebar draws it before the groups. */
 export function featuredItem(items: readonly NavItem[] = NAV_ITEMS): FeaturedItem | undefined {
   return items.find((item): item is FeaturedItem => item.enabled && item.featured === true)
 }
 
 /**
- * Itens ligados, agrupados na ordem da lista e separados por seção; grupos vazios somem. O destacado
- * fica de fora: ele não pertence a grupo.
+ * Enabled items, grouped in list order and split by section; empty groups disappear. The featured item
+ * stays out: it belongs to no group.
  */
 export function navGroups(items: readonly NavItem[] = NAV_ITEMS): Record<NavSection, NavGroupEntry[]> {
   const sections: Record<NavSection, Map<NavGroup, GroupedItem[]>> = { main: new Map(), header: new Map() }
@@ -105,8 +105,8 @@ export function navGroups(items: readonly NavItem[] = NAV_ITEMS): Record<NavSect
 }
 
 /**
- * Se o item está aceso na rota: a própria rota (a raiz só nela mesma), as filhas e os `matches`,
- * menos os `excludes`.
+ * Whether the item is lit on the route: its own route (the root only on itself), its children and the
+ * `matches`, minus the `excludes`.
  */
 export function isItemActive(item: NavItem, pathname: string): boolean {
   if (item.excludes?.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return false

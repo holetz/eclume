@@ -1,8 +1,8 @@
-"""Idioma de transcrição preferido da conta: `GET`/`PATCH /me/transcription`.
+"""The account's preferred transcription language: `GET`/`PATCH /me/transcription`.
 
-A leitura aceita PAT com `recordings:read` (o desktop e o celular nomeiam o padrão da conta); a
-escrita, só a sessão. Nulo é o padrão do servidor (`asr.default_language`). A ordem de resolução
-está em docs/standards/api/jobs-transcricao.md.
+Reading accepts a PAT with `recordings:read` (the desktop and the phone name the account's default);
+writing, only the session. Null is the server default (`asr.default_language`). The resolution
+order is in docs/standards/api/jobs-transcricao.md.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ Member = Annotated[Principal, Depends(requires(session_only=True))]
 
 
 class TranscriptionPreferencePatch(BaseModel):
-    """Corpo do `PATCH /me/transcription`: `language` nulo volta ao padrão do servidor."""
+    """Body of `PATCH /me/transcription`: a null `language` returns to the server default."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -51,7 +51,7 @@ async def _preference_json(conn: AsyncConnection, user_id: UUID) -> dict[str, An
 
 @router.get("/me/transcription")
 async def get_transcription_preference(principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """O idioma preferido da conta e o padrão do servidor, para os clientes o nomearem."""
+    """The account's preferred language and the server default, for the clients to name it."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await _preference_json(conn, principal.user_id)
 
@@ -60,7 +60,7 @@ async def get_transcription_preference(principal: Reader, ctx: Ctx) -> dict[str,
 async def patch_transcription_preference(
     body: TranscriptionPreferencePatch, principal: Member, ctx: Ctx
 ) -> dict[str, Any]:
-    """Muda o idioma preferido; vale para os próximos jobs, não para os já na fila."""
+    """Change the preferred language; it applies to future jobs, not to those already queued."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await conn.execute(
             update(t.users).where(t.users.c.id == principal.user_id).values(transcription_language=body.language)

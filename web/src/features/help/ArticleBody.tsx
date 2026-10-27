@@ -13,8 +13,9 @@ const isElement = (node: ElementContent | undefined, tag: string): node is Eleme
   node?.type === 'element' && node.tagName === tag
 
 /**
- * Ajustes do corpo do artigo sobre a árvore HTML: `id` nos `##` (para o índice) e o blockquote que
- * começa com `**Título**` vira o `.alert.alert-info` do DS, com o título em `.alert-title`.
+ * Adjustments to the article body on the HTML tree: `id` on the `##` (for the table of contents) and
+ * the blockquote that starts with `**Título**` becomes the DS `.alert.alert-info`, with the title in
+ * `.alert-title`.
  */
 function helpArticle() {
   return (tree: Root) => {
@@ -52,8 +53,8 @@ function helpArticle() {
 
 const components: Components = {
   a({ href = '', children }) {
-    // Rotas do app viram navegação do SPA; arquivos servidos ao lado do app (/downloads/, páginas
-    // .html como a referência da API) e endereços externos, links comuns.
+    // App routes become SPA navigation; files served beside the app (/downloads/, .html pages such
+    // as the API reference) and external addresses stay ordinary links.
     const file = href.startsWith('/downloads/') || /\.html(?:[?#]|$)/.test(href)
     if (href.startsWith('/') && !file) return <Link to={href}>{children}</Link>
     if (href.startsWith('/')) return <a href={href}>{children}</a>
@@ -66,8 +67,8 @@ const components: Components = {
 }
 
 /**
- * O corpo Markdown de um artigo de ajuda, no `.doc` do DS; `bare` mostra só o Markdown (a resposta
- * de uma pergunta frequente). HTML cru no Markdown não é renderizado.
+ * The Markdown body of a help article, in the DS `.doc`; `bare` shows only the Markdown (the answer to
+ * a frequently asked question). Raw HTML in the Markdown is not rendered.
  */
 export function ArticleBody({ markdown, bare }: { markdown: string; bare?: boolean }) {
   const body = (

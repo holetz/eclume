@@ -1,7 +1,7 @@
 ---
 type: standard
-title: Painel admin no server — conta de admin, configuração, segredos, usuários e saúde
-description: Como o server atende o painel de administração — a conta e a sessão de admin separadas das contas de usuário, a configuração em runtime da plataforma (platform_settings com o pré-processamento, o idioma automático e a regra identificação ⇒ separação; merge por campo, validação e entrega ao worker pelas options do transcribe), os tipos de agenda padrão, segredos cifrados só de escrita (platform_secrets; o token do HF vai cifrado ao worker GPU), usuários com ativar, desativar e o link de redefinição de senha, a saúde com as filas, o worker GPU, as etapas do pipeline e as sondas dos serviços, e o CLI de contas de admin.
+title: Admin panel in the server — admin account, settings, secrets, users and health
+description: How the server serves the administration panel — the admin account and session separate from the user accounts, the platform's runtime settings (platform_settings with preprocessing, automatic language and the identification ⇒ diarization rule; per-field merge, validation and delivery to the worker through the transcribe options), the default agenda types, write-only encrypted secrets (platform_secrets; the HF token goes encrypted to the GPU worker), users with activate, deactivate and the password reset link, health with the queues, the GPU worker, the pipeline steps and the service probes, and the admin account CLI.
 resource: server/src/eclume_server/settings_admin.py, server/src/eclume_server/health.py, server/src/eclume_server/accounts.py, server/src/eclume_server/cli.py, server/src/eclume_server/routes/admin*.py, server/src/eclume_server/db/migrations/008_conta_por_usuario.sql, server/src/eclume_server/db/migrations/027_redefinicao_de_senha.sql, worker-gpu/src/eclume_worker/health.py, worker-gpu/src/eclume_worker/secrets.py
 tags: [code, server, admin, configuracao, segredos, usuarios, saude, cli]
 timestamp: 2026-10-01
@@ -11,225 +11,225 @@ source: holetz/eclume#12, holetz/eclume#26, holetz/eclume#29, holetz/eclume#32, 
 maintainer: holetz
 ---
 
-# Painel admin no server — conta de admin, configuração, segredos, usuários e saúde
+# Admin panel in the server — admin account, settings, secrets, users and health
 
-O painel admin é da **plataforma**, não de um usuário: a conta de admin é separada das contas de
-usuário e vê e muda só o que é da plataforma. Os providers de agente (`/admin/agent-providers`)
-estão em [server-agentes.md](server-agentes.md); o acordo com o worker GPU, em
+The admin panel belongs to the **platform**, not to a user: the admin account is separate from the
+user accounts and sees and changes only what belongs to the platform. The agent providers (`/admin/agent-providers`)
+are in [server-agentes.md](server-agentes.md); the agreement with the GPU worker, in
 [jobs-transcricao.md](../api/jobs-transcricao.md).
 
-Na tela **Admin → Agentes**, o segredo de cada provider tem o rótulo do seu tipo: o `claude-cli`
-("Claude Code do servidor") pede **"Token do Claude"**, com a explicação de como obtê-lo
-(`claude setup-token` num computador logado na assinatura, token `sk-ant-oat01-…` de 1 ano); os
-demais pedem "Chave de API". Os dois vão no mesmo campo cifrado `api_key`, e o server escolhe a
-variável do `claude -p` pelo prefixo ([server-agentes.md](server-agentes.md)).
+On the **Admin → Agentes** screen, each provider's secret carries the label of its type: `claude-cli`
+("Claude Code do servidor") asks for **"Token do Claude"**, with the explanation of how to get it
+(`claude setup-token` on a computer logged into the subscription, a 1-year `sk-ant-oat01-…` token); the
+others ask for "Chave de API". Both go in the same encrypted field `api_key`, and the server picks the
+`claude -p` variable by the prefix ([server-agentes.md](server-agentes.md)).
 
-## Conta e sessão de admin
+## Admin account and session
 
-- **`admins`** (`id`, `email` único por `lower(email)`, `name`, `password_hash`, `active`,
-  `created_at`, `last_login_at`) e **`admin_sessions`** (SHA-256 do token, CSRF, `admin_id` com
-  `CASCADE`, `expires_at`) ficam sem RLS e sem `GRANT` para `eclume_app`, como `sessions`. O mesmo
-  e-mail pode existir em `users` e em `admins`: são contas distintas, com senhas e sessões próprias.
-- **Login** `POST /admin/auth/login` (público): argon2id, `last_login_at` e rehash como no login de
-  usuário; define `eclume_admin_session` (HttpOnly, Secure, SameSite=Strict,
-  `Path=/api/v1/admin`, `ECLUME_ADMIN_SESSION_TTL_HOURS`, padrão 12 h) e `eclume_admin_csrf`
-  (legível, `Path=/`). `POST /admin/auth/logout` apaga a sessão; `GET /admin/me` devolve a conta.
-- **Fronteira:** toda rota de `/admin/*` depende de `auth.require_admin`, que aceita só o cookie de
-  admin, com double-submit `X-CSRF-Token` = `eclume_admin_csrf` em método mutável. PAT, sessão de
-  usuário ou nada → 401 `unauthorized`. Admin desativado não entra nem mantém a sessão. As regras
-  de credencial comuns estão em [server-nucleo.md](server-nucleo.md#autenticação).
-- **As rotas de admin rodam em `system_tx`** (papel de conexão) e só tocam `platform_*`,
-  `agent_providers`, `admins`, `admin_sessions`, `users` (lista, contagem de gravações por dono e
-  `active`), `sessions` e `api_tokens` (ao desativar), `password_resets` (gerar e vencer o link), além da fila e dos jobs para Saúde e
-  retentativa. **Nenhuma rota de admin devolve conteúdo de usuário:** título, transcrição ou pessoa.
+- **`admins`** (`id`, `email` unique by `lower(email)`, `name`, `password_hash`, `active`,
+  `created_at`, `last_login_at`) and **`admin_sessions`** (SHA-256 of the token, CSRF, `admin_id` with
+  `CASCADE`, `expires_at`) have no RLS and no `GRANT` to `eclume_app`, like `sessions`. The same
+  e-mail may exist in `users` and in `admins`: they are distinct accounts, with their own passwords and sessions.
+- **Login** `POST /admin/auth/login` (public): argon2id, `last_login_at` and rehash as in the user
+  login; sets `eclume_admin_session` (HttpOnly, Secure, SameSite=Strict,
+  `Path=/api/v1/admin`, `ECLUME_ADMIN_SESSION_TTL_HOURS`, default 12 h) and `eclume_admin_csrf`
+  (readable, `Path=/`). `POST /admin/auth/logout` deletes the session; `GET /admin/me` returns the account.
+- **Boundary:** every `/admin/*` route depends on `auth.require_admin`, which accepts only the admin
+  cookie, with double-submit `X-CSRF-Token` = `eclume_admin_csrf` on a mutating method. PAT, user
+  session or nothing → 401 `unauthorized`. A deactivated admin neither enters nor keeps the session. The common
+  credential rules are in [server-nucleo.md](server-nucleo.md#authentication).
+- **The admin routes run in `system_tx`** (connection role) and only touch `platform_*`,
+  `agent_providers`, `admins`, `admin_sessions`, `users` (list, recording count per owner and
+  `active`), `sessions` and `api_tokens` (on deactivation), `password_resets` (generate and expire the link), plus the queue and the jobs for Health and
+  retry. **No admin route returns user content:** title, transcript or person.
 
-## CLI de contas de admin
+## Admin account CLI
 
-- `eclume-server admin create --email --name [--password-stdin]` aplica as migrations e cria uma
-  conta de admin; e-mail já existente ou senha com menos de 12 caracteres saem com código 2.
-- `eclume-server admin set-password --email [--password-stdin]` troca a senha e encerra as sessões
-  do admin; admin inexistente sai com código 2.
-- Criar admin e trocar senha não têm rota no painel. O usuário nasce pelo cadastro
-  ([server-nucleo.md](server-nucleo.md)); os testes usam `accounts.create_user`.
+- `eclume-server admin create --email --name [--password-stdin]` applies the migrations and creates an
+  admin account; an existing e-mail or a password with fewer than 12 characters exit with code 2.
+- `eclume-server admin set-password --email [--password-stdin]` changes the password and ends the
+  admin's sessions; a nonexistent admin exits with code 2.
+- Creating an admin and changing the password have no route in the panel. The user is born through sign-up
+  ([server-nucleo.md](server-nucleo.md)); the tests use `accounts.create_user`.
 
-## Configuração em runtime (`/admin/settings`)
+## Runtime settings (`/admin/settings`)
 
-- **Fonte única:** `platform_settings`, **uma linha** (`id boolean PRIMARY KEY DEFAULT true
-  CHECK (id)`), com os blocos `asr`, `diarization`, `voice_identification` (`enabled`,
-  `suggestion_threshold`), `preprocessing` e `quotas` (holetz/eclume#98, migration 026), mais
-  `updated_at` e `updated_by` (FK para `admins`).
-  Os padrões moram nas migrations 008 e 011. O bloco `summarization` saiu na 011: o resumo
-  automático segue o tipo de agenda e o provider de `summaries`
-  ([processamento automático](processamento-automatico.md)).
-  `eclume_app` lê a linha (o liga-desliga da voz e o resumo precisam); só o admin escreve.
-- O `PATCH` mescla **campo a campo** dentro de cada bloco (e, no `preprocessing`, dentro de cada
-  etapa), grava `updated_at` e `updated_by` e
-  devolve a configuração resultante, com `updated_by` apontando a conta de admin (`{id, name}`).
-- **Validação (422 `validation_failed`, campo `bloco.campo`):** campo desconhecido é recusado
-  (inclusive os que saíram, como `summarization.default_template_id` e
-  `voice_identification.consent_term_text`); `null` só onde o schema aceita; `compute_type` em
-  `int8_float16`, `int8`, `int8_float32` ou `float32` — `float16` é recusado aqui, porque a GTX
-  16xx dá NaN nele ([worker-gpu.md](/docs/project/worker-gpu.md)); `diarization.model` só
-  `pyannote/speaker-diarization-community-1`, o único pipeline que a engine carrega;
+- **Single source:** `platform_settings`, **one row** (`id boolean PRIMARY KEY DEFAULT true
+  CHECK (id)`), with the blocks `asr`, `diarization`, `voice_identification` (`enabled`,
+  `suggestion_threshold`), `preprocessing` and `quotas` (holetz/eclume#98, migration 026), plus
+  `updated_at` and `updated_by` (FK to `admins`).
+  The defaults live in migrations 008 and 011. The `summarization` block left in 011: the automatic
+  summary follows the agenda type and the `summaries` provider
+  ([automatic processing](processamento-automatico.md)).
+  `eclume_app` reads the row (the voice on-off switch and the summary need it); only the admin writes.
+- The `PATCH` merges **field by field** within each block (and, in `preprocessing`, within each
+  step), writes `updated_at` and `updated_by` and
+  returns the resulting settings, with `updated_by` pointing at the admin account (`{id, name}`).
+- **Validation (422 `validation_failed`, field `bloco.campo`):** an unknown field is refused
+  (including the ones that left, such as `summarization.default_template_id` and
+  `voice_identification.consent_term_text`); `null` only where the schema accepts it; `compute_type` in
+  `int8_float16`, `int8`, `int8_float32` or `float32` — `float16` is refused here, because the GTX
+  16xx gives NaN with it ([worker-gpu.md](/docs/project/worker-gpu.md)); `diarization.model` only
+  `pyannote/speaker-diarization-community-1`, the only pipeline the engine loads;
   `min_speakers ≤ max_speakers`; a JSON boolean in any numeric field (integer or float, in every block and
   preprocessing step) is a 422 instead of silently becoming `1`/`1.0` (`asr.batch_size`, `quotas.*`);
-  `"4"` and `4.0` are still accepted; `endpoint_url` obrigatória com `engine: openai-compatible`;
-  `voice_identification.enabled` exige `diarization.enabled` (a impressão é por locutor), checada
-  só quando o `PATCH` toca um dos dois blocos: um estado antigo que a quebra não trava a edição de
-  outro bloco. As regras entre campos valem sobre o estado mesclado, não só sobre o que foi enviado.
-- **Idioma automático:** `asr.default_language: "auto"` manda `options.language = null`, e a
-  engine detecta o idioma de cada gravação.
-- **Padrão do servidor é o último recurso:** `asr.default_language` só vale quando nem o arquivo
-  nem a conta escolhem (`users.transcription_language` nulo); a ordem completa (arquivo → conta →
-  servidor → `pt`) está em [jobs-transcricao.md](../api/jobs-transcricao.md). O `GET
-  /me/transcription` devolve o padrão em `platform_default` para os clientes o nomearem
+  `"4"` and `4.0` are still accepted; `endpoint_url` required with `engine: openai-compatible`;
+  `voice_identification.enabled` requires `diarization.enabled` (the voiceprint is per speaker), checked
+  only when the `PATCH` touches one of the two blocks: an old state that breaks it does not lock the editing of
+  another block. Cross-field rules hold over the merged state, not only over what was sent.
+- **Automatic language:** `asr.default_language: "auto"` sends `options.language = null`, and the
+  engine detects the language of each recording.
+- **The server default is the last resort:** `asr.default_language` only holds when neither the file
+  nor the account chooses (`users.transcription_language` null); the full order (file → account →
+  server → `pt`) is in [jobs-transcricao.md](../api/jobs-transcricao.md). `GET
+  /me/transcription` returns the default in `platform_default` for the clients to name it
   ("Padrão do servidor: Português").
-- **Bloco `preprocessing`:** `denoise` (`enabled`, `method` `rnnoise`/`afftdn`, `strength` 0–1),
-  `loudnorm` (`target_lufs` −30 a −10, `true_peak_db` −9 a 0, `lra` 1–20), `trim_silence`
-  (`min_silence_s` 1–30, `threshold_db` −80 a −20) e `split_channels` (`enabled`). A conversão
-  para 16 kHz mono não tem chave. Vai inteiro ao worker em `options.preprocess`; a ordem e o
-  tratamento estão no [contrato de jobs](../api/jobs-transcricao.md#pré-processamento).
-- **Vale para os próximos jobs.** O worker não lê o banco: `transcribe_options` monta as
-  `options` do `transcribe` a partir de `platform_settings` num lugar só (`recordings.insert_job`),
-  usado pelo upload completo, pela retranscrição e pela retentativa. Transcrições prontas não mudam.
-- **Bloco `voice_identification`:** o liga-desliga e o limiar da plataforma. Desligar apaga, na
-  mesma transação do `PATCH`, os `speaker_embeddings` e as sugestões pendentes de toda a
-  plataforma, e depois enfileira o `purge_embedding_objects`. As regras estão em
+- **`preprocessing` block:** `denoise` (`enabled`, `method` `rnnoise`/`afftdn`, `strength` 0–1),
+  `loudnorm` (`target_lufs` −30 to −10, `true_peak_db` −9 to 0, `lra` 1–20), `trim_silence`
+  (`min_silence_s` 1–30, `threshold_db` −80 to −20) and `split_channels` (`enabled`). The conversion
+  to 16 kHz mono has no key. It goes whole to the worker in `options.preprocess`; the order and the
+  treatment are in the [jobs contract](../api/jobs-transcricao.md#preprocessing).
+- **It holds for the next jobs.** The worker does not read the database: `transcribe_options` builds the
+  `transcribe` `options` from `platform_settings` in a single place (`recordings.insert_job`),
+  used by the completed upload, by retranscription and by retry. Finished transcripts do not change.
+- **`voice_identification` block:** the platform's on-off switch and threshold. Turning it off deletes, in the
+  same transaction as the `PATCH`, the `speaker_embeddings` and the pending suggestions of the whole
+  platform, and then enqueues `purge_embedding_objects`. The rules are in
   [identificacao-por-voz.md](identificacao-por-voz.md).
 
-## Tipos de agenda padrão (`/admin/default-agenda-types`)
+## Default agenda types (`/admin/default-agenda-types`)
 
-`default_agenda_types` é da plataforma (sem dono nem RLS; só o papel de conexão e a sessão de
-admin): nome, padrão de título, como identificar, tags padrão, instruções de resumo, `position` e
-`include_for_new_users`. Os marcados são copiados para cada conta no cadastro
-(`eclume_seed_user_defaults`); mudar ou excluir um padrão não mexe nas cópias que as contas já
-têm. Nome repetido: 409 no `POST`, 422 em `name` no `PATCH`.
+`default_agenda_types` belongs to the platform (no owner and no RLS; only the connection role and the admin
+session): name, title pattern, how to identify, default tags, summary instructions, `position` and
+`include_for_new_users`. The marked ones are copied to each account at sign-up
+(`eclume_seed_user_defaults`); changing or deleting a default does not touch the copies the accounts already
+have. A repeated name: 409 on `POST`, 422 on `name` in the `PATCH`.
 
-## Segredos (`/admin/secrets`)
+## Secrets (`/admin/secrets`)
 
-- `platform_secrets (name, value_encrypted, updated_at, updated_by)`, cifrado com
-  `crypto.encrypt` (AES-256-GCM, [server-agentes.md](server-agentes.md)), sem nenhum `GRANT` para
-  `eclume_app`. A API **nunca devolve o valor**: a listagem traz cada nome conhecido com `is_set` e
-  `updated_at`. `PUT` grava ou troca (204), `DELETE` apaga (404 se não havia).
-- **Nomes fixos, cada um com um leitor:** `hf_token` (worker GPU) e `anthropic_api_key` (provider
-  `anthropic` sem chave própria, que vence quando existe). Outro nome → 422. Um segredo novo entra
-  aqui junto com o código que o lê. Quem lê para trabalhar (enfileiramento, worker CPU) usa
-  `settings_admin.secret_encrypted(conn, name)` com o papel de conexão.
-- **O token do HF viaja cifrado.** Ao enfileirar, o server acrescenta `hf_token_encrypted` (o texto
-  `v1:` como está no banco) às `options` do payload — nunca a `transcription_jobs.options`. O
-  worker abre com a mesma chave (`ECLUME_ENCRYPTION_KEY`, ou o HKDF de `ECLUME_SECRET_KEY`), por
-  uma cópia do formato em `eclume_worker/secrets.py`; o segredo da plataforma vence `HF_TOKEN` e o
-  arquivo montado. Não abrir não falha o job: aviso `hf_token_undecryptable` e o token do ambiente.
+- `platform_secrets (name, value_encrypted, updated_at, updated_by)`, encrypted with
+  `crypto.encrypt` (AES-256-GCM, [server-agentes.md](server-agentes.md)), with no `GRANT` at all to
+  `eclume_app`. The API **never returns the value**: the listing brings each known name with `is_set` and
+  `updated_at`. `PUT` writes or replaces (204), `DELETE` deletes (404 if there was none).
+- **Fixed names, each with one reader:** `hf_token` (GPU worker) and `anthropic_api_key` (an
+  `anthropic` provider without its own key, which wins when it exists). Another name → 422. A new secret comes in
+  here together with the code that reads it. Whoever reads it to work (enqueueing, CPU worker) uses
+  `settings_admin.secret_encrypted(conn, name)` with the connection role.
+- **The HF token travels encrypted.** On enqueueing, the server adds `hf_token_encrypted` (the
+  `v1:` text as it is in the database) to the payload's `options` — never to `transcription_jobs.options`. The
+  worker opens it with the same key (`ECLUME_ENCRYPTION_KEY`, or the HKDF of `ECLUME_SECRET_KEY`), through
+  a copy of the format in `eclume_worker/secrets.py`; the platform secret wins over `HF_TOKEN` and the
+  mounted file. Failing to open does not fail the job: warning `hf_token_undecryptable` and the environment's token.
 
-- **Bloco `quotas`** (holetz/eclume#98): as cotas padrão de toda conta — `storage_bytes` (10 GiB),
-  `file_bytes` (2 GiB), `open_uploads` (3), `gpu_minutes_24h` (600) e `agent_requests_24h` (200);
-  `null` é sem limite. Mesclado campo a campo pelo mesmo `PATCH /admin/settings`, com inteiros
-  `>= 0` ou `null`. A conta da dona não é conhecida pela migration: ela se sobrepõe pelo painel
-  depois do deploy. Regras de uso em [server-nucleo.md](server-nucleo.md#upload-e-áudio) e
-  [server-agentes.md](server-agentes.md#cota-de-pedidos-ao-agente).
+- **`quotas` block** (holetz/eclume#98): the default quotas of every account — `storage_bytes` (10 GiB),
+  `file_bytes` (2 GiB), `open_uploads` (3), `gpu_minutes_24h` (600) and `agent_requests_24h` (200);
+  `null` is no limit. Merged field by field by the same `PATCH /admin/settings`, with integers
+  `>= 0` or `null`. The owner's account is not known to the migration: she overrides it through the panel
+  after the deploy. Usage rules in [server-nucleo.md](server-nucleo.md#upload-and-audio) and
+  [server-agentes.md](server-agentes.md#agent-request-quota).
 
-## Usuários (`/admin/users`)
+## Users (`/admin/users`)
 
-- A listagem devolve `AdminUser`: os dados da conta (`User`, com `notice_version` e
-  `notice_accepted_at`), `recording_count`, o uso (`usage`: armazenamento, uploads abertos,
-  minutos de áudio e pedidos ao agente em 24 h, `quotas.usage`) e a sobreposição das cotas
-  (`quotas`, só os campos sobrepostos, ou `null`), do mais novo para o mais antigo. Nada do
-  conteúdo.
-- `PATCH /admin/users/{id}` aceita `active` e `quotas` (ao menos um). Desativar apaga as sessões e
-  revoga os PATs do usuário e vence o link de redefinição pendente; reativar devolve o acesso por um login novo. `quotas` troca a
-  sobreposição inteira (`users.quotas`, JSONB): os campos enviados valem sobre o padrão, `null`
-  num campo é sem limite e `quotas: null` volta a conta ao padrão. Usuário inexistente → 404.
-- `DELETE /admin/users/{id}` exclui a conta (204; inexistente, 404) com `accounts.purge_user`, o
-  mesmo da exclusão pela própria pessoa, sem a senha e com o papel de conexão: as FKs levam tudo em
-  cascata, os gatilhos põem os objetos na fila de exclusão do bucket, os `transcribe` em aberto
-  recebem o pedido de cancelamento e o e-mail fica livre para um cadastro novo. O painel pede
-  confirmação digitando o e-mail.
-- `POST /admin/users/{id}/password-reset` (201 `PasswordResetLink`) gera o link de redefinição de
-  senha com `accounts.create_password_reset`: segredo de 32 bytes no fragmento de
-  `<url pública>/redefinir-senha#<segredo>`, com a URL de `server_info` (`ECLUME_PUBLIC_URL`, não
-  o `Host` do pedido), válido por 24 h, e `admin_id` de quem gerou. Gerar outro vence os pendentes
-  da conta; conta desativada → 409 `conflict`; inexistente → 404. O link só volta nesta resposta, e
-  o painel o mostra uma vez para o admin copiar e entregar por fora, depois de confirmar quem pede.
-  O admin nunca vê nem define a senha; o uso do link está em
-  [server-nucleo.md](server-nucleo.md#autenticação).
+- The listing returns `AdminUser`: the account data (`User`, with `notice_version` and
+  `notice_accepted_at`), `recording_count`, the usage (`usage`: storage, open uploads,
+  audio minutes and agent requests in 24 h, `quotas.usage`) and the quota override
+  (`quotas`, only the overridden fields, or `null`), from newest to oldest. Nothing of the
+  content.
+- `PATCH /admin/users/{id}` accepts `active` and `quotas` (at least one). Deactivating deletes the user's sessions and
+  revokes their PATs and expires the pending reset link; reactivating gives access back through a new login. `quotas` replaces the
+  whole override (`users.quotas`, JSONB): the fields sent hold over the default, `null`
+  in a field is no limit and `quotas: null` returns the account to the default. Nonexistent user → 404.
+- `DELETE /admin/users/{id}` deletes the account (204; nonexistent, 404) with `accounts.purge_user`, the
+  same as deletion by the person themselves, without the password and with the connection role: the FKs cascade
+  everything, the triggers put the objects in the bucket deletion queue, the open `transcribe` jobs
+  receive the cancellation request and the e-mail is free for a new sign-up. The panel asks for
+  confirmation by typing the e-mail.
+- `POST /admin/users/{id}/password-reset` (201 `PasswordResetLink`) generates the password reset
+  link with `accounts.create_password_reset`: a 32-byte secret in the fragment of
+  `<url pública>/redefinir-senha#<segredo>`, with the URL from `server_info` (`ECLUME_PUBLIC_URL`, not
+  the request's `Host`), valid for 24 h, and the `admin_id` of who generated it. Generating another expires the
+  account's pending ones; deactivated account → 409 `conflict`; nonexistent → 404. The link only comes back in this response, and
+  the panel shows it once for the admin to copy and hand over out of band, after confirming who is asking.
+  The admin never sees or sets the password; the use of the link is in
+  [server-nucleo.md](server-nucleo.md#authentication).
 
-## Saúde (`/admin/health`)
+## Health (`/admin/health`)
 
-- **Heartbeat do worker GPU:** o worker substitui `eclume:gpu:health` a cada 15 s (TTL 45 s) com
-  versão, engine, dispositivo, `busy`, os modelos residentes (o ASR e o da etapa) e, com NVML, nome
-  da GPU, VRAM usada e total e utilização; no SIGTERM, apaga o hash. Hash ausente = worker parado
-  há mais de 45 s → `worker: null` e `gpu: null`. Os campos estão no
-  [contrato de jobs](../api/jobs-transcricao.md).
-- **Filas:** por fila arq (`eclume:gpu`, `eclume:default`, `eclume:agents`), `running` = ids do zset com
-  `arq:in-progress:<id>`, `queued` = o resto. São números da instância, sem ids nem conteúdo.
-- **Jobs retidos (`held_jobs`, holetz/eclume#98):** só números — `account_turn`, os jobs que
-  aguardam a vez da conta (ela já tem um `transcribe` na GPU), e `gpu_minutes`, os que aguardam a
-  janela de minutos de 24 h (`dispatch.held_counts`). O
-  [despacho na vez da conta](../api/jobs-transcricao.md#filas) explica a retenção.
-- **Jobs e falhas da plataforma**, lidos com o papel de conexão: `running_jobs` são os
-  `transcription_jobs` `queued`/`running` **despachados** (o retido conta em `held_jobs`, e por
-  isso o `queued_over_2h` do `saude --json` não alerta pela espera da vez) com etapa, progresso e o `updated_at` do hash de
-  progresso; `recent_failures` são as últimas 20 etapas do pipeline `failed` em 24 h (todas as
-  etapas), com `step`, e `job_id` e `retryable` só no pré-processamento e na transcrição, que são
-  do job que o admin retenta (a falha passageira do [job morto](../api/jobs-transcricao.md#job-morto),
-  falta de VRAM, S3). O título da gravação nunca sai: `recording_title` é sempre o rótulo fixo
+- **GPU worker heartbeat:** the worker replaces `eclume:gpu:health` every 15 s (TTL 45 s) with
+  version, engine, device, `busy`, the resident models (the ASR one and the step's) and, with NVML, GPU
+  name, used and total VRAM and utilization; on SIGTERM, it deletes the hash. Hash missing = worker stopped
+  for more than 45 s → `worker: null` and `gpu: null`. The fields are in the
+  [jobs contract](../api/jobs-transcricao.md).
+- **Queues:** per arq queue (`eclume:gpu`, `eclume:default`, `eclume:agents`), `running` = ids of the zset with
+  `arq:in-progress:<id>`, `queued` = the rest. They are instance numbers, with no ids or content.
+- **Held jobs (`held_jobs`, holetz/eclume#98):** numbers only — `account_turn`, the jobs that
+  wait for the account's turn (it already has a `transcribe` on the GPU), and `gpu_minutes`, the ones that wait for the
+  24-h minutes window (`dispatch.held_counts`). The
+  [dispatch on the account's turn](../api/jobs-transcricao.md#queues) explains the holding.
+- **Platform jobs and failures**, read with the connection role: `running_jobs` are the
+  **dispatched** `queued`/`running` `transcription_jobs` (a held one counts in `held_jobs`, and that
+  is why the `queued_over_2h` of `saude --json` does not alert on the wait for the turn) with step, progress and the `updated_at` of the
+  progress hash; `recent_failures` are the last 20 `failed` pipeline steps in 24 h (all the
+  steps), with `step`, and `job_id` and `retryable` only on preprocessing and transcription, which belong
+  to the job the admin retries (the transient failure of the [dead job](../api/jobs-transcricao.md#dead-job),
+  lack of VRAM, S3). The recording title never goes out: `recording_title` is always the fixed label
   "Gravação de usuário".
-- **Etapas (`steps`):** para cada etapa do pipeline fora o recebido, nas últimas 24 h, as
-  execuções concluídas (`done` e `failed`), a mediana de `duration_ms` das feitas e as falhas, num
-  `SELECT` só de `pipeline_steps` com o papel de conexão. Só números; as cinco etapas aparecem
-  sempre, zeradas quando não rodaram.
-- **Serviços (`services`):** uma sonda por serviço, em paralelo, com teto de 2 s cada —
-  `healthy`, `degraded`, `down` ou `absent`:
+- **Steps (`steps`):** for each pipeline step except received, in the last 24 h, the
+  completed runs (`done` and `failed`), the median `duration_ms` of the done ones and the failures, in a
+  single `SELECT` of `pipeline_steps` with the connection role. Numbers only; the five steps always
+  appear, zeroed when they did not run.
+- **Services (`services`):** one probe per service, in parallel, with a ceiling of 2 s each —
+  `healthy`, `degraded`, `down` or `absent`:
 
-  | Serviço | Sonda |
+  | Service | Probe |
   |---|---|
-  | `api` | a versão do server |
-  | `postgres` | a RLS forçada (`relforcerowsecurity`) em todas as tabelas do usuário: detail "RLS ativa" |
+  | `api` | the server version |
+  | `postgres` | forced RLS (`relforcerowsecurity`) on all the user tables: detail "RLS ativa" |
   | `redis` | `PING` |
-  | `storage` | `head_bucket`; acima de 1 s, `degraded` |
-  | `gpu_worker` | o heartbeat `eclume:gpu:health` |
-  | `cpu_worker` | as chaves `eclume:default:health-check` e `eclume:agents:health-check` do arq (os dois workers CPU), renovadas a cada 15 s (`health_check_interval`); faltando uma, `down` com o detalhe `sem worker em <fila>` |
-  | `mcp` | `absent` até holetz/eclume#35 |
+  | `storage` | `head_bucket`; above 1 s, `degraded` |
+  | `gpu_worker` | the `eclume:gpu:health` heartbeat |
+  | `cpu_worker` | the arq keys `eclume:default:health-check` and `eclume:agents:health-check` (the two CPU workers), renewed every 15 s (`health_check_interval`); with one missing, `down` with the detail `sem worker em <fila>` |
+  | `mcp` | `absent` until holetz/eclume#35 |
 
-  A cota do bucket não aparece: a API S3 não a expõe.
-- **Prontidão (`GET /api/v1/health/ready`, pública):** reaproveita as sondas `postgres`, `redis` e
-  `storage` acima (`check_*` em `health.py`, teto de 2 s, em paralelo) e responde 200 com tudo `ok`
-  ou 503 com o nome de quem caiu (`down`), sem latência nem mensagem de erro, porque é pública.
-  `/api/v1/health` segue estático (sinal de vida, `deploy.sh`, descritor). O healthcheck do
-  `server` no compose de produção é a prontidão.
-- **Sondas dos workers sem subir o worker:** `eclume-server sonda fila <default|agents>` sai 0 se a
-  chave `eclume:<fila>:health-check` existe; `python -m eclume_worker.health --sonda` faz o mesmo
-  com `eclume:gpu:health`. São os healthchecks de `worker` (as duas filas, pela sonda leve
-  `python -m eclume_server.sonda fila default agents`) e `worker-gpu` (60 s, 3 tentativas,
-  `start_interval` de 2 s; `start_period` de 120 s no GPU).
-- **`eclume-server saude --json`:** a mesma `admin_health()` da tela, mais um `summary`
-  (`queued_over_2h`, `failed_last_24h`, `provider_auth_last_24h`, `services_down`) e o
-  `claude_token` (`status` `ok`/`unknown`, `expires_at`, `days_left`). É o que o `vigia.sh` do host
-  lê por `docker exec`, para a Saúde e o alerta nunca discordarem; o log do CLI vai para o stderr.
-- **Vencimento do token do Claude:** `agent_providers.key_set_at` (migration 025) muda sempre que a
-  chave muda (criar, trocar, apagar). Um `sk-ant-oat…` vence `key_set_at + 365 dias`; as chaves
-  anteriores à migration receberam a data de criação do provider (o aviso só pode vir cedo). Token
-  só no `ECLUME_CLAUDE_OAUTH_TOKEN` do env não tem data: `unknown`.
+  The bucket quota does not appear: the S3 API does not expose it.
+- **Readiness (`GET /api/v1/health/ready`, public):** reuses the `postgres`, `redis` and
+  `storage` probes above (`check_*` in `health.py`, 2-s ceiling, in parallel) and answers 200 with everything `ok`
+  or 503 with the name of whoever went down (`down`), with no latency or error message, because it is public.
+  `/api/v1/health` stays static (sign of life, `deploy.sh`, descriptor). The healthcheck of the
+  `server` in the production compose is the readiness.
+- **Worker probes without starting the worker:** `eclume-server sonda fila <default|agents>` exits 0 if the
+  key `eclume:<fila>:health-check` exists; `python -m eclume_worker.health --sonda` does the same
+  with `eclume:gpu:health`. They are the healthchecks of `worker` (both queues, through the light probe
+  `python -m eclume_server.sonda fila default agents`) and `worker-gpu` (60 s, 3 attempts,
+  `start_interval` of 2 s; `start_period` of 120 s on the GPU).
+- **`eclume-server saude --json`:** the same `admin_health()` as the screen, plus a `summary`
+  (`queued_over_2h`, `failed_last_24h`, `provider_auth_last_24h`, `services_down`) and the
+  `claude_token` (`status` `ok`/`unknown`, `expires_at`, `days_left`). It is what the host's `vigia.sh`
+  reads through `docker exec`, so that Health and the alert never disagree; the CLI log goes to stderr.
+- **Claude token expiry:** `agent_providers.key_set_at` (migration 025) changes whenever the
+  key changes (create, replace, delete). An `sk-ant-oat…` expires at `key_set_at + 365 dias`; keys
+  older than the migration received the provider's creation date (the warning can only come early). A token
+  only in the env's `ECLUME_CLAUDE_OAUTH_TOKEN` has no date: `unknown`.
 
-## Retentativa (`POST /admin/jobs/{job_id}/retry`)
+## Retry (`POST /admin/jobs/{job_id}/retry`)
 
-- Só a sessão de admin. Vale para a gravação de qualquer usuário — por isso roda com o papel de
-  conexão —, mas só para o job **mais recente** da gravação e em estado `failed`: job inexistente
-  é 404; job antigo ou ainda em aberto é 409.
-- A rota **trava a linha da gravação** (`recordings.lock_recording`, `SELECT … FOR UPDATE` num
-  comando próprio) antes de ler o estado, como a retranscrição do dono: dois pedidos simultâneos
-  criam uma revisão só, e o segundo recebe 409 em problem+json, nunca 500.
-- Cria o job da revisão seguinte com a configuração atual da plataforma
-  (`recordings.start_next_revision`, o mesmo caminho da retranscrição do dono), põe a gravação em
-  `queued`, enfileira o `transcribe` com o token do HF cifrado e responde 202 com
+- Admin session only. It holds for the recording of any user — that is why it runs with the
+  connection role —, but only for the recording's **most recent** job and in state `failed`: a nonexistent job
+  is 404; an old or still open job is 409.
+- The route **locks the recording row** (`recordings.lock_recording`, `SELECT … FOR UPDATE` in its
+  own command) before reading the state, like the owner's retranscription: two simultaneous requests
+  create a single revision, and the second gets 409 in problem+json, never 500.
+- It creates the job of the next revision with the platform's current settings
+  (`recordings.start_next_revision`, the same path as the owner's retranscription), sets the recording to
+  `queued`, enqueues the `transcribe` with the encrypted HF token and answers 202 with
   `AdminJobRetried` (`job_id`, `recording_id`, `revision`, `state: queued`, `queued_at`).
-- A Saúde do web mostra "Tentar de novo" em cada falha recente, destacado quando `retryable`.
+- The web Health shows "Tentar de novo" on each recent failure, highlighted when `retryable`.
 
-## Testes
+## Tests
 
-`server/tests/test_admin_auth.py` (a sessão de admin e a fronteira com as credenciais de usuário),
-`test_admin_settings.py`, `test_admin_secrets.py`, `test_admin_health.py` (com a retentativa) e
-`test_cli.py` rodam com Postgres, Redis e MinIO reais e a conformidade estrita ligada; a fixture
-`admin` abre a sessão de uma conta de admin nova e devolve a plataforma aos padrões antes e depois
-do teste. O heartbeat é semeado no Redis do teste. O lado do worker é
-`worker-gpu/tests/test_health.py` e os testes de token em `test_jobs.py`.
+`server/tests/test_admin_auth.py` (the admin session and the boundary with the user credentials),
+`test_admin_settings.py`, `test_admin_secrets.py`, `test_admin_health.py` (with the retry) and
+`test_cli.py` run with real Postgres, Redis and MinIO and strict conformance on; the
+`admin` fixture opens the session of a new admin account and returns the platform to the defaults before and after
+the test. The heartbeat is seeded in the test's Redis. The worker side is
+`worker-gpu/tests/test_health.py` and the token tests in `test_jobs.py`.

@@ -17,7 +17,7 @@ function mockSpeakersApi(settings: Settings = fixtures.adminSettings(), extra: P
     'GET /api/v1/admin/me': () => fixtures.adminMe(),
     'GET /api/v1/admin/settings': () => settings,
     'GET /api/v1/admin/secrets': () => fixtures.secretList(),
-    // O server devolve a configuração com o que foi mandado.
+    // The server returns the settings with what was sent.
     'PATCH /api/v1/admin/settings': async (request) => {
       const sent = await request.json()
       return {
@@ -32,8 +32,8 @@ function mockSpeakersApi(settings: Settings = fixtures.adminSettings(), extra: P
 
 const sentBody = (http: ReturnType<typeof mockFetch>) => http.requests('PATCH /api/v1/admin/settings')[0].json()
 
-describe('Locutores', () => {
-  it('mostra a separação e a identificação do DS e salva os dois blocos', async () => {
+describe('Speakers', () => {
+  it('shows the DS diarization and identification and saves both blocks', async () => {
     const http = mockSpeakersApi()
     renderApp('/admin/locutores')
     expect(await screen.findByRole('heading', { level: 2, name: '1 · Separação' })).toBeInTheDocument()
@@ -60,7 +60,7 @@ describe('Locutores', () => {
     })
   })
 
-  it('desligar a separação desliga a identificação e pede confirmação da purga', async () => {
+  it('turning diarization off turns identification off and asks to confirm the purge', async () => {
     const http = mockSpeakersApi()
     renderApp('/admin/locutores')
     await userEvent.click(await screen.findByRole('switch', { name: 'Separar os locutores com pyannote' }))
@@ -83,7 +83,7 @@ describe('Locutores', () => {
     })
   })
 
-  it('preserva as pessoas esperadas fora das opções como Personalizado', async () => {
+  it('keeps expected people outside the options as Personalizado', async () => {
     const settings = fixtures.adminSettings()
     settings.diarization.min_speakers = 2
     settings.diarization.max_speakers = 5
@@ -92,7 +92,7 @@ describe('Locutores', () => {
     renderApp('/admin/locutores')
     const speakers = await screen.findByRole('radiogroup', { name: 'Pessoas esperadas' })
     expect(within(speakers).getByRole('radio', { name: 'Personalizado (2–5)' })).toBeChecked()
-    // Um limiar salvo abaixo de 0,50 aparece como está.
+    // A threshold saved below 0,50 shows as it is.
     expect(screen.getByLabelText('Limiar de correspondência · 0,45')).toHaveValue('0.45')
     await userEvent.click(screen.getByRole('switch', { name: 'Sugerir quem está falando pelas amostras de voz' }))
     await userEvent.click(screen.getByRole('button', { name: 'Salvar' }))
@@ -100,7 +100,7 @@ describe('Locutores', () => {
     expect((await sentBody(http)).diarization).toEqual({ enabled: true, min_speakers: 2, max_speakers: 5 })
   })
 
-  it('grava, substitui e apaga o token do Hugging Face na hora', async () => {
+  it('saves, replaces and deletes the Hugging Face token at once', async () => {
     const secrets = fixtures.secretList()
     const http = mockSpeakersApi(fixtures.adminSettings(), {
       'GET /api/v1/admin/secrets': () => secrets,
@@ -124,7 +124,7 @@ describe('Locutores', () => {
     expect(new URL(put.url).pathname).toBe('/api/v1/admin/secrets/hf_token')
     expect(await put.json()).toEqual({ value: 'hf_novo' })
     expect(screen.queryByText('hf_novo')).not.toBeInTheDocument()
-    // O Enter do segredo não salva o form da página.
+    // Enter in the secret does not save the page form.
     expect(http.requests('PATCH /api/v1/admin/settings')).toHaveLength(0)
 
     await userEvent.click(within(hf).getByRole('button', { name: 'Apagar' }))
@@ -134,7 +134,7 @@ describe('Locutores', () => {
     expect(within(hf).getByLabelText('Token do Hugging Face')).toHaveValue('')
   })
 
-  it('a rota antiga de voz leva a Locutores', async () => {
+  it('the old voice route leads to Locutores', async () => {
     mockSpeakersApi()
     renderApp('/admin/voz')
     expect(await screen.findByRole('heading', { level: 1, name: 'Locutores' })).toBeInTheDocument()

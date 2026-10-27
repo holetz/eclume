@@ -1,8 +1,8 @@
-"""As habilidades do Agente: instruções reutilizáveis da pessoa, sob a RLS do dono.
+"""The Agent's skills: the person's reusable instructions, under the owner's RLS.
 
-Uma habilidade tem um nome curto (o `/nome` da conversa), a descrição que o agente lê para
-escolher, as instruções em Markdown e, opcionalmente, as ferramentas permitidas (nulo = todas).
-Até `MAX_SKILLS` por conta. Contrato em docs/standards/code/server-agentes.md §Agente.
+A skill has a short name (the conversation's `/name`), the description the agent reads to choose,
+the instructions in Markdown and, optionally, the allowed tools (null = all).
+Up to `MAX_SKILLS` per account. Contract in docs/standards/code/server-agentes.md §Agente.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ MAX_DESCRIPTION = 300
 MAX_INSTRUCTIONS = 8000
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{1,39}$")
 SKILL_TAKEN = "Já existe uma habilidade com esse nome."
-# `/nome` no começo da mensagem escolhe a habilidade; o resto é a pergunta.
+# `/name` at the start of the message picks the skill; the rest is the question.
 _PREFIX = re.compile(r"^/([a-z0-9][a-z0-9-]{1,39})(?:\s+|$)", re.IGNORECASE)
 
 K = t.agent_skills.c
@@ -53,7 +53,7 @@ def skill_json(row: Row) -> dict[str, Any]:
 
 
 def check_name(value: str) -> str:
-    """O nome normalizado (sem barra, minúsculo) ou 422."""
+    """The normalized name (no slash, lowercase) or 422."""
     name = skill_name(value) or ""
     if not NAME.match(name):
         raise invalid_field("name", "de 2 a 40 letras minúsculas, números e hífens, começando por letra ou número")
@@ -61,7 +61,7 @@ def check_name(value: str) -> str:
 
 
 def check_tools(value: list[str] | None) -> list[str] | None:
-    """As ferramentas permitidas, sem repetir, todas do catálogo; ou 422."""
+    """The allowed tools, deduplicated, all from the catalog; or 422."""
     if value is None:
         return None
     known = {item["name"] for item in default_registry().catalog()}
@@ -89,18 +89,18 @@ async def _get(conn: AsyncConnection, skill_id: UUID) -> Row:
 
 
 async def list_skills(conn: AsyncConnection) -> dict[str, Any]:
-    """As habilidades da conta, por nome."""
+    """The account's skills, by name."""
     rows = (await conn.execute(select(t.agent_skills).order_by(K.name))).mappings().all()
     return {"items": [skill_json(row) for row in rows]}
 
 
 async def get_skill(conn: AsyncConnection, skill_id: UUID) -> dict[str, Any]:
-    """Uma habilidade da conta, ou 404."""
+    """A skill of the account, or 404."""
     return skill_json(await _get(conn, skill_id))
 
 
 async def create_skill(conn: AsyncConnection, owner_id: UUID, values: dict[str, Any]) -> dict[str, Any]:
-    """Cadastra a habilidade; nome repetido 409, acima de `MAX_SKILLS` 422."""
+    """Registers the skill; a repeated name 409, above `MAX_SKILLS` 422."""
     count = (await conn.execute(select(func.count()).select_from(t.agent_skills))).scalar_one()
     if count >= MAX_SKILLS:
         raise invalid_field("name", f"até {MAX_SKILLS} habilidades por conta")
@@ -122,7 +122,7 @@ async def create_skill(conn: AsyncConnection, owner_id: UUID, values: dict[str, 
 
 
 async def update_skill(conn: AsyncConnection, skill_id: UUID, values: dict[str, Any]) -> dict[str, Any]:
-    """Edita os campos enviados; `allowed_tools: null` libera todas as ferramentas."""
+    """Edits the fields sent; `allowed_tools: null` allows every tool."""
     await _get(conn, skill_id)
     changes: dict[str, Any] = {}
     if "name" in values:
@@ -157,13 +157,13 @@ async def update_skill(conn: AsyncConnection, skill_id: UUID, values: dict[str, 
 
 
 async def delete_skill(conn: AsyncConnection, skill_id: UUID) -> None:
-    """Exclui a habilidade; as mensagens que a usaram guardam o nome."""
+    """Deletes the skill; the messages that used it keep the name."""
     await _get(conn, skill_id)
     await conn.execute(delete(t.agent_skills).where(K.id == skill_id))
 
 
 def split_prefix(message: str) -> tuple[str | None, str]:
-    """`/nome resto` → `("nome", "resto")`; sem prefixo, `(None, message)`."""
+    """`/name rest` → `("name", "rest")`; without a prefix, `(None, message)`."""
     found = _PREFIX.match(message.strip())
     if found is None:
         return None, message
@@ -171,19 +171,19 @@ def split_prefix(message: str) -> tuple[str | None, str]:
 
 
 def as_skill(row: Row) -> Skill:
-    """A habilidade no formato do protocolo do agente."""
+    """The skill in the agent protocol's format."""
     tools = tuple(row["allowed_tools"]) if row["allowed_tools"] is not None else None
     return Skill(row["name"], row["description"], row["instructions"], tools)
 
 
 async def enabled_skill(conn: AsyncConnection, name: str) -> Row | None:
-    """A habilidade ligada com esse nome, ou `None`."""
+    """The enabled skill with that name, or `None`."""
     stmt = select(t.agent_skills).where(K.name == name, K.enabled.is_(True))
     return (await conn.execute(stmt)).mappings().first()
 
 
 async def skill_briefs(conn: AsyncConnection) -> list[tuple[str, str]]:
-    """`(nome, descrição)` das habilidades ligadas, as que o `system` lista."""
+    """`(name, description)` of the enabled skills, the ones the `system` lists."""
     stmt = select(K.name, K.description).where(K.enabled.is_(True)).order_by(K.name).limit(MAX_LISTED_SKILLS)
     return [(row.name, row.description) for row in (await conn.execute(stmt)).all()]
 

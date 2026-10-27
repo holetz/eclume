@@ -14,9 +14,10 @@ function useOnline() {
 }
 
 /**
- * A faixa de conexão no topo do shell: sem rede, ou com `/me` falhando sobre a sessão em cache.
- * Consultas e mutações já pausam sem rede e retomam na volta (o `networkMode` padrão); a faixa só
- * dá o motivo e, com rede mas servidor fora, relê `/me` até ele voltar, a cada 10 s e dobrando até 60 s.
+ * The connection banner at the top of the shell: no network, or `/me` failing over the cached session.
+ * Queries and mutations already pause without network and resume when it returns (the default
+ * `networkMode`); the banner only gives the reason and, with network but the server down, re-reads `/me`
+ * until it returns, every 10 s and doubling up to 60 s.
  */
 export function ConnectionBanner() {
   const online = useOnline()
@@ -26,7 +27,7 @@ export function ConnectionBanner() {
 
   useEffect(() => {
     if (!online || !serverDown) return
-    // Servidor fora: 10 s, dobrando a cada tentativa que falha até 60 s.
+    // Server down: 10 s, doubling on each failed attempt up to 60 s.
     let attempt = 0
     let stopped = false
     let timer: number

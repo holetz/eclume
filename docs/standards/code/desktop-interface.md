@@ -1,7 +1,7 @@
 ---
 type: standard
-title: Interface do app desktop no Design System
-description: A janela e a bandeja do app desktop seguem o Design System do eclume — HTML e módulos ES sem framework nem bundler, eclume.css fiel (a mesma cópia do web), fonts.css e app.css, o tauri.js como único contato com o Tauri, uma seção por vista, tema escolhível (Sistema, Claro ou Escuro), CSP sem estilo inline, ícones Lucide embutidos, os atalhos globais por modo (global, portal do Wayland ou atalho do sistema) e os da janela, a janela no Linux, o menu de ajuda, o aviso "Atualizado para X", o painel Recentes no topo da principal e os testes Playwright com o Tauri simulado.
+title: Desktop app interface in the Design System
+description: The desktop app's window and tray follow the eclume Design System — HTML and ES modules with no framework or bundler, a faithful eclume.css (the same copy as the web), fonts.css and app.css, tauri.js as the only contact with Tauri, one section per view, a selectable theme (Sistema, Claro or Escuro), a CSP with no inline style, embedded Lucide icons, the global shortcuts by mode (global, Wayland portal or system shortcut) and the window ones, the window on Linux, the help menu, the "Atualizado para X" notice, the Recentes panel at the top of the main view and the Playwright tests with a simulated Tauri.
 resource: desktop/ui/**, desktop/ui-tests/**, desktop/scripts/sincronizar_ds.sh, desktop/scripts/cdp.mjs, desktop/src-tauri/tests/ui_assets.rs, desktop/src-tauri/src/shortcuts.rs, desktop/src-tauri/tauri.conf.json
 tags: [code, desktop, design-system, ui, css, tauri, playwright, atalhos]
 timestamp: 2026-10-05
@@ -11,201 +11,203 @@ source: holetz/eclume#40, holetz/eclume#57, holetz/eclume#88, holetz/eclume#125,
 maintainer: holetz
 ---
 
-# Interface do app desktop no Design System
+# Desktop app interface in the Design System
 
-A janela (520 × 600) e o menu da bandeja do app desktop seguem os frames de
-`design-system/examples/desktop.html`, do Design System do eclume, na variante A onde o frame
-marca "Pending stage 2". Os textos ficam em pt-BR. O mesmo DS vale para o web
-([web-design-system.md](web-design-system.md)), e as duas cópias do CSS são uma só.
+The window (520 × 600) and the tray menu of the desktop app follow the frames of
+`design-system/examples/desktop.html`, from the eclume Design System, in variant A where the frame
+marks "Pending stage 2". The texts stay in pt-BR. The same DS applies to the web
+([web-design-system.md](web-design-system.md)), and the two copies of the CSS are one and the same.
 
-## Sem framework
+## No framework
 
-- A UI é HTML e JS em **módulos ES nativos** (`<script type="module">`), servidos pelo protocolo
-  do Tauri como `frontendDist` estático. Não há bundler, lockfile nem passo de build: o
-  `cargo tauri build` e o `cargo xwin` do host seguem sem Node.
-- São cinco vistas com o estado todo vindo do Rust. Um framework traria bundler e build no
-  release só para desenhar listas.
+- The UI is HTML and JS in **native ES modules** (`<script type="module">`), served by the Tauri
+  protocol as static `frontendDist`. There is no bundler, lockfile or build step: the host's
+  `cargo tauri build` and `cargo xwin` run without Node.
+- There are five views, with all state coming from Rust. A framework would bring a bundler and a
+  build into the release just to draw lists.
 
-## Camadas de estilo
+## Style layers
 
-Na ordem do `index.html`:
+In the order of `index.html`:
 
-| Arquivo | O que tem |
+| File | What it holds |
 |---|---|
-| `fonts.css` | `@font-face` de Archivo 400–800 e IBM Plex Mono 400/500, subconjunto latin, apontando para `fonts/*.woff2` (com o `OFL.txt`) |
-| `eclume.css` | cópia fiel do `styles.css` do DS sem o `@import` do Google Fonts; **byte a byte igual** a `web/src/styles/eclume.css` |
-| `app.css` | só produto: `.tray.tray-window` ocupando a janela inteira, as utilidades que os exemplos fazem por `style=""` (`.row`, `.stack`, `.grid-2`...), o medidor de 16 barras, os campos da primeira execução |
+| `fonts.css` | `@font-face` for Archivo 400–800 and IBM Plex Mono 400/500, latin subset, pointing to `fonts/*.woff2` (with the `OFL.txt`) |
+| `eclume.css` | a faithful copy of the DS `styles.css` without the Google Fonts `@import`; **byte for byte equal** to `web/src/styles/eclume.css` |
+| `app.css` | product only: `.tray.tray-window` filling the whole window, the utilities the examples do through `style=""` (`.row`, `.stack`, `.grid-2`...), the 16-bar meter, the first-run fields |
 
-- **Sincronizar.** O `desktop/ui/eclume.css` é gerado de `design-system/styles.css` pelo
-  `uv run python design-system/sincronizar.py`, junto das cópias do web e do celular
-  ([web-design-system.md](web-design-system.md)); o `bash desktop/scripts/sincronizar_ds.sh` só
-  baixa as fontes do `@fontsource` por `npm pack` num diretório temporário, na mesma versão do
-  web, sem depender de `web/node_modules`. Ajuste de produto vai em `app.css`, nunca no `eclume.css`.
-- **CSS com LF.** O `.gitattributes` fixa `*.css text eol=lf`: o teste de igualdade compara bytes,
-  e um checkout Windows com `core.autocrlf=true` levaria o do web com CRLF.
-- **Tokens.** As classes do DS já usam `--color-rec` (terracota, reservada à gravação),
-  `--speaker-2` e `--color-success`. O mapa `--rec → --color-accent` do readme do DS contradiz a
-  seção Color, e vale a seção Color. Os `--radius-*` valem 0: todo canto é reto.
+- **Syncing.** `desktop/ui/eclume.css` is generated from `design-system/styles.css` by
+  `uv run python design-system/sincronizar.py`, together with the web and phone copies
+  ([web-design-system.md](web-design-system.md)); `bash desktop/scripts/sincronizar_ds.sh` only
+  downloads the `@fontsource` fonts through `npm pack` into a temporary directory, at the same
+  version as the web, without depending on `web/node_modules`. A product adjustment goes in
+  `app.css`, never in `eclume.css`.
+- **CSS with LF.** `.gitattributes` pins `*.css text eol=lf`: the equality test compares bytes,
+  and a Windows checkout with `core.autocrlf=true` would bring the web one with CRLF.
+- **Tokens.** The DS classes already use `--color-rec` (terracotta, reserved for recording),
+  `--speaker-2` and `--color-success`. The `--rec → --color-accent` map in the DS readme
+  contradicts the Color section, and the Color section prevails. The `--radius-*` are 0: every
+  corner is square.
 
-## CSP e DOM
+## CSP and DOM
 
-- A CSP da janela é `default-src 'self' ipc: http://ipc.localhost`. Ela bloqueia `style=""`, e
-  nenhum atributo de estilo entra no HTML. Valores dinâmicos (o `--h` de cada barra do medidor)
-  vão por `el.style.setProperty`, que a CSP permite.
-- A janela não carrega nada de fora: nem fonte, nem script, nem imagem.
-- O DOM é montado por `dom.js` (`el(tag, attrs, ...filhos)`, `trocar`, `$`), sem `innerHTML` com
-  dado vindo do servidor ou do disco. `$` falha alto quando a marcação mudou.
-- `icones.js` embute os ícones Lucide usados (engrenagem, ajuda, voltar, fechar, copiar, microfone) como
-  SVG, com a licença ISC no cabeçalho; `data-icone="<nome>"` no HTML recebe o SVG na carga.
+- The window's CSP is `default-src 'self' ipc: http://ipc.localhost`. It blocks `style=""`, and
+  no style attribute goes into the HTML. Dynamic values (the `--h` of each meter bar) go through
+  `el.style.setProperty`, which the CSP allows.
+- The window loads nothing from outside: no font, no script, no image.
+- The DOM is built by `dom.js` (`el(tag, attrs, ...filhos)`, `trocar`, `$`), with no `innerHTML`
+  carrying data from the server or the disk. `$` fails loudly when the markup changed.
+- `icones.js` embeds the Lucide icons used (gear, help, back, close, copy, microphone) as
+  SVG, with the ISC license in the header; `data-icone="<nome>"` in the HTML receives the SVG on load.
 
-## Módulos e vistas
+## Modules and views
 
-- **`tauri.js`** é o único lugar que toca o Tauri: `invoke`, `listen` e `versao` resolvem
-  `window.__TAURI__` (o `withGlobalTauri`) a cada chamada, para os testes injetarem o mock antes.
-- **`vocabulario.js`** é cópia byte a byte de `web/src/lib/vocabulario.js` (o vocabulário de
-  estados compartilhado, [frontend-web.md](frontend-web.md)); a fila de envio tira dele os rótulos e
-  o tom dos estados no aparelho (Gravando, Aguardando envio, Enviando, Enviada, Falhou o envio), e
-  um envio que falhou mostra o `last_error` em texto na própria linha (`.fila-erro`), não só no
-  `title`. Mude o texto no web e copie o arquivo; nunca edite a cópia.
-- **`main.js`** registra as vistas, uma `<section data-vista>` cada, e só uma fica visível. Ele
-  aplica o tema, trata as teclas da janela e consulta `status`, `recordings` e `recent` a cada 1 s
-  (e no evento `status-changed`); uma falha do `recent` mantém o último painel e não impede o
-  resto de desenhar. Sem credencial (`connection: first_run`), a janela fica na primeira
-  execução, e as teclas da janela não valem.
-- **`vistas/*.js`** exportam `montar(secao, app)`, que devolve `{ entrar?, sair?, atualizar? }`:
+- **`tauri.js`** is the only place that touches Tauri: `invoke`, `listen` and `versao` resolve
+  `window.__TAURI__` (the `withGlobalTauri`) on every call, so tests can inject the mock first.
+- **`vocabulario.js`** is a byte-for-byte copy of `web/src/lib/vocabulario.js` (the shared state
+  vocabulary, [frontend-web.md](frontend-web.md)); the upload queue takes from it the labels and
+  the tone of the device states (Gravando, Aguardando envio, Enviando, Enviada, Falhou o envio), and
+  a failed upload shows the `last_error` as text on its own row (`.fila-erro`), not only in the
+  `title`. Change the text in the web and copy the file; never edit the copy.
+- **`main.js`** registers the views, one `<section data-vista>` each, and only one is visible. It
+  applies the theme, handles the window keys and queries `status`, `recordings` and `recent` every
+  1 s (and on the `status-changed` event); a failure of `recent` keeps the last panel and does not
+  stop the rest from drawing. Without a credential (`connection: first_run`), the window stays on
+  the first run, and the window keys do not apply.
+- **`vistas/*.js`** export `montar(secao, app)`, which returns `{ entrar?, sair?, atualizar? }`:
 
-| Vista | Frame do DS | O que mostra |
+| View | DS frame | What it shows |
 |---|---|---|
-| `principal` | Main window, Voice note, Automatic recording, After an update | o painel Recentes no topo, linha de status, gravar, "Nova nota" e "Importar arquivo…", medidor e marcadores, política do app, pergunta de reunião, fila de envio e conta |
-| `primeira-execucao` | First run | servidores conhecidos, conferência da impressão digital, e-mail e senha, e em "Avançado" o código de pareamento e o endereço |
-| `importar` | Import file | a data lida do arquivo escolhido com a origem e o progresso da conversão; a área de soltar recebe um arquivo arrastado ou abre o seletor de novo |
-| `configuracoes` | Settings · Meetings, Audio, Storage, Server | as seis abas, nesta ordem: Geral (Aparência, Início e Avisos; abre por padrão), Reuniões (detecção e política por app, com a parada automática), Áudio, Armazenamento, Pasta e Servidor; `app.ir("configuracoes", { aba })` abre outra |
-| `atalhos` | — (menu de ajuda) | a folha com os atalhos globais e os da janela |
+| `principal` | Main window, Voice note, Automatic recording, After an update | the Recentes panel at the top, status line, record, "Nova nota" and "Importar arquivo…", meter and markers, per-app policy, meeting question, upload queue and account |
+| `primeira-execucao` | First run | known servers, fingerprint check, e-mail and password, and under "Avançado" the pairing code and the address |
+| `importar` | Import file | the date read from the chosen file with its origin and the conversion progress; the drop area takes a dragged file or opens the picker again |
+| `configuracoes` | Settings · Meetings, Audio, Storage, Server | the six tabs, in this order: Geral (Aparência, Início and Avisos; opens by default), Reuniões (detection and per-app policy, with the automatic stop), Áudio, Armazenamento, Pasta and Servidor; `app.ir("configuracoes", { aba })` opens another |
+| `atalhos` | — (help menu) | the sheet with the global shortcuts and the window ones |
 
-- **Tema.** "Aparência", na aba Geral, escolhe Sistema (o padrão), Claro ou Escuro
-  (`theme` na config, que o `status` também traz). Em Sistema, `data-theme` em `<html>` segue
-  `prefers-color-scheme`, como o readme do DS pede, e acompanha a troca do sistema com o app
-  aberto; Claro e Escuro vencem o sistema. O DS só tem o escuro sob `data-theme="dark"`, então o
-  atributo é sempre gravado.
+- **Theme.** "Aparência", in the Geral tab, chooses Sistema (the default), Claro or Escuro
+  (`theme` in the config, which `status` also carries). In Sistema, `data-theme` on `<html>`
+  follows `prefers-color-scheme`, as the DS readme asks, and tracks the system change with the app
+  open; Claro and Escuro override the system. The DS only has dark under `data-theme="dark"`, so
+  the attribute is always written.
 
-## Painel Recentes
+## Recent panel
 
-- O topo da principal, logo abaixo da linha da marca e antes da linha de status, tem o painel
-  **Recentes** (`#recentes`, montado por `recentes.js`): as últimas N gravações da conta que o
-  comando `recent` entrega ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md) §Painel de
-  gravações recentes). N vem de Configurações → Geral → "Gravações recentes na janela" (Ocultar,
-  3, 5 ou 10; 5 por padrão); Ocultar esconde o painel.
-- **Duas linhas em Geral, uma por lugar.** Logo abaixo, "Gravações recentes no menu da bandeja"
-  (`#recentes-bandeja-quantidade`: Ocultar, 1, 3 ou 5; 1 por padrão) salva `tray_recent_count`
-  na hora, apartada da janela; os rótulos dizem "na janela" e "no menu da bandeja" para a
-  diferença ficar clara. O menu em si é nativo, montado no Rust
-  ([desktop-gravacao.md](desktop-gravacao.md) §App e bandeja).
-- **Compacto para 520 × 600.** Cabeçalho de uma linha (o kicker "Recentes" e, quando há,
-  "N precisam de você" em `.badge-warning`) e uma linha por gravação numa grade de três colunas:
-  o título com reticências (sem título, a data curta "dd/mm hh:mm"), o `.badge` do estado e a
-  ação `btn-sm`. Uma segunda linha `.recente-detalhe` só aparece quando há o que dizer: o
-  `<progress class="progress">` da transcrição com o % em texto, a frase da espera
-  (`fraseDaEspera`), o motivo (`motivo`) ou o erro de uma ação.
-- **Rótulos do vocabulário.** O Rust entrega a fase; `recentes.js` tira os rótulos de
-  `vocabulario.js`: `ESTADOS_APARELHO` no aparelho, `ESTADOS_SERVIDOR` na fila e pronta, o
-  `andamento` de `ETAPAS` ("Transcrevendo", "Resumindo"), e os textos dos desfechos ("Resumo
-  pronto", "O resumo falhou", "A transcrição falhou", "Pronta sem resumo"). Um estado desconhecido
-  vira "Precisa de você", com a etapa, o código e "resolva no web".
-- **Alertas em texto.** A linha com alerta leva `.recente-alerta`, o motivo em texto na segunda
-  linha e a ação que resolve: **Abrir no web** (`open_recording`) ou **Tentar agora**
-  (`sync_now`). Estado nunca só por cor.
-- **Copiar resumo** (com o ícone copiar) chama `copy_summary`; o retorno ("Copiado" no botão e
-  "Resumo copiado em Markdown." num `role="status"`, ou o erro) fica na linha por 2,5 s, guardado
-  por chave para sobreviver ao redesenho de cada segundo. Ao entrar, a principal chama
-  `recent_refresh` para o painel não esperar a próxima volta da leitura.
+- The top of the main view, right below the brand line and before the status line, holds the
+  **Recentes** panel (`#recentes`, built by `recentes.js`): the account's last N recordings that
+  the `recent` command delivers ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md) §Recent
+  recordings panel). N comes from Configurações → Geral → "Gravações recentes na janela" (Ocultar,
+  3, 5 or 10; 5 by default); Ocultar hides the panel.
+- **Two rows in Geral, one per place.** Right below, "Gravações recentes no menu da bandeja"
+  (`#recentes-bandeja-quantidade`: Ocultar, 1, 3 or 5; 1 by default) saves `tray_recent_count`
+  immediately, separate from the window; the labels say "na janela" and "no menu da bandeja" so
+  the difference is clear. The menu itself is native, built in Rust
+  ([desktop-gravacao.md](desktop-gravacao.md) §App and tray).
+- **Compact for 520 × 600.** A one-line header (the "Recentes" kicker and, when there are any,
+  "N precisam de você" in `.badge-warning`) and one row per recording in a three-column grid:
+  the title with an ellipsis (without a title, the short date "dd/mm hh:mm"), the state `.badge`
+  and the `btn-sm` action. A second `.recente-detalhe` line only appears when there is something
+  to say: the transcription's `<progress class="progress">` with the % as text, the waiting
+  sentence (`fraseDaEspera`), the reason (`motivo`) or an action's error.
+- **Vocabulary labels.** Rust delivers the phase; `recentes.js` takes the labels from
+  `vocabulario.js`: `ESTADOS_APARELHO` on the device, `ESTADOS_SERVIDOR` for queued and ready,
+  the `andamento` of `ETAPAS` ("Transcrevendo", "Resumindo"), and the outcome texts ("Resumo
+  pronto", "O resumo falhou", "A transcrição falhou", "Pronta sem resumo"). An unknown state
+  becomes "Precisa de você", with the step, the code and "resolva no web".
+- **Alerts as text.** A row with an alert carries `.recente-alerta`, the reason as text on the
+  second line and the action that resolves it: **Abrir no web** (`open_recording`) or **Tentar
+  agora** (`sync_now`). State is never conveyed by color alone.
+- **Copiar resumo** (with the copy icon) calls `copy_summary`; the feedback ("Copiado" on the
+  button and "Resumo copiado em Markdown." in a `role="status"`, or the error) stays on the row for
+  2.5 s, kept by key so it survives the redraw every second. On entering, the main view calls
+  `recent_refresh` so the panel does not wait for the next round of polling.
 
-## Atalhos
+## Shortcuts
 
-- **Globais**, registrados no Rust (`shortcuts.rs`, sem permissão de JS): alternar a gravação,
-  nova nota (que também para a nota em curso) e marcador (só com gravação ativa).
+- **Global**, registered in Rust (`shortcuts.rs`, without JS permission): toggle recording,
+  new note (which also stops the note in progress) and marker (only with an active recording).
 
-| SO | Gravar | Nova nota | Marcador |
+| OS | Record | New note | Marker |
 |---|---|---|---|
-| Windows e Linux | `Ctrl+Alt+R` | `Ctrl+Alt+N` | `Ctrl+Alt+M` |
+| Windows and Linux | `Ctrl+Alt+R` | `Ctrl+Alt+N` | `Ctrl+Alt+M` |
 | macOS | `⌘⇧R` | `⌘⇧N` | `⌘⇧K` |
 
-  O `Ctrl+Shift` do DS roubaria atalhos de uso diário, porque o registro captura a tecla no
-  sistema inteiro: `Ctrl+Shift+M` é o mudo do Teams, `Ctrl+Shift+N` a janela anônima do Chrome e
-  `Ctrl+Shift+R` o recarregar sem cache. No ABNT2, o AltGr (`Ctrl+Alt`) não usa R, N nem M. No
-  Mac, `⌘⇧M` é o mudo do Teams.
-- Os atalhos ficam em `config.json` (`shortcuts: {record, note, marker}`) e mudam em Áudio →
-  "Alterar", que captura a próxima combinação na janela. O texto é validado por
-  `Shortcut::from_str` ao salvar.
-- **Três modos por sessão**, que a aba Áudio explica numa linha (`ShortcutMode` no
+  The DS's `Ctrl+Shift` would steal everyday shortcuts, because the registration captures the key
+  system-wide: `Ctrl+Shift+M` is Teams mute, `Ctrl+Shift+N` Chrome's incognito window and
+  `Ctrl+Shift+R` reload without cache. On ABNT2, AltGr (`Ctrl+Alt`) does not use R, N or M. On the
+  Mac, `⌘⇧M` is Teams mute.
+- The shortcuts live in `config.json` (`shortcuts: {record, note, marker}`) and change under Áudio →
+  "Alterar", which captures the next combination in the window. The text is validated by
+  `Shortcut::from_str` on save.
+- **Three modes per session**, which the Áudio tab explains in one line (`ShortcutMode` in the
   `SettingsView`):
 
-| Modo | Quando | Como o atalho chega |
+| Mode | When | How the shortcut arrives |
 |---|---|---|
-| `global` | X11, Windows, macOS | `tauri-plugin-global-shortcut`; falha de registro vira "Em uso por outro app" (outro app tem a combinação) ou "Indisponível nesta sessão" (o plugin não subiu) |
-| `portal` | Wayland com `org.freedesktop.portal.GlobalShortcuts` (KDE, GNOME 48+) | `ashpd`: uma sessão com os três atalhos, o gatilho preferido no formato do XDG (`CTRL+ALT+r`) e o sinal `Activated`; o sistema pode pedir confirmação. Registrar de novo fecha a sessão anterior |
-| `system` | Wayland sem o portal (GNOME 46) | o atalho é do sistema e chama `eclume-desktop --alternar-gravacao`, `--nova-nota` ou `--marcador`; a instância única (`tauri-plugin-single-instance`) entrega a flag à instância aberta, e sem instância o app abre e faz a ação. No GNOME, "Criar atalhos no GNOME" grava custom-keybindings em `…/custom-keybindings/eclume-<ação>/` (nome "eclume · …", combinação no formato do GTK, `<Control><Alt>n`); criar de novo só regrava, remover não toca nos atalhos da pessoa, e com eles criados cada registro os regrava com as combinações e o executável de agora (o AppImage, quando é por ele). Fora do GNOME, a aba mostra o comando de cada ação. Sem o atalho do sistema, a linha diz "Crie o atalho no sistema" |
+| `global` | X11, Windows, macOS | `tauri-plugin-global-shortcut`; a registration failure becomes "Em uso por outro app" (another app holds the combination) or "Indisponível nesta sessão" (the plugin did not start) |
+| `portal` | Wayland with `org.freedesktop.portal.GlobalShortcuts` (KDE, GNOME 48+) | `ashpd`: one session with the three shortcuts, the preferred trigger in the XDG format (`CTRL+ALT+r`) and the `Activated` signal; the system may ask for confirmation. Registering again closes the previous session |
+| `system` | Wayland without the portal (GNOME 46) | the shortcut belongs to the system and calls `eclume-desktop --alternar-gravacao`, `--nova-nota` or `--marcador`; the single instance (`tauri-plugin-single-instance`) hands the flag to the open instance, and with no instance the app opens and performs the action. On GNOME, "Criar atalhos no GNOME" writes custom-keybindings at `…/custom-keybindings/eclume-<ação>/` (name "eclume · …", combination in the GTK format, `<Control><Alt>n`); creating again only rewrites them, removing does not touch the person's own shortcuts, and once they are created each registration rewrites them with the current combinations and executable (the AppImage, when it runs from one). Outside GNOME, the tab shows the command for each action. Without the system shortcut, the line says "Crie o atalho no sistema" |
 
-  Numa sessão Wayland o app começa em `system` e passa a `portal` quando o portal responde. O
-  botão e a bandeja valem em todos os modos.
-- **Da janela**, por `keydown` no JS: `Ctrl/⌘+O` importar, `Ctrl/⌘+,` configurações,
-  `Ctrl/⌘+/` atalhos e `Esc` volta à principal. "Importar arquivo…" e `Ctrl/⌘+O` abrem direto o
-  seletor de arquivos do sistema (`tauri-plugin-dialog`); escolhido um arquivo, a vista
-  `importar` abre com ele, e desistir deixa a janela onde estava.
+  In a Wayland session the app starts in `system` and moves to `portal` when the portal answers.
+  The button and the tray work in every mode.
+- **Window ones**, through `keydown` in JS: `Ctrl/⌘+O` import, `Ctrl/⌘+,` settings,
+  `Ctrl/⌘+/` shortcuts and `Esc` goes back to the main view. "Importar arquivo…" and `Ctrl/⌘+O`
+  open the system file picker directly (`tauri-plugin-dialog`); once a file is chosen, the
+  `importar` view opens with it, and cancelling leaves the window where it was.
 
-## Janela no Linux
+## Window on Linux
 
-- A barra de título é a nativa. No Wayland, o tao até a 0.35 cobria a HeaderBar do GTK com um
-  `EventBox` acima dos botões, e minimizar e fechar não recebiam o clique até a janela ser
-  realocada (tauri-apps/tauri#13440); por isso o `Cargo.toml` fixa o Tauri em 2.12 ou mais, que
-  traz o tao 0.37 com a correção. Não há barra de título própria em nenhum sistema.
-- Fechar esconde a janela (o app segue na bandeja), como nos outros sistemas.
+- The title bar is the native one. On Wayland, tao up to 0.35 covered the GTK HeaderBar with an
+  `EventBox` above the buttons, and minimize and close did not receive the click until the window
+  was reallocated (tauri-apps/tauri#13440); that is why `Cargo.toml` pins Tauri at 2.12 or later,
+  which brings tao 0.37 with the fix. There is no custom title bar on any system.
+- Closing hides the window (the app stays in the tray), as on the other systems.
 
-## Início com o computador
+## Start with the computer
 
-- A aba Geral das configurações tem a chave **Iniciar com o computador** (`#iniciar-com-o-sistema`, na
-  seção "Início", antes de "Avisos"), **ligada por padrão** e salva na hora como as outras.
-- A preferência é `Config.autostart` (padrão `true`, inclusive numa config de versão anterior). O
-  app **concilia** o registro do sistema a ela a cada abertura e a cada salvar
-  (`reconcile_autostart`), em vez de registrar uma vez: um caminho que mudou se corrige sozinho, e
-  quem desligou continua desligado depois de reabrir ou atualizar. Um build de desenvolvimento
-  (`debug_assertions`) não registra, e uma falha do sistema só vai ao log.
-- Iniciado pelo sistema (`--autostart`), o app sobe **só na bandeja**: a janela nasce escondida
-  e só abre pelo item da bandeja ou por um atalho.
+- The Geral settings tab has the **Iniciar com o computador** switch (`#iniciar-com-o-sistema`, in
+  the "Início" section, before "Avisos"), **on by default** and saved immediately like the others.
+- The preference is `Config.autostart` (default `true`, including in a config from an earlier
+  version). The app **reconciles** the system registration with it on every launch and every save
+  (`reconcile_autostart`), instead of registering once: a path that changed fixes itself, and
+  whoever turned it off stays off after reopening or updating. A development build
+  (`debug_assertions`) does not register, and a system failure only goes to the log.
+- Started by the system (`--autostart`), the app comes up **in the tray only**: the window starts
+  hidden and only opens from the tray item or a shortcut.
 
-## Ajuda e atualização
+## Help and updates
 
-- O ícone de ajuda abre um `.menu`: "Primeiros passos" (o artigo `primeira-gravacao`) e
-  "Permissões de microfone" (`permissoes-de-microfone`), abertos em `<web_url>/ajuda/<artigo>`, "Atalhos de teclado", "Abrir a central de ajuda", "Relatar um
-  problema…" (abre a pasta de logs, com a dica "Anexe o eclume.log": o servidor é local e não
-  há formulário) e a linha da versão. Todo artigo que a UI pede ao `open_help` tem de existir em
-  `web/src/features/help/articles/`: o teste `ui_assets` extrai os slugs de `desktop/ui/js` e
-  falha sem o `.md`, e o filtro `desktop` da CI inclui os artigos.
-- Depois de uma atualização automática, a principal mostra o `.alert-success` "Atualizado para
-  X" com as notas do release até a pessoa fechar ([desktop-distribuicao.md](desktop-distribuicao.md)).
+- The help icon opens a `.menu`: "Primeiros passos" (the `primeira-gravacao` article) and
+  "Permissões de microfone" (`permissoes-de-microfone`), opened at `<web_url>/ajuda/<artigo>`, "Atalhos de teclado", "Abrir a central de ajuda", "Relatar um
+  problema…" (opens the logs folder, with the hint "Anexe o eclume.log": the server is local and
+  there is no form) and the version line. Every article the UI asks `open_help` for must exist in
+  `web/src/features/help/articles/`: the `ui_assets` test extracts the slugs from `desktop/ui/js`
+  and fails without the `.md`, and the CI `desktop` filter includes the articles.
+- After an automatic update, the main view shows the `.alert-success` "Atualizado para
+  X" with the release notes until the person closes it ([desktop-distribuicao.md](desktop-distribuicao.md)).
 
-## Testes
+## Tests
 
-- **`ui_assets`** (`desktop/src-tauri/tests`, no `cargo test`): o `eclume.css` e o
-  `js/vocabulario.js` iguais aos do web,
-  nenhuma URL `http(s)://` na UI, as fontes declaradas existentes com o `OFL.txt`, nenhum
-  `style=""` e o `index.html` carregando só arquivos que existem. Por isso nem um `placeholder`
-  leva `https://`.
-- **Playwright** (`desktop/ui-tests`, no job `desktop` da CI e no host): o próprio teste serve
-  `desktop/ui`, aborta e registra toda requisição de fora e injeta `mock-tauri.js`, que simula
-  `window.__TAURI__` com cenários (`window.__mock.cenario(nome)`: ocioso, gravando, nota,
+- **`ui_assets`** (`desktop/src-tauri/tests`, in `cargo test`): `eclume.css` and
+  `js/vocabulario.js` equal to the web ones,
+  no `http(s)://` URL in the UI, the declared fonts present with the `OFL.txt`, no
+  `style=""` and `index.html` loading only files that exist. That is why not even a `placeholder`
+  carries `https://`.
+- **Playwright** (`desktop/ui-tests`, in the CI `desktop` job and on the host): the test itself
+  serves `desktop/ui`, aborts and records every outside request and injects `mock-tauri.js`, which
+  simulates `window.__TAURI__` with scenarios (`window.__mock.cenario(nome)`: ocioso, gravando, nota,
   marcadores, pergunta, fila, vazio, atualizado, atalhoEmUso, pat, primeiraExecucao, semServidor,
-  caMudou, recentes) e registra cada comando em `__mock.chamadas`. O `recent` responde em todo
-  cenário (vazio fora de `recentes`), e o `copy_summary` grava o Markdown em
+  caMudou, recentes) and records each command in `__mock.chamadas`. `recent` answers in every
+  scenario (empty outside `recentes`), and `copy_summary` writes the Markdown to
   `__mock.estado.areaDeTransferencia`.
-- **`recentes.spec.ts`** confere o painel no topo com as N da configuração, cada fase com o seu
-  rótulo e progresso, o estado desconhecido como "Precisa de você" com Abrir no web, o Copiar
-  resumo pelo Tauri (e o erro sem copiar nada), o Tentar agora, Ocultar e a ausência de rolagem
-  horizontal em 520 × 600 e 380 × 420.
-- **`visual.spec.ts`** passa por cada vista em 520 × 600 e 380 × 420, nos temas claro e escuro, e
-  confere a Archivo carregada, nenhuma requisição externa, nenhuma rolagem horizontal, os cantos
-  retos das peças do DS e o botão de gravar no `--color-rec`. As capturas ficam em
-  `desktop/ui-tests/capturas/<vista>-<tamanho>-<tema>.png` (fora do git), para revisão.
-- **Na janela real**, `node desktop/scripts/cdp.mjs eval "<expr>"` e
-  `node desktop/scripts/cdp.mjs screenshot janela.png` falam com o WebView2 pela porta de
-  depuração 9229 ([estacao-windows.md](../../project/estacao-windows.md)), com o `WebSocket`
-  nativo do Node 22 e sem dependência.
+- **`recentes.spec.ts`** checks the panel at the top with the configured N, each phase with its
+  label and progress, the unknown state as "Precisa de você" with Abrir no web, Copiar
+  resumo through Tauri (and the error without copying anything), Tentar agora, Ocultar and the
+  absence of horizontal scrolling at 520 × 600 and 380 × 420.
+- **`visual.spec.ts`** goes through each view at 520 × 600 and 380 × 420, in the light and dark
+  themes, and checks Archivo loaded, no external request, no horizontal scrolling, the square
+  corners of the DS pieces and the record button in `--color-rec`. The screenshots go to
+  `desktop/ui-tests/capturas/<vista>-<tamanho>-<tema>.png` (outside git), for review.
+- **In the real window**, `node desktop/scripts/cdp.mjs eval "<expr>"` and
+  `node desktop/scripts/cdp.mjs screenshot janela.png` talk to WebView2 through debugging
+  port 9229 ([estacao-windows.md](../../project/estacao-windows.md)), with Node 22's native
+  `WebSocket` and no dependency.

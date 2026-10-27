@@ -29,7 +29,7 @@ export function TokensPage() {
     getNextPageParam: (page) => page.next_cursor,
   })
   const items = tokens.data?.pages.flatMap((page) => page.items) ?? []
-  // Os revogados vão para o fim, na ordem em que vieram.
+  // The revoked ones go to the end, in the order they came.
   const sorted = [...items.filter((t) => !t.revoked_at), ...items.filter((t) => t.revoked_at)]
 
   return (

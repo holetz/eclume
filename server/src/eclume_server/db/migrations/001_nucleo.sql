@@ -1,13 +1,13 @@
--- 001_nucleo — núcleo do eclume: organizações, usuários, sessões, PATs, grupos, gravações,
--- uploads, jobs e transcrições, com isolamento por RLS.
+-- 001_nucleo — eclume's core: organizations, users, sessions, PATs, groups, recordings,
+-- uploads, jobs and transcripts, isolated by RLS.
 --
--- Padrão (docs/standards/code/server-nucleo.md): toda tabela de domínio tem `org_id`; as
--- políticas leem `app.org_id` e `app.user_id`, fixados por transação com `set_config(..., true)`
--- depois de `SET LOCAL ROLE eclume_app`. O papel de conexão (dono do schema) roda as operações
--- de sistema: lookup de credencial, bootstrap, worker CPU e esta migration.
+-- Pattern (docs/standards/code/server-nucleo.md): every domain table has `org_id`; the
+-- policies read `app.org_id` and `app.user_id`, set per transaction with `set_config(..., true)`
+-- after `SET LOCAL ROLE eclume_app`. The connection role (schema owner) runs the system
+-- operations: credential lookup, bootstrap, CPU worker and this migration.
 --
--- Regra anti-recursão: as políticas de `recording_shares` e `group_members` filtram só por
--- organização; nenhuma política dessas duas volta a consultar `recordings`.
+-- Anti-recursion rule: the policies of `recording_shares` and `group_members` filter by
+-- organization only; no policy of those two queries `recordings` back.
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
@@ -19,7 +19,7 @@ BEGIN
 END
 $$;
 
--- Um papel de conexão não superusuário precisa ser membro para `SET ROLE eclume_app`.
+-- A non-superuser connection role must be a member to `SET ROLE eclume_app`.
 DO $$
 BEGIN
     IF NOT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
@@ -38,7 +38,7 @@ CREATE OR REPLACE FUNCTION eclume_user() RETURNS uuid
     LANGUAGE sql STABLE
     AS $$ SELECT nullif(current_setting('app.user_id', true), '')::uuid $$;
 
--- --- identidade -------------------------------------------------------------------------------
+-- --- identity ---------------------------------------------------------------------------------
 
 CREATE TABLE organizations (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -57,11 +57,11 @@ CREATE TABLE users (
     created_at     timestamptz NOT NULL DEFAULT now(),
     last_login_at  timestamptz
 );
--- O login é por e-mail, sem organização: o e-mail é único na instância.
+-- Login is by e-mail, with no organization: the e-mail is unique in the instance.
 CREATE UNIQUE INDEX users_email_idx ON users (lower(email));
 CREATE INDEX users_org_idx ON users (org_id, created_at DESC, id DESC);
 
--- Sessões só são lidas e escritas pelo papel de sistema.
+-- Sessions are only read and written by the system role.
 CREATE TABLE sessions (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     token_hash  text NOT NULL UNIQUE,
@@ -104,7 +104,7 @@ CREATE TABLE group_members (
 );
 CREATE INDEX group_members_user_idx ON group_members (user_id);
 
--- Configuração em runtime da organização; a API de leitura e escrita é do painel admin (#12).
+-- The organization's runtime settings; the read and write API belongs to the admin panel (#12).
 CREATE TABLE org_settings (
     org_id                uuid PRIMARY KEY REFERENCES organizations (id) ON DELETE CASCADE,
     asr                   jsonb NOT NULL,
@@ -115,7 +115,7 @@ CREATE TABLE org_settings (
     updated_by            uuid REFERENCES users (id) ON DELETE SET NULL
 );
 
--- --- gravações --------------------------------------------------------------------------------
+-- --- recordings -------------------------------------------------------------------------------
 
 CREATE TABLE recordings (
     id              uuid PRIMARY KEY,
@@ -164,8 +164,8 @@ CREATE TABLE uploads (
     sha256            text NOT NULL,
     part_size         bigint NOT NULL,
     part_count        integer NOT NULL,
-    -- Id que a gravação recebe no `complete` (a chave do áudio já o usa); `recording_id` só é
-    -- preenchido depois do `complete` ou num `deduplicated`.
+    -- Id the recording receives on `complete` (the audio key already uses it); `recording_id` is only
+    -- filled after `complete` or on a `deduplicated`.
     new_recording_id  uuid NOT NULL,
     recording_id      uuid,
     audio_key         text,
@@ -175,7 +175,7 @@ CREATE TABLE uploads (
     created_at        timestamptz NOT NULL DEFAULT now(),
     completed_at      timestamptz
 );
--- Retomada por hash: um único upload em andamento por dono e arquivo.
+-- Resume by hash: a single upload in progress per owner and file.
 CREATE UNIQUE INDEX uploads_in_progress_idx ON uploads (owner_id, sha256) WHERE status = 'in_progress';
 CREATE INDEX uploads_expiry_idx ON uploads (expires_at) WHERE status = 'in_progress';
 
@@ -196,7 +196,7 @@ CREATE TABLE transcription_jobs (
     UNIQUE (recording_id, revision)
 );
 
--- --- transcrições -----------------------------------------------------------------------------
+-- --- transcripts ------------------------------------------------------------------------------
 
 CREATE TABLE transcripts (
     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -217,7 +217,7 @@ CREATE TABLE speakers (
     speaker_id     text NOT NULL,
     position       integer NOT NULL,
     label          text NOT NULL,
-    -- A tabela de pessoas nasce na spec pessoas-organizacao-e-busca (#11), que acrescenta a FK.
+    -- The people table is born in the people-organization-and-search spec (#11), which adds the FK.
     person_id      uuid,
     talk_ms        bigint NOT NULL DEFAULT 0,
     PRIMARY KEY (transcript_id, speaker_id)
@@ -241,8 +241,8 @@ CREATE TABLE segments (
 CREATE INDEX segments_order_idx ON segments (transcript_id, position);
 CREATE INDEX segments_tsv_idx ON segments USING gin (tsv);
 
--- Impressão de voz (dado biométrico, LGPD): só chega com o opt-in da organização. A dimensão
--- depende do modelo, por isso `vector` sem dimensão fixa; a comparação é da #15.
+-- Voiceprint (biometric data, LGPD): only arrives with the organization's opt-in. The dimension
+-- depends on the model, hence `vector` with no fixed dimension; the comparison belongs to #15.
 CREATE TABLE speaker_embeddings (
     transcript_id  uuid NOT NULL REFERENCES transcripts (id) ON DELETE CASCADE,
     org_id         uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
@@ -269,7 +269,7 @@ ALTER TABLE transcripts        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE speakers           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE segments           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE speaker_embeddings ENABLE ROW LEVEL SECURITY;
--- `sessions` fica sem RLS e sem GRANT: eclume_app não a enxerga.
+-- `sessions` stays without RLS and without GRANT: eclume_app cannot see it.
 
 CREATE POLICY organizations_org ON organizations
     USING (id = eclume_org());
@@ -290,7 +290,7 @@ CREATE POLICY group_members_org ON group_members
 CREATE POLICY org_settings_org ON org_settings
     USING (org_id = eclume_org());
 
--- Leitura: dono, ou compartilhamento com a organização, ou com um grupo de que o usuário é membro.
+-- Read: owner, or shared with the organization, or with a group the user is a member of.
 CREATE POLICY recordings_read ON recordings FOR SELECT
     USING (
         org_id = eclume_org()
@@ -335,7 +335,7 @@ CREATE POLICY uploads_own ON uploads
     USING (org_id = eclume_org() AND owner_id = eclume_user())
     WITH CHECK (org_id = eclume_org() AND owner_id = eclume_user());
 
--- Conteúdo derivado herda a visibilidade da gravação (a política de `recordings` se aplica no EXISTS).
+-- Derived content inherits the recording's visibility (the `recordings` policy applies in the EXISTS).
 CREATE POLICY transcription_jobs_read ON transcription_jobs FOR SELECT
     USING (org_id = eclume_org() AND EXISTS (SELECT 1 FROM recordings r WHERE r.id = recording_id));
 CREATE POLICY transcription_jobs_write ON transcription_jobs FOR INSERT
@@ -347,7 +347,7 @@ CREATE POLICY transcription_jobs_write ON transcription_jobs FOR INSERT
 CREATE POLICY transcripts_read ON transcripts FOR SELECT
     USING (org_id = eclume_org() AND EXISTS (SELECT 1 FROM recordings r WHERE r.id = recording_id));
 
--- Só o dono edita a transcrição (hoje: `updated_at` ao editar metadados da gravação).
+-- Only the owner edits the transcript (today: `updated_at` when editing the recording's metadata).
 CREATE POLICY transcripts_update ON transcripts FOR UPDATE
     USING (
         org_id = eclume_org()

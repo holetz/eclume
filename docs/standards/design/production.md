@@ -1,31 +1,31 @@
 ---
 type: standard
-title: Produção de design
-description: O portão para produzir um artefato com a marca do eclume a partir de uma fonte única de tokens, em web, Typst e PDF.
+title: Design production
+description: The gate for producing an artifact with the eclume brand from a single token source, across web, Typst and PDF.
 resource: .design/genres/**, .design/media/**
 tags: [design, production, accessibility]
 timestamp: 2026-09-28
 audience: both
 authority: background
-source: quenching design brand pack, traduzido para o eclume
+source: quenching design brand pack, adapted for eclume
 maintainer: holetz
 ---
 
-# Produção de design
+# Design production
 
-Todo artefato cita este padrão antes de ser produzido, escolhe um contrato de gênero, importa o
-adaptador gerado da sua mídia e confere o destino renderizado, não só a fonte.
+Every artifact cites this standard before it is produced, picks a genre contract, imports the
+generated adapter for its medium and checks the rendered target, not only the source.
 
 ## Do's and Don'ts
 
 ### Do
 
-- **Do** manter toda declaração primitiva em `/.design/tokens.json` e regenerar os adaptadores.
-- **Do** preservar pares de frente e fundo acessíveis e a ordem semântica dos títulos.
-- **Do** inspecionar o HTML, o deck ou o PDF de verdade depois de renderizar.
+- **Do** keep every primitive declaration in `/.design/tokens.json` and regenerate the adapters.
+- **Do** preserve accessible foreground and background pairs and the semantic order of headings.
+- **Do** inspect the real HTML, deck or PDF after rendering.
 
 ### Don't
 
-- **Don't** copiar cor, tamanho de tipo, raio ou espaçamento para uma primitiva de mídia.
-- **Don't** usar um asset sem licença e papel registrados.
-- **Don't** tratar a projeção com perdas do `DESIGN.md` como a fonte DTCG inteira.
+- **Don't** copy a color, type size, radius or spacing into a media primitive.
+- **Don't** use an asset without a recorded license and role.
+- **Don't** treat the lossy projection of `DESIGN.md` as the whole DTCG source.

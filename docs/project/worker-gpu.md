@@ -168,7 +168,7 @@ docker --context gpu-host build -t eclume-worker-gpu:dev -f worker-gpu/Dockerfil
 Before the ASR, the job treats the audio with the image's `ffmpeg` (Debian bookworm, 5.1, with `arnndn`,
 `afftdn`, `loudnorm`, `silencedetect`, `atrim` and `pan`), per the configuration the admin defines in
 Pré-processamento and that arrives in `options.preprocess`. The order and the rules are in the
-[jobs contract](../standards/api/jobs-transcricao.md#pré-processamento).
+[jobs contract](../standards/api/jobs-transcricao.md#preprocessing).
 
 - **RNNoise model:** `cb.rnnn` (conjoined-burgers, from GregorR/rnnoise-models, trained on general
   speech with ambient noise) enters the image through `ADD --checksum`, at

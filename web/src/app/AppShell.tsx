@@ -14,7 +14,7 @@ import { featuredItem, isItemActive, navGroups, type FeaturedItem, type NavGroup
 import { useProcessingWatch } from './processingWatch'
 import { ShellFrame } from './ShellFrame'
 
-// A confirmação de sair durante o envio é rara: carrega sob demanda, fora do JS inicial.
+// The confirmation to log out during an upload is rare: it loads on demand, outside the initial JS.
 const ConfirmDialog = lazy(() => import('./ConfirmDialog').then((module) => ({ default: module.ConfirmDialog })))
 
 export interface ShellUser {
@@ -51,8 +51,8 @@ function NavGroups({ groups }: { groups: NavGroupEntry[] }) {
 }
 
 /**
- * O item destacado (Agente): a ação primária do DS no topo da barra lateral, com o ícone dele.
- * Enquanto a conta não tem gravação há pouco o que perguntar: fica no mesmo lugar, como secundário.
+ * The featured item (Agent): the DS primary action at the top of the sidebar, with its icon.
+ * While the account has no recording there is little to ask: it stays in the same place, as secondary.
  */
 function FeaturedLink({ item }: { item: FeaturedItem }) {
   const { pathname } = useLocation()
@@ -71,9 +71,10 @@ function FeaturedLink({ item }: { item: FeaturedItem }) {
 }
 
 /**
- * A conta no cabeçalho: nome e e-mail, e os botões de ajuda, de configurações e de sair. Ajuda e
- * configurações abrem menus com os itens da seção `header` do nav; escolher um item navega sem mexer
- * na barra lateral. Sair com um arquivo convertendo ou subindo pede confirmação, porque o envio para.
+ * The account in the header: name and e-mail, and the help, settings and log-out buttons. Help and
+ * settings open menus with the items of the nav's `header` section; choosing an item navigates without
+ * touching the sidebar. Logging out with a file converting or uploading asks for confirmation, because
+ * the upload stops.
  */
 function Account({ user, onLogout, loggingOut }: AppShellProps) {
   const help = useHelp()
@@ -89,7 +90,7 @@ function Account({ user, onLogout, loggingOut }: AppShellProps) {
         label: isItemActive(item, pathname) ? <strong>{item.label}</strong> : item.label,
         onSelect: () => navigate(item.to),
       }
-      // Cada parte da engrenagem abre com o rótulo dela.
+      // Each part of the gear menu opens with its own label.
       return item.part && item.part !== list[index - 1]?.part ? [{ heading: item.part }, entry] : [entry]
     })
   const helpItems: MenuEntry[] = [

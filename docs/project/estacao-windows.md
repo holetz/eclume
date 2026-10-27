@@ -79,12 +79,12 @@ slowness on Windows, which is not a regression.
   and stores it in `%APPDATA%\io.github.holetz.eclume\servidor-ca.pem`. All that is needed is the account's e-mail and
   password (or the pairing code from the web, under "Avançado"). The device credential
   is kept in the Credential Manager (target `pat.eclume-desktop`, the same as the old PAT).
-  ([desktop-deteccao-e-sync.md](../standards/code/desktop-deteccao-e-sync.md#conta-e-credencial)).
+  ([desktop-deteccao-e-sync.md](../standards/code/desktop-deteccao-e-sync.md#account-and-credential)).
 - **Versions 0.1.x** required the CA in the system (`certutil -addstore -f Root eclume-root.crt`, as
   administrator) or the extra CA in the settings, and a pasted PAT. Whoever upgrades from one of them
   keeps the PAT and can switch to the account in Configurações · Servidor.
 - **Log.** `%LOCALAPPDATA%\io.github.holetz.eclume\logs\eclume.log`
-  ([desktop-gravacao.md](../standards/code/desktop-gravacao.md#app-e-bandeja)).
+  ([desktop-gravacao.md](../standards/code/desktop-gravacao.md#app-and-tray)).
 
 ## 4. Driving the app without clicking
 

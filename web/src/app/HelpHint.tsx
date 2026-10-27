@@ -2,15 +2,15 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
 
 interface HelpHintProps {
-  /** O assunto, em minúsculas: vira o rótulo "Sobre <assunto>" e o título do popover. */
+  /** The subject, in lowercase: becomes the "Sobre <subject>" label and the popover title. */
   subject: string
   title: string
-  /** Slug do artigo da central de ajuda que explica o assunto. */
+  /** Slug of the help center article that explains the subject. */
   article: string
   children: ReactNode
 }
 
-/** A dica em linha do Design System: o `.hint` "?" que abre um `.popover` com o link para o artigo. */
+/** The Design System inline hint: the "?" `.hint` that opens a `.popover` with the link to the article. */
 export function HelpHint({ subject, title, article, children }: HelpHintProps) {
   const [open, setOpen] = useState(false)
   const wrapper = useRef<HTMLSpanElement>(null)

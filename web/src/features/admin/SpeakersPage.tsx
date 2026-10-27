@@ -17,7 +17,7 @@ const HF_TOKEN = 'hf_token'
 const THRESHOLD_MIN = 0.5
 const decimal = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-/** Separação de locutores (pyannote, com o token do Hugging Face) e a identificação pelas vozes. */
+/** Speaker diarization (pyannote, with the Hugging Face token) and identification by voice. */
 export function SpeakersPage() {
   const settings = useAdminSettings()
   const secrets = useSecrets()
@@ -53,11 +53,11 @@ function SpeakersForm({ settings, hf }: { settings: Settings; hf: Secret }) {
   const [identify, setIdentify] = useState(saved.voice.enabled && saved.diarization.enabled)
   const [threshold, setThreshold] = useState(saved.voice.suggestion_threshold)
   const [confirming, setConfirming] = useState(false)
-  // O que foi salvo por último: o aviso vale até o form mudar de novo.
+  // What was saved last: the notice holds until the form changes again.
   const [sent, setSent] = useState<string | null>(null)
   const ids = { speakers: useId(), threshold: useId() }
 
-  // "Personalizado" só existe enquanto o valor salvo não bate com as opções do DS.
+  // "Personalizado" only exists while the saved value matches none of the DS options.
   const savedPreset = speakerPreset(saved.diarization)
   const presets = savedPreset.custom ? [...SPEAKER_PRESETS, savedPreset] : SPEAKER_PRESETS
   const chosen = presets.find((option) => option.value === preset) ?? savedPreset
@@ -76,7 +76,7 @@ function SpeakersForm({ settings, hf }: { settings: Settings; hf: Secret }) {
 
   function changeDiarize(value: boolean) {
     setDiarize(value)
-    // A identificação compara os locutores que a separação produz: sem ela, desliga junto.
+    // Identification compares the speakers diarization produces: without it, it turns off too.
     if (!value) setIdentify(false)
   }
 

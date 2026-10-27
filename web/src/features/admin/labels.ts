@@ -1,6 +1,6 @@
 import { ApiError } from '../../api/problem'
 
-// Rótulos em pt-BR dos valores do contrato. Valor desconhecido aparece cru (o contrato só cresce).
+// pt-BR labels for the contract values. An unknown value shows raw (the contract only grows).
 type Option = { value: string; label: string; hint?: string }
 
 export const ENGINES: readonly Option[] = [
@@ -11,7 +11,7 @@ export const ENGINES: readonly Option[] = [
 
 export const MODELS = ['large-v3-turbo', 'large-v3', 'medium', 'small'] as const
 
-// `float16` fica de fora: a GTX 16xx dá NaN nele, e o server o recusa.
+// `float16` is left out: the GTX 16xx gives NaN on it, and the server refuses it.
 export const COMPUTE_TYPES: readonly Option[] = [
   { value: 'int8_float16', label: 'int8_float16 (recomendado na GTX 1660)' },
   { value: 'int8', label: 'int8' },
@@ -24,7 +24,7 @@ export const DENOISE_METHODS: readonly Option[] = [
   { value: 'afftdn', label: 'afftdn' },
 ]
 
-/** Para que um provider serve (`used_for`); cada finalidade tem um provider só. */
+/** What a provider is for (`used_for`); each purpose has a single provider. */
 export const PURPOSES: readonly Option[] = [
   { value: 'summaries', label: 'Resumos' },
   { value: 'fields', label: 'Preenchimento de campos' },
@@ -32,7 +32,7 @@ export const PURPOSES: readonly Option[] = [
   { value: 'agenda_detection', label: 'Detecção do tipo de agenda' },
 ]
 
-/** O primeiro é o tipo que vem escolhido no cadastro: um que roda em casa, nunca a CLI proprietária. */
+/** The first is the type preselected on creation: one that runs in-house, never the proprietary CLI. */
 export const PROVIDER_KINDS: readonly Option[] = [
   { value: 'ollama', label: 'Ollama', hint: 'Roda só com a fila da GPU vazia; exige o endereço.' },
   { value: 'openai-compatible', label: 'OpenAI-compatível', hint: 'DeepSeek, Groq, OpenRouter ou um servidor local; exige o endereço.' },
@@ -62,7 +62,7 @@ const API_KEY: ProviderSecret = {
   clear: 'Apagar a chave guardada',
 }
 
-/** O segredo que cada tipo de provider pede: o `claude-cli` autentica pelo token do `claude setup-token`. */
+/** The secret each provider type asks for: `claude-cli` authenticates through the `claude setup-token` token. */
 const PROVIDER_SECRETS: Record<string, ProviderSecret> = {
   'claude-cli': {
     label: 'Token do Claude',
@@ -102,7 +102,7 @@ interface SpeakerPreset {
   custom?: boolean
 }
 
-/** "Pessoas esperadas" de Locutores: cada opção fixa `min_speakers` e `max_speakers`. */
+/** "Pessoas esperadas" of Locutores: each option fixes `min_speakers` and `max_speakers`. */
 export const SPEAKER_PRESETS: readonly SpeakerPreset[] = [
   { value: 'detectar', label: 'Detectar', min: null, max: null },
   { value: '2', label: '2', min: 2, max: 2 },
@@ -112,7 +112,7 @@ export const SPEAKER_PRESETS: readonly SpeakerPreset[] = [
 
 type SpeakerRange = { min_speakers: number | null; max_speakers: number | null }
 
-/** A opção do valor salvo; fora das opções, "Personalizado", que o preserva até o admin trocar. */
+/** The option of the saved value; outside the options, "Personalizado", which preserves it until the admin changes it. */
 export function speakerPreset({ min_speakers: min, max_speakers: max }: SpeakerRange): SpeakerPreset {
   return (
     SPEAKER_PRESETS.find((preset) => preset.min === min && preset.max === max) ?? {
@@ -127,14 +127,14 @@ export function speakerPreset({ min_speakers: min, max_speakers: max }: SpeakerR
 
 const lastChange = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 
-/** "Última alteração por <admin> em <data>", abaixo dos forms da configuração da plataforma. */
+/** "Última alteração por <admin> em <data>", below the platform configuration forms. */
 export function lastChangeText(settings: { updated_at: string; updated_by: { name: string } | null }): string {
   return settings.updated_by
     ? `Última alteração por ${settings.updated_by.name} em ${lastChange.format(new Date(settings.updated_at))}.`
     : 'Configuração padrão, ainda não alterada.'
 }
 
-/** Número de um campo opcional: vazio vira `null`. */
+/** Number of an optional field: empty becomes `null`. */
 export function optionalInt(value: string): number | null {
   const trimmed = value.trim()
   return trimmed === '' ? null : Number.parseInt(trimmed, 10)
@@ -142,24 +142,24 @@ export function optionalInt(value: string): number | null {
 
 const shortDateParts = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 
-/** "02 set 2026": a data curta das tabelas do painel. */
+/** "02 set 2026": the short date of the panel tables. */
 export function formatShortDate(iso: string): string {
   const parts = Object.fromEntries(shortDateParts.formatToParts(new Date(iso)).map((part) => [part.type, part.value]))
   return `${parts.day} ${parts.month.replace('.', '')} ${parts.year}`
 }
 
-/** Compara sem acento e sem caixa. */
+/** Compares ignoring accents and case. */
 export function foldText(value: string): string {
   return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
 }
 
-/** As mensagens de um 422 por campo (`errors[].field`), para mostrar cada uma no seu campo. */
+/** The messages of a per-field 422 (`errors[].field`), to show each one on its field. */
 export function fieldErrorsOf(error: unknown): Record<string, string> {
   if (!(error instanceof ApiError)) return {}
   return Object.fromEntries((error.problem?.errors ?? []).map((e) => [e.field, e.message]))
 }
 
-/** "Resumo: <seções>": os títulos `##` das instruções, até três, ou o começo do texto. */
+/** "Resumo: <seções>": the `##` titles of the instructions, up to three, or the start of the text. */
 export function summaryOf(instructions: string): string {
   const headings = [...instructions.matchAll(/^##\s+(.+)$/gm)].map((match) => match[1].trim())
   if (headings.length > 0) return headings.slice(0, 3).join(', ')
@@ -167,7 +167,7 @@ export function summaryOf(instructions: string): string {
   return text.length > 60 ? `${text.slice(0, 60)}…` : text
 }
 
-/** Etapas do pipeline (holetz/eclume#33), na ordem em que rodam. */
+/** Pipeline steps (holetz/eclume#33), in the order they run. */
 export const STEPS: readonly Option[] = [
   { value: 'received', label: 'Recebido' },
   { value: 'preprocessing', label: 'Pré-processamento' },
@@ -177,7 +177,7 @@ export const STEPS: readonly Option[] = [
   { value: 'summary', label: 'Resumo' },
 ]
 
-/** As linhas da tabela de etapas da Saúde, sempre estas e nesta ordem. */
+/** The rows of the Saúde steps table, always these and in this order. */
 export const STEP_ORDER = ['preprocessing', 'transcription', 'fields', 'agenda_type', 'summary'] as const
 
 export const SERVICES: readonly Option[] = [
@@ -197,7 +197,7 @@ export const SERVICE_STATUS: Record<string, { label: string; badge: string }> = 
   absent: { label: 'Ausente', badge: 'badge' },
 }
 
-/** "m:ss" de uma duração em milissegundos. */
+/** "m:ss" of a duration in milliseconds. */
 export function formatDuration(ms: number): string {
   const seconds = Math.round(ms / 1000)
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`

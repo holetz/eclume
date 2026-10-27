@@ -3,7 +3,7 @@
 # Run `/impeccable document` to propose changes, then `cq design import` to fold them into the source.
 version: "alpha"
 name: "eclume"
-description: "Linho e nogueira: Archivo, raio zero, fios de 2px, terracota só para gravação e falha. Valores espelham o design-system/styles.css (gerado em web/src/styles/eclume.css e nas outras duas cópias)."
+description: "Linen and walnut: Archivo, zero radius, 2px rules, terracotta only for recording and failure. Values mirror design-system/styles.css (generated into web/src/styles/eclume.css and the other two copies)."
 colors:
   background: "#F7F5F2"
   surface: "#ECE8E2"
@@ -145,73 +145,78 @@ components:
 
 ## Overview
 
-**Norte: "o arquivo de trabalho de uma instituição".** O eclume é uma ferramenta que se usa por
-horas para ler, revisar e reencontrar reuniões. A interface parece papel de linho bem organizado:
-tinta escura, fios retos de 2px separando a estrutura, nenhuma curva, e a cor gasta só no que
-significa algo.
+**North star: "an institution's working file".** eclume is a tool people use for hours to read,
+review and rediscover meetings. The interface looks like well-organized linen paper: dark ink,
+straight 2px rules separating the structure, no curves, and color spent only on what means
+something.
 
-- **Sóbrio:** a hierarquia vem do peso do Archivo 800 e do espaço, não de ornamento.
-- **Estrutural:** fios de 2px desenham a moldura (cabeçalho de página, barra lateral, divisores);
-  sombras só separam camadas que flutuam.
-- **Honesto no estado:** a terracota aparece quando algo grava ou falha, e em nenhum outro lugar.
+- **Sober:** hierarchy comes from the weight of Archivo 800 and from space, not from ornament.
+- **Structural:** 2px rules draw the frame (page head, sidebar, dividers); shadows only separate
+  layers that float.
+- **Honest about state:** terracotta appears when something is recording or failing, and nowhere
+  else.
 
 ## Colors
 
-O fundo de linho (`background`) e a superfície um tom abaixo (`surface`) carregam a leitura; a
-tinta (`on-surface`) é quase preta e quente, e o texto secundário (`text-muted`) é o linho 700.
+The linen background (`background`) and the surface one tone below (`surface`) carry the reading;
+the ink (`on-surface`) is almost black and warm, and secondary text (`text-muted`) is linen 700.
 
-- **Nogueira (`primary`)** é o único acento de ação: botão primário, link, foco e item de
-  navegação ativo. `accent-ink` é a nogueira escura para kickers.
-- **Terracota (`recording`)** é semântica, não decorativa: gravação em curso e falha. Nunca vira
-  um segundo acento de variedade.
-- `success`, `warning` e `danger` são estados; `highlight` é o realce de busca e seleção. Como
-  texto, todos passam de 4,5:1 sobre o fundo e a superfície nos dois temas.
-- **Borda de controle (`control-border`) não é fio de estrutura.** Campo, caixa de seleção, botão
-  secundário e o trilho do switch desligado usam o linho 600, com pelo menos 3:1 sobre o fundo e a
-  superfície nos dois temas; o `divider` continua sendo o fio leve da estrutura. Escurecer o divisor
-  engrossaria todas as linhas da página.
-- Os locutores têm seis cores próprias em OKLCH (`--speaker-1` a `--speaker-6` no CSS), de mesma
-  luminosidade, que não competem com a nogueira.
-- **Tema escuro** (`data-theme="dark"`): os tokens `dark-*` trocam fundo, superfície, tinta,
-  nogueira clara, terracota clara, os estados, a tinta do acento, o realce e o divisor. O `DESIGN.md` não tem modos; o CSS é quem aplica a troca.
+- **Walnut (`primary`)** is the only action accent: primary button, link, focus and active
+  navigation item. `accent-ink` is the dark walnut for kickers.
+- **Terracotta (`recording`)** is semantic, not decorative: a recording in progress and failure. It
+  never becomes a second accent for variety.
+- `success`, `warning` and `danger` are states; `highlight` is the search and selection highlight.
+  As text, all of them pass 4.5:1 over the background and the surface in both themes.
+- **The control border (`control-border`) is not a structure rule.** Field, checkbox, secondary
+  button and the off-switch track use linen 600, with at least 3:1 over the background and the
+  surface in both themes; the `divider` remains the light structure rule. Darkening the divider
+  would thicken every line on the page.
+- Speakers have six colors of their own in OKLCH (`--speaker-1` to `--speaker-6` in the CSS), of
+  equal lightness, that do not compete with walnut.
+- **Dark theme** (`data-theme="dark"`): the `dark-*` tokens swap background, surface, ink, light
+  walnut, light terracotta, the states, the accent ink, the highlight and the divider.
+  `DESIGN.md` has no modes; the CSS is what applies the swap.
 
-**Regra do acento único.** Um bloco tem no máximo um acento; a terracota só entra quando o estado
-de gravação ou falha estiver presente.
+**Single-accent rule.** A block has at most one accent; terracotta only enters when the recording
+or failure state is present.
 
 ## Typography
 
-Archivo é a voz única: 800 com tracking levemente negativo nos títulos (h1 42px, h2 32px, h3
-25px), 400 a 15px com entrelinha 1,55 no texto corrido e nas transcrições, 800 a 14px nos botões.
-Kickers e badges usam 11px, peso 600, caixa alta e tracking largo. IBM Plex Mono 500 com números
-tabulares marca tempos, durações e contadores. As fontes vêm do build (`@fontsource`), sem CDN.
+Archivo is the single voice: 800 with slightly negative tracking in headings (h1 42px, h2 32px, h3
+25px), 400 at 15px with 1.55 line height in running text and transcripts, 800 at 14px in buttons.
+Kickers and badges use 11px, weight 600, uppercase and wide tracking. IBM Plex Mono 500 with
+tabular numbers marks times, durations and counters. The fonts come from the build
+(`@fontsource`), with no CDN.
 
 ## Layout
 
-Grade de espaçamento em 4px (4, 8, 12, 16, 24, 32). O shell tem barra lateral de 240px e o conteúdo
-usa a largura toda ao lado dela (o `--content-width` de 1040px do DS não vale no web); texto corrido
-fica em 68ch; a página abre com `.page-head`, título e ações sobre um fio de 2px. A densidade é
-de ferramenta: listas e tabelas compactas, com o respiro reservado para a leitura da transcrição.
+Spacing grid in 4px steps (4, 8, 12, 16, 24, 32). The shell has a 240px sidebar and the content
+uses the full width beside it (the DS `--content-width` of 1040px does not apply on the web);
+running text stays at 68ch; the page opens with `.page-head`, title and actions over a 2px rule.
+Density is that of a tool: compact lists and tables, with breathing room reserved for reading the
+transcript.
 
 ## Elevation & Depth
 
-A estrutura é plana e desenhada por fios. Sombras (`sm`, `md`, `lg`) só para o que flutua: menus,
-popovers, diálogos e a gaveta de ajuda. No escuro, a sombra vira um contorno de 1px mais a queda.
+The structure is flat and drawn by rules. Shadows (`sm`, `md`, `lg`) only for what floats: menus,
+popovers, dialogs and the help drawer. In dark, the shadow becomes a 1px outline plus the drop.
 
 ## Shapes
 
-Raio zero em tudo: botões, campos, cartões, tags, badges e diálogos. O badge marca o estado com um
-quadrado de 6px, não com um ponto. Ícones Lucide com ponta e junção retas
+Zero radius everywhere: buttons, fields, cards, tags, badges and dialogs. The badge marks state
+with a 6px square, not a dot. Lucide icons with square caps and joins
 (`stroke-linecap: square`).
 
 ## Components
 
-O vocabulário vem do `design-system/styles.css`: `.btn` com `btn-primary` e `btn-secondary` (o `.btn` puro é
-transparente), `.input` em campos, `select` e `textarea`, `.card`, `.badge` e `.tag`, `.nav` e
-`.sidebar`, `.page-head`, `.kicker`, `.hr`. O web acrescenta só o que o DS não tem, em `app.css`.
+The vocabulary comes from `design-system/styles.css`: `.btn` with `btn-primary` and `btn-secondary`
+(a bare `.btn` is transparent), `.input` on fields, `select` and `textarea`, `.card`, `.badge` and
+`.tag`, `.nav` and `.sidebar`, `.page-head`, `.kicker`, `.hr`. The web adds only what the DS lacks,
+in `app.css`.
 
-A marca de verdade é a do web (`web/src/app/Brand.tsx` e `web/public/favicon.svg`). O lockup em
-`/.design/assets/lockup.svg` é o genérico do pacote e fica só até a marca do eclume ser exportada
-para lá.
+The real brand mark is the web's (`web/src/app/Brand.tsx` and `web/public/favicon.svg`). The
+lockup in `/.design/assets/lockup.svg` is the package's generic one and stays only until the eclume
+brand is exported there.
 
 ### button-primary
 - **backgroundColor:** {colors.primary}
@@ -260,25 +265,26 @@ para lá.
 
 ### Do
 
-- **Do** montar telas com as classes do `design-system/` e ajustar produto em `app.css` ou no CSS
-  Module da tela.
-- **Do** usar fios de 2px para estrutura e manter o raio zero.
-- **Do** reservar a terracota para gravação e falha.
+- **Do** assemble screens with the `design-system/` classes and adjust the product in `app.css` or
+  in the screen's CSS Module.
+- **Do** use 2px rules for structure and keep zero radius.
+- **Do** reserve terracotta for recording and failure.
 
 ### Don't
 
-- **Don't** editar `web/src/styles/eclume.css`: ele é cópia fiel e só muda pelo sync.
-- **Don't** arredondar cantos, usar pílulas ou introduzir um segundo acento de cor.
-- **Don't** carregar fontes ou ícones de CDN: o servidor é auto-hospedado.
+- **Don't** edit `web/src/styles/eclume.css`: it is a faithful copy and only changes through the
+  sync.
+- **Don't** round corners, use pills or introduce a second color accent.
+- **Don't** load fonts or icons from a CDN: the server is self-hosted.
 
 ### Do
 
-- **Do** manter toda declaração primitiva em `/.design/tokens.json` e regenerar os adaptadores.
-- **Do** preservar pares de frente e fundo acessíveis e a ordem semântica dos títulos.
-- **Do** inspecionar o HTML, o deck ou o PDF de verdade depois de renderizar.
+- **Do** keep every primitive declaration in `/.design/tokens.json` and regenerate the adapters.
+- **Do** preserve accessible foreground and background pairs and the semantic order of headings.
+- **Do** inspect the real HTML, deck or PDF after rendering.
 
 ### Don't
 
-- **Don't** copiar cor, tamanho de tipo, raio ou espaçamento para uma primitiva de mídia.
-- **Don't** usar um asset sem licença e papel registrados.
-- **Don't** tratar a projeção com perdas do `DESIGN.md` como a fonte DTCG inteira.
+- **Don't** copy a color, type size, radius or spacing into a media primitive.
+- **Don't** use an asset without a recorded license and role.
+- **Don't** treat the lossy projection of `DESIGN.md` as the whole DTCG source.

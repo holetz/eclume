@@ -1,7 +1,7 @@
 ---
 type: standard
-title: Versionamento e CHANGELOG
-description: As três linhas de versão SemVer do eclume — o produto (server, worker GPU, engines e web, que sobem no mesmo deploy), o app desktop e o app do celular — com o contrato na linha própria; onde cada versão vive e o deploy/versao.py que as move juntas e as confere; quando cada linha sobe (MAJOR, MINOR, PATCH e a regra do 0.x); o formato Keep a Changelog em pt-BR com o bloco Para quem hospeda; as notas dos releases dos apps tiradas do CHANGELOG; a tag v<versão> no primeiro deploy; e o que o conclude de cada spec anexa ao merge.
+title: Versioning and CHANGELOG
+description: The three SemVer version lines of eclume — the product (server, GPU worker, engines and web, which go up in the same deploy), the desktop app and the phone app — with the contract on its own line; where each version lives and the deploy/versao.py that moves them together and checks them; when each line goes up (MAJOR, MINOR, PATCH and the 0.x rule); the Keep a Changelog format in pt-BR with the Para quem hospeda (For self-hosters) block; the app release notes taken from the CHANGELOG; the v<versão> tag on the first deploy; and what each spec's conclude attaches to the merge.
 resource: deploy/versao.py, deploy/test_versao.py, CHANGELOG.md, desktop/CHANGELOG.md, mobile/CHANGELOG.md, deploy/deploy.sh, deploy/release-desktop.sh, deploy/release-movel.sh, .github/workflows/desktop-release.yml
 tags: [code, versao, changelog, release, deploy, semver]
 timestamp: 2026-10-01
@@ -11,110 +11,110 @@ source: holetz/eclume#128
 maintainer: holetz
 ---
 
-# Versionamento e CHANGELOG
+# Versioning and CHANGELOG
 
-O eclume tem **três linhas de versão**, porque tem três canais de entrega. O **produto** — server,
-worker GPU, engines e web — sobe inteiro num deploy (`deploy/deploy.sh`), então é uma versão só. O
-**app desktop** e o **app do celular** têm updater, release e tag próprios e falam com servidores de
-versões diferentes pelo contrato, então seguem a própria linha. O **contrato** (`info.version` da
-v1) segue na linha dele, com a regra de [contrato-v1.md](../api/contrato-v1.md); cada entrada do
-produto cita a versão do contrato que leva.
+eclume has **three version lines**, because it has three delivery channels. The **product** — server,
+GPU worker, engines and web — goes up whole in one deploy (`deploy/deploy.sh`), so it is a single version. The
+**desktop app** and the **phone app** have their own updater, release and tag and talk to servers of
+different versions through the contract, so they follow their own line. The **contract** (`info.version` of
+v1) follows its own line, with the rule of [contrato-v1.md](../api/contrato-v1.md); each product
+entry cites the contract version it carries.
 
-Uma versão para tudo faria cada correção do desktop subir o servidor e vice-versa; uma por pilar
-separaria server e web, que nunca sobem separados.
+One version for everything would make each desktop fix bump the server and vice versa; one per pillar
+would separate server and web, which never go up separately.
 
-## Onde cada versão vive
+## Where each version lives
 
-| Linha | Campos (andam juntos) | CHANGELOG | Tag |
+| Line | Fields (move together) | CHANGELOG | Tag |
 |---|---|---|---|
-| `produto` | `version` de `server/`, `engines/` e `worker-gpu/pyproject.toml`; `web/package.json`; `web/package-lock.json` (raiz e `packages[""]`); os três membros no `uv.lock` | `CHANGELOG.md` | `v<versão>`, no primeiro deploy |
-| `desktop` | `desktop/src-tauri/tauri.conf.json`; `[workspace.package]` de `desktop/Cargo.toml`; os crates dele em `desktop/Cargo.lock` e `mobile/Cargo.lock` | `desktop/CHANGELOG.md` | `desktop-v<versão>`, no release ([desktop-distribuicao.md](desktop-distribuicao.md)) |
-| `movel` | `mobile/src-tauri/tauri.conf.json`; `[workspace.package]` de `mobile/Cargo.toml`; os crates dele em `mobile/Cargo.lock` | `mobile/CHANGELOG.md` | `mobile-v<versão>`, no release ([mobile-distribuicao.md](mobile-distribuicao.md)) |
+| `produto` | `version` of `server/`, `engines/` and `worker-gpu/pyproject.toml`; `web/package.json`; `web/package-lock.json` (root and `packages[""]`); the three members in `uv.lock` | `CHANGELOG.md` | `v<versão>`, on the first deploy |
+| `desktop` | `desktop/src-tauri/tauri.conf.json`; `[workspace.package]` of `desktop/Cargo.toml`; its crates in `desktop/Cargo.lock` and `mobile/Cargo.lock` | `desktop/CHANGELOG.md` | `desktop-v<versão>`, at release ([desktop-distribuicao.md](desktop-distribuicao.md)) |
+| `movel` | `mobile/src-tauri/tauri.conf.json`; `[workspace.package]` of `mobile/Cargo.toml`; its crates in `mobile/Cargo.lock` | `mobile/CHANGELOG.md` | `mobile-v<versão>`, at release ([mobile-distribuicao.md](mobile-distribuicao.md)) |
 
-- O `__version__` do server, do worker e das engines vem de `importlib.metadata.version(...)`: não
-  há literal para esquecer. O `/health`, o `GET /api/v1/server` e o `worker_version` do heartbeat o
-  leem.
-- `python3 deploy/versao.py definir <linha> <versão>` grava a versão em todos os campos da linha,
-  por expressão e sem reformatar os arquivos (os locks inclusive, sem rede); `atual <linha>` a lê.
-- `python3 deploy/versao.py conferir` falha quando um campo diverge, quando a versão atual de uma
-  linha não tem seção no CHANGELOG dela, quando o CHANGELOG não abre por `[Não lançado]`, quando o
-  `__version__` volta a ser literal ou quando uma migration de
-  `server/src/eclume_server/db/migrations/` não é citada (pelo nome, `NNN_assunto`) no
-  `CHANGELOG.md`. O `deploy/test_versao.py` roda o `conferir` sobre a árvore real, no pilar `python`.
+- The `__version__` of the server, the worker and the engines comes from `importlib.metadata.version(...)`: there
+  is no literal to forget. `/health`, `GET /api/v1/server` and the heartbeat's `worker_version`
+  read it.
+- `python3 deploy/versao.py definir <linha> <versão>` writes the version into every field of the line,
+  by expression and without reformatting the files (the locks included, without network); `atual <linha>` reads it.
+- `python3 deploy/versao.py conferir` fails when a field diverges, when the current version of a
+  line has no section in its CHANGELOG, when the CHANGELOG does not open with `[Não lançado]`, when
+  `__version__` becomes a literal again or when a migration of
+  `server/src/eclume_server/db/migrations/` is not cited (by name, `NNN_assunto`) in
+  `CHANGELOG.md`. `deploy/test_versao.py` runs `conferir` over the real tree, in the `python` pillar.
 
-## Quando sobe
+## When it goes up
 
-SemVer pelo olhar de quem hospeda e de quem usa o app:
+SemVer from the point of view of whoever self-hosts and whoever uses the app:
 
-- **MAJOR** — quem hospeda precisa agir para não quebrar (migration que pede intervenção, variável
-  removida ou renomeada, corte para `/api/v2`), ou um app já instalado deixa de funcionar.
-- **MINOR** — recurso novo, migration nova, variável nova ou contrato MINOR.
-- **PATCH** — correção sem migration nem mudança de contrato.
-- **Enquanto a linha estiver em `0.x`, a quebra sobe o MINOR.**
-- Mudança que não altera o que é entregue (só docs, CI, specs, testes) não sobe versão nem ganha
-  entrada.
+- **MAJOR** — whoever self-hosts must act to avoid breakage (a migration that needs intervention, a variable
+  removed or renamed, a cut to `/api/v2`), or an already installed app stops working.
+- **MINOR** — a new feature, a new migration, a new variable or a MINOR contract.
+- **PATCH** — a fix with no migration nor contract change.
+- **While the line is at `0.x`, a breaking change bumps MINOR.**
+- A change that does not alter what is delivered (only docs, CI, specs, tests) bumps no version nor gets
+  an entry.
 
-## Quem sobe: o conclude de cada spec
+## Who bumps: each spec's conclude
 
-Subir a versão e escrever a entrada é do **conclude** da spec, no mesmo merge do código, nunca de uma
-tarefa em `## Tasks`: como tarefa, o número seria decidido antes de o trabalho existir, e dois ramos
-subiriam do mesmo número para o mesmo número. O conclude lê o diff inteiro da spec e, para cada linha
-que ele muda no que é entregue:
+Bumping the version and writing the entry belongs to the spec's **conclude**, in the same merge as the code, never to a
+task in `## Tasks`: as a task, the number would be decided before the work existed, and two branches
+would go from the same number to the same number. The conclude reads the spec's whole diff and, for each line
+it changes in what is delivered:
 
-1. Decide o nível pela seção acima.
-2. Se a versão atual da linha **já foi publicada** (a tag dela existe; no produto, também a 0.1.0,
-   em produção antes das tags), roda `deploy/versao.py definir <linha> <próxima>` e abre a seção da
-   nova versão, com a data do merge. Se **ainda não foi publicada**, a entrada vai para a seção da
-   versão atual, que só sobe de novo se o nível pedir mais (uma quebra numa versão PATCH ainda não
-   publicada, por exemplo).
-3. Escreve as entradas e, no produto, o bloco Para quem hospeda.
-4. Roda `uv run pytest deploy/test_versao.py`.
+1. Decides the level by the section above.
+2. If the line's current version **has already been published** (its tag exists; for the product, also 0.1.0,
+   in production before the tags), runs `deploy/versao.py definir <linha> <próxima>` and opens the section of the
+   new version, with the merge date. If it **has not been published yet**, the entry goes to the section of the
+   current version, which only goes up again if the level asks for more (a breaking change in a PATCH version not yet
+   published, for example).
+3. Writes the entries and, for the product, the Para quem hospeda (For self-hosters) block.
+4. Runs `uv run pytest deploy/test_versao.py`.
 
-Specs mescladas em paralelo escolhem o número **dentro da trava de merge**, olhando `main`
-atualizado, como as migrations e o `info.version`.
+Specs merged in parallel choose the number **inside the merge lock**, looking at an updated `main`,
+like the migrations and `info.version`.
 
-`## [Não lançado]` fica no topo de todo CHANGELOG para nada se perder entre merges: guarda o que
-entrou sem número (o acumulado do produto antes desta norma, holetz/eclume#89 a #130). O conclude que
-cortar a próxima versão da linha move essas entradas para a seção dela. Enquanto o `[Não lançado]` do
-produto tiver entradas, o deploy não cria a tag.
+`## [Não lançado]` stays at the top of every CHANGELOG so nothing gets lost between merges: it holds what
+went in without a number (the product's backlog before this standard, holetz/eclume#89 to #130). The conclude that
+cuts the line's next version moves those entries into its section. While the product's `[Não lançado]`
+has entries, the deploy does not create the tag.
 
-## Formato do CHANGELOG
+## CHANGELOG format
 
-[Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) em pt-BR:
+[Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) in pt-BR:
 
-- Uma seção por versão, a mais nova em cima, `## [X.Y.Z] - AAAA-MM-DD` (a data do merge que cortou a
-  versão); abaixo do `## [Não lançado]`.
-- Grupos `### Adicionado`, `### Mudado`, `### Corrigido` e `### Removido`, só os que tiverem
-  entrada; cada entrada diz o efeito para quem usa, numa frase, e cita a spec (`holetz/eclume#N`) no
-  produto.
-- No produto, **`### Para quem hospeda`**, obrigatório quando houver migration ou variável nova:
-  - as **migrations** que rodam, pelo nome; a **destrutiva** vem marcada e pede o backup antes
+- One section per version, the newest on top, `## [X.Y.Z] - AAAA-MM-DD` (the date of the merge that cut the
+  version); below `## [Não lançado]`.
+- Groups `### Adicionado`, `### Mudado`, `### Corrigido` and `### Removido`, only those that have an
+  entry; each entry states the effect for the user, in one sentence, and cites the spec (`holetz/eclume#N`) in the
+  product.
+- In the product, **`### Para quem hospeda`**, mandatory when there is a new migration or variable:
+  - the **migrations** that run, by name; the **destructive** one is marked and asks for the backup first
     ([deploy-producao.md](../../project/deploy-producao.md));
-  - as **variáveis de ambiente** novas, mudadas ou removidas, e se o deploy as gera ou recusa sem
-    elas;
-  - a **versão do contrato** que a versão leva;
-  - as **versões de app compatíveis**.
-- Nos apps, as entradas falam com quem usa o app: a seção da versão é a nota do release.
+  - the new, changed or removed **environment variables**, and whether the deploy generates them or refuses without
+    them;
+  - the **contract version** the version carries;
+  - the **compatible app versions**.
+- In the apps, the entries speak to whoever uses the app: the version's section is the release note.
 
-## Notas dos releases dos apps
+## App release notes
 
-As notas do `latest.json` (desktop) e do `movel.json` (celular) são a seção da versão no CHANGELOG da
-linha, lida por `python3 deploy/versao.py notas <linha> <versão>` no `deploy/release-desktop.sh`, no
-workflow `desktop-release` e no `deploy/release-movel.sh`. É o texto que o desktop mostra no aviso
-"Atualizado para X" e o celular em "Nova versão disponível". `--notas` explícito continua vencendo;
-sem ele, uma versão sem seção (ou com a seção vazia) recusa o release.
+The notes of `latest.json` (desktop) and of `movel.json` (phone) are the version's section in the line's
+CHANGELOG, read by `python3 deploy/versao.py notas <linha> <versão>` in `deploy/release-desktop.sh`, in the
+`desktop-release` workflow and in `deploy/release-movel.sh`. It is the text the desktop shows in the
+"Atualizado para X" (Updated to X) notice and the phone in "Nova versão disponível" (New version available). An explicit `--notas` still wins;
+without it, a version with no section (or with an empty section) refuses the release.
 
-## Tag no deploy
+## Tag on deploy
 
-O `deploy/deploy.sh` lê a versão do produto na árvore do commit alvo e a mostra no `--plan`. O
-primeiro deploy de uma versão, depois do gate e da conferência do `/health` e do descritor, cria a
-tag anotada `v<versão>` no SHA publicado e a envia ao `origin`. Não cria no `--voltar`, quando a tag
-já existe nem com entradas em `[Não lançado]`; uma falha ao criar ou enviar a tag só avisa, porque o
-deploy já está no ar.
+`deploy/deploy.sh` reads the product version in the tree of the target commit and shows it in `--plan`. The
+first deploy of a version, after the gate and the check of `/health` and the descriptor, creates the
+annotated tag `v<versão>` on the published SHA and pushes it to `origin`. It does not create it on `--voltar`, when the tag
+already exists nor with entries in `[Não lançado]`; a failure to create or push the tag only warns, because the
+deploy is already live.
 
-## O que o conclude anexa ao merge
+## What the conclude attaches to the merge
 
-- A versão de cada linha que a spec muda no que é entregue, pela seção "Quem sobe", com a entrada no
-  CHANGELOG da linha.
-- No produto, o bloco Para quem hospeda com as migrations novas, as variáveis e o `info.version`.
-- O `deploy/test_versao.py` verde.
+- The version of each line the spec changes in what is delivered, per the section "Who bumps", with the entry in the
+  line's CHANGELOG.
+- For the product, the Para quem hospeda (For self-hosters) block with the new migrations, the variables and `info.version`.
+- `deploy/test_versao.py` green.

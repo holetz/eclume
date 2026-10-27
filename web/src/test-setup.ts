@@ -2,11 +2,11 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, configure } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
 
-// As telas carregam por import dinâmico; com a suíte inteira em paralelo, o primeiro carregamento
-// passa de 1 s na estação Windows e os `findBy` falhavam por tempo.
+// Screens load through dynamic imports; with the whole suite in parallel, the first load
+// takes over 1 s on the Windows station and the `findBy` calls timed out.
 configure({ asyncUtilTimeout: 5000 })
 
-// O jsdom não implementa rolagem nem reprodução de mídia.
+// jsdom implements neither scrolling nor media playback.
 if (typeof window !== 'undefined') {
   Element.prototype.scrollIntoView = vi.fn()
   Element.prototype.scrollTo = vi.fn() as unknown as typeof Element.prototype.scrollTo
@@ -14,8 +14,8 @@ if (typeof window !== 'undefined') {
   HTMLMediaElement.prototype.pause = vi.fn()
 }
 
-// Sem `globals: true`, o Testing Library não desmonta sozinho entre os testes. Os testes da
-// conversão rodam no ambiente node, sem DOM nem localStorage.
+// Without `globals: true`, Testing Library does not unmount between tests on its own. The
+// conversion tests run in the node environment, with no DOM or localStorage.
 afterEach(() => {
   if (typeof document === 'undefined') return
   cleanup()

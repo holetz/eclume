@@ -8,7 +8,7 @@ import { json, mockFetch } from '../../test/http'
 import { anchorFrom, formatCountdown, useCreatePairingCode } from './pairing'
 import { PairingCode } from './PairingCode'
 
-// A resposta sai às 14:02:18 no relógio do servidor; o código vence às 14:12:00 (a fixture).
+// The response leaves at 14:02:18 on the server's clock; the code expires at 14:12:00 (the fixture).
 const SERVER_DATE = 'Sun, 27 Sep 2026 14:02:18 GMT'
 
 function Harness() {
@@ -48,7 +48,7 @@ async function advance(ms: number) {
 
 beforeEach(() => {
   vi.useFakeTimers()
-  // O relógio do computador está 40 minutos adiantado: a contagem não pode depender dele.
+  // The computer's clock is 40 minutes fast: the countdown must not depend on it.
   vi.setSystemTime(new Date('2026-09-27T14:42:00Z'))
 })
 afterEach(() => {
@@ -56,17 +56,17 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('âncora e formato da contagem', () => {
-  it('mede o tempo pelo header Date da resposta e cai no relógio local sem ele', () => {
+describe('countdown anchor and format', () => {
+  it('measures time by the response Date header and falls back to the local clock without it', () => {
     expect(anchorFrom('2026-09-27T14:12:00Z', SERVER_DATE, 500)).toEqual({ expiresInMs: 582_000, at: 500 })
     expect(anchorFrom('2026-09-27T14:52:00Z', null, 0).expiresInMs).toBe(600_000)
   })
 
-  it('não passa dos 10 minutos quando o Date da resposta está atrasado', () => {
+  it('does not go past 10 minutes when the response Date lags behind', () => {
     expect(anchorFrom('2026-09-27T14:12:01.400Z', 'Sun, 27 Sep 2026 14:01:59 GMT', 0).expiresInMs).toBe(600_000)
   })
 
-  it('formata em m:ss arredondando para baixo', () => {
+  it('formats as m:ss rounding down', () => {
     expect(formatCountdown(582_000)).toBe('9:42')
     expect(formatCountdown(600_900)).toBe('10:00')
     expect(formatCountdown(60_000)).toBe('1:00')
@@ -75,8 +75,8 @@ describe('âncora e formato da contagem', () => {
   })
 })
 
-describe('código de vínculo', () => {
-  it('mostra o código, conta pelo relógio do servidor e troca para Pareado com o nome do aparelho', async () => {
+describe('pairing code', () => {
+  it('shows the code, counts by the server clock and switches to Pareado with the device name', async () => {
     let polls = 0
     const http = mockPairing(() => (++polls < 2 ? pending() : fixtures.pairingCodeUsed()))
     renderHarness()
@@ -98,7 +98,7 @@ describe('código de vínculo', () => {
     expect(new URL(tokens[0].url).searchParams.get('kind')).toBe('device')
   })
 
-  it('avisa no último minuto, vence no zero, para de consultar e gera outro', async () => {
+  it('warns in the last minute, expires at zero, stops polling and generates another', async () => {
     const http = mockPairing(pending)
     renderHarness()
     await advance(0)

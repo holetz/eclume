@@ -1,4 +1,4 @@
-"""`health`, cadastro, sessão, redefinição de senha por link, `me` e o aceite do aviso."""
+"""`health`, signup, session, password reset by link, `me` and the notice acceptance."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-WRONG_PASSWORD = "E-mail ou senha incorretos."  # noqa: S105 — mensagem, não senha
+WRONG_PASSWORD = "E-mail ou senha incorretos."  # noqa: S105 — a message, not a password
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 router = APIRouter()
@@ -62,7 +62,7 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 
 
 def check_email(value: str) -> str:
-    """Validação de `format: email` para os corpos de requisição."""
+    """`format: email` validation for request bodies."""
     if not EMAIL_RE.match(value):
         msg = "e-mail inválido"
         raise ValueError(msg)
@@ -102,7 +102,7 @@ def _check_notice(version: str) -> None:
 
 @router.get("/health")
 async def health(ctx: Ctx) -> dict[str, str]:
-    """Saúde do serviço, versão do contrato e, numa imagem de produção, o commit de que ela saiu."""
+    """Service health, contract version and, in a production image, the commit it was built from."""
     body = {"status": "ok", "version": __version__, "contract_version": CONTRACT_VERSION}
     if ctx.settings.commit:
         body["commit"] = ctx.settings.commit
@@ -111,7 +111,7 @@ async def health(ctx: Ctx) -> dict[str, str]:
 
 @router.get("/health/ready")
 async def health_ready(ctx: Ctx) -> JSONResponse:
-    """Prontidão: 200 quando Postgres, Redis e armazenamento respondem em 2 s, 503 nomeando o que caiu."""
+    """Readiness: 200 when Postgres, Redis and storage answer within 2 s, 503 naming what is down."""
     body = await readiness(ctx)
     return JSONResponse(body, status_code=200 if body["status"] == "ok" else 503)
 
@@ -120,14 +120,14 @@ async def health_ready(ctx: Ctx) -> JSONResponse:
 async def login(
     body: LoginRequest, request: Request, ctx: Ctx, _: Annotated[None, Depends(attempts("auth_login"))]
 ) -> Response:
-    """Abre sessão e define `eclume_session` (HttpOnly) e `eclume_csrf` (legível)."""
+    """Opens a session and sets `eclume_session` (HttpOnly) and `eclume_csrf` (readable)."""
     user_id = await user_password_login(ctx, body.email, body.password, client_ip(request))
     async with system_tx(ctx.engine) as conn:
         return await _open_session(conn, ctx, user_id, datetime.now(UTC))
 
 
 async def user_password_login(ctx: AppContext, email: str, password: str, ip: str) -> UUID:
-    """Login por senha da conta de usuário sob o limite de falhas; senha errada é 401."""
+    """Password login of the user account under the failure limit; a wrong password is 401."""
     await check_login(ctx, "user", email, ip)
     user_id = await password_login(ctx.engine, email, password)
     if user_id is None:
@@ -139,7 +139,7 @@ async def user_password_login(ctx: AppContext, email: str, password: str, ip: st
 
 @router.get("/auth/signup")
 async def signup_info(ctx: Ctx) -> dict[str, Any]:
-    """Se o cadastro está aberto, e o aviso que a conta nova aceita."""
+    """Whether signup is open, and the notice the new account accepts."""
     return {"open": ctx.settings.signup_open, "notice": notice()}
 
 
@@ -147,7 +147,7 @@ async def signup_info(ctx: Ctx) -> dict[str, Any]:
 async def signup(
     body: SignupRequest, request: Request, ctx: Ctx, _: Annotated[None, Depends(attempts("auth_signup"))]
 ) -> Response:
-    """Cria a conta com o aceite do aviso e abre a sessão, como o login."""
+    """Creates the account with the notice acceptance and opens the session, like the login."""
     if not ctx.settings.signup_open:
         raise ApiProblemError(403, "signup_closed", "O cadastro está fechado nesta instalação.")
     if not body.name.strip():
@@ -175,7 +175,7 @@ async def signup(
 
 
 async def _open_session(conn: AsyncConnection, ctx: AppContext, user_id: UUID, now: datetime) -> Response:
-    """Cria a sessão no banco e devolve o 204 com os cookies `eclume_session` e `eclume_csrf`."""
+    """Creates the session in the database and returns the 204 with the `eclume_session` and `eclume_csrf` cookies."""
     token, csrf = new_session_token(), new_session_token()
     ttl = timedelta(days=ctx.settings.session_ttl_days)
     await conn.execute(
@@ -203,7 +203,7 @@ class PasswordReset(BaseModel):
 
 
 def _invalid_reset_link() -> ApiProblemError:
-    # Inexistente, vencido e usado dão a mesma resposta: a rota não serve de oráculo.
+    # Missing, expired and used give the same answer: the route is no oracle.
     return ApiProblemError(
         401,
         "invalid_reset_link",
@@ -217,7 +217,7 @@ ResetAttempts = Annotated[None, Depends(attempts("auth_password_reset"))]
 
 @router.post("/auth/password-reset/check")
 async def check_password_reset(body: PasswordResetCheck, ctx: Ctx, _: ResetAttempts) -> dict[str, Any]:
-    """O e-mail e a validade de um link de redefinição, sem consumi-lo."""
+    """The e-mail and validity of a reset link, without consuming it."""
     info = await password_reset_info(ctx.engine, body.token)
     if info is None:
         raise _invalid_reset_link()
@@ -226,7 +226,7 @@ async def check_password_reset(body: PasswordResetCheck, ctx: Ctx, _: ResetAttem
 
 @router.post("/auth/password-reset", status_code=204)
 async def reset_password_by_link(body: PasswordReset, ctx: Ctx, _: ResetAttempts) -> Response:
-    """Troca a senha pelo link e encerra todas as sessões da conta, sem abrir outra."""
+    """Changes the password through the link and ends every session of the account, without opening another."""
     try:
         reset = await reset_password(ctx.engine, body.token, body.new_password)
     except AccountError as exc:
@@ -240,7 +240,7 @@ async def reset_password_by_link(body: PasswordReset, ctx: Ctx, _: ResetAttempts
 async def logout(
     principal: Annotated[Principal, Depends(requires(session_only=True, before_notice=True))], ctx: Ctx
 ) -> Response:
-    """Encerra a sessão corrente e remove os cookies."""
+    """Ends the current session and removes the cookies."""
     if principal.session_id is None:
         raise forbidden("Logout exige sessão.")
     async with system_tx(ctx.engine) as conn:
@@ -259,7 +259,7 @@ class PasswordChange(BaseModel):
 
 
 class AccountDeletion(BaseModel):
-    """Schema `AccountDeletion`: a senha confirma que é o dono."""
+    """Schema `AccountDeletion`: the password confirms it is the owner."""
 
     password: str = Field(min_length=1, max_length=1024)
 
@@ -277,9 +277,9 @@ def _clear_cookies(response: Response, ctx: AppContext) -> None:
 async def change_own_password(
     body: PasswordChange, principal: Member, ctx: Ctx, _: Annotated[None, Depends(attempts("me_password"))]
 ) -> Response:
-    """Troca a senha; as outras sessões da conta acabam e esta continua.
+    """Changes the password; the account's other sessions end and this one continues.
 
-    Com `revoke_tokens`, as credenciais de aparelho e os PATs da conta também são revogados.
+    With `revoke_tokens`, the account's device credentials and PATs are revoked too.
     """
     try:
         await confirm_password(ctx.engine, principal.user_id, body.current_password, "senha atual incorreta")
@@ -300,7 +300,7 @@ async def change_own_password(
 async def delete_own_account(
     body: AccountDeletion, principal: Member, ctx: Ctx, _: Annotated[None, Depends(attempts("me_delete"))]
 ) -> Response:
-    """Exclui a conta e todos os dados dela; os objetos saem do bucket pela fila de exclusão. Encerra a sessão."""
+    """Deletes the account and all its data; the objects leave the bucket through the deletion queue. Ends the session."""
     try:
         await confirm_password(ctx.engine, principal.user_id, body.password)
     except AccountError as exc:
@@ -308,7 +308,7 @@ async def delete_own_account(
     async with system_tx(ctx.engine) as conn:
         open_jobs = await open_jobs_of(conn, principal.user_id)
         await purge_user(conn, principal.user_id)
-    # A GPU não segue transcrevendo o que a conta excluída tinha na fila ou em curso.
+    # The GPU stops transcribing what the deleted account had queued or running.
     await ctx.queue.request_cancel(open_jobs)
     response = Response(status_code=204)
     _clear_cookies(response, ctx)
@@ -321,7 +321,7 @@ async def accept_notice(
     principal: Annotated[Principal, Depends(requires(session_only=True, before_notice=True))],
     ctx: Ctx,
 ) -> Response:
-    """Registra o aceite do aviso em vigor pela conta corrente."""
+    """Records the current account's acceptance of the notice in force."""
     _check_notice(body.notice_version)
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await conn.execute(
@@ -334,14 +334,14 @@ async def accept_notice(
 
 @router.get("/me/usage")
 async def my_usage(principal: Annotated[Principal, Depends(requires())], ctx: Ctx) -> dict[str, Any]:
-    """Uso da conta e a cota efetiva (schema `Usage`)."""
+    """Account usage and the effective quota (schema `Usage`)."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await usage(conn, ctx.queue.pool, principal.user_id)
 
 
 @router.get("/me")
 async def me(principal: Annotated[Principal, Depends(requires(before_notice=True))], ctx: Ctx) -> dict[str, Any]:
-    """Conta e credencial correntes, e se falta aceitar o aviso em vigor."""
+    """Current account and credential, and whether accepting the notice in force is still pending."""
     async with system_tx(ctx.engine) as conn:
         user = (await conn.execute(select(t.users).where(t.users.c.id == principal.user_id))).mappings().one()
     return {
