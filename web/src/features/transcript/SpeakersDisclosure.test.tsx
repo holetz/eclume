@@ -7,7 +7,7 @@ beforeAll(() => preloadRoute('/gravacoes/x'))
 
 afterEach(() => vi.unstubAllGlobals())
 
-/** O `details` do bloco Locutores, achado pelo começo do resumo. */
+/** The `details` of the Locutores block, found by the start of its summary. */
 async function speakersBlock() {
   const summary = await screen.findByText(
     (_, element) => element?.tagName === 'SUMMARY' && Boolean(element.textContent?.startsWith('Locutores')),
@@ -15,8 +15,8 @@ async function speakersBlock() {
   return summary.closest('details') as HTMLDetailsElement
 }
 
-describe('bloco Locutores', () => {
-  it('recolhido, mostra os locutores em linha, cada um na cor dele, antes da transcrição', async () => {
+describe('Locutores block', () => {
+  it('collapsed, shows the speakers inline, each in its color, before the transcript', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING_ID}`)
     const block = await speakersBlock()
@@ -28,7 +28,7 @@ describe('bloco Locutores', () => {
     expect(within(summary).getByText('Mariana Couto')).toHaveClass('speaker', 'speaker-1')
     expect(screen.queryByRole('region', { name: 'Locutores' })).not.toBeInTheDocument()
 
-    // Fica antes da transcrição, fora dela.
+    // It sits before the transcript, outside it.
     const transcript = [...document.querySelectorAll('details.disclosure')].find((element) =>
       element.querySelector('summary')?.textContent?.startsWith('Transcrição'),
     )!
@@ -36,7 +36,7 @@ describe('bloco Locutores', () => {
     expect(transcript.contains(block)).toBe(false)
   })
 
-  it('aberto, troca a linha por um card por locutor numa grade, com as ações de cada um', async () => {
+  it('open, swaps the line for one card per speaker in a grid, with each one\'s actions', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING_ID}`)
     const region = await openSpeakers()
@@ -44,7 +44,7 @@ describe('bloco Locutores', () => {
     expect(block.open).toBe(true)
     expect(block.querySelector('summary .speaker')).toBeNull()
 
-    // Os cards são os filhos da lista da grade (as sugestões por voz são listas dentro deles).
+    // The cards are the children of the grid's list (the voice suggestions are lists inside them).
     const cards = [...region.querySelector('ul')!.children] as HTMLElement[]
     expect(cards).toHaveLength(3)
     expect(within(cards[1]).getByRole('button', { name: 'Renomear Locutor 2' })).toBeInTheDocument()
@@ -52,7 +52,7 @@ describe('bloco Locutores', () => {
     expect(within(region).getByRole('button', { name: 'Mesclar locutores' })).toBeInTheDocument()
   })
 
-  it('abrir a transcrição não traz os locutores, e o painel de campos não os repete', async () => {
+  it('opening the transcript does not bring the speakers, and the fields panel does not repeat them', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING_ID}`)
     await openTranscript()

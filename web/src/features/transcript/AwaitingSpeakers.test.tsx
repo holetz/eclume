@@ -8,7 +8,7 @@ import { mockTranscriptApi, RECORDING_ID as RECORDING } from '../../test/transcr
 
 beforeAll(() => preloadRoute('/gravacoes/x'))
 
-/** A gravação transcrita parada à espera dos nomes: locutores em `waiting`, o resto pendente. */
+/** The transcribed recording stopped waiting for the names: speakers in `waiting`, the rest pending. */
 function waitingRecording(): Schemas['Recording'] {
   const recording = fixtures.recordingTranscribed()
   recording.awaiting = 'speakers'
@@ -21,8 +21,8 @@ function waitingRecording(): Schemas['Recording'] {
   return recording
 }
 
-describe('gravação aguardando locutores', () => {
-  it('mostra a etapa em espera com o motivo e o aviso que leva aos locutores', async () => {
+describe('recording awaiting speakers', () => {
+  it('shows the waiting step with the reason and the notice that leads to the speakers', async () => {
     mockTranscriptApi({ 'GET /api/v1/recordings/:id': () => waitingRecording() })
     renderApp(`/gravacoes/${RECORDING}`)
     const notice = await screen.findByRole('status', { name: 'Aguardando locutores' })
@@ -32,7 +32,7 @@ describe('gravação aguardando locutores', () => {
     expect(screen.getByRole('list', { name: 'Motivos das etapas' })).toHaveTextContent(/nomeie todos para seguir/)
   })
 
-  it('Seguir sem nomear pede confirmação e solta a gravação', async () => {
+  it('Seguir sem nomear asks for confirmation and releases the recording', async () => {
     const user = userEvent.setup()
     const released = fixtures.recordingTranscribed()
     released.pipeline = released.pipeline.map((step) =>
@@ -51,7 +51,7 @@ describe('gravação aguardando locutores', () => {
     expect(screen.queryByRole('status', { name: 'Aguardando locutores' })).not.toBeInTheDocument()
   })
 
-  it('sem espera, nada de aviso', async () => {
+  it('with no wait, no notice', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     await screen.findByRole('list', { name: 'Processamento' })
