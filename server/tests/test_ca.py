@@ -28,7 +28,7 @@ def _load(path: Path) -> x509.Certificate:
 
 
 def test_root_profile(tmp_path: Path):
-    root = generate(tmp_path, "192.168.15.199", ["holetz-pc.local"])
+    root = generate(tmp_path, "192.168.15.199", ["workstation.local"])
 
     assert isinstance(root.public_key(), ec.EllipticCurvePublicKey)
     assert root.public_key().curve.name == "secp256r1"
@@ -37,7 +37,7 @@ def test_root_profile(tmp_path: Path):
     assert constraints.critical
     assert constraints.value.permitted_subtrees == [
         x509.IPAddress(ipaddress.ip_network("192.168.15.199/32")),
-        x509.DNSName("holetz-pc.local"),
+        x509.DNSName("workstation.local"),
         x509.RFC822Name("eclume.invalid"),
     ]
     assert constraints.value.excluded_subtrees is None
@@ -59,11 +59,11 @@ def test_without_dns_name_restricts_dns_to_the_unusable_domain():
 
 def test_without_ip_refuses():
     with pytest.raises(CaError, match="IP permitido"):
-        permitted_names("holetz-pc.local", [])
+        permitted_names("workstation.local", [])
 
 
 def test_names_by_comma_or_space():
-    assert split_names(" holetz-pc.local, 10.0.0.6  eclume.lan ") == ["holetz-pc.local", "10.0.0.6", "eclume.lan"]
+    assert split_names(" workstation.local, 10.0.0.6  eclume.lan ") == ["workstation.local", "10.0.0.6", "eclume.lan"]
     assert split_names(None) == []
 
 
@@ -95,7 +95,7 @@ def test_proof_can_be_redone(tmp_path: Path):
 
 def test_cli_generate_and_refuse(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     folder = tmp_path / "secrets" / "ca"
-    args = ["ca", "gerar", "--pasta", str(folder), "--host", "192.168.15.199", "--nomes", "holetz-pc.local"]
+    args = ["ca", "gerar", "--pasta", str(folder), "--host", "192.168.15.199", "--nomes", "workstation.local"]
     assert cli.main(args) == 0
     assert capsys.readouterr().out.startswith("sha256 ")
     assert cli.main(args) == 2
