@@ -10,10 +10,10 @@ beforeAll(() => preloadRoute('/config/agendas'))
 
 afterEach(() => vi.unstubAllGlobals())
 
-const UM_A_UM = '01928f3a-1c00-7a00-8000-000000000902'
-const EQUIPE = '01928f3a-1c00-7a00-8000-000000000901'
+const ONE_ON_ONE = '01928f3a-1c00-7a00-8000-000000000902'
+const TEAM = '01928f3a-1c00-7a00-8000-000000000901'
 
-/** API de tipos de agenda com estado, como o servidor. */
+/** Stateful agenda types API, like the server. */
 function mockAgendaTypes(overrides: Record<string, Parameters<typeof mockFetch>[0][string]> = {}) {
   let items: Schemas['AgendaType'][] = [
     ...fixtures.agendaTypePage().items,
@@ -65,8 +65,8 @@ const list = () => screen.findByRole('list', { name: 'Tipos de agenda' })
 const row = (name: string) =>
   within(screen.getByRole('list', { name: 'Tipos de agenda' })).getByRole('button', { name }).closest('li')!
 
-describe('tipos de agenda', () => {
-  it('abre o tipo padrão, no topo com o selo, sem Excluir e sem Como identificar', async () => {
+describe('agenda types', () => {
+  it('opens the fallback agenda type, on top with the badge, without Excluir and without Como identificar', async () => {
     mockAgendaTypes()
     renderApp('/config/agendas')
     await list()
@@ -82,9 +82,9 @@ describe('tipos de agenda', () => {
     )
   })
 
-  it('lista os tipos com o resumo das instruções e abre o escolhido no painel', async () => {
+  it('lists the agenda types with the instructions summary and opens the chosen one in the panel', async () => {
     mockAgendaTypes()
-    renderApp(`/config/agendas?tipo=${EQUIPE}`)
+    renderApp(`/config/agendas?tipo=${TEAM}`)
     expect(await screen.findByRole('heading', { level: 1, name: 'Tipos de agenda' })).toBeInTheDocument()
     expect(screen.getByText('Regras', { selector: '.kicker' })).toBeInTheDocument()
     await list()
@@ -108,11 +108,11 @@ describe('tipos de agenda', () => {
     expect(within(panel).getByRole('button', { name: 'Sobre como montar o título' })).toBeInTheDocument()
   })
 
-  it('o pedido do chat entra no rascunho das instruções do tipo, protegido pelo aviso de descartar', async () => {
+  it('the chat request goes into the draft of the agenda type instructions, guarded by the discard notice', async () => {
     const http = mockAgendaTypes()
     const { router } = renderApp('/config/agendas')
     await screen.findByRole('list', { name: 'Tipos de agenda' })
-    await router.navigate(`/config/agendas?tipo=${UM_A_UM}`, { state: { instructionsRequest: 'Liste as decisões em tabela.' } })
+    await router.navigate(`/config/agendas?tipo=${ONE_ON_ONE}`, { state: { instructionsRequest: 'Liste as decisões em tabela.' } })
     const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
     const instructions = within(panel).getByLabelText('Instruções do resumo') as HTMLTextAreaElement
     expect(instructions.value).toMatch(/até quando\.\n\nListe as decisões em tabela\.$/)
@@ -121,9 +121,9 @@ describe('tipos de agenda', () => {
     expect(await screen.findByRole('dialog', { name: 'Descartar alterações?' })).toBeInTheDocument()
   })
 
-  it('oferece os marcadores, com as chaves dos campos do usuário, e os insere no cursor', async () => {
+  it('offers the placeholders, with the keys of the user fields, and inserts them at the cursor', async () => {
     const http = mockAgendaTypes()
-    renderApp(`/config/agendas?tipo=${UM_A_UM}`)
+    renderApp(`/config/agendas?tipo=${ONE_ON_ONE}`)
     const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
     const markers = within(panel).getByRole('group', { name: 'Marcadores do título' })
     await waitFor(() =>
@@ -140,7 +140,7 @@ describe('tipos de agenda', () => {
     title.focus()
     title.setSelectionRange(6, 6)
     await userEvent.click(within(markers).getByRole('button', { name: 'Inserir {cliente}' }))
-    // A inserção devolve o cursor no quadro seguinte: espera por ele antes de mover o cursor.
+    // The insertion returns the cursor on the next frame: wait for it before moving the cursor.
     await new Promise((resolve) => requestAnimationFrame(resolve))
     await userEvent.click(title)
     title.setSelectionRange(title.value.length, title.value.length)
@@ -161,7 +161,7 @@ describe('tipos de agenda', () => {
     })
   })
 
-  it('cria um tipo novo; o padrão vazio vai como null', async () => {
+  it('creates a new agenda type; the empty pattern goes as null', async () => {
     const http = mockAgendaTypes()
     renderApp('/config/agendas')
     await list()
@@ -185,7 +185,7 @@ describe('tipos de agenda', () => {
     expect(within(row('Mentoria')).getByRole('button', { name: 'Mentoria' })).toHaveAttribute('aria-current', 'true')
   })
 
-  it('pede para descartar as alterações antes de trocar de tipo', async () => {
+  it('asks to discard the changes before switching agenda types', async () => {
     mockAgendaTypes()
     renderApp('/config/agendas')
     await list()
@@ -197,12 +197,12 @@ describe('tipos de agenda', () => {
     expect(await screen.findByRole('form', { name: 'Editar 1:1' })).toBeInTheDocument()
   })
 
-  it('mostra o nome repetido no campo', async () => {
+  it('shows the duplicate name on the field', async () => {
     mockAgendaTypes({
       'PATCH /api/v1/agenda-types/:id': () =>
         problem('validation_failed', 422, { errors: [{ field: 'name', message: 'já existe um tipo com este nome' }] }),
     })
-    renderApp(`/config/agendas?tipo=${UM_A_UM}`)
+    renderApp(`/config/agendas?tipo=${ONE_ON_ONE}`)
     const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
     const name = within(panel).getByLabelText('Nome')
     await userEvent.type(name, ' semanal')
@@ -211,9 +211,9 @@ describe('tipos de agenda', () => {
     expect(name).toHaveAccessibleDescription('já existe um tipo com este nome')
   })
 
-  it('exclui um tipo avisando o que acontece com as gravações', async () => {
+  it('deletes an agenda type warning what happens to the recordings', async () => {
     const http = mockAgendaTypes()
-    renderApp(`/config/agendas?tipo=${UM_A_UM}`)
+    renderApp(`/config/agendas?tipo=${ONE_ON_ONE}`)
     const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
     await userEvent.click(within(panel).getByRole('button', { name: 'Excluir tipo' }))
     const dialog = screen.getByRole('dialog', { name: 'Excluir 1:1?' })
@@ -225,7 +225,7 @@ describe('tipos de agenda', () => {
   })
 })
 
-describe('pré-visualizar numa gravação', () => {
+describe('preview on a recording', () => {
   const RECORDING = '01928f3a-1c00-7a00-8000-000000000401'
   const queued = () => ({ ...fixtures.previewAgendaType(), status: 'queued', items: [] })
   const withRecordings = (extra: Record<string, Parameters<typeof mockFetch>[0][string]>) =>
@@ -239,17 +239,17 @@ describe('pré-visualizar numa gravação', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Pré-visualizar' }))
   }
 
-  it('roda o rascunho na gravação escolhida e mostra detecção, título, tags e resumo, sem salvar', async () => {
+  it('runs the draft on the chosen recording and shows detection, title, tags and summary, without saving', async () => {
     const http = withRecordings({
       'POST /api/v1/agenda-types/preview': () => queued(),
       'GET /api/v1/previews/:id': () => fixtures.previewAgendaType(),
     })
-    renderApp(`/config/agendas?tipo=${UM_A_UM}`)
+    renderApp(`/config/agendas?tipo=${ONE_ON_ONE}`)
     const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
     await userEvent.type(within(panel).getByLabelText('Nome'), ' e mentoria')
     await previewOn(panel, /^Alinhamento do programa de lideranças · /)
 
-    // A lista da pré-visualização, sem a pergunta "a conta tem alguma?" (limit=1) do shell.
+    // The preview list, without the shell's "does the account have any?" question (limit=1).
     const [recordings] = http
       .requests('GET /api/v1/recordings')
       .map((r) => new URL(r.url).searchParams)
@@ -271,11 +271,11 @@ describe('pré-visualizar numa gravação', () => {
     expect(http.requests('POST /api/v1/agenda-types')).toHaveLength(0)
   })
 
-  it('diz qual tipo o agente escolheria quando não é o rascunho, e some ao editar', async () => {
+  it('says which agenda type the agent would choose when it is not the draft, and goes away on editing', async () => {
     const other = fixtures.previewAgendaType()
     other.items = [{ ...(other.items[0] as Schemas['AgendaTypePreviewItem']), detected: false, detected_type_name: 'Reunião de equipe', confidence: 0.64 }]
     withRecordings({ 'POST /api/v1/agenda-types/preview': () => other })
-    renderApp(`/config/agendas?tipo=${UM_A_UM}`)
+    renderApp(`/config/agendas?tipo=${ONE_ON_ONE}`)
     const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
     await previewOn(panel, /^Alinhamento/)
 
@@ -290,7 +290,7 @@ describe('pré-visualizar numa gravação', () => {
     expect(within(panel).getByRole('status')).toHaveTextContent('O rascunho mudou desde a pré-visualização.')
   })
 
-  it('explica quando falta o agente e quando não há gravações transcritas', async () => {
+  it('explains when the agent is missing and when there are no transcribed recordings', async () => {
     withRecordings({
       'POST /api/v1/agenda-types/preview': () => ({
         ...queued(),
@@ -298,7 +298,7 @@ describe('pré-visualizar numa gravação', () => {
         error: { code: 'no_provider', message: 'Nenhum provider serve a finalidade summaries.' },
       }),
     })
-    renderApp(`/config/agendas?tipo=${UM_A_UM}`)
+    renderApp(`/config/agendas?tipo=${ONE_ON_ONE}`)
     const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
     await previewOn(panel, /^Alinhamento/)
     expect(await within(panel).findByRole('alert')).toHaveTextContent(
@@ -306,9 +306,9 @@ describe('pré-visualizar numa gravação', () => {
     )
   })
 
-  it('sem gravações transcritas, o diálogo avisa e não deixa pré-visualizar', async () => {
+  it('with no transcribed recordings, the dialog warns and does not allow previewing', async () => {
     mockAgendaTypes({ 'GET /api/v1/recordings': () => ({ items: [], next_cursor: null }) })
-    renderApp(`/config/agendas?tipo=${UM_A_UM}`)
+    renderApp(`/config/agendas?tipo=${ONE_ON_ONE}`)
     const panel = await screen.findByRole('form', { name: 'Editar 1:1' })
     await userEvent.click(within(panel).getByRole('button', { name: 'Pré-visualizar numa gravação' }))
     const dialog = screen.getByRole('dialog', { name: 'Pré-visualizar numa gravação' })
