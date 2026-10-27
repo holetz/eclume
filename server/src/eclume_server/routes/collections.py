@@ -1,4 +1,4 @@
-"""Coleções do usuário, com a regra que o agente segue para incluir gravações."""
+"""The user's collections, with the rule the agent follows to include recordings."""
 
 from __future__ import annotations
 
@@ -60,13 +60,13 @@ class CollectionPatch(BaseModel):
 
 
 class CollectionMerge(BaseModel):
-    """Schema `CollectionMerge`: a coleção que recebe as gravações."""
+    """Schema `CollectionMerge`: the collection that receives the recordings."""
 
     into: UUID
 
 
 def _select() -> Select:
-    """Coleções do usuário (a RLS só mostra as dele) com as gravações que as usam."""
+    """The user's collections (RLS shows only theirs) with the recordings that use them."""
     return select(t.collections, _sort_name, _recording_count)
 
 
@@ -93,7 +93,7 @@ async def _get(conn: AsyncConnection, collection_id: UUID) -> Row:
 
 @router.get("/collections")
 async def list_collections(principal: Reader, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50) -> dict[str, Any]:
-    """Coleções do usuário, em ordem alfabética."""
+    """The user's collections, in alphabetical order."""
     c = t.collections.c
     query = _select().order_by(func.lower(c.name), c.id).limit(limit + 1)
     if cursor:
@@ -107,7 +107,7 @@ async def list_collections(principal: Reader, ctx: Ctx, cursor: Cursor = None, l
 
 @router.post("/collections", status_code=201)
 async def create_collection(body: CollectionCreate, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Cria uma coleção do usuário."""
+    """Create a collection for the user."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         collection_id = (
             await conn.execute(
@@ -121,7 +121,7 @@ async def create_collection(body: CollectionCreate, principal: Writer, ctx: Ctx)
 
 @router.patch("/collections/{collection_id}")
 async def update_collection(collection_id: UUID, body: CollectionPatch, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Renomeia ou descreve a coleção."""
+    """Rename or describe the collection."""
     values = body.model_dump(exclude_unset=True)
     if not values:
         raise invalid_field("body", "informe ao menos um campo")
@@ -136,8 +136,8 @@ async def update_collection(collection_id: UUID, body: CollectionPatch, principa
             .values(**values, updated_at=datetime.now(UTC))
         )
         if "name" in values:
-            # O nome é a subpasta da pasta sincronizada do desktop: as gravações da coleção
-            # reaparecem no `?since=` e mudam de pasta.
+            # The name is the subfolder of the desktop's synced folder: the collection's recordings
+            # reappear in `?since=` and change folder.
             r = t.recordings.c
             await conn.execute(
                 update(t.recordings)
@@ -149,7 +149,7 @@ async def update_collection(collection_id: UUID, body: CollectionPatch, principa
 
 @router.delete("/collections/{collection_id}", status_code=204)
 async def delete_collection(collection_id: UUID, principal: Writer, ctx: Ctx) -> Response:
-    """Exclui a coleção; as gravações ficam e só saem dela."""
+    """Delete the collection; the recordings stay and only leave it."""
     r = t.recordings.c
     async with user_tx(ctx.engine, principal.user_id) as conn:
         result = await conn.execute(delete(t.collections).where(t.collections.c.id == collection_id))
@@ -168,9 +168,9 @@ async def delete_collection(collection_id: UUID, principal: Writer, ctx: Ctx) ->
 
 @router.post("/collections/{collection_id}/merge")
 async def merge_collection(collection_id: UUID, body: CollectionMerge, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Junta a coleção a outra: as gravações dela passam para `into`, sem repetição, e ela é excluída.
+    """Merge the collection into another: its recordings move to `into`, without repeats, and it is deleted.
 
-    A coleção que recebe fica com o nome, a descrição e a regra dela.
+    The receiving collection keeps its own name, description and rule.
     """
     if body.into == collection_id:
         raise invalid_field("into", "escolha outra coleção")
@@ -202,7 +202,7 @@ async def merge_collection(collection_id: UUID, body: CollectionMerge, principal
             .all()
         )
         if moved:
-            # As coleções são pastas do desktop: as transcrições reaparecem no `?since=`.
+            # Collections are desktop folders: the transcripts reappear in `?since=`.
             await conn.execute(
                 update(t.transcripts).where(t.transcripts.c.recording_id.in_(moved)).values(updated_at=now)
             )

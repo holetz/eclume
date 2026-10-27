@@ -1,4 +1,4 @@
-"""Pessoas do usuário: diretório, cadastro e as transcrições em que cada uma fala."""
+"""The user's people: directory, registration and the transcripts in which each one speaks."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ class PersonPatch(BaseModel):
 async def list_people(
     principal: Reader, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50, q: str | None = None
 ) -> dict[str, Any]:
-    """Pessoas em ordem alfabética (sem acento); `q` filtra por prefixo de nome ou e-mail."""
+    """People in alphabetical order (accent-insensitive); `q` filters by name or e-mail prefix."""
     c = t.people.c
     query = person_select().order_by(c.sort_name, c.id).limit(limit + 1)
     if q and q.strip():
@@ -107,14 +107,14 @@ async def list_people(
 
 @router.get("/people/facets")
 async def list_person_facets(principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Empresas, áreas e tags de pessoa em uso, com quantas pessoas usam cada uma."""
+    """Companies, areas and person tags in use, with how many people use each one."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await facets(conn)
 
 
 @router.post("/people", status_code=201)
 async def create_person(body: PersonCreate, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Cadastra uma pessoa; e-mail repetido entre as pessoas do usuário é 409."""
+    """Register a person; an e-mail repeated among the user's people is 409."""
     try:
         async with user_tx(ctx.engine, principal.user_id) as conn:
             person_id = (
@@ -132,14 +132,14 @@ async def create_person(body: PersonCreate, principal: Writer, ctx: Ctx) -> dict
 
 @router.get("/people/{person_id}")
 async def read_person(person_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Uma pessoa."""
+    """One person."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return person_json(await get_person(conn, person_id))
 
 
 @router.patch("/people/{person_id}")
 async def update_person(person_id: UUID, body: PersonPatch, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Edita nome, e-mail, notas e atributos; renomear sobe o `updated_at` das transcrições em que ela fala."""
+    """Edit name, e-mail, notes and attributes; renaming bumps the `updated_at` of the transcripts they speak in."""
     values = body.model_dump(exclude_unset=True)
     if not values:
         raise invalid_field("body", "informe ao menos um campo")
@@ -154,14 +154,14 @@ async def update_person(person_id: UUID, body: PersonPatch, principal: Writer, c
             )
             row = await get_person(conn, person_id)
     except IntegrityError as exc:
-        # O contrato não declara 409 no PATCH: e-mail repetido é um campo inválido.
+        # The contract declares no 409 on PATCH: a repeated e-mail is an invalid field.
         raise invalid_field("email", EMAIL_TAKEN) from exc
     return person_json(row)
 
 
 @router.delete("/people/{person_id}", status_code=204)
 async def delete_person(person_id: UUID, principal: Writer, ctx: Ctx) -> Response:
-    """Exclui a pessoa; os locutores ligados a ela ficam sem pessoa e mantêm o `label`."""
+    """Delete the person; the speakers linked to them are left with no person and keep the `label`."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         result = await conn.execute(delete(t.people).where(t.people.c.id == person_id))
     if result.rowcount == 0:
@@ -173,7 +173,7 @@ async def delete_person(person_id: UUID, principal: Writer, ctx: Ctx) -> Respons
 async def list_person_transcripts(
     person_id: UUID, principal: TranscriptReader, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50
 ) -> dict[str, Any]:
-    """Transcrições do usuário em que a pessoa fala, da gravação mais recente para a mais antiga."""
+    """The user's transcripts in which the person speaks, from the most recent recording to the oldest."""
     tc = t.transcripts.c
     recorded_at = t.recordings.c.recorded_at
     query = (
