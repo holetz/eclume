@@ -731,8 +731,8 @@ paths:
       - tokens
       operationId: listTokens
       summary: List the user's tokens
-      description: Personal PATs and device credentials. `?kind=device` is the list of the mobile app
-        and the desktop app; `?kind=personal`, the one of the access tokens.
+      description: Personal PATs and device credentials. `?kind=device` is the list of "App móvel" and
+        "App desktop"; `?kind=personal`, the one of "Tokens de acesso".
       parameters:
       - $ref: '#/components/parameters/Cursor'
       - $ref: '#/components/parameters/Limit'
@@ -798,7 +798,7 @@ paths:
       - tokens
       operationId: revokeToken
       summary: Revoke a token
-      description: Applies to a PAT and to a device credential (unlinking turns the device off).
+      description: Applies to a PAT and to a device credential ("Desvincular" turns the device off).
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
@@ -955,7 +955,7 @@ paths:
 
         `kind: device` token with `recordings:read`, `recordings:write`, since 2.6.0
 
-        `summaries:read` (the app''s summary-ready notice, with Copy) and, since 2.8.0,
+        `summaries:read` (the app''s summary-ready notice, with "Copiar") and, since 2.8.0,
 
         `transcripts:read` (the desktop synced folder reads transcripts), with no expiry and
 
@@ -1038,7 +1038,7 @@ paths:
       - devices
       operationId: getPairingCode
       summary: State of a pairing code
-      description: The web polls it to replace the QR with "Paired" and show the device (`token_id`).
+      description: The web polls it to replace the QR with "Pareado" and show the device (`token_id`).
         Session only.
       responses:
         '200':

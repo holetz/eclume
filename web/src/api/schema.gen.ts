@@ -351,7 +351,7 @@ export interface paths {
         };
         /**
          * List the user's tokens
-         * @description Personal PATs and device credentials. `?kind=device` is the list of the mobile app and the desktop app; `?kind=personal`, the one of the access tokens.
+         * @description Personal PATs and device credentials. `?kind=device` is the list of "App móvel" and "App desktop"; `?kind=personal`, the one of "Tokens de acesso".
          */
         get: operations["listTokens"];
         put?: never;
@@ -380,7 +380,7 @@ export interface paths {
         post?: never;
         /**
          * Revoke a token
-         * @description Applies to a PAT and to a device credential (unlinking turns the device off).
+         * @description Applies to a PAT and to a device credential ("Desvincular" turns the device off).
          */
         delete: operations["revokeToken"];
         options?: never;
@@ -496,7 +496,7 @@ export interface paths {
          * Log in on a device with e-mail and password
          * @description Checks the password like the browser login and issues a device credential: a
          *     `kind: device` token with `recordings:read`, `recordings:write`, since 2.6.0
-         *     `summaries:read` (the app's summary-ready notice, with Copy) and, since 2.8.0,
+         *     `summaries:read` (the app's summary-ready notice, with "Copiar") and, since 2.8.0,
          *     `transcripts:read` (the desktop synced folder reads transcripts), with no expiry and
          *     revocable at `DELETE /api/v1/tokens/{token_id}`. The secret comes back only in this
          *     response. Wrong password or inactive account, 401 with the same message as login; an
@@ -544,7 +544,7 @@ export interface paths {
         };
         /**
          * State of a pairing code
-         * @description The web polls it to replace the QR with "Paired" and show the device (`token_id`). Session only.
+         * @description The web polls it to replace the QR with "Pareado" and show the device (`token_id`). Session only.
          */
         get: operations["getPairingCode"];
         put?: never;
