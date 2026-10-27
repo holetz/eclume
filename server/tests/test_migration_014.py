@@ -1,4 +1,4 @@
-"""Migration 014 (gravação centrada no resumo): origem da data e versões renumeradas por transcrição."""
+"""Migration 014 (summary-centred recording): date source and versions renumbered per transcript."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ VALUES ('{USER}', '{TRANSCRIPT}', 1, '{agenda_type}', 'Tipo', 'x', {version}, 'd
         'p', 'claude-cli', 'm', '# v', now() - interval '{minutes_ago} minutes', now());"""  # noqa: S608
 
 
-# Dois tipos com a numeração antiga (por tipo): A1, B1, A2, B2 em ordem de criação.
+# Two types with the old numbering (per type): A1, B1, A2, B2 in creation order.
 SEED = f"""
 INSERT INTO users (id, email, name, password_hash) VALUES ('{USER}', 'u@exemplo.com.br', 'U', 'h');
 {_recording(DESKTOP, "desktop")}{_recording(WEB, "upload")}
@@ -53,7 +53,7 @@ VALUES ('{TRANSCRIPT}', '{USER}', '{DESKTOP}', 1, 'pt', 1000);
 
 @pytest.fixture(scope="module")
 def url(services: Services) -> Iterator[str]:
-    del services  # só pela checagem dos serviços de teste
+    del services  # only for the test services check
     database = f"eclume_mig014_{secrets.token_hex(4)}"
     target = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
 
@@ -93,13 +93,13 @@ def _rows(url: str, sql: str) -> list[tuple[Any, ...]]:
     return run(go())
 
 
-def test_origem_da_data_pela_fonte(url: str):
+def test_date_source_from_the_source(url: str):
     rows = dict(_rows(url, "SELECT id, recorded_at_source FROM recordings"))
     assert rows == {DESKTOP: "capture", WEB: "upload"}
     assert {kind for (kind,) in _rows(url, "SELECT kind FROM recordings")} == {"meeting"}
 
 
-def test_versoes_renumeradas_por_transcricao_na_ordem_de_criacao(url: str):
+def test_versions_renumbered_per_transcript_in_creation_order(url: str):
     rows = _rows(url, "SELECT agenda_type_id, version, origin FROM summaries ORDER BY created_at")
     assert rows == [
         (TYPE_A, 1, "generated"),

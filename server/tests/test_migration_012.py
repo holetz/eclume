@@ -1,4 +1,4 @@
-"""Migration 012 (etapas do pipeline): o histórico das gravações que já existiam."""
+"""Migration 012 (pipeline steps): the history of recordings that already existed."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ VALUES ('{USER}', '{TRANSCRIPT}', 2, gen_random_uuid(), 'Ata', 'x', 1, 'done', '
 
 @pytest.fixture(scope="module")
 def url(services: Services) -> Iterator[str]:
-    del services  # só pela checagem dos serviços de teste
+    del services  # only for the test services check
     database = f"eclume_mig012_{secrets.token_hex(4)}"
     target = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
 
@@ -98,19 +98,19 @@ def _steps(url: str, recording: Any) -> dict[tuple[int, str], tuple[Any, ...]]: 
     return {(row[0], row[1]): tuple(row[2:]) for row in run(go())}
 
 
-def test_revisoes_transcritas_ganham_o_historico(url: str):
+def test_transcribed_revisions_get_the_history(url: str):
     steps = _steps(url, DONE)
     assert steps[(2, "received")][0] == "done"
     assert steps[(2, "transcription")][:2] == ("done", None)
     assert steps[(2, "transcription")][3] == 60000
     for step in ("preprocessing", "fields", "agenda_type"):
         assert steps[(2, step)][:3] == ("skipped", None, "before_pipeline")
-    # O resumo automático é da última revisão; na anterior, a etapa sai pulada.
+    # The automatic summary belongs to the last revision; on the previous one the step is skipped.
     assert steps[(2, "summary")][0] == "done"
     assert steps[(1, "summary")][:3] == ("skipped", None, "before_pipeline")
 
 
-def test_falhas_e_jobs_em_aberto(url: str):
+def test_failures_and_open_jobs(url: str):
     failed = _steps(url, FAILED)
     assert failed[(1, "transcription")][:2] == ("failed", "gpu_oom")
     assert (1, "fields") not in failed

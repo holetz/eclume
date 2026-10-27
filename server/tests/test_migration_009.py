@@ -1,9 +1,9 @@
-"""Migration 009 (tipos de agenda) sobre dados no formato da 008.
+"""Migration 009 (agenda types) over data in the 008 format.
 
-Aplica 001 a 008 num banco próprio, semeia duas contas com os templates que a 008 deixa (os três
-padrões semeados e um pessoal com nome de tipo padrão), uma gravação transcrita com resumo que cita
-um template, aplica a 009 e confere a conversão, os tipos padrão do admin, as FKs compostas e a
-remoção dos templates.
+Applies 001 to 008 in a database of its own, seeds two accounts with the templates 008 leaves (the three
+seeded defaults and a personal one named like a default type), a transcribed recording with a summary
+that cites a template, applies 009 and checks the conversion, the admin's default types, the composite
+FKs and the removal of the templates.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ INSERT INTO summaries (owner_id, transcript_id, transcript_revision, template_id
 SELECT '{ANA}', '{TR}', 1, id, name, instructions, 1, 'done', 'automatic', gen_random_uuid(), 'claude',
        'claude-cli', 'sonnet', '# Ata'
 FROM summary_templates WHERE owner_id = '{ANA}' AND is_default;
-"""  # noqa: S608 — valores fixos do teste
+"""  # noqa: S608 — fixed test values
 
 
 async def _rows(conn: Any, sql: str, **params: Any) -> list[Any]:  # noqa: ANN401
@@ -68,8 +68,8 @@ async def _rows(conn: Any, sql: str, **params: Any) -> list[Any]:  # noqa: ANN40
 
 @pytest.fixture(scope="module")
 def migrated(services: Services) -> Iterator[dict[str, Any]]:
-    """Banco próprio: 001 a 008, a semeadura no formato da 008, o retrato de antes e a 009."""
-    del services  # só pela checagem dos serviços de teste
+    """Own database: 001 to 008, the seed in the 008 format, the before snapshot and 009."""
+    del services  # only for the test services check
     database = f"eclume_mig009_{secrets.token_hex(4)}"
     url = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
 
@@ -105,7 +105,7 @@ def migrated(services: Services) -> Iterator[dict[str, Any]]:
 
 
 def _query(migrated: dict[str, Any], *statements: str, **params: Any) -> list[Any]:  # noqa: ANN401
-    """Roda os comandos numa transação; devolve as linhas do último."""
+    """Run the statements in one transaction; return the rows of the last one."""
 
     async def go() -> list[Any]:
         engine = create_async_engine(migrated["url"])
@@ -127,7 +127,7 @@ def _names(migrated: dict[str, Any], owner: UUID) -> list[str]:
     return [row[0] for row in rows]
 
 
-def test_cada_template_vira_tipo_do_dono_com_o_mesmo_id(migrated: dict[str, Any]) -> None:
+def test_each_template_becomes_an_owner_type_with_the_same_id(migrated: dict[str, Any]) -> None:
     for template_id, owner, name, description, instructions in migrated["before"]["templates"]:
         row = _query(
             migrated,
@@ -138,14 +138,14 @@ def test_cada_template_vira_tipo_do_dono_com_o_mesmo_id(migrated: dict[str, Any]
         assert row == [(owner, name, description or "", instructions, None, [], None)]
 
 
-def test_os_resumos_citam_o_tipo_convertido(migrated: dict[str, Any]) -> None:
+def test_summaries_cite_the_converted_type(migrated: dict[str, Any]) -> None:
     summary = _query(migrated, "SELECT agenda_type_id, agenda_type_name FROM summaries")
     assert [tuple(row) for row in summary] == [migrated["before"]["summary"]]
     (type_name,) = _query(migrated, "SELECT name FROM agenda_types WHERE id = :id", id=summary[0][0])[0]
     assert type_name == "Ata de reunião"
 
 
-def test_os_tipos_padrao_do_admin_chegam_a_toda_conta(migrated: dict[str, Any]) -> None:
+def test_admin_default_types_reach_every_account(migrated: dict[str, Any]) -> None:
     defaults = _query(
         migrated,
         "SELECT name, title_pattern, default_tags, include_for_new_users FROM default_agenda_types ORDER BY position",
@@ -153,7 +153,7 @@ def test_os_tipos_padrao_do_admin_chegam_a_toda_conta(migrated: dict[str, Any]) 
     assert [row[0] for row in defaults] == DEFAULT_TYPES
     assert tuple(defaults[0][1:]) == ("Reunião de equipe · {assunto}", ["interno", "planejamento"], True)
     assert _names(migrated, ANA) == SEEDED + DEFAULT_TYPES
-    # O nome já usado por um template pessoal ganha o sufixo.
+    # A name already used by a personal template gets the suffix.
     assert _names(migrated, BRUNO) == [*SEEDED, "1:1", "Reunião de equipe", "1:1 (padrão)", *DEFAULT_TYPES[2:]]
     copied = _query(
         migrated,
@@ -163,17 +163,17 @@ def test_os_tipos_padrao_do_admin_chegam_a_toda_conta(migrated: dict[str, Any]) 
     assert copied == [(2 * len(DEFAULT_TYPES),)]
 
 
-def test_gravacoes_ficam_sem_tipo(migrated: dict[str, Any]) -> None:
+def test_recordings_are_left_without_a_type(migrated: dict[str, Any]) -> None:
     assert _query(migrated, "SELECT agenda_type_id, agenda_type_origin FROM recordings") == [(None, None)]
 
 
-def test_saem_os_templates(migrated: dict[str, Any]) -> None:
+def test_templates_are_dropped(migrated: dict[str, Any]) -> None:
     assert _query(migrated, "SELECT to_regclass('summary_templates')") == [(None,)]
     functions = {row[0] for row in _query(migrated, "SELECT proname FROM pg_proc WHERE proname LIKE 'eclume_seed%'")}
     assert functions == {"eclume_seed_user_defaults"}
 
 
-def test_a_semeadura_de_conta_nova_e_idempotente(migrated: dict[str, Any]) -> None:
+def test_new_account_seeding_is_idempotent(migrated: dict[str, Any]) -> None:
     carla = uuid4()
     _query(
         migrated,
@@ -186,7 +186,7 @@ def test_a_semeadura_de_conta_nova_e_idempotente(migrated: dict[str, Any]) -> No
     assert _names(migrated, carla) == DEFAULT_TYPES[:3]
 
 
-def test_filho_de_outra_conta_e_recusado_pelas_fks_compostas(migrated: dict[str, Any]) -> None:
+def test_child_of_another_account_is_refused_by_composite_fks(migrated: dict[str, Any]) -> None:
     with pytest.raises(DBAPIError, match="foreign key"):
         _query(migrated, "UPDATE segments SET owner_id = :o WHERE transcript_id = :t", o=BRUNO, t=TR)
     bruno_type = _query(migrated, "SELECT id FROM agenda_types WHERE owner_id = :o LIMIT 1", o=BRUNO)[0][0]
@@ -194,7 +194,7 @@ def test_filho_de_outra_conta_e_recusado_pelas_fks_compostas(migrated: dict[str,
         _query(migrated, "UPDATE recordings SET agenda_type_id = :a WHERE id = :r", a=bruno_type, r=REC)
 
 
-def test_sob_eclume_app_cada_um_so_ve_os_proprios_tipos(migrated: dict[str, Any]) -> None:
+def test_as_eclume_app_each_user_only_sees_their_own_types(migrated: dict[str, Any]) -> None:
     async def go() -> tuple[int, int]:
         engine = create_async_engine(migrated["url"])
         try:

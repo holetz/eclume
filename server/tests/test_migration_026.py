@@ -1,4 +1,4 @@
-"""Migration 026 (cotas e fila justa): padrões das cotas e jobs em aberto já despachados."""
+"""Migration 026 (quotas and fair queue): quota defaults and open jobs already dispatched."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ INSERT INTO users (id, email, name, password_hash) VALUES ('{USER}', 'u@exemplo.
 
 @pytest.fixture(scope="module")
 def url(services: Services) -> Iterator[str]:
-    del services  # só pela checagem dos serviços de teste
+    del services  # only for the test services check
     database = f"eclume_mig026_{secrets.token_hex(4)}"
     target = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
 
@@ -81,7 +81,7 @@ def _rows(url: str, sql: str) -> list[tuple[Any, ...]]:
     return run(go())
 
 
-def test_cotas_padrao_da_plataforma(url: str):
+def test_platform_default_quotas(url: str):
     [(quotas,)] = _rows(url, "SELECT quotas FROM platform_settings")
     assert quotas == {
         "storage_bytes": 10 * 1024**3,
@@ -92,10 +92,10 @@ def test_cotas_padrao_da_plataforma(url: str):
     }
 
 
-def test_conta_nasce_sem_sobreposicao(url: str):
+def test_account_starts_without_an_override(url: str):
     assert _rows(url, "SELECT quotas FROM users") == [(None,)]
 
 
-def test_jobs_em_aberto_nascem_despachados(url: str):
+def test_open_jobs_start_dispatched(url: str):
     rows = dict(_rows(url, "SELECT recording_id, dispatched_at = queued_at FROM transcription_jobs"))
     assert rows == {QUEUED: True, RUNNING: True, DONE: None}

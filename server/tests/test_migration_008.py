@@ -1,9 +1,9 @@
-"""Migration 008 (conta por usuário) sobre dados no formato da 007.
+"""Migration 008 (account per user) over data in the 007 format.
 
-Aplica 001 a 007 num banco próprio, semeia três organizações como a 007 as guardava (admins e
-membros, pessoas usadas por mais de um usuário, amostras, sugestões, templates da organização,
-compartilhamento, grupo, convite, consentimento, auditoria, segredo e configuração), aplica a 008
-e confere o que a spec holetz/eclume#32 promete preservar e o que ela remove.
+Applies 001 to 007 in a database of its own, seeds three organizations as 007 stored them (admins and
+members, people used by more than one user, samples, suggestions, organization templates, sharing,
+group, invitation, consent, audit, secret and settings), applies 008 and checks what spec
+holetz/eclume#32 promises to preserve and what it removes.
 """
 
 from __future__ import annotations
@@ -87,7 +87,7 @@ INSERT INTO summaries (org_id, transcript_id, transcript_revision, template_id, 
                        status, trigger, provider_id, provider_name, provider_kind, model, content_md, created_by)
 VALUES ('{org}', '{transcript}', 1, gen_random_uuid(), 'Ata de reunião', 'x', 1, 'done', 'automatic',
         '{PROVIDER}', 'claude', 'claude-cli', 'sonnet', '# Ata', '{owner}');
-"""  # noqa: S608 — valores fixos do teste
+"""  # noqa: S608 — fixed test values
 
 
 SEED = f"""
@@ -152,7 +152,7 @@ INSERT INTO uploads (org_id, owner_id, status, filename, content_type, size_byte
                      new_recording_id, expires_at)
 VALUES ('{ORG_A}', '{MEMBER_A2}', 'in_progress', 'a.ogg', 'audio/ogg', 10, '{"0" * 64}', 5242880, 1,
         gen_random_uuid(), now() + interval '1 day');
-"""  # noqa: S608 — valores fixos do teste
+"""  # noqa: S608 — fixed test values
 
 
 async def _rows(conn: Any, sql: str, **params: Any) -> list[Any]:  # noqa: ANN401
@@ -161,8 +161,8 @@ async def _rows(conn: Any, sql: str, **params: Any) -> list[Any]:  # noqa: ANN40
 
 @pytest.fixture(scope="module")
 def migrated(services: Services) -> Iterator[dict[str, Any]]:
-    """Banco próprio: 001 a 007, a semeadura no formato da 007, o retrato de antes e a 008."""
-    del services  # só pela checagem dos serviços de teste
+    """Own database: 001 to 007, the seed in the 007 format, the before snapshot and 008."""
+    del services  # only for the test services check
     database = f"eclume_mig008_{secrets.token_hex(4)}"
     url = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
 
@@ -230,7 +230,7 @@ def _query(migrated: dict[str, Any], sql: str, **params: Any) -> list[Any]:  # n
 
 
 def _as_user(migrated: dict[str, Any], user: UUID, sql: str) -> list[Any]:
-    """Consulta sob `eclume_app`, com a RLS do usuário."""
+    """Query as `eclume_app`, under the user's RLS."""
 
     async def go() -> list[Any]:
         engine = create_async_engine(migrated["url"])
@@ -245,7 +245,7 @@ def _as_user(migrated: dict[str, Any], user: UUID, sql: str) -> list[Any]:
     return run(go())
 
 
-def test_saem_as_tabelas_colunas_e_funcoes_da_organizacao(migrated: dict[str, Any]) -> None:
+def test_organization_tables_columns_and_functions_are_dropped(migrated: dict[str, Any]) -> None:
     gone = (
         "organizations",
         "groups",
@@ -281,27 +281,27 @@ def test_saem_as_tabelas_colunas_e_funcoes_da_organizacao(migrated: dict[str, An
     assert functions == []
 
 
-def test_cada_admin_vira_conta_de_admin_com_o_mesmo_hash(migrated: dict[str, Any]) -> None:
+def test_each_admin_becomes_an_admin_account_with_the_same_hash(migrated: dict[str, Any]) -> None:
     admins = dict(_query(migrated, "SELECT email, password_hash FROM admins"))
     assert admins == migrated["before"]["hashes"]
     assert set(admins) == {"admin.a@example.com", "admin.b@example.net"}
-    # A conta de usuário do admin segue, com a sessão aberta.
+    # The admin's user account remains, with its session open.
     assert _query(migrated, "SELECT count(*) FROM sessions WHERE user_id = :u", u=ADMIN_A) == [(1,)]
 
 
-def test_ids_e_contagens_do_conteudo_sao_preservados(migrated: dict[str, Any]) -> None:
+def test_content_ids_and_counts_are_preserved(migrated: dict[str, Any]) -> None:
     before = migrated["before"]
     for table in ("users", "recordings", "transcripts", "summaries"):
         ids = {row[0] for row in _query(migrated, f"SELECT id FROM {table}")}  # noqa: S608
         assert ids == before[table], table
     assert _query(migrated, "SELECT count(*) FROM segments") == [(before["segments"],)]
     assert dict(_query(migrated, "SELECT id, audio_key FROM recordings")) == before["audio_keys"]
-    # Pessoas originais mantêm o id; as cópias somam.
+    # Original people keep their id; the copies add up.
     people = {row[0] for row in _query(migrated, "SELECT id FROM people")}
     assert before["people"] <= people
 
 
-def test_owner_id_bate_com_o_dono_da_gravacao(migrated: dict[str, Any]) -> None:
+def test_owner_id_matches_the_recording_owner(migrated: dict[str, Any]) -> None:
     for table in ("transcription_jobs", "transcripts"):
         wrong = _query(
             migrated,
@@ -318,8 +318,8 @@ def test_owner_id_bate_com_o_dono_da_gravacao(migrated: dict[str, Any]) -> None:
         assert wrong == [(0,)], table
 
 
-def test_pessoa_usada_por_outro_usuario_vira_copia_dele(migrated: dict[str, Any]) -> None:
-    # A original fica com quem a criou (ou com o admin mais antigo), com o mesmo id.
+def test_person_used_by_another_user_becomes_their_copy(migrated: dict[str, Any]) -> None:
+    # The original stays with whoever created it (or with the oldest admin), with the same id.
     owners = dict(_query(migrated, "SELECT id, owner_id FROM people WHERE id = ANY(:ids)", ids=[PERSON_1, PERSON_2]))
     assert owners == {PERSON_1: ADMIN_A, PERSON_2: ADMIN_A}
     assert _query(
@@ -349,11 +349,11 @@ def test_pessoa_usada_por_outro_usuario_vira_copia_dele(migrated: dict[str, Any]
     assert updated[TR_2] > before[TR_2]
     assert updated[TR_1] == before[TR_1]
     assert updated[TR_3] == before[TR_3]
-    # Quem não usava a pessoa não recebe cópia.
+    # Whoever did not use the person gets no copy.
     assert _query(migrated, "SELECT count(*) FROM people WHERE owner_id = :u", u=MEMBER_A2) == [(0,)]
 
 
-def test_cada_usuario_tem_os_templates_com_o_padrao_certo(migrated: dict[str, Any]) -> None:
+def test_each_user_has_the_templates_with_the_right_default(migrated: dict[str, Any]) -> None:
     before = migrated["before"]
     org_templates = before["org_a_templates"]
     org_default = UUID(before["org_a_default"])
@@ -376,7 +376,7 @@ def test_cada_usuario_tem_os_templates_com_o_padrao_certo(migrated: dict[str, An
     assert [name for name, (_, default) in member.items() if default] == [org_templates[org_default]]
 
     other_org = templates(MEMBER_B)
-    assert len(other_org) == 3  # cópias dos três padrões da outra organização
+    assert len(other_org) == 3  # copies of the other organization's three defaults
     assert [name for name, (_, default) in other_org.items() if default] == ["Ata de reunião"]
 
     seeded = templates(LONE_C)
@@ -385,7 +385,7 @@ def test_cada_usuario_tem_os_templates_com_o_padrao_certo(migrated: dict[str, An
     assert _query(migrated, "SELECT count(*) FROM summary_templates WHERE owner_id IS NULL") == [(0,)]
 
 
-def test_configuracao_e_segredos_vem_da_organizacao_mais_antiga(migrated: dict[str, Any]) -> None:
+def test_settings_and_secrets_come_from_the_oldest_organization(migrated: dict[str, Any]) -> None:
     [(summarization, voice, updated_by_email)] = _query(
         migrated,
         "SELECT s.summarization, s.voice_identification, a.email"
@@ -398,7 +398,7 @@ def test_configuracao_e_segredos_vem_da_organizacao_mais_antiga(migrated: dict[s
     assert _query(migrated, "SELECT id FROM agent_providers") == [(PROVIDER,)]
 
 
-def test_sob_eclume_app_cada_um_so_enxerga_o_que_e_dele(migrated: dict[str, Any]) -> None:
+def test_as_eclume_app_each_user_only_sees_their_own(migrated: dict[str, Any]) -> None:
     users = (ADMIN_A, MEMBER_A1, MEMBER_A2, ADMIN_B, MEMBER_B, LONE_C)
     for user in users:
         for table in CONTENT_TABLES:
@@ -406,17 +406,17 @@ def test_sob_eclume_app_cada_um_so_enxerga_o_que_e_dele(migrated: dict[str, Any]
             owned = _query(migrated, f"SELECT count(*) FROM {table} WHERE owner_id = :u", u=user)  # noqa: S608
             assert visible == owned, (user, table)
         assert _as_user(migrated, user, "SELECT id FROM users") == [(user,)]
-    # O que chegava por compartilhamento (grupo e organização) deixou de chegar.
+    # What arrived through sharing (group and organization) no longer arrives.
     assert _as_user(migrated, MEMBER_A2, "SELECT id FROM recordings") == []
     assert _as_user(migrated, ADMIN_A, "SELECT id FROM recordings") == [(REC_1,)]
     assert _as_user(migrated, MEMBER_A1, "SELECT count(*) FROM api_tokens") == [(1,)]
     assert _as_user(migrated, MEMBER_A2, "SELECT count(*) FROM api_tokens") == [(0,)]
-    # Busca pelo GIN restrita ao dono.
+    # GIN search restricted to the owner.
     matches = _as_user(
         migrated, MEMBER_A1, "SELECT transcript_id FROM eclume_segment_matches(to_tsquery('eclume_pt', 'turma'))"
     )
     assert matches == [(TR_2,)]
-    # Providers e configuração da plataforma: leitura sem segredo.
+    # Providers and platform settings: readable without secrets.
     assert _as_user(migrated, MEMBER_A1, "SELECT name FROM agent_providers") == [("claude",)]
     assert len(_as_user(migrated, MEMBER_A1, "SELECT asr FROM platform_settings")) == 1
 
@@ -430,14 +430,14 @@ def test_sob_eclume_app_cada_um_so_enxerga_o_que_e_dele(migrated: dict[str, Any]
         "SELECT * FROM admin_sessions",
     ],
 )
-def test_eclume_app_nao_le_segredos_nem_contas_de_admin(migrated: dict[str, Any], sql: str) -> None:
+def test_eclume_app_reads_neither_secrets_nor_admin_accounts(migrated: dict[str, Any], sql: str) -> None:
     with pytest.raises(DBAPIError, match="permission denied"):
         _as_user(migrated, MEMBER_A1, sql)
 
 
-def test_grants_do_dono_e_contas_sem_aceite(migrated: dict[str, Any]) -> None:
-    # Esquecer a voz de uma pessoa passa a ser um DELETE comum do dono, sob a RLS.
+def test_owner_grants_and_accounts_without_acceptance(migrated: dict[str, Any]) -> None:
+    # Forgetting a person's voice becomes a plain DELETE by the owner, under RLS.
     for table in ("voice_samples", "speaker_suggestions"):
         assert _query(migrated, "SELECT has_table_privilege('eclume_app', :t, 'DELETE')", t=table) == [(True,)]
-    # As contas migradas nascem sem o aceite do aviso.
+    # Migrated accounts start without the notice acceptance.
     assert _query(migrated, "SELECT count(*) FROM users WHERE notice_version IS NOT NULL") == [(0,)]
