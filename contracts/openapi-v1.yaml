@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.29.0
+  version: 2.29.1
   summary: Contract v1 of the eclume API, the institutional transcription service.
   description: |
     Source of truth between the eclume server and its clients: the web frontend, the desktop
