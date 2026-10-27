@@ -89,7 +89,7 @@ das pessoas que gravo", que toda conta dá no cadastro e que substitui o consent
   na etapa `speakers` até o dono ligar cada locutor com pelo menos 10 s de fala a uma pessoa. O
   vínculo automático conta como nomeado; ligar a última pessoa pelo `PATCH` do locutor solta a
   gravação. Vale também com a voz desligada na plataforma. Regras em
-  [processamento-automatico.md](processamento-automatico.md#marcação-dos-locutores).
+  [processamento-automatico.md](processamento-automatico.md#speaker-naming).
 - **Web:** cartão "Atribuição automática" em Pessoas (interruptor e pontuação mínima; só aparece com
   a voz ligada na plataforma) e, no painel de locutores, o selo com **Confirmar** e **Desligar pessoa**.
 

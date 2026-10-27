@@ -187,7 +187,7 @@ mapping to `transcricao.md`) is in [contracts/README.md](/contracts/README.md).
   tolerate. `Recording.awaiting` (`speakers` or `null`), the filter
   `GET /recordings?awaiting=speakers` and `POST /recordings/{id}/continue` (`recordings:write`;
   409 outside the wait) complete it. Rules in
-  [processamento-automatico.md](../code/processamento-automatico.md#marcação-dos-locutores).
+  [processamento-automatico.md](../code/processamento-automatico.md#speaker-naming).
 - **Job failure** (`Job.error`): `code`, `message` and, since 1.4.0, `retryable` — a transient
   failure (lost worker, vanished or stalled job, lack of VRAM), which retranscribing or
   `POST /api/v1/admin/jobs/{job_id}/retry` tends to resolve.

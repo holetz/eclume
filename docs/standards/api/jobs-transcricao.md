@@ -243,7 +243,7 @@ suggestions above the threshold
 recording's state to `transcribed` and writes the `speakers` step: with the account requiring
 speaker naming and some speaker without a person, `waiting`, and `ingest_transcript` does not
 enqueue `detect_agenda_type` (`Ingested.waiting`); otherwise, `done` and the chain goes on
-([processamento-automatico.md](/docs/standards/code/processamento-automatico.md#marcação-dos-locutores)).
+([processamento-automatico.md](/docs/standards/code/processamento-automatico.md#speaker-naming)).
 
 - **Non-finite embedding.** Ingestion also discards a vector with NaN or infinity (old worker, file
   already in the bucket): pgvector would refuse it and undo the whole ingestion.
