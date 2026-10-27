@@ -10,8 +10,8 @@ beforeAll(() => preloadRoute('/gravacoes/x'))
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('cabeçalho, pipeline, exportar e excluir', () => {
-  it('mostra a data, a hora e a duração no kicker, o título e as sete etapas', async () => {
+describe('header, pipeline, export and delete', () => {
+  it('shows the date, time and duration in the kicker, the title and the seven steps', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const title = await screen.findByRole('heading', { level: 1, name: 'Alinhamento do programa de lideranças' })
@@ -33,7 +33,7 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
     expect(document.querySelector('aside.chat')).toHaveTextContent('Ajustar o resumo')
   })
 
-  it('mostra a referência curta da gravação sob o título, com o id completo na dica', async () => {
+  it('shows the recording\'s short reference under the title, with the full id in the tooltip', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const title = await screen.findByRole('heading', { level: 1, name: 'Alinhamento do programa de lideranças' })
@@ -42,7 +42,7 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
     expect(ref).toHaveAttribute('title', `ID completo: ${RECORDING}`)
   })
 
-  it('etapa pulada ou que falhou diz o motivo, e a data do envio aparece no kicker', async () => {
+  it('a skipped or failed step states the reason, and the upload date shows in the kicker', async () => {
     const recording = fixtures.recordingTranscribed()
     recording.recorded_at_source = 'upload'
     recording.pipeline = recording.pipeline.map((step) =>
@@ -54,7 +54,7 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
     )
     mockTranscriptApi({ 'GET /api/v1/recordings/:id': () => recording })
     renderApp(`/gravacoes/${RECORDING}`)
-    // O estado está no texto da etapa, e o motivo numa linha visível sob a barra, não só no `title`.
+    // The state is in the step's text, and the reason in a visible line under the bar, not only in `title`.
     const skipped = await screen.findByText('Tipo de agenda · pulada', { selector: 'ol li' })
     expect(skipped).toHaveAttribute('data-state', 'skipped')
     expect(screen.getByText('Resumo · falhou', { selector: 'ol li' })).toHaveAttribute('data-state', 'failed')
@@ -66,7 +66,7 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
     expect(screen.getByText(/· data do envio$/)).toHaveClass('kicker')
   })
 
-  it('exporta pelo menu com fetch e mostra o erro da API num alerta', async () => {
+  it('exports through the menu with fetch and shows the API error in an alert', async () => {
     const user = userEvent.setup()
     const createObjectURL = vi.fn(() => 'blob:export')
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }))
@@ -102,7 +102,7 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
     click.mockRestore()
   })
 
-  it('exclui com confirmação e volta para a biblioteca de onde veio, com o aviso', async () => {
+  it('deletes with confirmation and goes back to the library it came from, with the notice', async () => {
     const user = userEvent.setup()
     const http = mockTranscriptApi({
       'DELETE /api/v1/recordings/:id': () => empty(),
@@ -126,11 +126,11 @@ describe('cabeçalho, pipeline, exportar e excluir', () => {
   })
 })
 
-/** A fala (`.segment`) de um item da lista de falas. */
+/** The segment (`.segment`) of an item in the segment list. */
 const segment = (item: HTMLElement) => item.querySelector('.segment')!
 
-describe('transcrição recolhida', () => {
-  it('fica fechada, com o resumo de locutores, falas e marcadores, e só renderiza as falas aberta', async () => {
+describe('collapsed transcript', () => {
+  it('stays closed, with the summary of speakers, segments and markers, and renders the segments only when open', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const details = await waitFor(() => {
@@ -147,26 +147,26 @@ describe('transcrição recolhida', () => {
     expect(screen.queryByRole('list', { name: 'Falas' })).not.toBeInTheDocument()
     await openTranscript()
     expect(details.open).toBe(true)
-    // Os locutores ficam no bloco deles: a transcrição aberta só traz as falas.
+    // The speakers stay in their own block: the open transcript only brings the segments.
     expect(screen.getByRole('list', { name: 'Falas' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Locutores' })).not.toBeInTheDocument()
   })
 
-  it('abre sozinha com ?t=, posiciona o áudio sem tocar e destaca a fala', async () => {
+  it('opens by itself with ?t=, seeks the audio without playing and highlights the segment', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}?t=80900`)
-    const falas = await screen.findByRole('list', { name: 'Falas' })
-    const items = within(falas).getAllByRole('listitem')
+    const segmentList = await screen.findByRole('list', { name: 'Falas' })
+    const items = within(segmentList).getAllByRole('listitem')
     expect(segment(items[6])).toHaveAttribute('aria-current', 'true')
     const audio = screen.getByLabelText('Áudio da gravação') as HTMLAudioElement
     expect(audio.currentTime).toBe(80.9)
     expect(audio.play).not.toHaveBeenCalled()
-    // A lista vem à janela e a fala é centrada por dentro dela.
-    expect(vi.mocked(Element.prototype.scrollIntoView).mock.contexts).toContain(falas)
-    expect(vi.mocked(Element.prototype.scrollTo).mock.contexts).toContain(falas)
+    // The list comes into the window and the segment is centered inside it.
+    expect(vi.mocked(Element.prototype.scrollIntoView).mock.contexts).toContain(segmentList)
+    expect(vi.mocked(Element.prototype.scrollTo).mock.contexts).toContain(segmentList)
   })
 
-  it('põe o marcador antes da fala, com a nota, o dispositivo, editar e excluir', async () => {
+  it('places the marker before the segment, with the note, the device, edit and delete', async () => {
     const user = userEvent.setup()
     const http = mockTranscriptApi({
       'PATCH /api/v1/markers/:id': async (request) => ({
@@ -177,17 +177,17 @@ describe('transcrição recolhida', () => {
     })
     renderApp(`/gravacoes/${RECORDING}`)
     await openTranscript()
-    const falas = await screen.findByRole('list', { name: 'Falas' })
-    const marker = await within(falas).findByRole('group', { name: 'Marcador em 00:00:42' })
+    const segmentList = await screen.findByRole('list', { name: 'Falas' })
+    const marker = await within(segmentList).findByRole('group', { name: 'Marcador em 00:00:42' })
     expect(marker).toHaveClass('segment-marker')
     expect(marker).toHaveTextContent('Decisão sobre as turmas')
     expect(marker).toHaveTextContent('Marcado no NB-MARIANA')
-    // O marcador fica antes da primeira fala que começa nele ou depois.
+    // The marker sits before the first segment that starts at it or later.
     const item = marker.closest('[role="listitem"]') as HTMLElement
     expect(marker.nextElementSibling).toBe(segment(item))
     expect(Number(segment(item).textContent?.match(/00:00:(\d\d)/)?.[1])).toBeGreaterThanOrEqual(42)
 
-    const empty2 = within(falas).getByRole('group', { name: 'Marcador em 00:02:11' })
+    const empty2 = within(segmentList).getByRole('group', { name: 'Marcador em 00:02:11' })
     expect(empty2).toHaveTextContent('Marcador')
     await user.click(within(empty2).getByRole('button', { name: 'Editar nota' }))
     const input = within(empty2).getByRole('textbox', { name: 'Nota do marcador em 00:02:11' })
@@ -204,14 +204,14 @@ describe('transcrição recolhida', () => {
   })
 })
 
-describe('página da gravação', () => {
-  it('mostra as falas com locutor e tempo, e o player do áudio', async () => {
+describe('recording page', () => {
+  it('shows the segments with speaker and time, and the audio player', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     expect(await screen.findByRole('heading', { name: 'Alinhamento do programa de lideranças' })).toBeInTheDocument()
     await openTranscript()
-    const falas = await screen.findByRole('list', { name: 'Falas' })
-    const items = within(falas).getAllByRole('listitem')
+    const segmentList = await screen.findByRole('list', { name: 'Falas' })
+    const items = within(segmentList).getAllByRole('listitem')
     expect(items).toHaveLength(12)
     expect(within(items[0]).getByText('Mariana Couto')).toBeInTheDocument()
     expect(within(items[1]).getByText('Locutor 2')).toBeInTheDocument()
@@ -220,12 +220,12 @@ describe('página da gravação', () => {
     expect(audio.getAttribute('src')).toBe(`/api/v1/recordings/${RECORDING}/audio`)
   })
 
-  it('clicar num segmento posiciona e toca o player e destaca a fala', async () => {
+  it('clicking a segment seeks and plays the player and highlights the segment', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     await openTranscript()
-    const falas = await screen.findByRole('list', { name: 'Falas' })
-    const items = within(falas).getAllByRole('listitem')
+    const segmentList = await screen.findByRole('list', { name: 'Falas' })
+    const items = within(segmentList).getAllByRole('listitem')
     const audio = screen.getByLabelText('Áudio da gravação') as HTMLAudioElement
 
     await userEvent.click(items[3].querySelector('p')!)
@@ -239,22 +239,22 @@ describe('página da gravação', () => {
     expect(segment(items[3])).not.toHaveAttribute('aria-current')
   })
 
-  it('o destaque acompanha o tempo do player', async () => {
+  it('the highlight follows the player time', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     await openTranscript()
-    const falas = await screen.findByRole('list', { name: 'Falas' })
-    const items = within(falas).getAllByRole('listitem')
+    const segmentList = await screen.findByRole('list', { name: 'Falas' })
+    const items = within(segmentList).getAllByRole('listitem')
     const audio = screen.getByLabelText('Áudio da gravação') as HTMLAudioElement
     vi.mocked(Element.prototype.scrollIntoView).mockClear()
     audio.currentTime = 100
     fireEvent.timeUpdate(audio)
     expect(segment(items[7])).toHaveAttribute('aria-current', 'true')
-    // Acompanhar rola só a lista de falas: nada chama `scrollIntoView`, que rolaria a página.
+    // Following scrolls only the segment list: nothing calls `scrollIntoView`, which would scroll the page.
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
   })
 
-  it('falha passageira: o dono retenta e a gravação volta para a fila', async () => {
+  it('transient failure: the owner retries and the recording goes back to the queue', async () => {
     const failed = fixtures.recordingQueued()
     failed.status = 'failed'
     failed.job = {
@@ -274,7 +274,7 @@ describe('página da gravação', () => {
     expect(http.requests('POST /api/v1/recordings/:id/retranscribe')).toHaveLength(1)
   })
 
-  it('o dono cancela a transcrição em curso com confirmação, e a gravação mostra o motivo', async () => {
+  it('the owner cancels the transcription in progress with confirmation, and the recording shows the reason', async () => {
     const processing = fixtures.recordingQueued()
     processing.status = 'processing'
     processing.job = { ...processing.job!, state: 'running', stage: 'asr', progress: 0.4 }
@@ -296,7 +296,7 @@ describe('página da gravação', () => {
     renderApp(`/gravacoes/${processing.id}`)
     await userEvent.click(await screen.findByRole('button', { name: 'Cancelar transcrição' }))
     const dialog = screen.getByRole('dialog', { name: 'Cancelar a transcrição?' })
-    // Desistir não chama a API.
+    // Giving up does not call the API.
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
     expect(http.requests('POST /api/v1/recordings/:id/cancel')).toHaveLength(0)
 
@@ -310,7 +310,7 @@ describe('página da gravação', () => {
     expect(screen.queryByRole('button', { name: 'Cancelar transcrição' })).not.toBeInTheDocument()
   })
 
-  it('gravação ainda em processamento mostra o job no lugar da transcrição', async () => {
+  it('a recording still processing shows the job in place of the transcript', async () => {
     const page = fixtures.recordingPage()
     mockFetch({
       'GET /api/v1/me': () => fixtures.me(),

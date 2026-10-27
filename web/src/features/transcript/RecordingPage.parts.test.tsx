@@ -14,8 +14,8 @@ function audio() {
   return screen.getByLabelText('Áudio da gravação') as HTMLAudioElement
 }
 
-describe('player e marcadores', () => {
-  it('toca e pausa pelo player, que acompanha o áudio', async () => {
+describe('player and markers', () => {
+  it('plays and pauses through the player, which follows the audio', async () => {
     const user = userEvent.setup()
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
@@ -37,7 +37,7 @@ describe('player e marcadores', () => {
     )
   })
 
-  it('renova a assinatura vencida uma vez e retoma do instante, tocando; na segunda falha, mostra o erro', async () => {
+  it('renews the expired signature once and resumes from the instant, playing; on the second failure, shows the error', async () => {
     const user = userEvent.setup()
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
@@ -61,7 +61,7 @@ describe('player e marcadores', () => {
     expect(screen.queryByText('O áudio não carregou.')).not.toBeInTheDocument()
 
     fireEvent.error(audio())
-    // O aviso fica logo abaixo do player, fora da linha dele.
+    // The notice sits right below the player, outside its row.
     const alert = screen.getByText('O áudio não carregou.').closest('[role="alert"]') as HTMLElement
     expect(within(player).getByRole('button', { name: 'Tocar' })).toBeDisabled()
     const failed = audio().getAttribute('src')
@@ -70,7 +70,7 @@ describe('player e marcadores', () => {
     expect(audio().getAttribute('src')).not.toBe(failed)
   })
 
-  it('num navegador que não toca Ogg Opus, o player diz isso em vez de ficar mudo', async () => {
+  it('in a browser that does not play Ogg Opus, the player says so instead of staying silent', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const player = await screen.findByRole('group', { name: 'Player' })
@@ -80,7 +80,7 @@ describe('player e marcadores', () => {
     expect(within(player).getByRole('button', { name: 'Tocar' })).toBeDisabled()
   })
 
-  it('posiciona pela trilha e troca a velocidade em ciclo', async () => {
+  it('seeks through the track and cycles the speed', async () => {
     const user = userEvent.setup()
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
@@ -97,7 +97,7 @@ describe('player e marcadores', () => {
     expect(screen.getByRole('button', { name: 'Velocidade 1×' })).toBeInTheDocument()
   })
 
-  it('um tick por marcador na posição dele, e a ficha toca do marcador', async () => {
+  it('one tick per marker at its position, and the chip plays from the marker', async () => {
     const user = userEvent.setup()
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
@@ -123,7 +123,7 @@ describe('player e marcadores', () => {
     expect(audio().currentTime).toBe(131.5)
   })
 
-  it('sem marcadores, a barra não aparece e nada é pedido', async () => {
+  it('with no markers, the bar does not show and nothing is requested', async () => {
     const recording = fixtures.recordingTranscribed()
     recording.marker_count = 0
     const http = mockTranscriptApi({ 'GET /api/v1/recordings/:id': () => recording })
@@ -135,8 +135,8 @@ describe('player e marcadores', () => {
   })
 })
 
-describe('áudio apagado pela retenção', () => {
-  it('troca o player e as ações de transcrever de novo pelo aviso, sem pedir o áudio', async () => {
+describe('audio deleted by retention', () => {
+  it('replaces the player and the transcribe-again actions with the notice, without requesting the audio', async () => {
     mockTranscriptApi({
       'GET /api/v1/recordings/:id': () => ({
         ...fixtures.recordingTranscribed(),
@@ -151,8 +151,8 @@ describe('áudio apagado pela retenção', () => {
   })
 })
 
-describe('exportar', () => {
-  it('um 401 no export encerra a sessão como qualquer outra chamada', async () => {
+describe('export', () => {
+  it('a 401 on export ends the session like any other call', async () => {
     const user = userEvent.setup()
     let signedIn = true
     mockTranscriptApi({
@@ -169,8 +169,8 @@ describe('exportar', () => {
   })
 })
 
-describe('transcrever de novo em…', () => {
-  it('mostra o idioma e retranscreve em outro, com a confirmação do que muda', async () => {
+describe('transcribe again in…', () => {
+  it('shows the language and retranscribes in another, with the confirmation of what changes', async () => {
     const user = userEvent.setup()
     const http = mockTranscriptApi({
       'POST /api/v1/recordings/:id/retranscribe': () => fixtures.recordingQueued(),
@@ -188,7 +188,7 @@ describe('transcrever de novo em…', () => {
     expect(await http.requests('POST /api/v1/recordings/:id/retranscribe')[0].json()).toEqual({ language: 'en' })
   })
 
-  it('leva o número de locutores quando preenchido', async () => {
+  it('carries the number of speakers when filled in', async () => {
     const user = userEvent.setup()
     const http = mockTranscriptApi({
       'POST /api/v1/recordings/:id/retranscribe': () => fixtures.recordingQueued(),
@@ -207,7 +207,7 @@ describe('transcrever de novo em…', () => {
     })
   })
 
-  it('o pedido duplicado diz que já há uma transcrição em andamento', async () => {
+  it('the duplicate request says a transcription is already in progress', async () => {
     const user = userEvent.setup()
     mockTranscriptApi({
       'POST /api/v1/recordings/:id/retranscribe': () => problem('conflict', 409),
