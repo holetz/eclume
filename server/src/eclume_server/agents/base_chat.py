@@ -1,11 +1,11 @@
-"""Protocolo do chat sobre a base de gravações: o agente responde um objeto JSON por chamada.
+"""Protocol of the chat over the recordings base: the agent answers one JSON object per call.
 
-Cinco ações: `search_summaries` e `read_summary` (os resumos vêm primeiro), `search_transcripts` e
-`read_transcript` (só quando o resumo não basta, e só quando a credencial lê transcrições) e `reply`
-(a resposta e as gravações que a sustentam). Cada ferramenta é executada pelo server sob a RLS do dono, e o resultado volta
-delimitado como dado. As fontes de uma resposta são só as gravações que apareceram nos resultados
-devolvidos ao agente. Funciona com qualquer provider, pela `Provider.complete` de texto. Contrato em
-docs/standards/code/server-agentes.md.
+Five actions: `search_summaries` and `read_summary` (summaries come first), `search_transcripts` and
+`read_transcript` (only when the summary is not enough, and only when the credential reads transcripts)
+and `reply` (the answer and the recordings that support it). Each tool is executed by the server under
+the owner's RLS, and the result comes back delimited as data. The sources of an answer are only the
+recordings that appeared in the results returned to the agent. It works with any provider, through the
+text `Provider.complete`. Contract in docs/standards/code/server-agentes.md.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def _actions(*, transcripts: bool) -> list[str]:
 
 
 def base_chat_system(*, transcripts: bool = True) -> str:
-    """O `system` do chat da base; sem `transcripts`, só as ações de resumo e a resposta."""
+    """The base chat's `system`; without `transcripts`, only the summary actions and the answer."""
     return (
         "Você responde perguntas sobre a base de gravações transcritas de quem pergunta, em português do "
         f"Brasil. {_SOURCES[transcripts]} Use só o que as consultas devolveram; se elas não sustentam a "
@@ -72,7 +72,7 @@ def base_chat_system(*, transcripts: bool = True) -> str:
 
 
 def correction(*, transcripts: bool = True) -> str:
-    """O pedido de correção depois de uma saída que não é ação válida."""
+    """The correction request after an output that is not a valid action."""
     names = _actions(transcripts=transcripts)
     return f"Responda só com um objeto JSON de uma das ações: {', '.join(names[:-1])} ou {names[-1]}."
 
@@ -86,7 +86,7 @@ UNKNOWN_RECORDING = "gravação inexistente ou sem acesso"
 
 @dataclass(frozen=True)
 class Hit:
-    """Um resultado de busca: a gravação e o trecho (resumo ou fala) que bateu."""
+    """A search result: the recording and the excerpt (summary or utterance) that matched."""
 
     recording_id: UUID
     title: str
@@ -94,40 +94,40 @@ class Hit:
 
 
 class BaseTools(Protocol):
-    """O acesso do chat à base do usuário, dado pelo job."""
+    """The chat's access to the user's base, given by the job."""
 
     async def search_summaries(self, query: str, limit: int) -> list[Hit]:
-        """Até `limit` gravações cujo resumo, título ou tags batem com os termos."""
+        """Up to `limit` recordings whose summary, title or tags match the terms."""
         ...
 
     async def read_summary(self, recording_id: UUID) -> Hit | None:
-        """O resumo atual da gravação (`text`), ou `None` se ela não existe ou não tem resumo."""
+        """The recording's current summary (`text`), or `None` if it does not exist or has no summary."""
         ...
 
     async def search_transcripts(self, query: str, limit: int) -> list[Hit]:
-        """Até `limit` falas `[HH:MM:SS] Locutor: texto` que batem com os termos."""
+        """Up to `limit` utterances `[HH:MM:SS] Locutor: texto` that match the terms."""
         ...
 
     async def read_transcript(
         self, recording_id: UUID, from_ms: int, to_ms: int
     ) -> tuple[str, list[tuple[int, str]]] | None:
-        """O título e as falas `(início, "[HH:MM:SS] Locutor: texto")` do trecho; `None` sem a gravação."""
+        """The title and the utterances `(start, "[HH:MM:SS] Locutor: texto")` of the excerpt; `None` without the recording."""
         ...
 
 
 @dataclass(frozen=True)
 class BaseChatContext:
-    """O que o agente vê: a conversa até aqui (`(papel, texto)`) e a pergunta."""
+    """What the agent sees: the conversation so far (`(role, text)`) and the question."""
 
     history: list[tuple[str, str]]
     question: str
-    # Sem `transcripts:read` na credencial, o agente não busca nem lê transcrições.
+    # Without `transcripts:read` on the credential, the agent neither searches nor reads transcripts.
     transcripts: bool = True
 
 
 @dataclass
 class BaseChatResult:
-    """A resposta, as fontes consultadas `(id, título)`, as consultas feitas e a última chamada."""
+    """The answer, the consulted sources `(id, title)`, the queries made and the last call."""
 
     message: str
     sources: list[tuple[UUID, str]]
@@ -165,9 +165,9 @@ def _valid(action: dict[str, Any]) -> bool:
 
 
 def parse_action(text: str, *, transcripts: bool = True) -> dict[str, Any] | None:
-    """O último objeto JSON da saída (dentro ou fora de cerca) que é uma ação válida, ou `None`.
+    """The last JSON object of the output (inside or outside a fence) that is a valid action, or `None`.
 
-    Sem `transcripts`, as ações de transcrição não são válidas.
+    Without `transcripts`, the transcript actions are not valid.
     """
     for candidate in [*reversed(_FENCE.findall(text)), text]:
         action = _last_object(candidate)
@@ -177,7 +177,7 @@ def parse_action(text: str, *, transcripts: bool = True) -> dict[str, Any] | Non
 
 
 def base_chat_prompt(context: BaseChatContext) -> str:
-    """O prompt fixo da conversa: as últimas mensagens e a pergunta."""
+    """The conversation's fixed prompt: the last messages and the question."""
     history = "\n".join(
         f"{'Pessoa' if role == 'user' else 'Agente'}: {content}" for role, content in context.history[-HISTORY:]
     )
@@ -198,7 +198,7 @@ def _hits(hits: list[Hit]) -> str:
 
 
 def _clip(text: str, budget: int) -> tuple[str, bool]:
-    """O texto cortado no orçamento de tokens, e se foi cortado."""
+    """The text cut at the token budget, and whether it was cut."""
     used, kept = 0, []
     for line in text.splitlines():
         used += estimate_tokens(line) + 1
@@ -211,7 +211,7 @@ def _clip(text: str, budget: int) -> tuple[str, bool]:
 async def _run_tool(
     tools: BaseTools, action: dict[str, Any], budget: int, seen: dict[UUID, str]
 ) -> tuple[str, dict[str, Any]]:
-    """Executa uma consulta: o bloco para o agente e o registro dela. `seen` ganha as gravações devolvidas."""
+    """Executes a query: the block for the agent and its record. `seen` gains the returned recordings."""
     name = action["action"]
     if name in {"search_summaries", "search_transcripts"}:
         query = action["query"].strip()
@@ -221,7 +221,7 @@ async def _run_tool(
         record = {"tool": name, "query": query, "hits": len(hits)}
         return _block(name, f" termos={json.dumps(query, ensure_ascii=False)}", _hits(hits)), record
     recording_id = _recording_id(action["recording_id"])
-    assert recording_id is not None  # noqa: S101 — `_valid` já garantiu
+    assert recording_id is not None  # noqa: S101 — `_valid` already guaranteed it
     attributes = f' gravacao="{recording_id}"'
     record = {"tool": name, "recording_id": str(recording_id)}
     if name == "read_summary":
@@ -247,11 +247,11 @@ async def _run_tool(
 
 
 async def run_base_chat(provider: Provider, context: BaseChatContext, tools: BaseTools) -> BaseChatResult:
-    """O laço do chat da base: executa as consultas pedidas até a resposta.
+    """The base chat loop: executes the requested queries until the answer.
 
-    Uma saída que não é ação válida recebe um pedido de correção; a segunda é `provider_bad_output`.
-    Depois de `MAX_TOOL_CALLS` consultas, a próxima resposta tem de ser `reply`, senão
-    `chat_tool_limit`. As fontes são as citadas em `reply.sources` que apareceram nos resultados.
+    An output that is not a valid action gets a correction request; the second one is `provider_bad_output`.
+    After `MAX_TOOL_CALLS` queries, the next answer must be `reply`, otherwise
+    `chat_tool_limit`. The sources are the ones cited in `reply.sources` that appeared in the results.
     """
     prompt = base_chat_prompt(context)
     system = base_chat_system(transcripts=context.transcripts)

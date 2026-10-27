@@ -1,4 +1,4 @@
--- Expandir: índice parcial para as varreduras e a fila, que só olham o que está em andamento
--- (`queued`/`running`); a tabela cresce com o histórico de `succeeded`/`failed`/`canceled`.
--- Sem CONCURRENTLY: o migrador roda cada arquivo numa transação.
+-- Expand: partial index for the scans and the queue, which only look at what is in progress
+-- (`queued`/`running`); the table grows with the history of `succeeded`/`failed`/`canceled`.
+-- No CONCURRENTLY: the migrator runs each file in a transaction.
 CREATE INDEX IF NOT EXISTS transcription_jobs_open_state_idx ON transcription_jobs (state) WHERE state IN ('queued', 'running');

@@ -1,15 +1,15 @@
--- 011_plataforma_de_processamento — agentes por finalidade e pré-processamento (holetz/eclume#33).
+-- 011_plataforma_de_processamento — agents per purpose and preprocessing (holetz/eclume#33).
 --
--- Cada provider declara para que serve (`used_for`); cada finalidade tem no máximo um provider. O
--- antigo provider padrão herda as quatro. O bloco `summarization` sai (`auto_summarize` e o provider
--- padrão perdem o sentido: o resumo automático segue o tipo de agenda) e entra `preprocessing`, o
--- tratamento do áudio antes da transcrição. Padrões em docs/standards/code/server-admin.md.
+-- Each provider declares what it is for (`used_for`); each purpose has at most one provider. The
+-- former default provider inherits all four. The `summarization` block goes (`auto_summarize` and the default
+-- provider lose their meaning: the automatic summary follows the agenda type) and `preprocessing` comes in, the
+-- audio treatment before transcription. Patterns in docs/standards/code/server-admin.md.
 
 ALTER TABLE agent_providers
     ADD COLUMN used_for text[] NOT NULL DEFAULT '{}'
         CHECK (used_for <@ ARRAY['summaries', 'fields', 'chat', 'agenda_detection']);
 
--- O padrão do resumo, se habilitado; senão, o único provider habilitado.
+-- The summary's default, if enabled; otherwise, the only enabled provider.
 UPDATE agent_providers SET used_for = ARRAY['summaries', 'fields', 'chat', 'agenda_detection']
 WHERE id = coalesce(
     (SELECT p.id FROM agent_providers p JOIN platform_settings s
@@ -18,7 +18,7 @@ WHERE id = coalesce(
         HAVING count(*) = 1)
 );
 
--- `eclume_app` lê as colunas sem segredo (o resumo resolve o provider sob a RLS do usuário).
+-- `eclume_app` reads the columns without secrets (the summary resolves the provider under the user's RLS).
 GRANT SELECT (used_for) ON agent_providers TO eclume_app;
 
 ALTER TABLE platform_settings

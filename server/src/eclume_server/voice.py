@@ -1,10 +1,10 @@
-"""Identificação por voz: amostras da impressão, comparação na ingestão e sugestões.
+"""Voice identification: voiceprint samples, comparison at ingestion and suggestions.
 
-Regras em docs/standards/code/identificacao-por-voz.md. A impressão de uma pessoa é o conjunto das
-amostras dela (`voice_samples`), uma por locutor confirmado; comparar é o cosseno entre o embedding
-do locutor novo e o centroide normalizado dessas amostras, só entre pessoas do dono da transcrição.
-Nada é comparado nem guardado como amostra com a identificação por voz desligada na plataforma; o
-aceite do aviso no cadastro cobre o consentimento de quem o usuário grava.
+Rules in docs/standards/code/identificacao-por-voz.md. A person's voiceprint is the set of their
+samples (`voice_samples`), one per confirmed speaker; comparing is the cosine between the new
+speaker's embedding and the normalized centroid of those samples, only among the transcript
+owner's people. Nothing is compared or kept as a sample with voice identification switched off on
+the platform; accepting the notice at sign-up covers the consent of whoever the user records.
 """
 
 from __future__ import annotations
@@ -24,33 +24,34 @@ if TYPE_CHECKING:
 
     from eclume_server.auth import Principal
 
-# Calibração em docs/project/calibracao-voz.md: limiar padrão, fala mínima para comparar um locutor
-# e para ele virar amostra. Abaixo disso o embedding é ruído demais.
+# Calibration in docs/project/calibracao-voz.md: default threshold, minimum speech to compare a speaker
+# and for it to become a sample. Below that the embedding is too noisy.
 DEFAULT_THRESHOLD = 0.55
 MIN_COMPARE_TALK_MS = 10_000
 MIN_SAMPLE_TALK_MS = 10_000
 MAX_SUGGESTIONS = 3
-# Atribuição automática: limiar padrão da conta (calibracao-voz.md: FPR ~0,05% a 0,70), faixa aceita e a
-# folga mínima entre a 1ª e a 2ª pessoa candidatas do mesmo locutor; sem folga, só sugere.
+# Automatic attribution: the account's default threshold (calibracao-voz.md: FPR ~0.05% at 0.70), the
+# accepted range and the minimum margin between the 1st and 2nd candidate people of the same speaker;
+# without the margin, it only suggests.
 DEFAULT_AUTO_THRESHOLD = 0.75
 MIN_AUTO_THRESHOLD = 0.5
 MAX_AUTO_THRESHOLD = 0.99
 AUTO_MARGIN = 0.05
-# Retranscrição: o locutor novo herda o vínculo do antigo quando a fala dos dois se sobrepõe ao
-# menos nesta fração, nos dois sentidos.
+# Retranscription: the new speaker inherits the old one's link when the speech of both overlaps by at
+# least this fraction, in both directions.
 RESTORE_OVERLAP = 0.5
 
 VOICE_DEFAULTS: dict[str, Any] = {"enabled": False, "suggestion_threshold": DEFAULT_THRESHOLD}
 
 
 def voice_settings(block: dict[str, Any] | None) -> dict[str, Any]:
-    """Bloco `voice_identification` (`enabled`, `suggestion_threshold`), com os padrões."""
+    """The `voice_identification` block (`enabled`, `suggestion_threshold`), with the defaults."""
     block = block or {}
     return {key: block.get(key, default) for key, default in VOICE_DEFAULTS.items()}
 
 
 async def platform_voice(conn: AsyncConnection) -> dict[str, Any]:
-    """Configuração de voz da plataforma (legível sob a RLS por qualquer usuário)."""
+    """The platform's voice configuration (readable under RLS by any user)."""
     return voice_settings((await conn.execute(select(t.platform_settings.c.voice_identification))).scalar())
 
 
@@ -77,21 +78,21 @@ _ADD_SAMPLE = text(
 
 
 async def add_sample(conn: AsyncConnection, transcript_id: UUID, speaker_id: str, actor_id: UUID | None) -> bool:
-    """Guarda o locutor (ligado e confirmado) como amostra da pessoa, com a identificação por voz ligada.
+    """Keep the speaker (linked and confirmed) as a sample of the person, with voice identification on.
 
-    O vínculo que a voz fez sozinho (`auto_score`) não entra: só uma confirmação reforça a impressão.
-    Gravação sem áudio (apagado pela retenção) também não gera amostra nova.
+    A link the voice made on its own (`auto_score`) does not go in: only a confirmation reinforces the
+    voiceprint. A recording without audio (deleted by retention) does not yield a new sample either.
     """
     params = {"transcript": transcript_id, "speaker": speaker_id, "actor": actor_id, "min_talk": MIN_SAMPLE_TALK_MS}
     return (await conn.execute(_ADD_SAMPLE, params)).first() is not None
 
 
-# --- ingestão: vínculos preservados e comparação -------------------------------------------------
+# --- ingestion: preserved links and comparison --------------------------------------------------
 
 
 @dataclass(frozen=True)
 class OldLink:
-    """Vínculo de um locutor antes da retranscrição, com a fala dele."""
+    """A speaker's link before retranscription, with its speech."""
 
     speaker_id: str
     person_id: UUID
@@ -101,7 +102,7 @@ class OldLink:
 
 
 async def capture_links(conn: AsyncConnection, transcript_id: UUID) -> list[OldLink]:
-    """Os locutores ligados da transcrição e os intervalos de fala de cada um (antes de apagar)."""
+    """The transcript's linked speakers and the speech intervals of each (before deleting)."""
     sp, sg = t.speakers.c, t.segments.c
     linked = (
         await conn.execute(
@@ -137,7 +138,7 @@ def _merged(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
 
 
 def _overlap(a: list[tuple[int, int]], b: list[tuple[int, int]]) -> int:
-    """Interseção total de duas listas de intervalos já mescladas e ordenadas."""
+    """Total intersection of two interval lists, already merged and sorted."""
     total, i, j = 0, 0, 0
     while i < len(a) and j < len(b):
         total += max(0, min(a[i][1], b[j][1]) - max(a[i][0], b[j][0]))
@@ -149,9 +150,9 @@ def _overlap(a: list[tuple[int, int]], b: list[tuple[int, int]]) -> int:
 
 
 def match_links(old: list[OldLink], new_segments: list[dict[str, Any]]) -> tuple[dict[str, OldLink], list[OldLink]]:
-    """Casa cada vínculo antigo com o locutor novo de maior sobreposição de fala, um para um.
+    """Match each old link with the new speaker of greatest speech overlap, one to one.
 
-    Só casa com sobreposição ≥ `RESTORE_OVERLAP` da fala dos dois. Devolve `({novo: antigo}, perdidos)`.
+    Matches only with overlap ≥ `RESTORE_OVERLAP` of both speeches. Returns `({new: old}, lost)`.
     """
     new_spans: dict[str, list[tuple[int, int]]] = {}
     for segment in new_segments:
@@ -178,7 +179,7 @@ def match_links(old: list[OldLink], new_segments: list[dict[str, Any]]) -> tuple
 async def restore_links(
     conn: AsyncConnection, transcript_id: UUID, old: list[OldLink], new_segments: list[dict[str, Any]]
 ) -> None:
-    """Reaplica aos locutores novos os vínculos confirmados antes da retranscrição (papel de conexão)."""
+    """Reapply to the new speakers the links confirmed before retranscription (connection role)."""
     matched, _ = match_links(old, new_segments)
     for new_id, link in matched.items():
         await conn.execute(
@@ -189,8 +190,8 @@ async def restore_links(
         await add_sample(conn, transcript_id, new_id, None)
 
 
-# Centroide normalizado das amostras de cada pessoa, do mesmo modelo e dimensão; cosseno com cada
-# locutor sem pessoa e com fala suficiente. Só as pessoas do dono da transcrição.
+# Normalized centroid of each person's samples, of the same model and dimension; cosine with each
+# speaker without a person and with enough speech. Only the transcript owner's people.
 _COMPARE = text(
     """
     WITH prints AS (
@@ -218,14 +219,14 @@ _COMPARE = text(
 
 @dataclass(frozen=True)
 class AutoPrefs:
-    """Preferência da conta: atribuir sozinho e a partir de que pontuação."""
+    """The account preference: attribute on its own, and from which score."""
 
     enabled: bool
     threshold: float
 
 
 async def auto_prefs(conn: AsyncConnection, user_id: UUID) -> AutoPrefs:
-    """Preferência de atribuição automática do usuário (o padrão, se a conta não existe mais)."""
+    """The user's automatic attribution preference (the default, if the account no longer exists)."""
     row = (
         await conn.execute(
             select(t.users.c.voice_auto_assign, t.users.c.voice_auto_threshold).where(t.users.c.id == user_id)
@@ -237,11 +238,11 @@ async def auto_prefs(conn: AsyncConnection, user_id: UUID) -> AutoPrefs:
 
 
 def pick_auto(rows: list[Any], threshold: float) -> dict[str, Any]:
-    """Escolhe `{locutor: linha}` a atribuir: 1ª candidata ≥ limiar, com folga sobre a 2ª e sem repetir pessoa.
+    """Choose the `{speaker: row}` to attribute: 1st candidate ≥ threshold, with margin over the 2nd and no repeated person.
 
-    `rows` vem ordenada por locutor e por pontuação decrescente. A folga (`AUTO_MARGIN`) evita ligar
-    quando duas pessoas têm voz parecida com a do locutor; a pessoa que dois locutores disputam fica
-    com o de maior pontuação.
+    `rows` comes sorted by speaker and by descending score. The margin (`AUTO_MARGIN`) avoids linking
+    when two people have a voice similar to the speaker's; a person two speakers compete for goes to
+    the one with the higher score.
     """
     by_speaker: dict[str, list[Any]] = {}
     for row in rows:
@@ -262,12 +263,12 @@ def pick_auto(rows: list[Any], threshold: float) -> dict[str, Any]:
 
 
 async def suggest(conn: AsyncConnection, owner_id: UUID, transcript_id: UUID, model: str, dims: int) -> int:
-    """Compara os locutores da transcrição com as impressões, liga os de alta confiança e sugere o resto.
+    """Compare the transcript's speakers with the voiceprints, link the high-confidence ones and suggest the rest.
 
-    Roda na ingestão, com o papel de conexão: filtra o dono explicitamente. Com a atribuição
-    automática ligada na conta, o locutor com pontuação ≥ o limiar dela é ligado à pessoa (e o
-    rótulo vira o nome dela) antes de a cadeia de agentes e o resumo lerem a transcrição; os demais
-    recebem sugestões acima do limiar da plataforma. Devolve quantas sugestões gravou.
+    Runs at ingestion, with the connection role: filters the owner explicitly. With automatic
+    attribution on for the account, a speaker scoring ≥ its threshold is linked to the person (and
+    the label becomes their name) before the agent chain and the summary read the transcript; the
+    others get suggestions above the platform threshold. Returns how many suggestions it wrote.
     """
     settings = await platform_voice(conn)
     if not settings["enabled"]:
@@ -321,13 +322,13 @@ async def suggest(conn: AsyncConnection, owner_id: UUID, transcript_id: UUID, mo
     return len(suggested)
 
 
-# --- leitura das sugestões ----------------------------------------------------------------------
+# --- reading the suggestions ---------------------------------------------------------------------
 
 
 async def load_suggestions(conn: AsyncConnection, transcript_ids: list[UUID]) -> dict[tuple[UUID, str], list[dict]]:
-    """Sugestões pendentes de locutores sem pessoa, por `(transcrição, locutor)`, maior `score` antes.
+    """Pending suggestions for speakers without a person, by `(transcript, speaker)`, highest `score` first.
 
-    Com a identificação por voz desligada na plataforma, nenhuma aparece.
+    With voice identification switched off on the platform, none appears.
     """
     if not transcript_ids:
         return {}
@@ -361,18 +362,18 @@ async def load_suggestions(conn: AsyncConnection, transcript_ids: list[UUID]) ->
 
 @dataclass(frozen=True)
 class SpeakerKey:
-    """Um locutor de uma transcrição."""
+    """A speaker of a transcript."""
 
     transcript_id: UUID
     speaker_id: str
 
 
 async def on_link(conn: AsyncConnection, principal: Principal, key: SpeakerKey, new_person: UUID | None) -> None:
-    """Depois do `PATCH` que troca a pessoa do locutor: aceite da sugestão e a amostra nova.
+    """After the `PATCH` that changes the speaker's person: accept the suggestion and add the new sample.
 
-    A amostra da pessoa anterior já saiu pelo gatilho `speakers_voice_relink`. Mandar a mesma
-    pessoa confirma o vínculo que a voz fez sozinho: o `PATCH` já zerou o `auto_score`, e agora a
-    amostra entra.
+    The previous person's sample already left through the `speakers_voice_relink` trigger. Sending
+    the same person confirms the link the voice made on its own: the `PATCH` already cleared
+    `auto_score`, and now the sample goes in.
     """
     if new_person is None:
         return
@@ -393,7 +394,7 @@ async def on_link(conn: AsyncConnection, principal: Principal, key: SpeakerKey, 
 
 
 async def reject(conn: AsyncConnection, principal: Principal, key: SpeakerKey, person_id: UUID) -> bool:
-    """Marca a sugestão pendente como recusada; `False` se não havia."""
+    """Mark the pending suggestion as rejected; `False` if there was none."""
     transcript_id, speaker_id = key.transcript_id, key.speaker_id
     ss = t.speaker_suggestions.c
     result = await conn.execute(
@@ -410,7 +411,7 @@ async def reject(conn: AsyncConnection, principal: Principal, key: SpeakerKey, p
 
 
 async def keeps_samples(conn: AsyncConnection, user_id: UUID) -> bool:
-    """A conta guarda amostras de voz (o padrão, se a conta não existe mais)."""
+    """Whether the account keeps voice samples (the default, if the account no longer exists)."""
     query = select(t.users.c.voice_keep_samples).where(t.users.c.id == user_id)
     return (await conn.execute(query)).scalar() is not False
 
@@ -424,10 +425,10 @@ async def voice_counts(conn: AsyncConnection, owner_id: UUID) -> tuple[int, int]
 
 
 async def purge_account(conn: AsyncConnection, owner_id: UUID) -> None:
-    """A conta deixa de guardar voz: apaga as amostras, os vetores e as sugestões pendentes dela.
+    """The account stops keeping voice: delete its samples, vectors and pending suggestions.
 
-    Roda sob a RLS do dono; o filtro explícito por dono vale também com o papel de conexão. Os
-    `speaker_embeddings.json` do bucket saem no worker CPU, depois do commit.
+    Runs under the owner's RLS; the explicit owner filter also holds with the connection role. The
+    bucket's `speaker_embeddings.json` files leave in the CPU worker, after the commit.
     """
     await conn.execute(delete(t.speaker_embeddings).where(t.speaker_embeddings.c.owner_id == owner_id))
     await conn.execute(delete(t.voice_samples).where(t.voice_samples.c.owner_id == owner_id))
@@ -436,17 +437,18 @@ async def purge_account(conn: AsyncConnection, owner_id: UUID) -> None:
 
 
 async def purge_embeddings(conn: AsyncConnection) -> tuple[int, int]:
-    """Apaga os `speaker_embeddings` e as sugestões pendentes de toda a plataforma (papel de conexão)."""
+    """Delete the `speaker_embeddings` and pending suggestions of the whole platform (connection role)."""
     embeddings = await conn.execute(delete(t.speaker_embeddings))
     suggestions = await conn.execute(delete(t.speaker_suggestions).where(t.speaker_suggestions.c.status == "pending"))
     return embeddings.rowcount, suggestions.rowcount
 
 
 async def forget(conn: AsyncConnection, person_id: UUID) -> tuple[int, int]:
-    """Apaga as amostras, as sugestões pendentes e os vetores dos locutores da pessoa, sob a RLS do dono.
+    """Delete the samples, pending suggestions and vectors of the person's speakers, under the owner's RLS.
 
-    O vínculo locutor ↔ pessoa fica; sem o vetor, religar um desses locutores não recria a amostra,
-    e só uma retranscrição o recria (holetz/eclume#97, recomendação da spec até a dona decidir).
+    The speaker ↔ person link stays; without the vector, relinking one of those speakers does not
+    recreate the sample, and only a retranscription recreates it (holetz/eclume#97, the spec's
+    recommendation until the owner decides).
     """
     await conn.execute(
         text(
@@ -465,7 +467,7 @@ async def forget(conn: AsyncConnection, person_id: UUID) -> tuple[int, int]:
 
 
 async def forget_sample(conn: AsyncConnection, person_id: UUID, key: SpeakerKey) -> bool:
-    """Tira uma amostra da impressão da pessoa, sob a RLS do dono; o locutor segue ligado."""
+    """Remove a sample from the person's voiceprint, under the owner's RLS; the speaker stays linked."""
     vs = t.voice_samples.c
     result = await conn.execute(
         delete(t.voice_samples).where(

@@ -1,16 +1,16 @@
--- 013_revisao_do_processamento — correções da revisão do processamento automático (holetz/eclume#33).
+-- 013_revisao_do_processamento — fixes from the automatic processing review (holetz/eclume#33).
 --
--- `recordings.subject` guarda o assunto de antes do primeiro padrão de título: reaplicar um tipo
--- renderiza o padrão sobre ele, nunca sobre o título já renderizado. Nulo até o primeiro padrão
--- aplicado. Padrões em docs/standards/code/processamento-automatico.md.
+-- `recordings.subject` keeps the subject from before the first title pattern: reapplying a type
+-- renders the pattern over it, never over the already rendered title. Null until the first pattern
+-- is applied. Patterns in docs/standards/code/processamento-automatico.md.
 --
--- `agent_providers` ganha a garantia, no banco, de uma finalidade por provider (server-agentes.md).
+-- `agent_providers` gets the guarantee, in the database, of one purpose per provider (server-agentes.md).
 
 ALTER TABLE recordings ADD COLUMN subject text;
 
--- Cada finalidade tem no máximo um provider, garantido no banco: toda escrita de `used_for`
--- serializa no mesmo advisory lock de transação que as rotas do admin tomam, e a sobreposição com
--- outro provider é recusada.
+-- Each purpose has at most one provider, guaranteed in the database: every write of `used_for`
+-- serializes on the same transaction advisory lock the admin routes take, and an overlap with
+-- another provider is refused.
 CREATE FUNCTION eclume_agent_providers_one_per_purpose() RETURNS trigger
     LANGUAGE plpgsql
     AS $$

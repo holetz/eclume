@@ -1,7 +1,7 @@
-"""Exportação da gravação: transcrição em TXT e SRT, resumo em MD, e os dois em DOCX.
+"""Recording export: transcript in TXT and SRT, summary in MD, and both in DOCX.
 
-Os nomes dos locutores são os da transcrição (a pessoa ligada ou o rótulo); a data sai no horário
-de Brasília. Contrato em docs/standards/api/contrato-v1.md.
+The speaker names are the transcript's (the linked person or the label); the date is in Brasilia
+time. Contract in docs/standards/api/contrato-v1.md.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from docx.text.paragraph import Paragraph
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-# O Brasil não tem horário de verão desde 2019: Brasília é UTC-3 o ano todo.
+# Brazil has had no daylight saving time since 2019: Brasilia is UTC-3 all year.
 BRASILIA = timezone(timedelta(hours=-3), "BRT")
 MEDIA_TYPES = {
     "txt": "text/plain; charset=utf-8",
@@ -38,19 +38,19 @@ MEDIA_TYPES = {
 }
 
 
-# Controles que o XML do DOCX não aceita (o python-docx recusa o texto inteiro).
+# Control characters the DOCX XML does not accept (python-docx refuses the whole text).
 _XML_INVALID = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
 def slug(title: str, fallback: str = "transcricao") -> str:
-    """O título em minúsculas, sem acento e com hífens: o nome do arquivo exportado."""
+    """The title in lowercase, without accents and with hyphens: the exported file name."""
     ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-z0-9]+", "-", ascii_title.lower()).strip("-") or fallback
 
 
 @dataclass(frozen=True)
 class Line:
-    """Uma fala: início, fim, nome do locutor e texto."""
+    """An utterance: start, end, speaker name and text."""
 
     start_ms: int
     end_ms: int
@@ -60,7 +60,7 @@ class Line:
 
 @dataclass(frozen=True)
 class Export:
-    """O que os formatos precisam: cabeçalho, falas e o resumo atual (se houver)."""
+    """What the formats need: header, utterances and the current summary (if any)."""
 
     title: str
     recorded_at: datetime
@@ -72,11 +72,11 @@ class Export:
 
     @property
     def date(self) -> str:
-        """`dd/mm/aaaa hh:mm` no horário de Brasília."""
+        """`dd/mm/aaaa hh:mm` in Brasilia time."""
         return self.recorded_at.astimezone(BRASILIA).strftime("%d/%m/%Y %H:%M")
 
     def meta(self) -> list[str]:
-        """Data, duração e participantes, uma linha cada."""
+        """Date, duration and participants, one line each."""
         return [
             f"Data: {self.date}",
             f"Duração: {hms(self.duration_ms)}",
@@ -85,7 +85,7 @@ class Export:
 
 
 async def load_export(conn: AsyncConnection, recording_id: UUID) -> Export:
-    """A gravação do usuário pronta para exportar (404 sem ela, 409 `transcript_missing` sem transcrição)."""
+    """The user's recording ready to export (404 without it, 409 `transcript_missing` without a transcript)."""
     transcript_row = await recording_transcript(conn, recording_id)
     transcript = await load_transcript(conn, transcript_row["id"], words=False)
     names = {s["id"]: s["person"]["name"] if s["person"] else s["label"] for s in transcript["speakers"]}
@@ -113,7 +113,7 @@ async def load_export(conn: AsyncConnection, recording_id: UUID) -> Export:
 
 
 def render_txt(export: Export) -> str:
-    """Título, data, duração e participantes, e uma linha `[HH:MM:SS] Nome: texto` por fala."""
+    """Title, date, duration and participants, and one `[HH:MM:SS] Nome: texto` line per utterance."""
     lines = [export.title, *export.meta(), ""]
     lines += [f"[{hms(line.start_ms)}] {line.speaker}: {line.text}" for line in export.lines]
     return "\n".join(lines) + "\n"
@@ -124,8 +124,8 @@ def _srt_time(ms: int) -> str:
 
 
 def render_srt(export: Export) -> str:
-    """Uma legenda por fala: número, `HH:MM:SS,mmm --> HH:MM:SS,mmm` e `Nome: texto`."""
-    # Uma linha em branco dentro do texto encerraria o bloco: a fala sai numa linha só.
+    """One subtitle per utterance: number, `HH:MM:SS,mmm --> HH:MM:SS,mmm` and `Nome: texto`."""
+    # A blank line inside the text would end the block: the utterance goes out on a single line.
     blocks = [
         f"{n}\n{_srt_time(line.start_ms)} --> {_srt_time(line.end_ms)}\n{line.speaker}: {' '.join(line.text.split())}"
         for n, line in enumerate(export.lines, 1)
@@ -134,7 +134,7 @@ def render_srt(export: Export) -> str:
 
 
 def render_md(export: Export) -> str:
-    """`# Título`, a linha com a data e o tipo de agenda, e o resumo atual; sem resumo, 409."""
+    """`# Título`, the line with the date and the agenda type, and the current summary; without a summary, 409."""
     if export.summary_md is None:
         raise conflict("A gravação ainda não tem resumo.", code=SUMMARY_MISSING)
     subtitle = " · ".join(part for part in (export.date, export.agenda_type) if part)
@@ -151,7 +151,7 @@ _INLINE = re.compile(r"(\*\*[^*]+\*\*|\*[^*\s][^*]*\*)")
 
 
 def _runs(paragraph: Paragraph, text: str) -> None:
-    """`**negrito**` e `*itálico*` viram runs; o resto é texto."""
+    """`**negrito**` and `*itálico*` become runs; the rest is text."""
     for part in _INLINE.split(text):
         if part.startswith("**") and part.endswith("**") and len(part) > 4:  # noqa: PLR2004 — os dois marcadores
             paragraph.add_run(part[2:-2]).bold = True
@@ -162,7 +162,7 @@ def _runs(paragraph: Paragraph, text: str) -> None:
 
 
 def _markdown(doc: DocxDocument, markdown: str) -> None:
-    """Um subconjunto do Markdown: `#` a `###`, listas, caixas de seleção, negrito, itálico e parágrafos."""
+    """A subset of Markdown: `#` to `###`, lists, checkboxes, bold, italic and paragraphs."""
     pending: list[str] = []
 
     def flush() -> None:
@@ -189,9 +189,9 @@ def _markdown(doc: DocxDocument, markdown: str) -> None:
 
 
 def render_docx(export: Export) -> bytes:
-    """Título, data/duração/participantes, o resumo (se houver) e a transcrição, um parágrafo por fala."""
+    """Title, date/duration/participants, the summary (if any) and the transcript, one paragraph per utterance."""
     export = _xml_safe(export)
-    from docx import Document  # noqa: PLC0415 — o worker não monta DOCX
+    from docx import Document  # noqa: PLC0415 — the worker does not build DOCX
 
     doc = Document()
     doc.add_heading(export.title, level=0)

@@ -1,7 +1,7 @@
-"""Identificação por voz (LGPD): impressão de voz da pessoa e recusa de sugestão.
+"""Voice identification (LGPD): a person's voiceprint and declining a suggestion.
 
-Toda rota aqui aceita só sessão: um PAT nunca lê nem apaga dado biométrico. Tudo é do dono: a RLS
-mostra só as pessoas, as amostras e as transcrições da conta. Regras em
+Every route here accepts only a session: a PAT never reads or deletes biometric data. Everything
+belongs to the owner: RLS shows only the account's people, samples and transcripts. Rules in
 docs/standards/code/identificacao-por-voz.md.
 """
 
@@ -46,7 +46,7 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 Member = Annotated[Principal, Depends(requires(session_only=True))]
 
 
-# --- sugestões ----------------------------------------------------------------------------------
+# --- suggestions --------------------------------------------------------------------------------
 
 
 @router.delete("/transcripts/{transcript_id}/speakers/{speaker_id}/suggestions/{person_id}")
@@ -57,7 +57,7 @@ async def reject_speaker_suggestion(
     principal: Member,
     ctx: Ctx,
 ) -> dict[str, Any]:
-    """Recusa a sugestão: some do locutor e não volta."""
+    """Decline the suggestion: it disappears from the speaker and does not come back."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await editable_transcript(conn, transcript_id)
         if not await reject(conn, principal, SpeakerKey(transcript_id, speaker_id), person_id):
@@ -66,7 +66,7 @@ async def reject_speaker_suggestion(
         return await speaker_response(conn, transcript_id, speaker_id)
 
 
-# --- impressão ----------------------------------------------------------------------------------
+# --- voiceprint ---------------------------------------------------------------------------------
 
 _SAMPLES = text(
     """
@@ -89,7 +89,7 @@ _SAMPLES = text(
 )
 
 
-def _sample_json(row: Any) -> dict[str, Any]:  # noqa: ANN401 — linha do SQLAlchemy
+def _sample_json(row: Any) -> dict[str, Any]:  # noqa: ANN401 — an SQLAlchemy row
     return {
         "transcript_id": str(row.transcript_id),
         "recording_id": str(row.recording_id) if row.recording_id else None,
@@ -109,7 +109,7 @@ def _sample_json(row: Any) -> dict[str, Any]:  # noqa: ANN401 — linha do SQLAl
 
 @router.get("/people/{person_id}/voiceprint")
 async def get_voiceprint(person_id: UUID, principal: Member, ctx: Ctx) -> dict[str, Any]:
-    """As amostras da impressão, sem os vetores."""
+    """The voiceprint's samples, without the vectors."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await get_person(conn, person_id)
         settings = await platform_voice(conn)
@@ -125,7 +125,7 @@ async def get_voiceprint(person_id: UUID, principal: Member, ctx: Ctx) -> dict[s
 
 @router.delete("/people/{person_id}/voiceprint", status_code=204)
 async def delete_voiceprint(person_id: UUID, principal: Member, ctx: Ctx) -> Response:
-    """Esquece a voz da pessoa: apaga as amostras e as sugestões pendentes dela."""
+    """Forget the person's voice: delete their samples and pending suggestions."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await get_person(conn, person_id)
         await forget(conn, person_id)
@@ -140,7 +140,7 @@ async def delete_voice_sample(
     principal: Member,
     ctx: Ctx,
 ) -> Response:
-    """Tira uma amostra da impressão; o locutor segue ligado à pessoa."""
+    """Remove a sample from the voiceprint; the speaker stays linked to the person."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await get_person(conn, person_id)
         if not await forget_sample(conn, person_id, SpeakerKey(transcript_id, speaker_id)):
@@ -148,11 +148,11 @@ async def delete_voice_sample(
     return Response(status_code=204)
 
 
-# --- atribuição automática ----------------------------------------------------------------------
+# --- automatic assignment -----------------------------------------------------------------------
 
 
 class VoiceAssignmentPatch(BaseModel):
-    """Corpo do `PATCH /me/voice-assignment`: os campos enviados mudam, os demais ficam."""
+    """Body of `PATCH /me/voice-assignment`: the fields sent change, the others stay."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -162,7 +162,7 @@ class VoiceAssignmentPatch(BaseModel):
 
 
 async def _assignment_json(conn: AsyncConnection, user_id: UUID) -> dict[str, Any]:
-    """Schema `VoiceAssignment`; `platform_enabled` diz se a plataforma deixa a voz valer."""
+    """Schema `VoiceAssignment`; `platform_enabled` says whether the platform lets voice apply."""
     prefs = await auto_prefs(conn, user_id)
     samples, people = await voice_counts(conn, user_id)
     return {
@@ -177,17 +177,17 @@ async def _assignment_json(conn: AsyncConnection, user_id: UUID) -> dict[str, An
 
 @router.get("/me/voice-assignment")
 async def get_voice_assignment(principal: Member, ctx: Ctx) -> dict[str, Any]:
-    """Preferência da conta: ligar o locutor à pessoa sozinho, a pontuação mínima e guardar amostras."""
+    """The account's preference: link the speaker to the person on its own, the minimum score, and keeping samples."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await _assignment_json(conn, principal.user_id)
 
 
 @router.patch("/me/voice-assignment")
 async def patch_voice_assignment(body: VoiceAssignmentPatch, principal: Member, ctx: Ctx) -> dict[str, Any]:
-    """Muda a preferência; vale para as próximas transcrições, sem mexer nos vínculos que já existem.
+    """Change the preference; it applies to future transcripts, without touching existing links.
 
-    `keep_samples: false` apaga na hora as amostras, os vetores e as sugestões pendentes da conta
-    (LGPD: a escolha do titular); os `speaker_embeddings.json` da conta saem no worker CPU.
+    `keep_samples: false` immediately deletes the account's samples, vectors and pending suggestions
+    (LGPD: the data subject's choice); the account's `speaker_embeddings.json` files go in the CPU worker.
     """
     values = body.model_dump(exclude_unset=True)
     if any(value is None for value in values.values()):

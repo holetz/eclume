@@ -1,7 +1,7 @@
-"""Para onde vai cada dado: a classificação do destino da transcrição e de cada finalidade de agente.
+"""Where each piece of data goes: the destination classification of transcription and of each agent purpose.
 
-O servidor classifica e os clientes só mostram (holetz/eclume#116). Na dúvida, "fora": errar para
-fora só sobra-avisa, errar para dentro esconderia o envio. Sem resolver DNS.
+The server classifies and the clients only display (holetz/eclume#116). When in doubt, "external":
+erring outward only over-warns, erring inward would hide the transfer. No DNS resolution.
 """
 
 from __future__ import annotations
@@ -19,9 +19,9 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection
 
 SERVER, LOCAL_NETWORK, EXTERNAL, DISABLED = "server", "local_network", "external", "disabled"
-# Tipos de provider que sempre mandam o texto à Anthropic.
+# Provider kinds that always send the text to Anthropic.
 _ANTHROPIC_KINDS = {"anthropic", "claude-cli"}
-# O próprio host visto de dentro de um contêiner.
+# The host itself as seen from inside a container.
 _THIS_HOST = {"localhost", "host.docker.internal"}
 _LOCAL_SUFFIXES = (".local", ".lan")
 _LOCAL_NETWORKS = [
@@ -31,7 +31,7 @@ _LOCAL_NETWORKS = [
 
 
 def _location(host: str) -> str:
-    """Destino de um host já normalizado; o que não se prova dentro fica fora."""
+    """Destination of an already normalized host; whatever is not proven inside is external."""
     try:
         address = ipaddress.ip_address(host)
     except ValueError:
@@ -44,7 +44,7 @@ def _location(host: str) -> str:
 
 
 def classify_url(url: str | None) -> tuple[str, str | None]:
-    """`(destino, quem processa)` de um endereço; fora do servidor, quem processa é só o host."""
+    """`(destination, processor)` of an address; outside the server, the processor is just the host."""
     host = (urlsplit(url or "").hostname or "").rstrip(".").lower()
     if not host:
         return EXTERNAL, None
@@ -53,14 +53,14 @@ def classify_url(url: str | None) -> tuple[str, str | None]:
 
 
 def classify_provider(kind: str, base_url: str | None) -> tuple[str, str | None]:
-    """Destino de um provider de agente pelo tipo e pelo endereço."""
+    """Destination of an agent provider by its kind and address."""
     if kind in _ANTHROPIC_KINDS:
         return EXTERNAL, "Anthropic"
     return classify_url(base_url)
 
 
 def classify_asr(asr: dict[str, Any]) -> tuple[str, str | None]:
-    """Destino da transcrição: a engine local (GPU ou CPU) fica no servidor; a remota segue o endereço."""
+    """Destination of transcription: the local engine (GPU or CPU) stays on the server; a remote one follows its address."""
     if asr.get("engine") == "openai-compatible":
         return classify_url(asr.get("endpoint_url"))
     return SERVER, None
@@ -71,7 +71,7 @@ def _destination(purpose: str, where: tuple[str, str | None]) -> dict[str, Any]:
 
 
 async def privacy_info(conn: AsyncConnection) -> dict[str, Any]:
-    """Schema `PrivacyInfo`: um destino por finalidade, sem endereço, modelo, chave nem nome."""
+    """Schema `PrivacyInfo`: one destination per purpose, with no address, model, key or name."""
     asr = (await conn.execute(select(t.platform_settings.c.asr))).scalar_one()
     destinations = [_destination("transcription", classify_asr(asr or {}))]
     for purpose in PURPOSES:

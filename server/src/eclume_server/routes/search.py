@@ -1,4 +1,4 @@
-"""Busca full-text sobre os segmentos das transcrições do usuário."""
+"""Full-text search over the segments of the user's transcripts."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ async def search_segments(
     cursor: Cursor = None,
     limit: Limit = 50,
 ) -> dict[str, Any]:
-    """Trechos por relevância (`q`) ou, só com `person`, as falas da pessoa em ordem cronológica."""
+    """Excerpts by relevance (`q`) or, with `person` alone, the person's utterances in chronological order."""
     q = q.strip() if q else None
     if not q and person is None:
         raise invalid_field("q", "informe q ou person")

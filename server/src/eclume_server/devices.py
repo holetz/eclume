@@ -1,6 +1,6 @@
-"""Credencial de dispositivo: o token `kind: device` que o desktop e o celular recebem ao entrar.
+"""Device credential: the `kind: device` token the desktop and the phone receive on sign-in.
 
-Padrão em docs/standards/code/server-mcp-e-dispositivos.md.
+Pattern in docs/standards/code/server-mcp-e-dispositivos.md.
 """
 
 from __future__ import annotations
@@ -26,16 +26,16 @@ if TYPE_CHECKING:
 
 PAIRING_TTL = timedelta(minutes=10)
 
-# Upload, marcadores e status das próprias gravações, o resumo pronto para o aviso do app com
-# "Copiar" e a leitura de resumos e transcrições para a pasta sincronizada do desktop; sem
-# validade, revogável na web.
+# Upload, markers and status of the account's own recordings, the ready summary for the app's
+# notification with "Copiar", and reading summaries and transcripts for the desktop's synced folder;
+# no expiry, revocable on the web.
 DEVICE_SCOPES = ("recordings:read", "recordings:write", "transcripts:read", "summaries:read")
 
 
 async def issue_credential(
     conn: AsyncConnection, user_id: UUID, device_name: str, platform: str, server: dict[str, Any]
 ) -> dict[str, Any]:
-    """Cria o token de dispositivo e devolve o schema `DeviceCredential` (o segredo só aqui)."""
+    """Create the device token and return the `DeviceCredential` schema (the secret only here)."""
     secret, prefix = new_pat()
     row = (
         (
@@ -64,7 +64,7 @@ def _code_hmac(secret_key: str, code: str) -> str:
 
 
 def pairing_code_json(row: Row, now: datetime | None = None) -> dict[str, Any]:
-    """Schema `PairingCode`, sem o código (que o banco não guarda)."""
+    """Schema `PairingCode`, without the code (which the database does not store)."""
     now = now or datetime.now(UTC)
     status = "used" if row["used_at"] else ("pending" if row["expires_at"] > now else "expired")
     return {
@@ -78,7 +78,7 @@ def pairing_code_json(row: Row, now: datetime | None = None) -> dict[str, Any]:
 async def create_pairing_code(
     conn: AsyncConnection, user_id: UUID, secret_key: str, server: dict[str, Any]
 ) -> dict[str, Any]:
-    """Novo código do usuário (vence os anteriores ainda pendentes), com o link do QR."""
+    """New code for the user (expires the previous still pending ones), with the QR link."""
     now = datetime.now(UTC)
     codes = t.pairing_codes
     await conn.execute(
@@ -105,7 +105,7 @@ async def create_pairing_code(
                 )
             break
         except IntegrityError:
-            # Colisão com um código ainda não usado (de qualquer conta): sorteia outro.
+            # Collision with a code not used yet (of any account): draw another.
             continue
     query = {"codigo": code} | ({"ca": server["ca_sha256"]} if server["ca_sha256"] else {})
     return pairing_code_json(row, now) | {
@@ -116,7 +116,7 @@ async def create_pairing_code(
 
 
 async def redeem_pairing_code(conn: AsyncConnection, raw: str, secret_key: str) -> Row | None:
-    """Marca o código como usado, de forma atômica; `None` se inexistente, vencido, usado ou de conta inativa."""
+    """Mark the code as used, atomically; `None` if nonexistent, expired, used or of an inactive account."""
     codes = t.pairing_codes
     return (
         (
@@ -138,5 +138,5 @@ async def redeem_pairing_code(conn: AsyncConnection, raw: str, secret_key: str) 
 
 
 async def link_token(conn: AsyncConnection, pairing_code_id: UUID, token_id: str) -> None:
-    """Registra no código a credencial que ele emitiu."""
+    """Record on the code the credential it issued."""
     await conn.execute(update(t.pairing_codes).where(t.pairing_codes.c.id == pairing_code_id).values(token_id=token_id))

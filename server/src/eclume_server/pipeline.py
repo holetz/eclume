@@ -1,8 +1,9 @@
-"""Etapas do processamento de uma gravação (`pipeline_steps`), por revisão do job de transcrição.
+"""Processing steps of a recording (`pipeline_steps`), per transcription job revision.
 
-recebido → pré-processamento → transcrição → locutores → tipo de agenda → campos → resumo (a ordem
-de `STEPS`). Cada etapa fica `pending`, `active`, `done`, `failed` ou `skipped`, com o motivo quando
-pulada ou falha; a de locutores também fica `waiting`, à espera do dono (`speaker_naming.py`). Contrato e decisões em docs/standards/code/processamento-automatico.md.
+received → preprocessing → transcription → speakers → agenda type → fields → summary (the order of
+`STEPS`). Each step is `pending`, `active`, `done`, `failed` or `skipped`, with the reason when
+skipped or failed; the speakers step can also be `waiting`, for the owner (`speaker_naming.py`).
+Contract and decisions in docs/standards/code/processamento-automatico.md.
 """
 
 from __future__ import annotations
@@ -24,23 +25,23 @@ if TYPE_CHECKING:
     from eclume_server.serialize import Row
 
 PREPROCESS_FAILED = "preprocess_failed"
-# Etapa do progresso do worker GPU em que a falha aconteceu → etapa do pipeline que ela derruba.
+# GPU worker progress stage where the failure happened → the pipeline step it brings down.
 FAILED_STEP = {"download": "preprocessing", "preprocess": "preprocessing"}
 STEPS = ("received", "preprocessing", "transcription", "speakers", "agenda_type", "fields", "summary")
 FINISHED = ("done", "failed", "skipped")
-# A etapa `speakers` parada à espera do dono (holetz/eclume#144): não terminou, mas marca início e fim
-# como um estado final; quando sai da espera, o fim é regravado e o início, mantido.
+# The `speakers` step paused waiting for the owner (holetz/eclume#144): it has not finished, but it
+# marks start and end like a final state; when it leaves the wait, the end is rewritten and the start kept.
 STOPPED = (*FINISHED, "waiting")
-# Desfechos da etapa `summary` sem resumo novo que o `?since=` precisa enxergar.
+# Outcomes of the `summary` step without a new summary that `?since=` must see.
 UNSUMMARIZED = ("failed", "skipped")
-# Desfechos dos jobs das etapas que param a cadeia: a revisão não é mais a da gravação.
+# Outcomes of the step jobs that stop the chain: the revision is no longer the recording's.
 GONE = "gravação apagada"
 STALE = "revisão antiga"
-# Etapa do worker GPU (hash de progresso, já no vocabulário de `Job.stage`) → etapa em andamento.
+# GPU worker stage (progress hash, already in the `Job.stage` vocabulary) → step in progress.
 _ACTIVE_BY_STAGE = {"preprocessing": "preprocessing"}
 
 
-async def set_step(  # noqa: PLR0913 — a etapa, o estado e o que ele carrega
+async def set_step(  # noqa: PLR0913 — the step, the state and what it carries
     conn: AsyncConnection,
     recording: Row,
     revision: int,
@@ -52,10 +53,10 @@ async def set_step(  # noqa: PLR0913 — a etapa, o estado e o que ele carrega
     started_at: datetime | None = None,
     finished_at: datetime | None = None,
 ) -> None:
-    """Grava o estado da etapa; `active` marca o início, e um estado final, o fim.
+    """Write the step's state; `active` marks the start, and a final state, the end.
 
-    `recording` traz `id` e `owner_id`. Serve às rotas (sob a RLS do dono) e aos workers (papel de
-    conexão).
+    `recording` carries `id` and `owner_id`. It serves the routes (under the owner's RLS) and the
+    workers (connection role).
     """
     ps = t.pipeline_steps
     now = func.now()
@@ -71,7 +72,7 @@ async def set_step(  # noqa: PLR0913 — a etapa, o estado e o que ele carrega
         values |= {"started_at": started_at or now, "finished_at": finished_at or now}
     update_values = dict(values)
     if state in STOPPED and started_at is None:
-        # Terminar uma etapa que já tinha começado mantém o início dela.
+        # Finishing a step that had already started keeps its start.
         update_values["started_at"] = func.coalesce(ps.c.started_at, now)
     await conn.execute(
         pg_insert(ps)
@@ -83,9 +84,9 @@ async def set_step(  # noqa: PLR0913 — a etapa, o estado e o que ele carrega
 
 
 async def mark_recording_changed(conn: AsyncConnection, recording_id: UUID) -> None:
-    """Move `updated_at` da gravação: o `?since=` dos clientes vê o resumo que falha ou é pulado.
+    """Move the recording's `updated_at`: the clients' `?since=` sees a summary that fails or is skipped.
 
-    Só a gravação: o `updated_at` da transcrição se move só com resumo novo, para não acordar o lumea.
+    Only the recording: the transcript's `updated_at` moves only with a new summary, so lumea is not woken up.
     """
     await conn.execute(update(t.recordings).where(t.recordings.c.id == recording_id).values(updated_at=func.now()))
 
@@ -114,7 +115,7 @@ def _step_json(step: str, row: Row | None) -> dict[str, Any]:
 
 
 async def load_pipelines(conn: AsyncConnection, recording_ids: list[UUID]) -> dict[UUID, list[Row]]:
-    """As linhas da maior revisão de cada gravação."""
+    """The rows of each recording's highest revision."""
     if not recording_ids:
         return {}
     ps = t.pipeline_steps.c
@@ -142,10 +143,10 @@ async def load_pipelines(conn: AsyncConnection, recording_ids: list[UUID]) -> di
 
 
 def pipeline_json(rows: list[Row], running_stage: str | None) -> list[dict[str, Any]]:
-    """Schema `PipelineStep[]`: as sete etapas em ordem; sem linha, `pending`.
+    """Schema `PipelineStep[]`: the seven steps in order; without a row, `pending`.
 
-    `running_stage` é a etapa de `Job.stage` enquanto o worker GPU reporta progresso: ela deixa o
-    pré-processamento ou a transcrição `active`.
+    `running_stage` is the `Job.stage` stage while the GPU worker reports progress: it leaves
+    preprocessing or transcription `active`.
     """
     by_step = {row["step"]: row for row in rows}
     steps = [_step_json(step, by_step.get(step)) for step in STEPS]
@@ -158,7 +159,7 @@ def pipeline_json(rows: list[Row], running_stage: str | None) -> list[dict[str, 
 
 
 def gpu_started(engine_info: dict[str, Any], fallback: datetime) -> datetime:
-    """O início real do job no worker GPU (`engine_info.started_at` ou o do hash de progresso)."""
+    """The job's real start on the GPU worker (`engine_info.started_at` or the progress hash's)."""
     try:
         return datetime.fromisoformat(engine_info["started_at"])
     except (KeyError, TypeError, ValueError):
@@ -166,11 +167,11 @@ def gpu_started(engine_info: dict[str, Any], fallback: datetime) -> datetime:
 
 
 async def record_gpu_steps(conn: AsyncConnection, job: Row, engine_info: dict[str, Any], now: datetime) -> None:
-    """Pré-processamento e transcrição feitos, pelo `engine_info` do worker GPU.
+    """Preprocessing and transcription done, from the GPU worker's `engine_info`.
 
-    O pré-processamento começa com o job no worker e dura `preprocess.ms`; a transcrição vem em
-    seguida. A cadeia que caiu para só o formato sai `failed` (`preprocess_failed`), e a transcrição
-    seguiu. Um worker sem pré-processamento deixa a etapa pulada.
+    Preprocessing starts with the job on the worker and lasts `preprocess.ms`; transcription comes
+    right after. A chain that fell back to format only ends `failed` (`preprocess_failed`), and
+    transcription went on. A worker without preprocessing leaves the step skipped.
     """
     recording, revision = {"id": job["recording_id"], "owner_id": job["owner_id"]}, job["revision"]
     started = gpu_started(engine_info, job["started_at"] or job["queued_at"])
@@ -188,7 +189,7 @@ async def record_gpu_steps(conn: AsyncConnection, job: Row, engine_info: dict[st
         )
         transcription_start = started
     else:
-        # O fim do pré-processamento nunca passa do fim do job (relógios do worker e do server).
+        # The end of preprocessing never goes past the end of the job (worker and server clocks).
         transcription_start = min(started + timedelta(milliseconds=int(pre.get("ms") or 0)), now)
         failed = [step for step in pre.get("steps", []) if step.get("state") == "failed"]
         error = (PREPROCESS_FAILED, str(failed[0].get("error") or "")[:500]) if failed else None
@@ -216,13 +217,13 @@ async def record_gpu_steps(conn: AsyncConnection, job: Row, engine_info: dict[st
 
 
 async def get_step(conn: AsyncConnection, recording_id: UUID, revision: int, step: str) -> Row | None:
-    """A linha da etapa, se já existe."""
+    """The step's row, if it already exists."""
     ps = t.pipeline_steps.c
     query = select(t.pipeline_steps).where(ps.recording_id == recording_id, ps.revision == revision, ps.step == step)
     return (await conn.execute(query)).mappings().first()
 
 
 async def current_revision(conn: AsyncConnection, recording_id: UUID) -> int | None:
-    """A revisão do job de transcrição mais recente da gravação (a da cadeia em curso)."""
+    """The revision of the recording's most recent transcription job (that of the running chain)."""
     jobs = t.transcription_jobs.c
     return (await conn.execute(select(func.max(jobs.revision)).where(jobs.recording_id == recording_id))).scalar()

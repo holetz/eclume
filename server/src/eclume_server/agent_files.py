@@ -1,10 +1,10 @@
-"""Arquivos do Agente: o texto extraído dos anexos e os arquivos que o agente gera.
+"""The Agent's files: the text extracted from attachments and the files the agent generates.
 
-Entrada: .txt, .md, .csv, .pdf e .docx, até `MAX_INPUT_BYTES`; o texto extraído é cortado em
-`MAX_TEXT_CHARS`. O tipo vem da extensão e é conferido pelo conteúdo (o PDF começa por `%PDF`, o
-.docx é um zip com `word/document.xml`); o original nunca é executado. Saída: .md, .txt, .csv e
-.docx, montados a partir do texto que o agente escreveu (o .docx pelo subconjunto de Markdown da
-exportação). Regras em docs/standards/code/server-agentes.md §Agente.
+Input: .txt, .md, .csv, .pdf and .docx, up to `MAX_INPUT_BYTES`; the extracted text is cut at
+`MAX_TEXT_CHARS`. The type comes from the extension and is checked against the content (a PDF starts
+with `%PDF`, a .docx is a zip with `word/document.xml`); the original is never executed. Output: .md,
+.txt, .csv and .docx, built from the text the agent wrote (the .docx through the export's Markdown
+subset). Rules in docs/standards/code/server-agentes.md §Agente.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ MAX_INPUTS_PER_SESSION = 20
 MAX_OUTPUT_CHARS = 200_000
 MAX_OUTPUTS_PER_REPLY = 3
 MAX_PDF_PAGES = 500
-# Teto do conteúdo descompactado de um .docx: barra a bomba de zip antes de abrir o XML.
+# Ceiling of a .docx's uncompressed content: stops a zip bomb before the XML is opened.
 MAX_DOCX_UNZIPPED = 50 * 1024 * 1024
 MAX_NAME = 200
 
@@ -51,12 +51,12 @@ _UNSAFE_NAME = re.compile(r"[\\/:*?\"<>|\x00-\x1f]+")
 
 
 class FileRejectedError(Exception):
-    """O anexo não é aceito: tipo fora da lista, conteúdo que não bate com a extensão ou ilegível."""
+    """The attachment is not accepted: a type outside the list, content that does not match the extension, or unreadable."""
 
 
 @dataclass(frozen=True)
 class Extracted:
-    """O texto do anexo, o tipo dele e se o texto foi cortado no teto."""
+    """The attachment's text, its type and whether the text was cut at the ceiling."""
 
     text: str
     media_type: str
@@ -65,7 +65,7 @@ class Extracted:
 
 @dataclass(frozen=True)
 class Rendered:
-    """Um arquivo gerado: o nome final, o tipo e os bytes."""
+    """A generated file: the final name, the type and the bytes."""
 
     name: str
     media_type: str
@@ -73,18 +73,18 @@ class Rendered:
 
 
 def file_key(owner_id: UUID, session_id: UUID, file_id: UUID) -> str:
-    """Chave do arquivo no bucket: sob o dono, como o áudio."""
+    """The file's key in the bucket: under the owner, like the audio."""
     return f"users/{owner_id}/agent/{session_id}/{file_id}"
 
 
 def extension(name: str) -> str:
-    """A extensão em minúsculas, sem o ponto (vazia sem extensão)."""
+    """The lowercase extension, without the dot (empty without an extension)."""
     _, dot, ext = name.rpartition(".")
     return ext.lower() if dot else ""
 
 
 def clean_name(name: str, fallback: str = "arquivo") -> str:
-    """Um nome de arquivo sem caminho nem caracteres de controle, até `MAX_NAME`."""
+    """A file name without a path or control characters, up to `MAX_NAME`."""
     base = name.replace("\\", "/").rsplit("/", 1)[-1]
     base = _UNSAFE_NAME.sub("-", unicodedata.normalize("NFC", base)).strip(" .-")
     return (base or fallback)[:MAX_NAME]
@@ -98,7 +98,7 @@ def _decode(data: bytes) -> str:
 
 
 def _pdf_text(data: bytes) -> str:
-    from pypdf import PdfReader  # noqa: PLC0415 — só quem anexa PDF paga a importação
+    from pypdf import PdfReader  # noqa: PLC0415 — only who attaches a PDF pays for the import
     from pypdf.errors import PdfReadError  # noqa: PLC0415
 
     if not data.startswith(b"%PDF"):
@@ -126,7 +126,7 @@ def _docx_text(data: bytes) -> str:
                 raise FileRejectedError("O documento descompactado passa do limite.")
     except zipfile.BadZipFile as exc:
         raise FileRejectedError("O arquivo não é um documento do Word (.docx).") from exc
-    from docx import Document  # noqa: PLC0415 — o worker não lê DOCX
+    from docx import Document  # noqa: PLC0415 — the worker does not read DOCX
 
     try:
         doc = Document(BytesIO(data))
@@ -139,7 +139,7 @@ def _docx_text(data: bytes) -> str:
 
 
 def extract_text(name: str, data: bytes) -> Extracted:
-    """O texto do anexo; `FileRejectedError` fora da lista ou com conteúdo que não bate."""
+    """The attachment's text; `FileRejectedError` outside the list or with content that does not match."""
     ext = extension(name)
     if ext not in INPUT_TYPES:
         raise FileRejectedError(f"Tipo não aceito. Anexe {ACCEPTED}.")
@@ -157,7 +157,7 @@ def extract_text(name: str, data: bytes) -> Extracted:
 
 
 def output_name(name: str, fmt: str) -> str:
-    """O nome do arquivo gerado, com a extensão do formato."""
+    """The generated file's name, with the format's extension."""
     base = clean_name(name, "resultado")
     if extension(base) == fmt:
         base = base[: -(len(fmt) + 1)] or "resultado"
@@ -165,7 +165,7 @@ def output_name(name: str, fmt: str) -> str:
 
 
 def render_output(name: str, fmt: str, content: str) -> Rendered:
-    """Monta o arquivo que o agente pediu; `ValueError` para formato fora de `OUTPUT_TYPES`."""
+    """Builds the file the agent asked for; `ValueError` for a format outside `OUTPUT_TYPES`."""
     if fmt not in OUTPUT_TYPES:
         raise ValueError(fmt)
     content = content[:MAX_OUTPUT_CHARS]

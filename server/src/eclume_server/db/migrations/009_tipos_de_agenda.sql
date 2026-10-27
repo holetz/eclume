@@ -1,14 +1,14 @@
--- 009_tipos_de_agenda — os templates de resumo viram tipos de agenda (holetz/eclume#33).
+-- 009_tipos_de_agenda — the summary templates become agenda types (holetz/eclume#33).
 --
--- Cada template (todos têm dono desde a 008) vira um tipo de agenda do dono, com o mesmo id: os
--- resumos que o citavam continuam válidos. O admin passa a manter os tipos padrão
--- (`default_agenda_types`), semeados com os quatro tipos do protótipo e copiados para toda conta,
--- nova ou existente. Antes disso, amarra o dono dos filhos ao do pai por FKs compostas, no padrão
--- que a 008 usa em `people`. Padrões em docs/standards/code/processamento-automatico.md.
+-- Every template (all have an owner since 008) becomes an agenda type of the owner, with the same id: the
+-- summaries that cited it stay valid. The admin now maintains the default types
+-- (`default_agenda_types`), seeded with the prototype's four types and copied to every account,
+-- new or existing. Before that, it ties the children's owner to the parent's with composite FKs, in the pattern
+-- 008 uses in `people`. Patterns in docs/standards/code/processamento-automatico.md.
 
--- --- 1. dono do filho = dono do pai ------------------------------------------------------------
+-- --- 1. child's owner = parent's owner ---------------------------------------------------------
 
--- A RLS confere só `owner_id`; as FKs compostas garantem que ele é o da gravação (ou da transcrição).
+-- RLS only checks `owner_id`; the composite FKs guarantee it is the recording's (or the transcript's).
 ALTER TABLE recordings  ADD CONSTRAINT recordings_id_owner_id_key  UNIQUE (id, owner_id);
 ALTER TABLE transcripts ADD CONSTRAINT transcripts_id_owner_id_key UNIQUE (id, owner_id);
 
@@ -42,24 +42,24 @@ BEGIN
 END
 $$;
 
--- Com locutor, amostra e pessoa sempre do mesmo dono, os gatilhos de pessoa e de voz não
--- atravessam contas: rodam com os direitos de quem edita, sob a RLS dele.
+-- With speaker, sample and person always of the same owner, the person and voice triggers do not
+-- cross accounts: they run with the editor's rights, under their RLS.
 ALTER FUNCTION eclume_touch_person_transcripts() SECURITY INVOKER;
 ALTER FUNCTION eclume_voice_relink() SECURITY INVOKER;
 
--- --- 2. tipos de agenda ------------------------------------------------------------------------
+-- --- 2. agenda types ---------------------------------------------------------------------------
 
 CREATE TABLE agenda_types (
     id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id              uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     name                  text NOT NULL CHECK (name <> ''),
     position              integer NOT NULL DEFAULT 0,
-    -- Marcadores: {assunto}, {data}, {tipo} e {<chave do campo>}.
+    -- Placeholders: {assunto}, {data}, {tipo} and {<field key>}.
     title_pattern         text,
     identify              text NOT NULL DEFAULT '',
     default_tags          text[] NOT NULL DEFAULT '{}',
     summary_instructions  text NOT NULL CHECK (summary_instructions <> ''),
-    -- O tipo padrão de que foi copiado, só como informação.
+    -- The default type it was copied from, for information only.
     from_default_id       uuid,
     created_at            timestamptz NOT NULL DEFAULT now(),
     updated_at            timestamptz NOT NULL DEFAULT now(),
@@ -68,7 +68,7 @@ CREATE TABLE agenda_types (
 );
 CREATE INDEX agenda_types_order_idx ON agenda_types (owner_id, position, created_at, id);
 
--- Da plataforma, como `platform_settings`: sem dono, sem RLS e sem GRANT a `eclume_app`.
+-- The platform's, like `platform_settings`: no owner, no RLS and no GRANT to `eclume_app`.
 CREATE TABLE default_agenda_types (
     id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     name                   text NOT NULL UNIQUE CHECK (name <> ''),
@@ -88,11 +88,11 @@ ALTER TABLE recordings
     ADD CONSTRAINT recordings_agenda_type_fk FOREIGN KEY (agenda_type_id, owner_id)
         REFERENCES agenda_types (id, owner_id) ON DELETE SET NULL (agenda_type_id);
 
--- Instantâneos, como antes: sem FK, o resumo sobrevive ao tipo.
+-- Snapshots, as before: no FK, the summary survives the type.
 ALTER TABLE summaries RENAME COLUMN template_id TO agenda_type_id;
 ALTER TABLE summaries RENAME COLUMN template_name TO agenda_type_name;
 
--- --- 3. templates → tipos do dono --------------------------------------------------------------
+-- --- 3. templates → the owner's types ----------------------------------------------------------
 
 INSERT INTO agenda_types (id, owner_id, name, position, identify, summary_instructions, created_at, updated_at)
 SELECT
@@ -106,7 +106,7 @@ SELECT
     updated_at
 FROM summary_templates;
 
--- --- 4. tipos padrão do admin ------------------------------------------------------------------
+-- --- 4. the admin's default types --------------------------------------------------------------
 
 INSERT INTO default_agenda_types (name, position, title_pattern, identify, default_tags, summary_instructions)
 VALUES
@@ -150,8 +150,8 @@ VALUES
         'Mantenha as ideias na ordem em que vieram e não acrescente nada.'
     );
 
--- Contas existentes também recebem os padrões (os templates convertidos não dizem como identificar,
--- e a detecção ficaria às cegas), depois dos tipos delas; um nome já usado ganha " (padrão)".
+-- Existing accounts also receive the defaults (the converted templates do not say how to identify,
+-- and detection would be blind), after their own types; a name already in use gets " (padrão)".
 INSERT INTO agenda_types (owner_id, name, position, title_pattern, identify, default_tags, summary_instructions,
                           from_default_id)
 SELECT
@@ -166,8 +166,8 @@ SELECT
     d.id
 FROM users u CROSS JOIN default_agenda_types d;
 
--- Semeia o que toda conta nova recebe: os tipos padrão marcados para contas novas. Idempotente (um
--- nome que a conta já tem fica como está). Roda com o papel de conexão, no cadastro.
+-- Seeds what every new account receives: the default types marked for new accounts. Idempotent (a
+-- name the account already has stays as is). Runs with the connection role, at sign-up.
 CREATE FUNCTION eclume_seed_user_defaults(target uuid) RETURNS void
     LANGUAGE plpgsql
     AS $$
@@ -183,12 +183,12 @@ $$;
 REVOKE ALL ON FUNCTION eclume_seed_user_defaults(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION eclume_seed_user_defaults(uuid) TO eclume_server;
 
--- --- 5. remoções -------------------------------------------------------------------------------
+-- --- 5. removals -------------------------------------------------------------------------------
 
 DROP FUNCTION eclume_seed_summary_templates(uuid);
 DROP TABLE summary_templates;
 
--- --- 6. RLS e GRANTs ---------------------------------------------------------------------------
+-- --- 6. RLS and GRANTs -------------------------------------------------------------------------
 
 ALTER TABLE agenda_types ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agenda_types FORCE ROW LEVEL SECURITY;
@@ -196,5 +196,5 @@ CREATE POLICY agenda_types_own ON agenda_types
     USING (owner_id = eclume_user()) WITH CHECK (owner_id = eclume_user());
 GRANT SELECT, INSERT, UPDATE, DELETE ON agenda_types TO eclume_app;
 
--- Já coberto pelo ALTER DEFAULT PRIVILEGES da 006 (mesmo migrador); repetido por clareza.
+-- Already covered by the ALTER DEFAULT PRIVILEGES of 006 (same migrator); repeated for clarity.
 GRANT SELECT, INSERT, UPDATE, DELETE ON agenda_types, default_agenda_types TO eclume_server;

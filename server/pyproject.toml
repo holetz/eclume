@@ -1,7 +1,7 @@
 [project]
 name = "eclume-server"
 version = "0.2.0"
-description = "API do eclume: contas, PATs, gravações, resumos, pessoas e busca."
+description = "The eclume API: accounts, PATs, recordings, summaries, people and search."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -41,6 +41,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/eclume_server"]
 
-# Resolve a interface de engine a partir do workspace (não do PyPI).
+# Resolve the engine interface from the workspace (not from PyPI).
 [tool.uv.sources]
 eclume-engines = { workspace = true }
