@@ -36,10 +36,10 @@ serviços de longa duração (eram dez antes do holetz/eclume#151, com o `web` e
 |---|---|---|
 | `caddy` | `eclume-edge:prod` (`deploy/web.Dockerfile`) | a borda: Caddy 2.11 com o build do SPA em `/srv/web` e as regras dele (`deploy/web.Caddyfile`, em `/etc/caddy/spa.caddy`); TLS interno na 8443, a **única porta publicada** |
 | `server` | `eclume-server:prod` (`deploy/server.Dockerfile`) | API (`uvicorn`) e o servidor MCP em `/mcp`, com healthcheck em `/api/v1/health/ready`; lê a CA publicada (`/srv/downloads`, read-only) para o descritor `/api/v1/server` |
-| `mdns` | `eclume-server:prod` | `eclume-server announce` (leve: só o anunciador, sem a app): anuncia `_eclume._tcp` na LAN com o endereço público e a impressão digital da CA; `network_mode: host`, sem porta publicada ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#descoberta-na-rede-mdns)) |
+| `mdns` | `eclume-server:prod` | `eclume-server announce` (leve: só o anunciador, sem a app): anuncia `_eclume._tcp` na LAN com o endereço público e a impressão digital da CA; `network_mode: host`, sem porta publicada ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#network-discovery-mdns)) |
 | `worker` | `eclume-server:prod` | `eclume-server worker`: as filas `eclume:default` (ingestão, purgas, reaper, retomada e expiração de uploads) e `eclume:agents` (tipo de agenda, campos, resumos, chats e pré-visualizações, com `ECLUME_AGENT_MAX_JOBS` vagas, padrão 2, e o `claude -p`) num processo só |
 | `worker-gpu` | `eclume-worker-gpu:prod` (`worker-gpu/Dockerfile`, ~8 GB) | ASR e diarização, `max_jobs=1`; sai sozinho (código 0) depois da descarga ociosa e o `restart` o traz de volta ([worker-gpu.md](worker-gpu.md)) |
-| `postgres` | `pgvector/pgvector:pg16` | banco; server e worker CPU conectam como `eclume_server` (sem superusuário, só DML) e as requisições baixam para `eclume_app`; o superusuário `eclume` fica para o `migrate`, o bootstrap e o backup ([server-nucleo.md](../standards/code/server-nucleo.md#papéis-do-banco)) |
+| `postgres` | `pgvector/pgvector:pg16` | banco; server e worker CPU conectam como `eclume_server` (sem superusuário, só DML) e as requisições baixam para `eclume_app`; o superusuário `eclume` fica para o `migrate`, o bootstrap e o backup ([server-nucleo.md](../standards/code/server-nucleo.md#database-roles)) |
 | `redis` | `redis:7-alpine` | filas e progresso, com `appendonly` |
 | `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | áudio e artefatos (a MinIO parou de publicar imagens); `MINIO_API_STALE_UPLOADS_EXPIRY=192h` guarda o multipart incompleto 8 dias, acima dos 7 do upload, para a retomada valer de verdade |
 
@@ -83,7 +83,7 @@ One-shots do perfil `tools`, rodados por `compose run --rm`: `minio-init` (bucke
 - **Credencial por serviço:** server e worker CPU usam `eclume-server` no Redis e no MinIO; o
   worker GPU, `eclume-gpu`, que só lê o áudio e escreve os artefatos. O root do MinIO fica no
   MinIO, no `minio-init` e no backup; o usuário `default` do Redis está desligado
-  ([server-nucleo.md](../standards/code/server-nucleo.md#credenciais-de-redis-e-minio)). Para
+  ([server-nucleo.md](../standards/code/server-nucleo.md#redis-and-minio-credentials)). Para
   depurar o Redis: `compose exec redis sh -c 'redis-cli --user eclume-server --pass "$ECLUME_REDIS_SERVER_PASSWORD"'`.
 - **Privilégio mínimo:** os contêineres Python (server, workers, `migrate`, `mdns`) rodam com
   `cap_drop: [ALL]` e `no-new-privileges`; o Caddy fica como está, porque escuta em porta baixa.
@@ -235,7 +235,7 @@ host.
 | `ECLUME_MEM_<SERVIÇO>`, `ECLUME_MEMSWAP_<SERVIÇO>` | opcionais: teto de memória e de memória mais swap de cada serviço, que sobem juntos (ver Stack) |
 | `ECLUME_REDIS_MAXMEMORY` | opcional (`160mb`): `maxmemory` do Redis com `noeviction`, abaixo do `ECLUME_MEM_REDIS`; no teto o Redis recusa escritas em vez de despejar chaves da fila ou morrer pelo OOM. Suba os dois juntos |
 | `ECLUME_AGENT_MAX_JOBS` | opcional (2): vagas da fila `eclume:agents` no `worker` |
-| `ECLUME_JOB_GRACE_SECONDS`, `ECLUME_JOB_STALL_SECONDS` | opcionais (120 e 1800): detecção de job morto ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)) |
+| `ECLUME_JOB_GRACE_SECONDS`, `ECLUME_JOB_STALL_SECONDS` | opcionais (120 e 1800): detecção de job morto ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#dead-job)) |
 | `ECLUME_KEEP_ASR_RESIDENT`, `ECLUME_RESIDENT_MIN_FREE_MB`, `ECLUME_MODEL_IDLE_SECONDS` | opcionais (1, 2500, 300): o ASR residente entre jobs no worker GPU ([worker-gpu.md](worker-gpu.md)) |
 | `ECLUME_SECRET_KEY` | assina as URLs de parte e de áudio; trocar invalida as que estão em circulação |
 | `ECLUME_ENCRYPTION_KEY` | cifra as chaves de API dos providers e os segredos do painel admin; o worker GPU recebe a mesma, para abrir o token do HF que chega cifrado no job; trocar obriga a recadastrá-los ([server-agentes.md](../standards/code/server-agentes.md), [server-admin.md](../standards/code/server-admin.md)) |
@@ -272,7 +272,7 @@ sessão próprios em `/admin/entrar`, que só alcançam `/admin/*`
 O provider desta produção é o `claude-cli` ("Claude (servidor)", modelo `sonnet`), uma escolha
 deste host e não do produto: ele roda o `claude -p` no worker de agentes, na imagem construída com
 `ECLUME_CLAUDE_CLI=1`, com o token entregue pelo painel ou pelo env, sem montar a credencial do
-host. A matriz do que cada tipo exige está em [server-agentes.md](../standards/code/server-agentes.md#o-que-cada-provider-exige).
+host. A matriz do que cada tipo exige está em [server-agentes.md](../standards/code/server-agentes.md#what-each-provider-requires).
 O smoke não cadastra provider: prova o resumo com o que estiver cadastrado para `summaries`, de
 qualquer tipo, ou com o de `--provider <id>`.
 
@@ -401,7 +401,7 @@ ECLUME_PROD_SSH=holetz@192.168.15.199 bash deploy/prova-web-prod.sh
 ## Conectar um assistente (MCP)
 
 1. Na web, crie um token em **Conexão MCP** (ou em Tokens de acesso) com os grupos de escopo
-   que o assistente precisa ([grupos](../standards/code/server-mcp-e-dispositivos.md#grupos-da-tela-conexão-mcp))
+   que o assistente precisa ([grupos](../standards/code/server-mcp-e-dispositivos.md#scope-groups-of-the-mcp-connection-screen))
    e a validade; o segredo `eclp_…` aparece uma vez.
 2. No cliente MCP, cadastre um servidor HTTP streamable em `https://192.168.15.199:8443/mcp`
    com o header `Authorization: Bearer eclp_…`. Exemplo do Claude Code:
@@ -417,7 +417,7 @@ HTTPS é obrigatório para o microfone e a conversão de mídia no navegador. A 
 **`https://192.168.15.199:8443/downloads/eclume-root.crt`** (um certificado só, a raiz da CA
 ativa). Ela é distinta da do lumea. Os apps (desktop e celular) **não** usam o repositório do
 sistema: fixam a raiz por conta própria, pela impressão digital, na primeira execução ou no
-pareamento ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#fixação-da-ca-pelos-apps)).
+pareamento ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#ca-pinning-by-the-apps)).
 Só o navegador, o Claude Desktop/Code (MCP) e o lumea precisam da raiz instalada.
 
 A raiz própria do eclume (`ECLUME_TLS_CA=eclume`) tem restrição de nome crítica: só vale para o
@@ -465,7 +465,7 @@ já tiverem guardado a próxima raiz.
    o `publish-ca` publica a própria como `eclume-root.crt` e apaga a próxima, e o fim do deploy
    confere que a publicada é a raiz própria. Em seguida, troque a variável
    `ECLUME_SERVER_CA_SHA256` pela impressão nova e solte um release do desktop
-   ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#servidor-embutido-no-instalador)):
+   ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#server-embedded-in-the-installer)):
    os instaladores antigos em `/downloads` embutem a impressão velha. Confira desktop e celular
    sincronizando sem nova entrada; quem ficou para trás entra ou pareia de novo.
 3. **Aposentar**, depois da janela: tire a raiz velha das estações, do lumea e dos clientes MCP
@@ -618,7 +618,7 @@ bash deploy/deploy.sh --context gpu-host --services "server caddy"   # só códi
   nada é montado do host e nenhum serviço precisa reiniciar.
 - **Job de transcrição parado:** o worker CPU marca sozinho como falha recuperável (`worker_lost`,
   `job_lost`, `job_stalled`) o job que o worker GPU abandonou; o dono retranscreve ou o admin usa
-  "Tentar de novo" na Saúde ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#job-morto)).
+  "Tentar de novo" na Saúde ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#dead-job)).
 - **Staging** (`eclume-staging`, 127.0.0.1:18444): `staging.sh subir` para as provas,
   `staging.sh derrubar` depois; o ensaio noturno o sobe e derruba sozinho. Falha do ensaio: veja
   `estado/ensaio.json` e o fim de `backups/ensaio.log`.
@@ -632,7 +632,7 @@ bash deploy/deploy.sh --context gpu-host --services "server caddy"   # só códi
   o release embute o endereço e a impressão digital da CA deste servidor (variáveis
   `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256`): trocar a CA raiz (a virada da rotação acima)
   ou o endereço exige atualizar as variáveis e soltar um release novo
-  ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#servidor-embutido-no-instalador)).
+  ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#server-embedded-in-the-installer)).
   Publicar é `bash deploy/release-desktop.sh --publicar --notas "<texto>"` (compila no host, sem
   Actions; `--plan` antes mostra o que sairia) e, com o release criado,
   `ssh holetz@192.168.15.199 'bash -s -- desktop-v<versão>' < deploy/publicar-desktop.sh`.

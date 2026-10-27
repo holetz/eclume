@@ -9,7 +9,7 @@ desktop. The app does not read transcripts.
   over eclume's DS; the Rust core (`crates/core`) reuses the desktop's recording and sync crates
   (`../desktop/crates`).
 - **Architecture and contracts:** [docs/standards/code/mobile-app.md](../docs/standards/code/mobile-app.md).
-- **Commands:** [docs/standards/code/monorepo.md](../docs/standards/code/monorepo.md#móvel--npm-e-workspace-cargo-em-mobile).
+- **Commands:** [docs/standards/code/monorepo.md](../docs/standards/code/monorepo.md#mobile--npm-and-cargo-workspace-in-mobile).
 - **Android environment on the host:** `scripts/android-sdk.sh`
   ([docs/project/host-setup.md](../docs/project/host-setup.md)).
 

@@ -81,7 +81,7 @@ ECLUME_S3_ENDPOINT_URL=http://127.0.0.1:9000 ECLUME_S3_ACCESS_KEY=eclume ECLUME_
 
 O primeiro job baixa o modelo `small` (~0,5 GB) para o cache do Hugging Face do usuário. A
 transcrição sai com um locutor só: a engine `cpu` não diariza
-([jobs-transcricao.md](../standards/api/jobs-transcricao.md#como-o-worker-cumpre-a-sua-parte)).
+([jobs-transcricao.md](../standards/api/jobs-transcricao.md#how-the-worker-does-its-part)).
 
 ## 5. Web
 
@@ -98,7 +98,7 @@ passa por `processing` até `done` com a transcrição. O microfone do navegador
 Entre no painel em `http://localhost:5173/admin/entrar` com o admin do passo 3 e cadastre um
 provider em **Admin → Agentes**: uma chave de API, ou um servidor compatível com a API da OpenAI na
 sua rede (ex.: um modelo local). A matriz do que cada tipo exige está em
-[server-agentes.md](../standards/code/server-agentes.md#o-que-cada-provider-exige). Com ele
+[server-agentes.md](../standards/code/server-agentes.md#what-each-provider-requires). Com ele
 cadastrado, a gravação transcrita ganha o resumo.
 
 ## Sem o host de build: o equivalente local de cada `remote-run`

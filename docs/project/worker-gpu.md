@@ -168,7 +168,7 @@ docker --context gpu-host build -t eclume-worker-gpu:dev -f worker-gpu/Dockerfil
 Antes do ASR, o job trata o áudio com o `ffmpeg` da imagem (Debian bookworm, 5.1, com `arnndn`,
 `afftdn`, `loudnorm`, `silencedetect`, `atrim` e `pan`), pela configuração que o admin define em
 Pré-processamento e que chega em `options.preprocess`. A ordem e as regras estão no
-[contrato de jobs](../standards/api/jobs-transcricao.md#pré-processamento).
+[contrato de jobs](../standards/api/jobs-transcricao.md#preprocessing).
 
 - **Modelo do RNNoise:** o `cb.rnnn` (conjoined-burgers, de GregorR/rnnoise-models, treinado em
   fala geral com ruído de ambiente) entra na imagem por `ADD --checksum`, em

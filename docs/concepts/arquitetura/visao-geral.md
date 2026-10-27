@@ -82,7 +82,7 @@ flowchart LR
 ## As filas
 
 Três filas arq no Redis, cada uma com o seu worker
-([jobs-transcricao.md](../../standards/api/jobs-transcricao.md#filas)):
+([jobs-transcricao.md](../../standards/api/jobs-transcricao.md#queues)):
 
 | Fila | Worker | O que roda |
 |---|---|---|
@@ -147,5 +147,5 @@ ligados por configuração do admin:
 
 Para onde vai cada dado na configuração em vigor é a resposta de `GET /api/v1/privacy`, pública,
 que a Conta, o cadastro e o painel admin mostram; o que cada provider exige está na matriz de
-[server-agentes.md](../../standards/code/server-agentes.md#o-que-cada-provider-exige). Este doc
+[server-agentes.md](../../standards/code/server-agentes.md#what-each-provider-requires). Este doc
 não repete a lista, para que as duas não divirjam.
