@@ -1,4 +1,4 @@
-"""Retenção mínima: sessões vencidas e uploads terminais antigos somem no cron `purge_expired`."""
+"""Minimal retention: expired sessions and old terminal uploads disappear in the `purge_expired` cron."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _purge(services: Services, now: datetime) -> dict[str, int]:
     return run(services.sql(lambda conn: purge_stale_rows(conn, now)))
 
 
-def test_sessoes_vencidas_e_uploads_terminais_antigos_somem(
+def test_expired_sessions_and_old_terminal_uploads_disappear(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -43,12 +43,12 @@ def test_sessoes_vencidas_e_uploads_terminais_antigos_somem(
     sessions = _sql(services, "SELECT count(*) FROM sessions WHERE user_id = :u", u=account.user_id)[0][0]
     assert sessions >= 1
 
-    # Hoje: nada vence.
+    # Today: nothing expires.
     _purge(services, datetime.now(UTC))
     assert api.get("/api/v1/me").status_code == 200
     assert admin.get("/api/v1/admin/me").status_code == 200
 
-    # Daqui a 40 dias: as sessões venceram há mais de 1 dia, e o upload concluído passou dos 30.
+    # 40 days from now: the sessions expired more than 1 day ago, and the completed upload is past 30.
     removed = _purge(services, datetime.now(UTC) + timedelta(days=40))
     assert removed["sessions"] >= 1
     assert removed["admin_sessions"] >= 1
@@ -56,7 +56,7 @@ def test_sessoes_vencidas_e_uploads_terminais_antigos_somem(
     statuses = dict(
         _sql(services, "SELECT status, count(*) FROM uploads WHERE owner_id = :u GROUP BY status", u=account.user_id)
     )
-    # O em andamento fica (o cron `expire_uploads` o encerra antes); o concluído saiu, a gravação não.
+    # The in-progress one stays (the `expire_uploads` cron ends it first); the completed one left, the recording did not.
     assert statuses == {"in_progress": 1}
     assert open_upload["status"] == "in_progress"
     assert _sql(services, "SELECT count(*) FROM recordings WHERE id = :r", r=recording["id"]) == [(1,)]
