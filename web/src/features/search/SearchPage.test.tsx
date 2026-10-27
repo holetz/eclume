@@ -34,8 +34,8 @@ async function chip(name: RegExp) {
   return within(filters).findByRole('button', { name })
 }
 
-describe('busca', () => {
-  it('sem termo nem pessoa não chama a busca', async () => {
+describe('search', () => {
+  it('with no term and no person it does not call the search', async () => {
     const http = mockSearch()
     renderApp('/busca')
     expect(await screen.findByRole('heading', { level: 1, name: 'Busca' })).toBeInTheDocument()
@@ -44,7 +44,7 @@ describe('busca', () => {
     expect(http.requests('GET /api/v1/search')).toHaveLength(0)
   })
 
-  it('busca pelos termos, agrupa por gravação com o total e leva à gravação no segundo', async () => {
+  it('searches by the terms, groups by recording with the total and leads to the recording at the second', async () => {
     const http = mockSearch()
     renderApp('/busca')
     await userEvent.type(await screen.findByRole('searchbox', { name: 'Termos' }), 'turmas')
@@ -70,7 +70,7 @@ describe('busca', () => {
     expect(lastQuery(http).get('q')).toBe('turmas')
   })
 
-  it('as fichas de período, pessoa, tag, coleção e campo viram a consulta', async () => {
+  it('the period, person, tag, collection and field chips become the query', async () => {
     const user = userEvent.setup()
     const http = mockSearch()
     renderApp('/busca?q=turmas')
@@ -115,7 +115,7 @@ describe('busca', () => {
     expect(query.get('collection')).toBe('01928f3a-1c00-7a00-8000-000000000801')
     expect(query.getAll('field')).toEqual([`${CLIENT}:Serra Azul`, `${PROJECT}:Lideranças`])
 
-    // Limpar tira tudo menos os termos.
+    // Limpar removes everything but the terms.
     await user.click(screen.getByRole('button', { name: 'Limpar' }))
     expect(await chip(/^Cliente: qualquer$/)).toHaveClass('tag-neutral')
     for (const name of [/^Período: qualquer$/, /^Pessoa: qualquer$/, /^Tag: qualquer$/, /^Projeto: qualquer$/]) {
@@ -124,7 +124,7 @@ describe('busca', () => {
     expect(screen.getByRole('searchbox', { name: 'Termos' })).toHaveValue('turmas')
   }, 20_000)
 
-  it('Esc e o clique fora fecham a ficha sem aplicar', async () => {
+  it('Esc and a click outside close the chip without applying', async () => {
     const user = userEvent.setup()
     mockSearch()
     renderApp('/busca?q=turmas')
@@ -139,7 +139,7 @@ describe('busca', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('lê os filtros da URL e avisa quando nada é encontrado', async () => {
+  it('reads the filters from the URL and warns when nothing is found', async () => {
     const http = mockSearch({ 'GET /api/v1/search': () => ({ items: [], next_cursor: null }) })
     renderApp(`/busca?q=inexistente&ate=2026-09-18&campo=${CLIENT}:Vale%20Verde`)
     expect(await screen.findByText('Nenhum trecho encontrado com esses filtros.')).toBeInTheDocument()
@@ -151,7 +151,7 @@ describe('busca', () => {
     expect(query.getAll('field')).toEqual([`${CLIENT}:Vale Verde`])
   })
 
-  it('pagina os resultados e o total diz quando há mais', async () => {
+  it('pages the results and the total says when there are more', async () => {
     const first = { ...fixtures.searchPage(), next_cursor: 'c2' }
     const second = { items: [fixtures.searchPage().items[0]], next_cursor: null }
     second.items[0].segment.id = 'seg-0012'
@@ -167,12 +167,12 @@ describe('busca', () => {
   })
 })
 
-describe('gravação aberta pela busca', () => {
-  it('posiciona o áudio e destaca a fala do instante em ?t=', async () => {
+describe('recording opened from the search', () => {
+  it('positions the audio and highlights the utterance at the instant in ?t=', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING_ID}?t=122500`)
-    const falas = await screen.findByRole('list', { name: 'Falas' })
-    const items = within(falas).getAllByRole('listitem')
+    const utterances = await screen.findByRole('list', { name: 'Falas' })
+    const items = within(utterances).getAllByRole('listitem')
     expect(items[9].querySelector('.segment')).toHaveAttribute('aria-current', 'true')
     expect((screen.getByLabelText('Áudio da gravação') as HTMLAudioElement).currentTime).toBe(122.5)
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
