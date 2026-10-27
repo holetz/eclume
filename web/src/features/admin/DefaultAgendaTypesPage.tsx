@@ -40,7 +40,7 @@ function draftOf(type: AgendaType): Draft {
   return { name, title_pattern, title_instructions, identify, default_tags, summary_instructions, include_for_new_users }
 }
 
-/** O que mudou no rascunho, para o PATCH mandar só isso. */
+/** What changed in the draft, so the PATCH sends only that. */
 function changesOf(draft: Draft, saved: Draft): Partial<Draft> {
   return Object.fromEntries(
     (Object.keys(draft) as (keyof Draft)[])
@@ -49,7 +49,7 @@ function changesOf(draft: Draft, saved: Draft): Partial<Draft> {
   )
 }
 
-/** O conjunto inicial de tipos de agenda, copiado para cada conta nova. */
+/** The initial set of agenda types, copied to each new account. */
 export function DefaultAgendaTypesPage() {
   const types = useDefaultAgendaTypes()
   const toggle = useToggleDefaultAgendaType()
@@ -57,7 +57,7 @@ export function DefaultAgendaTypesPage() {
   const [dirty, setDirty] = useState(false)
   const [leavingTo, setLeavingTo] = useState<string | null>(null)
   const items = types.data ?? []
-  // Sem escolha (ou com o escolhido excluído), abre o primeiro, como no DS.
+  // With no choice (or with the chosen one deleted), opens the first, as in the DS.
   const current = selected === NEW ? null : (items.find((type) => type.id === selected) ?? items[0] ?? null)
   const openId = selected === NEW ? NEW : (current?.id ?? null)
 
@@ -180,7 +180,7 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
     tags: useId(),
     instructions: useId(),
   }
-  // Na edição, "Incluir" grava na hora, como na lista; no tipo novo, vai no POST.
+  // When editing, "Incluir" saves at once, as in the list; for a new type, it goes in the POST.
   const effective = type ? { ...draft, include_for_new_users: type.include_for_new_users } : draft
   const changes = changesOf(effective, saved)
   const changed = Object.keys(changes).length > 0
@@ -372,7 +372,7 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
   )
 }
 
-/** Nome repetido (409) ou recusado (422 em `name`) aparece no campo Nome. */
+/** A repeated name (409) or a refused one (422 on `name`) shows on the Nome field. */
 function nameErrorOf(error: unknown): string | null {
   if (!(error instanceof ApiError)) return null
   if (error.status === 409) return 'Já existe um tipo padrão com esse nome.'

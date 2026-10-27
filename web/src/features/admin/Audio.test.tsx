@@ -24,8 +24,8 @@ function mockAudioApi(extra: Parameters<typeof mockFetch>[0] = {}) {
 
 const sentBody = (http: ReturnType<typeof mockFetch>) => http.requests('PATCH /api/v1/admin/settings')[0].json()
 
-describe('Pré-processamento de áudio', () => {
-  it('mostra as cinco etapas na ordem do worker, com 16 kHz mono sempre ligada', async () => {
+describe('Audio preprocessing', () => {
+  it('shows the five steps in worker order, with 16 kHz mono always on', async () => {
     mockAudioApi()
     renderApp('/admin/audio')
     const list = await screen.findByRole('list', { name: 'Etapas do pré-processamento' })
@@ -46,12 +46,12 @@ describe('Pré-processamento de áudio', () => {
     expect(within(items[4]).getByText('Mais de 3 s no início e no fim')).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: 'Separar canais estéreo' })).not.toBeChecked()
     expect(screen.getByRole('switch', { name: 'Redução de ruído' })).toBeChecked()
-    // A ordem é fixa: nenhuma alça de arrastar.
+    // The order is fixed: no drag handle.
     expect(document.querySelector('.grip')).toBeNull()
     expect(screen.getByRole('button', { name: 'Salvar' })).toBeDisabled()
   })
 
-  it('ajusta as etapas e salva só o bloco preprocessing inteiro', async () => {
+  it('adjusts the steps and saves only the whole preprocessing block', async () => {
     const http = mockAudioApi()
     renderApp('/admin/audio')
     await userEvent.click(await screen.findByRole('switch', { name: 'Separar canais estéreo' }))
@@ -79,7 +79,7 @@ describe('Pré-processamento de áudio', () => {
     })
   })
 
-  it('valor fora do limite marca o campo e trava o Salvar', async () => {
+  it('a value out of range marks the field and locks Salvar', async () => {
     mockAudioApi()
     renderApp('/admin/audio')
     await userEvent.click(await screen.findByRole('button', { name: 'Ajustes de cortar silêncio' }))
@@ -91,7 +91,7 @@ describe('Pré-processamento de áudio', () => {
     expect(screen.getByRole('button', { name: 'Salvar' })).toBeDisabled()
   })
 
-  it('mostra o 422 do servidor no campo', async () => {
+  it('shows the server 422 on the field', async () => {
     mockAudioApi({
       'PATCH /api/v1/admin/settings': () =>
         problem('validation_failed', 422, {
@@ -107,7 +107,7 @@ describe('Pré-processamento de áudio', () => {
     expect(screen.getByText('fora da faixa aceita')).toBeInTheDocument()
   })
 
-  it('salva o teto da retenção do áudio só no bloco retention', async () => {
+  it('saves the audio retention ceiling only in the retention block', async () => {
     const http = mockAudioApi({
       'PATCH /api/v1/admin/settings': async (request) => ({
         ...fixtures.adminSettings(),
@@ -128,7 +128,7 @@ describe('Pré-processamento de áudio', () => {
     expect(await sentBody(http)).toEqual({ retention: { audio_max_days: 120 } })
   })
 
-  it('tira o teto com null e recusa um valor fora do limite', async () => {
+  it('removes the ceiling with null and refuses an out-of-range value', async () => {
     const http = mockAudioApi({
       'PATCH /api/v1/admin/settings': async () => ({ ...fixtures.adminSettings(), retention: { audio_max_days: null } }),
     })

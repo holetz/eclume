@@ -8,8 +8,8 @@ import { AuthLayout } from './AuthLayout'
 import { useSignupInfo } from './signup'
 
 /**
- * Aceite do aviso em vigor (`notice_required` em `/me`): a conta que ainda não aceitou a versão
- * atual só chega ao app depois de `POST /me/notice`.
+ * Acceptance of the notice in force (`notice_required` in `/me`): the account that has not yet accepted the current
+ * version only reaches the app after `POST /me/notice`.
  */
 export function NoticePage({ onLogout, loggingOut }: { onLogout: () => void; loggingOut: boolean }) {
   usePageTitle('Aceite do aviso')

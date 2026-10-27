@@ -87,7 +87,7 @@ function ArticleView({ article }: { article: Article }) {
   )
 }
 
-/** A seção visível do artigo, pelo IntersectionObserver; sem ele (jsdom), vale a primeira. */
+/** The article's visible section, from the IntersectionObserver; without it (jsdom), the first one applies. */
 function useCurrentHeading(container: RefObject<HTMLElement | null>, first: string | undefined) {
   const [current, setCurrent] = useState(first)
 

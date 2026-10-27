@@ -4,8 +4,8 @@ import styles from './Connect.module.css'
 type Qr = { size: number; rows: string[] }
 
 /**
- * O QR num `<svg>` desenhado aqui, preto sobre branco também no tema escuro, dentro da moldura do
- * `.qr-slot`. O pacote `qrcode` só carrega com esta peça.
+ * The QR in an `<svg>` drawn here, black on white in the dark theme too, inside the `.qr-slot`
+ * frame. The `qrcode` package only loads with this component.
  */
 export function QrCode({ value, label }: { value: string; label: string }) {
   const [qr, setQr] = useState<Qr | null>(null)
@@ -18,7 +18,7 @@ export function QrCode({ value, label }: { value: string; label: string }) {
         const matrix = qrMatrix(value)
         if (active) setQr({ size: matrix.size + 2 * QUIET_ZONE, rows: qrRowPaths(matrix) })
       },
-      // Sem o QR (o chunk não carregou), o código em texto continua na página.
+      // Without the QR (the chunk did not load), the text code stays on the page.
       () => {
         if (active) setFailed(true)
       },

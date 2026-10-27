@@ -16,7 +16,7 @@ afterEach(() => {
 })
 
 describe('CopyValue', () => {
-  it('copia o valor e anuncia', async () => {
+  it('copies the value and announces it', async () => {
     const user = userEvent.setup()
     const writeText = vi.spyOn(navigator.clipboard, 'writeText')
     render(<CopyValue value="https://eclume.local/mcp" />)
@@ -26,7 +26,7 @@ describe('CopyValue', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Copiado')
   })
 
-  it('avisa quando a área de transferência recusa', async () => {
+  it('warns when the clipboard refuses', async () => {
     const user = userEvent.setup()
     vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('negado'))
     render(<CopyValue value="K7Q-4MX" size="lg" />)
@@ -60,7 +60,7 @@ function DialogHarness({ refuse = false }: { refuse?: boolean }) {
 }
 
 describe('Dialog', () => {
-  it('leva o foco ao primeiro controle, prende o Tab, trava a rolagem e devolve o foco ao fechar com Esc', async () => {
+  it('moves focus to the first control, traps Tab, locks scrolling and returns focus on closing with Esc', async () => {
     const user = userEvent.setup()
     render(<DialogHarness />)
     const opener = screen.getByRole('button', { name: 'Abrir' })
@@ -86,7 +86,7 @@ describe('Dialog', () => {
     expect(document.body.style.overflow).toBe('')
   })
 
-  it('fecha no clique no fundo e no Fechar, e quem monta pode recusar', async () => {
+  it('closes on a backdrop click and on Fechar, and the mounting code can refuse', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<DialogHarness />)
     await user.click(screen.getByRole('button', { name: 'Abrir' }))
@@ -104,7 +104,7 @@ describe('Dialog', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
-  it('põe a mensagem no .dialog-body e, com plain, o conteúdo fora dele', () => {
+  it('puts the message in .dialog-body and, with plain, the content outside it', () => {
     render(
       <Dialog title="Excluir pessoa?" message="As transcrições ficam." onClose={() => {}} plain>
         <p role="alert">Falhou.</p>
@@ -117,7 +117,7 @@ describe('Dialog', () => {
 })
 
 describe('ConfirmDialog', () => {
-  it('foca Cancelar, confirma com o botão de perigo e espera a mutação', async () => {
+  it('focuses Cancelar, confirms with the danger button and waits for the mutation', async () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()
     const onCancel = vi.fn()
@@ -165,7 +165,7 @@ describe('MenuButton', () => {
     return picked
   }
 
-  it('abre pelo teclado, navega com setas, Home e End, e escolhe com Enter', async () => {
+  it('opens from the keyboard, navigates with arrows, Home and End, and picks with Enter', async () => {
     const user = userEvent.setup()
     const picked = renderMenu()
     const button = screen.getByRole('button', { name: 'Exportar' })
@@ -192,7 +192,7 @@ describe('MenuButton', () => {
     expect(button).toHaveFocus()
   })
 
-  it('não escolhe item desabilitado, fecha com Esc e com clique fora', async () => {
+  it('does not pick a disabled item, closes with Esc and with an outside click', async () => {
     const user = userEvent.setup()
     const picked = renderMenu()
     const button = screen.getByRole('button', { name: 'Exportar' })
@@ -212,17 +212,17 @@ describe('MenuButton', () => {
 })
 
 describe('storage', () => {
-  it('lê, grava e apaga, e tolera o localStorage que lança', () => {
+  it('reads, writes and removes, and tolerates a localStorage that throws', () => {
     writeStored('k', 'v')
     expect(readStored('k')).toBe('v')
     writeStored('k', null)
     expect(readStored('k')).toBeNull()
 
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('bloqueado')
+      throw new Error('blocked')
     })
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('bloqueado')
+      throw new Error('blocked')
     })
     expect(readStored('k')).toBeNull()
     expect(() => writeStored('k', 'v')).not.toThrow()
@@ -245,7 +245,7 @@ function renderHint() {
 }
 
 describe('HelpHint', () => {
-  it('abre o popover com o texto e o link para o artigo', async () => {
+  it('opens the popover with the text and the link to the article', async () => {
     const user = userEvent.setup()
     const hint = renderHint()
     expect(hint).toHaveAttribute('aria-expanded', 'false')
@@ -256,7 +256,7 @@ describe('HelpHint', () => {
     expect(screen.getByRole('link', { name: 'Ler o artigo →' })).toHaveAttribute('href', '/ajuda/sugestoes-por-voz')
   })
 
-  it('fecha com Esc e devolve o foco ao ?', async () => {
+  it('closes with Esc and returns focus to the ?', async () => {
     const user = userEvent.setup()
     const hint = renderHint()
     await user.click(hint)
@@ -265,7 +265,7 @@ describe('HelpHint', () => {
     expect(hint).toHaveFocus()
   })
 
-  it('fecha com clique fora e ao navegar', async () => {
+  it('closes with an outside click and on navigation', async () => {
     const user = userEvent.setup()
     const hint = renderHint()
     await user.click(hint)

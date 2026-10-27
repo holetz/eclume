@@ -1,12 +1,12 @@
-// O que é de uma conta não atravessa para outra na mesma aba: o cache de dados do usuário e os
-// rascunhos de resumo guardados no `sessionStorage` (`eclume-resumo-rascunho:<id>`). O painel admin
-// tem sessão própria e fica sob `['admin']`, fora desta limpeza.
+// What belongs to one account does not cross over to another in the same tab: the user's data cache and
+// the summary drafts kept in `sessionStorage` (`eclume-resumo-rascunho:<id>`). The admin panel has its
+// own session and lives under `['admin']`, outside this cleanup.
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 
 const ACCOUNT_KEY = 'eclume-conta'
 const DRAFT_PREFIX = 'eclume-resumo-rascunho:'
 
-/** Remove do cache as consultas de usuário (tudo fora de `['admin']`), menos a de `keep`. */
+/** Removes the user queries from the cache (everything outside `['admin']`), except the one in `keep`. */
 export function clearUserQueries(client: QueryClient, keep?: QueryKey): void {
   const kept = keep && JSON.stringify(keep)
   client.removeQueries({
@@ -15,19 +15,19 @@ export function clearUserQueries(client: QueryClient, keep?: QueryKey): void {
 }
 
 /**
- * Ao entrar (login, cadastro ou a sessão do cookie): se a conta não é a última que usou esta aba,
- * apaga o cache de usuário (menos a sessão recém-lida, em `sessionKey`) e os rascunhos da aba, e
- * lembra a conta nova. A mesma conta que volta reencontra os rascunhos.
+ * On sign-in (login, signup or the cookie session): if the account is not the last one that used this
+ * tab, clears the user cache (except the session just read, in `sessionKey`) and the tab's drafts, and
+ * remembers the new account. The same account coming back finds its drafts again.
  */
 export function enterAccount(client: QueryClient, userId: string, sessionKey: QueryKey): void {
   let previous: string | null
   try {
     previous = window.sessionStorage.getItem(ACCOUNT_KEY)
-    // A primeira conta da aba: nada de outra conta para apagar (o guarda marca a conta antes de
-    // qualquer rascunho ser escrito).
+    // The tab's first account: no other account's data to clear (the guard marks the account before
+    // any draft is written).
     if (previous === null) window.sessionStorage.setItem(ACCOUNT_KEY, userId)
   } catch {
-    // Sem armazenamento não há rascunho guardado nem como saber a conta anterior.
+    // Without storage there is no saved draft and no way to know the previous account.
     return
   }
   if (previous === null || previous === userId) return
@@ -38,6 +38,6 @@ export function enterAccount(client: QueryClient, userId: string, sessionKey: Qu
     for (const key of keys) if (key?.startsWith(DRAFT_PREFIX)) storage.removeItem(key)
     storage.setItem(ACCOUNT_KEY, userId)
   } catch {
-    // Melhor esforço: o cache, que é o que mostra dado na tela, já foi limpo.
+    // Best effort: the cache, which is what shows data on screen, has already been cleared.
   }
 }

@@ -10,9 +10,9 @@ import { AuthLayout } from './AuthLayout'
 export function LoginPage() {
   usePageTitle('Entrar')
   const [params] = useSearchParams()
-  // O aviso de quem chega de outra tela, como a conta excluída ou a senha redefinida.
+  // The notice for someone arriving from another screen, such as the deleted account or the reset password.
   const notice = (useLocation().state as { notice?: string } | null)?.notice
-  const volta = safeReturnPath(params.get('volta'))
+  const returnPath = safeReturnPath(params.get('volta'))
   const me = useMe()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -22,7 +22,7 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const errorId = useId()
 
-  if (me.data) return <Navigate to={volta} replace />
+  if (me.data) return <Navigate to={returnPath} replace />
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -31,7 +31,7 @@ export function LoginPage() {
     try {
       await unwrap(api.POST('/api/v1/auth/login', { body: { email: email.trim(), password } }))
       await refreshSession(queryClient)
-      navigate(volta, { replace: true })
+      navigate(returnPath, { replace: true })
     } catch (caught) {
       setError(
         caught instanceof ApiError && caught.status === 401

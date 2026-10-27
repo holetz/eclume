@@ -5,18 +5,18 @@ import { openDialogs } from './dialogStack'
 
 interface DialogProps {
   title: string
-  /** Pedido de fechamento (Esc, clique no fundo, botão Fechar); quem monta decide se desmonta. */
+  /** Close request (Esc, backdrop click, Close button); whoever mounts it decides whether to unmount. */
   onClose: () => void
-  /** O texto do diálogo (uma confirmação), no `.dialog-body`. */
+  /** The dialog text (a confirmation), in `.dialog-body`. */
   message?: ReactNode
-  /** O conteúdo, no `.dialog-body` ou, com `plain`, depois da mensagem e sem o esmaecido dela. */
+  /** The content, in `.dialog-body` or, with `plain`, after the message and without its muted style. */
   children?: ReactNode
-  /** Os botões do rodapé (`.dialog-actions`). */
+  /** The footer buttons (`.dialog-actions`). */
   actions?: ReactNode
   size?: 'lg'
-  /** Kicker sobre o título; com ele, o cabeçalho ganha o botão Fechar (`.dialog-head`). */
+  /** Kicker above the title; with it, the header gets the Close button (`.dialog-head`). */
   kicker?: string
-  /** Conteúdo rico (formulário, tabela, zona de soltar) fora do `.dialog-body`, que atenua o texto. */
+  /** Rich content (form, table, drop zone) outside `.dialog-body`, which mutes the text. */
   plain?: boolean
 }
 
@@ -28,9 +28,9 @@ function focusables(root: HTMLElement): HTMLElement[] {
 }
 
 /**
- * O `.dialog` do Design System sobre o `.dialog-backdrop`, num portal no `body`. Ao abrir, leva o
- * foco ao primeiro controle do corpo (ou ao Fechar); prende o Tab, fecha com Esc e com clique no
- * fundo, trava a rolagem da página e, ao desmontar, devolve o foco a quem abriu.
+ * The Design System `.dialog` over `.dialog-backdrop`, in a portal on `body`. On opening, it moves
+ * focus to the first control of the body (or to Close); it traps Tab, closes on Esc and on a backdrop
+ * click, locks page scrolling and, on unmount, returns focus to whoever opened it.
  */
 export function Dialog({ title, onClose, message, children, actions, size, kicker, plain = false }: DialogProps) {
   const ref = useRef<HTMLDivElement>(null)
@@ -52,7 +52,7 @@ export function Dialog({ title, onClose, message, children, actions, size, kicke
     const overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     openDialogs.push(dialog)
-    // O Esc vale mesmo com o foco fora (um botão que ficou desabilitado o perde para o body).
+    // Esc works even with focus outside (a button that became disabled loses it to the body).
     function onEscape(event: globalThis.KeyboardEvent) {
       if (event.key !== 'Escape' || openDialogs[openDialogs.length - 1] !== dialog) return
       event.preventDefault()
@@ -65,7 +65,7 @@ export function Dialog({ title, onClose, message, children, actions, size, kicke
       document.body.style.overflow = overflow
       if (opener?.isConnected) opener.focus()
     }
-    // Só na montagem: o diálogo é montado aberto e desmontado ao fechar.
+    // Mount only: the dialog is mounted open and unmounted on close.
   }, [])
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {

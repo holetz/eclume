@@ -6,16 +6,16 @@ import { usePageTitle } from './usePageTitle'
 interface PageHeadProps {
   title: string
   kicker?: string
-  /** Ações da página, à direita do título (botões, links). */
+  /** Page actions, to the right of the title (buttons, links). */
   actions?: ReactNode
-  /** Uma dica em linha (`HelpHint`) ao lado do título, fora do nome do `h1`. */
+  /** An inline hint (`HelpHint`) beside the title, outside the `h1` name. */
   hint?: ReactNode
 }
 
 /**
- * O `.page-head` do Design System: kicker opcional, `h1`, ações e, dentro do shell, o botão Ajuda.
- * Depois de uma troca de rota (não na primeira carga nem numa troca só de busca), o foco vai para o
- * `h1`, para o leitor de tela anunciar a página nova e o teclado recomeçar do topo dela.
+ * The Design System `.page-head`: optional kicker, `h1`, actions and, inside the shell, the Help button.
+ * After a route change (not on the first load nor on a search-only change), focus goes to the
+ * `h1`, so the screen reader announces the new page and the keyboard starts again from its top.
  */
 export function PageHead({ title, kicker, actions, hint }: PageHeadProps) {
   usePageTitle(title)
@@ -24,7 +24,7 @@ export function PageHead({ title, kicker, actions, hint }: PageHeadProps) {
   const titleRef = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
-    // Sem rolar: a âncora da página (o `?t=` da gravação) decide a rolagem.
+    // No scrolling: the page's anchor (the recording's `?t=`) decides the scroll.
     if (navigatedPath !== null) titleRef.current?.focus({ preventScroll: true })
   }, [navigatedPath])
 

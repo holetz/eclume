@@ -1,4 +1,4 @@
-// Erros da API em application/problem+json (RFC 9457). A UI decide por `code`, nunca por `title`.
+// API errors in application/problem+json (RFC 9457). The UI decides by `code`, never by `title`.
 import type { Schemas } from './client'
 
 export type Problem = Schemas['Problem']
@@ -23,7 +23,7 @@ function isProblem(value: unknown): value is Problem {
   return typeof value === 'object' && value !== null && typeof (value as Problem).code === 'string'
 }
 
-/** Devolve `data` de uma chamada do openapi-fetch, ou lança `ApiError` com o problem. */
+/** Returns `data` from an openapi-fetch call, or throws `ApiError` with the problem. */
 export async function unwrap<T>(
   call: Promise<{ data?: T; error?: unknown; response: Response }>,
 ): Promise<T> {
@@ -50,7 +50,7 @@ function formatBytes(bytes: number): string {
   return `${Math.round(bytes / 1024 ** 2).toLocaleString('pt-BR')} MB`
 }
 
-/** Mensagem da cota estourada (`quota_exceeded`), pelo `quota` e o `limit` do problem. */
+/** Message for an exceeded quota (`quota_exceeded`), from the problem's `quota` and `limit`. */
 function quotaMessage(problem: Problem): string {
   const limit = problem.limit ?? 0
   switch (problem.quota) {
@@ -67,7 +67,7 @@ function quotaMessage(problem: Problem): string {
   }
 }
 
-/** Mensagem em pt-BR para qualquer erro vindo de uma chamada à API. */
+/** pt-BR message for any error coming from an API call. */
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const problem = error.problem

@@ -17,8 +17,8 @@ async function fillSignup(password = request.password) {
   await userEvent.type(screen.getByLabelText('Senha'), password)
 }
 
-describe('criar conta', () => {
-  it('exige o aceite, cria a conta com a versão do aviso e entra na biblioteca', async () => {
+describe('create account', () => {
+  it('requires the acceptance, creates the account with the notice version and enters the library', async () => {
     let signedUp = false
     const http = mockFetch({
       'GET /api/v1/me': () => (signedUp ? fixtures.me() : problem('unauthorized', 401)),
@@ -54,7 +54,7 @@ describe('criar conta', () => {
     expect(await http.requests('POST /api/v1/auth/signup')[0].json()).toEqual(request)
   })
 
-  it('senha curta não envia: diz o que falta e foca a senha', async () => {
+  it('a short password does not submit: says what is missing and focuses the password', async () => {
     const http = mockFetch({
       'GET /api/v1/me': () => problem('unauthorized', 401),
       'GET /api/v1/auth/signup': () => fixtures.signupInfo(),
@@ -71,7 +71,7 @@ describe('criar conta', () => {
     expect(http.requests('POST /api/v1/auth/signup')).toHaveLength(0)
   })
 
-  it('formulário vazio lista tudo o que falta, foca o nome e atualiza a lista ao preencher', async () => {
+  it('an empty form lists everything missing, focuses the name and updates the list while filling in', async () => {
     mockFetch({
       'GET /api/v1/me': () => problem('unauthorized', 401),
       'GET /api/v1/auth/signup': () => fixtures.signupInfo(),
@@ -88,7 +88,7 @@ describe('criar conta', () => {
     )
   })
 
-  it('e-mail já cadastrado mostra a mensagem sem sair da tela', async () => {
+  it('an already registered e-mail shows the message without leaving the screen', async () => {
     mockFetch({
       'GET /api/v1/me': () => problem('unauthorized', 401),
       'GET /api/v1/auth/signup': () => fixtures.signupInfo(),
@@ -102,7 +102,7 @@ describe('criar conta', () => {
     expect(screen.getByRole('heading', { name: 'Criar sua conta' })).toBeInTheDocument()
   })
 
-  it('cadastro fechado não mostra o formulário', async () => {
+  it('closed signup does not show the form', async () => {
     mockFetch({
       'GET /api/v1/me': () => problem('unauthorized', 401),
       'GET /api/v1/auth/signup': () => ({ ...fixtures.signupInfo(), open: false }),
@@ -113,7 +113,7 @@ describe('criar conta', () => {
     expect(screen.getByRole('link', { name: 'Entrar' })).toHaveAttribute('href', '/entrar')
   })
 
-  it('com sessão, vai para a biblioteca', async () => {
+  it('with a session, goes to the library', async () => {
     mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
       'GET /api/v1/auth/signup': () => fixtures.signupInfo(),
@@ -126,8 +126,8 @@ describe('criar conta', () => {
   })
 })
 
-describe('aceite do aviso em vigor', () => {
-  it('com notice_required, pede o aceite antes do shell e libera depois', async () => {
+describe('acceptance of the notice in force', () => {
+  it('with notice_required, asks for the acceptance before the shell and lets through afterwards', async () => {
     let accepted = false
     const http = mockFetch({
       'GET /api/v1/me': () => ({ ...fixtures.me(), notice_required: !accepted }),
@@ -153,7 +153,7 @@ describe('aceite do aviso em vigor', () => {
     expect(await http.requests('POST /api/v1/me/notice')[0].json()).toEqual({ notice_version: '1' })
   })
 
-  it('sem destino externo, não mostra a linha do destino', async () => {
+  it('without an external destination, does not show the destination line', async () => {
     mockFetch({
       'GET /api/v1/me': () => problem('unauthorized', 401),
       'GET /api/v1/auth/signup': () => fixtures.signupInfo(),

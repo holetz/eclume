@@ -4,14 +4,14 @@ import { Link } from 'react-router'
 import type { HelpPageKey } from '../features/help/pages'
 import { NAV_ITEMS } from './nav'
 
-// O corpo (busca, "Nesta página" e atalhos) traz o catálogo dos artigos: só carrega na primeira abertura.
+// The body (search, "Nesta página" and shortcuts) brings the article catalog: it loads on first open only.
 const HelpDrawerBody = lazy(() => import('../features/help/HelpDrawerBody'))
 
 const HELP_CENTER = NAV_ITEMS.find((item) => item.to === '/ajuda')
 
 /**
- * O `.help-drawer` do Design System: busca, artigos da página, atalhos e o caminho para a central
- * de ajuda. Um link da gaveta navega e a mantém aberta, como no DS.
+ * The Design System `.help-drawer`: search, the page's articles, shortcuts and the way to the help
+ * center. A link in the drawer navigates and keeps it open, as in the DS.
  */
 export function HelpDrawer({ pageKey, onClose }: { pageKey: HelpPageKey | null; onClose: () => void }) {
   const titleId = useId()

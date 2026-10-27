@@ -1,6 +1,6 @@
-// Rótulos e formatos em pt-BR sem dono de domínio, usados por mais de uma feature: estado e etapa da
-// gravação, datas, horas, durações, tamanhos e o relógio do áudio. Valores de enum desconhecidos (o
-// contrato só cresce) aparecem crus, sem quebrar a tela.
+// pt-BR labels and formats with no domain owner, used by more than one feature: recording state and
+// step, dates, times, durations, sizes and the audio clock. Unknown enum values (the contract only
+// grows) show up raw, without breaking the screen.
 import type { Schemas } from '../api/client'
 import { ESTADOS_APARELHO, ESTADOS_SERVIDOR, ETAPAS, type Tom } from '../lib/vocabulario.js'
 
@@ -21,13 +21,13 @@ interface RecordingState {
   state: 'failed' | 'busy' | 'waiting' | 'ready'
   label: string
   tone: Tone
-  /** Pronta, mas a etapa do resumo falhou. */
+  /** Ready, but the summary step failed. */
   noSummary: boolean
 }
 
 /**
- * A etapa corrente em palavra, ou `null` quando nada anda: a etapa ativa, o envio ou o job, ou a
- * próxima etapa pendente depois da transcrição. "Na fila" é só a espera pela transcrição.
+ * The current step as a word, or `null` when nothing is moving: the active step, the upload or the
+ * job, or the next pending step after transcription. "Na fila" is only the wait for transcription.
  */
 function busyLabel(status: Recording['status'], steps: Schemas['PipelineStep'][]): string | null {
   const active = steps.find((item) => item.state === 'active')
@@ -40,10 +40,10 @@ function busyLabel(status: Recording['status'], steps: Schemas['PipelineStep'][]
 }
 
 /**
- * O estado da gravação como a biblioteca o mostra, lido de `status` e do `pipeline`: cancelada (a
- * gravação `failed` com uma etapa pulada por `cancelled`), falhou (a gravação ou a etapa que a torna
- * legível), aguardando locutores (a etapa `speakers` em `waiting`, à espera do dono), em andamento
- * (com a etapa corrente em palavra) ou pronta.
+ * The recording state as the library shows it, read from `status` and the `pipeline`: cancelled (the
+ * `failed` recording with a step skipped by `cancelled`), failed (the recording, or the step that
+ * makes it readable), awaiting speakers (the `speakers` step in `waiting`, waiting for the owner),
+ * in progress (with the current step as a word) or ready.
  */
 export function recordingState(recording: Pick<Recording, 'status' | 'pipeline'>): RecordingState {
   const steps = recording.pipeline ?? []
@@ -116,8 +116,8 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
- * A referência curta de uma gravação: os 8 primeiros caracteres do id. É o sufixo do nome dos
- * arquivos da pasta sincronizada do desktop, para ligar um arquivo à gravação.
+ * A recording's short reference: the first 8 characters of the id. It is the suffix of the file
+ * names in the desktop synced folder, to link a file to its recording.
  */
 export function shortRef(id: string): string {
   return id.replace(/[^0-9a-zA-Z]/g, '').slice(0, 8)
@@ -139,7 +139,7 @@ export const MONTHS = [
   'dezembro',
 ]
 
-/** Índice do dia da semana com a segunda em 0. */
+/** Index of the weekday, with Monday at 0. */
 export function weekdayIndex(day: Date): number {
   return (day.getDay() + 6) % 7
 }
@@ -162,7 +162,7 @@ export function markersLabel(count: number): string {
   return count === 1 ? '1 marcador' : `${count} marcadores`
 }
 
-/** "02:46" ou, com `withHours`, "0:02:46". */
+/** "02:46" or, with `withHours`, "0:02:46". */
 export function formatClock(ms: number, withHours = false): string {
   const total = Math.max(0, Math.floor(ms / 1000))
   const hours = Math.floor(total / 3600)

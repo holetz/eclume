@@ -8,28 +8,28 @@ import { ProgressTracker, type ProgressCallback } from './progress'
 export interface ConvertOptions {
   signal?: AbortSignal
   onProgress?: ProgressCallback
-  /** Bits por segundo, de 16 000 a 64 000; padrão 32 000. */
+  /** Bits per second, from 16,000 to 64,000; default 32,000. */
   bitrate?: number
-  /** `auto` tenta o WebCodecs e cai para o ffmpeg.wasm quando ele não serve. */
+  /** `auto` tries WebCodecs and falls back to ffmpeg.wasm when it does not work. */
   engine?: 'auto' | EngineName
 }
 
 export interface ConvertResult {
-  /** Opus mono 16 kHz em Ogg (`audio/ogg; codecs=opus`). */
+  /** Mono 16 kHz Opus in Ogg (`audio/ogg; codecs=opus`). */
   blob: Blob
-  /** SHA-256 do `blob`, em hex minúsculo, para a dedup do upload. */
+  /** SHA-256 of the `blob`, in lowercase hex, for the upload deduplication. */
   sha256: string
-  /** Duração relida do arquivo convertido. */
+  /** Duration read back from the converted file. */
   durationSec: number
   engine: EngineName
 }
 
 export interface MediaProbe {
   durationSec: number | null
-  /** `null` quando o contêiner só é legível pelo ffmpeg.wasm. */
+  /** `null` when the container is readable only by ffmpeg.wasm. */
   hasAudio: boolean | null
   estimatedBytes: number | null
-  /** O motor que `convertAudio` deve usar em `auto`. */
+  /** The engine `convertAudio` should use under `auto`. */
   engine: EngineName
 }
 
@@ -42,8 +42,8 @@ export interface Engines {
 
 type Scope = Parameters<typeof checkEnvironment>[0] & { crypto?: { subtle?: SubtleCrypto } }
 
-// Os dois motores são carregados sob demanda: importar a biblioteca não baixa o Mediabunny
-// nem o ffmpeg.wasm até a primeira conversão.
+// Both engines are loaded on demand: importing the library downloads neither Mediabunny
+// nor ffmpeg.wasm until the first conversion.
 const webcodecs = () => import('./webcodecs')
 const defaultEngines: Engines = {
   webcodecs: async (request) => (await webcodecs()).convertWithWebCodecs(request),
@@ -52,7 +52,7 @@ const defaultEngines: Engines = {
   measureDuration: async (blob) => (await webcodecs()).measureOutputDuration(blob),
 }
 
-/** Só `unsupported` e `failed` justificam tentar o outro motor; `no-audio` e `aborted`, não. */
+/** Only `unsupported` and `failed` justify trying the other engine; `no-audio` and `aborted` do not. */
 function canFallBack(error: MediaConvertError): boolean {
   return error.code === 'unsupported' || error.code === 'failed'
 }
@@ -66,7 +66,7 @@ export function createConverter(engines: Engines = defaultEngines, scope?: Scope
       choice !== 'auto' ? [choice] : env.webCodecs ? ['webcodecs', 'ffmpeg'] : ['ffmpeg']
 
     for (const [index, name] of order.entries()) {
-      // Um motor novo recomeça o progresso: a razão só é monótona dentro de uma tentativa.
+      // A new engine restarts the progress: the ratio is monotonic only within one attempt.
       const progress = new ProgressTracker(file.size, options.onProgress)
       try {
         const blob = await engines[name]({ file, bitrate, signal: options.signal, progress })

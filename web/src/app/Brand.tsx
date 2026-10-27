@@ -1,6 +1,6 @@
 import { Link } from 'react-router'
 
-/** A marca do Design System: cinco barras (uma fala como forma de onda) e `eclume` em Archivo 800. */
+/** The Design System mark: five bars (speech as a waveform) and `eclume` in Archivo 800. */
 function Mark() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -13,7 +13,7 @@ function Mark() {
   )
 }
 
-/** A lockup `.brand`; com `to`, é o link para essa rota. */
+/** The `.brand` lockup; with `to`, it is the link to that route. */
 export function Brand({ to, className }: { to?: string; className?: string }) {
   const classes = className ? `brand ${className}` : 'brand'
   if (to === undefined) {

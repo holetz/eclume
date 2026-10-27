@@ -5,13 +5,13 @@ import { clearUserQueries } from './accountScope'
 import { ME_KEY } from './session'
 
 export function AppProviders({ client, children }: { client: QueryClient; children: ReactNode }) {
-  // Um 401 em qualquer chamada encerra a sessão local e apaga o cache de dados do usuário; a guarda
-  // de rota leva ao login. Os rascunhos da aba ficam: a mesma conta que volta os reencontra.
+  // A 401 on any call ends the local session and clears the user's data cache; the route guard
+  // leads to the login. The tab's drafts stay: the same account coming back finds them again.
   useEffect(
     () =>
       onUnauthorized(() => {
-        // Só a sessão que existia e caiu limpa o cache; o 401 de quem nunca entrou (o `/me` do login,
-        // do cadastro) não pode levar junto as consultas públicas dessas telas.
+        // Only a session that existed and dropped clears the cache; the 401 of someone who never signed in (the login's
+        // `/me`, the signup's) must not take those screens' public queries with it.
         if (client.getQueryData(ME_KEY)) clearUserQueries(client, ME_KEY)
         client.setQueryData(ME_KEY, null)
       }),
