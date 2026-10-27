@@ -1,4 +1,4 @@
-"""A conta pelo próprio usuário: trocar a senha e excluir a conta com todos os dados."""
+"""The account by its own user: change the password and delete the account with all its data."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 NEW_PASSWORD = "uma-senha-nova-bem-longa"
 
 
-def test_trocar_a_senha_encerra_as_outras_sessoes(
+def test_changing_the_password_ends_the_other_sessions(
     client: TestClient, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     account = make_user()
@@ -59,7 +59,7 @@ def test_trocar_a_senha_encerra_as_outras_sessoes(
     assert new.status_code == 204
 
 
-def test_excluir_a_conta_apaga_tudo_e_so_dela(
+def test_deleting_the_account_erases_everything_and_only_its_own(
     client: TestClient, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -86,13 +86,13 @@ def test_excluir_a_conta_apaga_tudo_e_so_dela(
     client.cookies.clear()
     assert client.post("/api/v1/auth/login", json={"email": account.email, "password": PASSWORD}).status_code == 401
     assert bystander.get(f"/api/v1/recordings/{kept['id']}").status_code == 200
-    # O job em aberto da conta excluída é cancelado; o de outra conta, não.
+    # The deleted account's open job is cancelled; another account's is not.
     cache = redis.Redis.from_url(services.settings.redis_url)
     assert cache.exists(f"eclume:cancel:{recording['id']}:1")
     assert not cache.exists(f"eclume:cancel:{kept['id']}:1")
 
 
-def test_trocar_a_senha_com_revoke_tokens_revoga_aparelhos_e_pats(
+def test_changing_the_password_with_revoke_tokens_revokes_devices_and_pats(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     account = make_user()
@@ -100,7 +100,7 @@ def test_trocar_a_senha_com_revoke_tokens_revoga_aparelhos_e_pats(
     kept = api.pat("recordings:read", name="mantido")
     body = {"current_password": PASSWORD, "new_password": NEW_PASSWORD}
     assert api.post("/api/v1/me/password", json=body).status_code == 204
-    # Sem `revoke_tokens`, os tokens seguem valendo, como antes.
+    # Without `revoke_tokens`, the tokens stay valid, as before.
     assert kept.get("/api/v1/me").status_code == 200
 
     revoked = api.pat("recordings:read", name="revogado")
@@ -118,7 +118,7 @@ def test_trocar_a_senha_com_revoke_tokens_revoga_aparelhos_e_pats(
     assert api.get("/api/v1/me").status_code == 200
 
 
-def test_admin_exclui_a_conta_e_libera_o_email(
+def test_admin_deletes_the_account_and_frees_the_email(
     admin: Api,
     client: TestClient,
     as_user: Callable[[Account], Api],
@@ -151,7 +151,7 @@ def _secret(link: dict) -> str:
     return link["url"].split("#", 1)[1]
 
 
-def test_link_de_redefinicao_e_de_uso_unico_e_encerra_as_sessoes(
+def test_reset_link_is_single_use_and_ends_the_sessions(
     client: TestClient, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -167,7 +167,7 @@ def test_link_de_redefinicao_e_de_uso_unico_e_encerra_as_sessoes(
     async def go() -> None:
         engine = create_async_engine(services.settings.database_url)
         try:
-            # Um link novo vence o anterior; conferir não consome.
+            # A new link expires the previous one; checking does not consume it.
             assert await password_reset_info(engine, _secret(old)) is None
             info = await password_reset_info(engine, _secret(link))
             assert info == {"email": account.email, "expires_at": link["expires_at"]}
@@ -203,7 +203,7 @@ def test_link_de_redefinicao_e_de_uso_unico_e_encerra_as_sessoes(
     assert run(check()) is None
 
 
-def test_admin_gera_o_link_de_redefinicao_so_para_conta_ativa(
+def test_admin_creates_the_reset_link_only_for_an_active_account(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -223,7 +223,7 @@ def test_admin_gera_o_link_de_redefinicao_so_para_conta_ativa(
 
     assert run(services.sql(admin_of)) is not None
 
-    # Desativar vence o link pendente, e a conta desativada não recebe outro.
+    # Deactivating expires the pending link, and the deactivated account gets no other.
     assert admin.patch(f"/api/v1/admin/users/{account.user_id}", json={"active": False}).status_code == 200
     assert admin.post(path).status_code == 409
     assert admin.patch(f"/api/v1/admin/users/{account.user_id}", json={"active": True}).status_code == 200
@@ -238,7 +238,7 @@ def test_admin_gera_o_link_de_redefinicao_so_para_conta_ativa(
     assert run(info()) is None
 
 
-def test_rotas_publicas_conferem_e_redefinem_pelo_link(
+def test_public_routes_check_and_reset_through_the_link(
     client: TestClient, admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     account = make_user()
@@ -266,7 +266,7 @@ def test_rotas_publicas_conferem_e_redefinem_pelo_link(
     assert client.post("/api/v1/auth/login", json={"email": account.email, "password": NEW_PASSWORD}).status_code == 204
 
 
-def test_rotas_publicas_da_redefinicao_limitam_tentativas_por_ip(services: Services):
+def test_public_reset_routes_limit_attempts_per_ip(services: Services):
     store = redis.Redis.from_url(services.settings.redis_url)
     for key in store.scan_iter("eclume:rl:auth_password_reset:*"):
         store.delete(key)

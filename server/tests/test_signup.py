@@ -1,4 +1,4 @@
-"""Cadastro aberto com o aceite do aviso, `notice_required` e `POST /me/notice`."""
+"""Open signup with acceptance of the notice, `notice_required` and `POST /me/notice`."""
 
 from __future__ import annotations
 
@@ -30,14 +30,14 @@ def _body(**changes: Any) -> dict[str, Any]:  # noqa: ANN401
     return {"name": "Paulo Andrade", "email": email, "password": PASSWORD, "notice_version": NOTICE_VERSION} | changes
 
 
-def test_estado_do_cadastro_e_o_aviso(client: TestClient):
+def test_signup_state_and_the_notice(client: TestClient):
     response = client.get("/api/v1/auth/signup")
     assert response.status_code == 200
     assert response.json() == {"open": True, "notice": {"version": NOTICE_VERSION, "text": NOTICE_TEXT}}
     assert "consentimento das pessoas que gravo" in NOTICE_TEXT
 
 
-def test_cadastro_abre_a_sessao_com_o_aviso_aceito_e_os_tipos_de_agenda(client: TestClient, services: Services):
+def test_signup_opens_the_session_with_the_notice_accepted_and_the_agenda_types(client: TestClient, services: Services):
     body = _body()
     client.cookies.clear()
     response = client.post("/api/v1/auth/signup", json=body)
@@ -56,19 +56,19 @@ def test_cadastro_abre_a_sessao_com_o_aviso_aceito_e_os_tipos_de_agenda(client: 
     types = agenda_types(services, UUID(user_id))
     assert [t["name"] for t in types] == ["Geral", "Reunião de equipe", "1:1", "Conversa com cliente", "Nota de voz"]
 
-    # O login com a senha do cadastro funciona.
+    # Login with the signup password works.
     client.cookies.clear()
     assert client.post("/api/v1/auth/login", json={"email": body["email"], "password": PASSWORD}).status_code == 204
 
 
-def test_email_repetido_e_409(client: TestClient, make_user: Callable[..., Account]):
+def test_repeated_email_is_409(client: TestClient, make_user: Callable[..., Account]):
     existing = make_user()
     response = client.post("/api/v1/auth/signup", json=_body(email=existing.email.upper()))
     assert response.status_code == 409
     assert response.json()["code"] == "email_taken"
 
 
-def test_sem_o_aviso_em_vigor_e_422(client: TestClient):
+def test_without_the_notice_in_force_is_422(client: TestClient):
     for body in (
         {k: v for k, v in _body().items() if k != "notice_version"},
         _body(notice_version="0"),
@@ -84,7 +84,7 @@ def test_sem_o_aviso_em_vigor_e_422(client: TestClient):
     assert [e["field"] for e in wrong["errors"]] == ["notice_version"]
 
 
-def test_cadastro_fechado_e_403(services: Services):
+def test_closed_signup_is_403(services: Services):
     settings = services.settings.model_copy(update={"signup_open": False})
     with TestClient(create_app(settings), base_url="https://testserver") as closed:
         closed.event_hooks["response"] = [CONFORMANCE.check]
@@ -94,7 +94,7 @@ def test_cadastro_fechado_e_403(services: Services):
         assert response.json()["code"] == "signup_closed"
 
 
-def test_conta_sem_aceite_aceita_o_aviso_por_sessao(
+def test_account_without_acceptance_accepts_the_notice_by_session(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -102,14 +102,14 @@ def test_conta_sem_aceite_aceita_o_aviso_por_sessao(
     pat = api.pat("recordings:read")
 
     async def withdraw(conn: Any) -> None:  # noqa: ANN401
-        # A conta migrada: sem aceite, com o PAT do desktop ou do lumea de antes.
+        # The migrated account: no acceptance, with the earlier desktop or lumea PAT.
         await conn.execute(
             update(t.users).where(t.users.c.id == account.user_id).values(notice_version=None, notice_accepted_at=None)
         )
 
     run(services.sql(withdraw))
     assert api.get("/api/v1/me").json()["notice_required"] is True
-    # A sessão só alcança /me, o aceite e o logout; o PAT segue funcionando.
+    # The session reaches only /me, the acceptance and logout; the PAT keeps working.
     blocked = api.get("/api/v1/recordings")
     assert (blocked.status_code, blocked.json()["code"]) == (403, "notice_required")
     assert api.post("/api/v1/tokens", json={"name": "x", "scopes": ["recordings:read"]}).json()["code"] == (
@@ -130,14 +130,14 @@ def test_conta_sem_aceite_aceita_o_aviso_por_sessao(
     assert api.get("/api/v1/recordings").status_code == 200
 
 
-def test_teto_diario_de_cadastros_por_ip(services: Services):
+def test_daily_signup_ceiling_per_ip(services: Services):
     import redis  # noqa: PLC0415
 
     redis.Redis.from_url(services.settings.redis_url).delete("eclume:rl:signup_day:testclient")
     settings = services.settings.model_copy(update={"signups_per_ip_per_day": 2})
     with TestClient(create_app(settings), base_url="https://testserver") as client:
         client.event_hooks["response"] = [CONFORMANCE.check]
-        # Só conta o cadastro criado: o recusado não gasta a vez.
+        # Only a created signup counts: a refused one does not use up a turn.
         assert client.post("/api/v1/auth/signup", json=_body(notice_version="v0")).status_code == 422
         for _ in range(2):
             assert client.post("/api/v1/auth/signup", json=_body()).status_code == 204
