@@ -39,16 +39,16 @@ function AgentMessage({ message, onRetry }: { message: ChatMessage; onRetry: () 
 
 interface ChatPanelProps {
   recordingId: string
-  /** Sem transcrição, não há histórico a ler (a API responde 409). */
+  /** With no transcript, there is no history to read (the API answers 409). */
   hasTranscript: boolean
-  /** Há resumo atual: sem ele, o chat não tem sobre o que trabalhar. */
+  /** There is a current summary: without it, the chat has nothing to work on. */
   hasSummary: boolean
-  /** O tipo de agenda da gravação: depois de um ajuste, o pedido pode ir para as instruções dele. */
+  /** The recording's agenda type: after an adjustment, the request can go to its instructions. */
   agendaTypeId?: string | null
   className?: string
 }
 
-/** O `aside.chat` "Ajustar o resumo": histórico, notas de leitura da transcrição e o composer. */
+/** The `aside.chat` "Ajustar o resumo": history, transcript reading notes and the composer. */
 export function ChatPanel({ recordingId, hasTranscript, hasSummary, agendaTypeId = null, className = '' }: ChatPanelProps) {
   const chat = useChat(recordingId, hasTranscript)
   const send = useSendChat(recordingId)
@@ -77,7 +77,7 @@ export function ChatPanel({ recordingId, hasTranscript, hasSummary, agendaTypeId
   }
 
   const request = (reply: ChatMessage) => messages.find((message) => message.id === reply.reply_to)?.content ?? ''
-  // O último ajuste que mudou o resumo: o pedido dele pode virar regra do tipo.
+  // The last adjustment that changed the summary: its request can become a rule of the agenda type.
   const lastAdjustment = messages.findLast(
     (message) => message.role === 'assistant' && message.status === 'done' && message.summary_id !== null,
   )
