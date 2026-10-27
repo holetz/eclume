@@ -6,13 +6,13 @@ import { downloadExport, type ExportFormat } from './exports'
 
 interface ExportMenuProps {
   recordingId: string
-  /** Há resumo atual: sem ele, o MD fica desabilitado. */
+  /** There is a current summary: without it, MD is disabled. */
   hasSummary: boolean
-  /** A falha do export (o problem da API), para o cabeçalho mostrar; `null` ao tentar de novo. */
+  /** The export failure (the API problem), for the header to show; `null` when trying again. */
   onError: (message: string | null) => void
 }
 
-/** O menu Exportar do cabeçalho: transcrição (TXT, SRT), resumo (MD) e os dois juntos (DOCX). */
+/** The header's Exportar menu: transcript (TXT, SRT), summary (MD) and both together (DOCX). */
 export function ExportMenu({ recordingId, hasSummary, onError }: ExportMenuProps) {
   const [busy, setBusy] = useState(false)
 
