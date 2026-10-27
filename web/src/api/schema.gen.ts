@@ -11,7 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Saúde do serviço e versão do contrato */
+        /** Service health and contract version */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -29,10 +29,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Prontidão — Postgres, Redis e MinIO respondem
-         * @description Desde a 2.13.0. Roda as sondas de Postgres, Redis e armazenamento em paralelo, com teto de
-         *     2 s cada. Pública: devolve só o nome e `ok`/`down` de cada uma, sem latência nem mensagem
-         *     de erro. `/api/v1/health` segue estático, como sinal de vida.
+         * Readiness — Postgres, Redis and MinIO answer
+         * @description Since 2.13.0. Runs the Postgres, Redis and storage probes in parallel, with a ceiling of
+         *     2 s each. Public: returns only the name and `ok`/`down` of each, with no latency nor error
+         *     message. `/api/v1/health` stays static, as a liveness signal.
          */
         get: operations["getHealthReady"];
         put?: never;
@@ -53,10 +53,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Abrir sessão com e-mail e senha
-         * @description Define os cookies `eclume_session` (HttpOnly, Secure, SameSite=Lax) e `eclume_csrf`
-         *     (legível pelo JavaScript). Toda requisição mutável autenticada por sessão ecoa o valor
-         *     de `eclume_csrf` no header `X-CSRF-Token`.
+         * Open a session with e-mail and password
+         * @description Sets the `eclume_session` (HttpOnly, Secure, SameSite=Lax) and `eclume_csrf` cookies
+         *     (readable by JavaScript). Every mutating request authenticated by session echoes the value
+         *     of `eclume_csrf` in the `X-CSRF-Token` header.
          */
         post: operations["login"];
         delete?: never;
@@ -74,7 +74,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Encerrar a sessão */
+        /** Close the session */
         post: operations["logout"];
         delete?: never;
         options?: never;
@@ -90,18 +90,18 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Estado do cadastro e o aviso em vigor
-         * @description Diz se o cadastro está aberto e devolve o texto e a versão do aviso que a conta nova aceita.
+         * Sign-up state and the notice in force
+         * @description Says whether sign-up is open and returns the text and version of the notice the new account accepts.
          */
         get: operations["getSignupInfo"];
         put?: never;
         /**
-         * Criar uma conta e abrir a sessão
-         * @description Cadastro aberto, sem convite e sem confirmação de e-mail. Exige o aceite do aviso em vigor
-         *     (`notice_version` igual à versão de `GET /api/v1/auth/signup`). A conta nasce com os
-         *     tipos de agenda padrão, e a resposta define os cookies de sessão, como o login.
-         *     Com o cadastro fechado (`ECLUME_SIGNUP_OPEN=false`), 403 `signup_closed`; e-mail já
-         *     cadastrado, 409 `email_taken`.
+         * Create an account and open the session
+         * @description Open sign-up, with no invitation and no e-mail confirmation. Requires accepting the notice
+         *     in force (`notice_version` equal to the version of `GET /api/v1/auth/signup`). The account
+         *     is born with the default agenda types, and the response sets the session cookies, like
+         *     login. With sign-up closed (`ECLUME_SIGNUP_OPEN=false`), 403 `signup_closed`; e-mail
+         *     already registered, 409 `email_taken`.
          */
         post: operations["signup"];
         delete?: never;
@@ -118,8 +118,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Usuário e credencial correntes
-         * @description Aceita qualquer credencial válida, sem escopo. O lumea usa para mostrar a conta conectada e os escopos do PAT.
+         * Current user and credential
+         * @description Accepts any valid credential, with no scope. lumea uses it to show the connected account and the PAT's scopes.
          */
         get: operations["getMe"];
         put?: never;
@@ -138,10 +138,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uso e cotas da conta
-         * @description Desde a 2.15.0. O uso corrente da conta e a cota efetiva (a sobreposição da conta pelo
-         *     admin sobre o padrão da plataforma; `null` é sem limite). Minutos de áudio e pedidos ao
-         *     agente contam numa janela móvel de 24 h. Aceita qualquer credencial válida, sem escopo.
+         * Account usage and quotas
+         * @description Since 2.15.0. The account's current usage and the effective quota (the admin's per-account
+         *     override over the platform default; `null` is unlimited). Audio minutes and agent
+         *     requests count in a rolling 24 h window. Accepts any valid credential, with no scope.
          */
         get: operations["getMyUsage"];
         put?: never;
@@ -162,12 +162,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Trocar a própria senha
-         * @description Confere a senha atual (errada: 422 em `current_password`) e grava a nova, que segue a regra
-         *     do cadastro (curta: 422 em `new_password`). As outras sessões da conta acabam e esta
-         *     continua. Com `revoke_tokens: true` (desde a 2.14.0), as credenciais de aparelho e os PATs
-         *     da conta também são revogados; ausente ou `false`, continuam valendo. Só pela sessão do
-         *     usuário, com o limite de tentativas das credenciais.
+         * Change one's own password
+         * @description Checks the current password (wrong: 422 on `current_password`) and stores the new one, which
+         *     follows the sign-up rule (too short: 422 on `new_password`). The account's other sessions
+         *     end and this one continues. With `revoke_tokens: true` (since 2.14.0), the account's device
+         *     credentials and PATs are also revoked; absent or `false`, they stay valid. Only through the
+         *     user's session, with the credentials' attempt limit.
          */
         post: operations["changePassword"];
         delete?: never;
@@ -186,11 +186,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Excluir a própria conta
-         * @description Confere a senha (errada: 422 em `password`) e apaga a conta com tudo o que é dela:
-         *     gravações e áudios, transcrições, resumos, pessoas e impressões de voz, coleções, tags,
-         *     campos, tipos de agenda, tokens e aparelhos. Não há como desfazer. A resposta apaga os
-         *     cookies da sessão. Só pela sessão do usuário, com o limite de tentativas das credenciais.
+         * Delete one's own account
+         * @description Checks the password (wrong: 422 on `password`) and deletes the account with everything it
+         *     owns: recordings and audio, transcripts, summaries, people and voiceprints, collections,
+         *     tags, fields, agenda types, tokens and devices. It cannot be undone. The response clears
+         *     the session cookies. Only through the user's session, with the credentials' attempt limit.
          */
         post: operations["deleteAccount"];
         delete?: never;
@@ -209,8 +209,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Aceitar o aviso de consentimento em vigor
-         * @description Registra o aceite do aviso pela conta corrente, o que zera `notice_required` em `GET /api/v1/me`. Uma versão diferente da em vigor é 422. Só sessão.
+         * Accept the consent notice in force
+         * @description Records the current account's acceptance of the notice, which clears `notice_required` in `GET /api/v1/me`. A version other than the one in force is 422. Session only.
          */
         post: operations["acceptNotice"];
         delete?: never;
@@ -227,8 +227,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Ler a atribuição automática de locutores da conta
-         * @description Preferência da conta: ligar sozinho o locutor à pessoa pela voz, e a pontuação mínima para isso. `platform_enabled` é o liga-desliga da plataforma (`voice_identification.enabled`): desligado, a preferência não tem efeito. Só sessão.
+         * Read the account's automatic speaker assignment
+         * @description The account's preference: link the speaker to the person by voice on its own, and the minimum score for that. `platform_enabled` is the platform's on/off switch (`voice_identification.enabled`): when off, the preference has no effect. Session only.
          */
         get: operations["getVoiceAssignment"];
         put?: never;
@@ -237,8 +237,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Mudar a atribuição automática de locutores da conta
-         * @description Os campos enviados mudam e os demais ficam. Vale para as próximas transcrições: os vínculos que já existem não mudam. Só sessão. `threshold` fora de 0,50 a 0,99 é 422; o padrão é 0,75. Desde a 2.19.0, `keep_samples: false` apaga na hora as amostras, os vetores por gravação e as sugestões pendentes da conta.
+         * Change the account's automatic speaker assignment
+         * @description The fields sent change and the others stay. It applies to the next transcriptions: the links that already exist do not change. Session only. `threshold` outside 0.50 to 0.99 is 422; the default is 0.75. Since 2.19.0, `keep_samples: false` immediately deletes the account's samples, per-recording vectors and pending suggestions.
          */
         patch: operations["updateVoiceAssignment"];
         trace?: never;
@@ -251,8 +251,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Ler o idioma de transcrição preferido da conta
-         * @description Desde a 2.20.0. O idioma preferido da conta (`null` é o padrão do servidor) e o padrão do servidor (`platform_default`), para os clientes nomearem o idioma real. O idioma de um job sai, nesta ordem: o do arquivo, o da conta, o do servidor, `pt`. Sessão ou PAT com `recordings:read`.
+         * Read the account's preferred transcription language
+         * @description Since 2.20.0. The account's preferred language (`null` is the server default) and the server default (`platform_default`), so clients can name the actual language. A job's language comes, in this order, from: the file, the account, the server, `pt`. Session or PAT with `recordings:read`.
          */
         get: operations["getTranscriptionPreference"];
         put?: never;
@@ -261,8 +261,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Mudar o idioma de transcrição preferido da conta
-         * @description Desde a 2.20.0. `language` é um idioma, `auto` (a engine detecta) ou `null` (volta ao padrão do servidor). Vale para os próximos jobs; os que já estão na fila não mudam. Só sessão.
+         * Change the account's preferred transcription language
+         * @description Since 2.20.0. `language` is a language, `auto` (the engine detects) or `null` (back to the server default). It applies to the next jobs; the ones already queued do not change. Session only.
          */
         patch: operations["updateTranscriptionPreference"];
         trace?: never;
@@ -299,8 +299,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Ler se a conta exige nomear os locutores
-         * @description Desde a 2.22.0. `required` diz se a cadeia por agente espera todo locutor (com pelo menos 10 s de fala) ter pessoa; `waiting_count` conta as gravações paradas à espera disso. Sessão ou PAT com `recordings:read`.
+         * Read whether the account requires naming the speakers
+         * @description Since 2.22.0. `required` says whether the agent chain waits for every speaker (with at least 10 s of speech) to have a person; `waiting_count` counts the recordings stopped waiting for that. Session or PAT with `recordings:read`.
          */
         get: operations["getSpeakerNaming"];
         put?: never;
@@ -309,8 +309,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Ligar ou desligar a marcação obrigatória dos locutores
-         * @description Desde a 2.22.0. Ligar vale para as próximas transcrições. Desligar solta toda gravação parada da conta (etapa `speakers` `skipped` com `reason` `naming_not_required`) e a cadeia segue. Só sessão.
+         * Turn required speaker naming on or off
+         * @description Since 2.22.0. Turning it on applies to the next transcriptions. Turning it off releases every stopped recording of the account (`speakers` step `skipped` with `reason` `naming_not_required`) and the chain goes on. Session only.
          */
         patch: operations["updateSpeakerNaming"];
         trace?: never;
@@ -323,11 +323,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Como o agente atribui as tags
-         * @description O automático e a regra do campo embutido Tags, o modo (`fixed`: só as tags cadastradas;
-         *     `auto`: o agente pode criar até `new_limit` tags novas por gravação, sempre preferindo
-         *     reusar, enquanto o cadastro tiver menos que `catalog_limit`) e o tamanho do cadastro. Só
-         *     pela sessão do usuário.
+         * How the agent assigns tags
+         * @description The automatic switch and the rule of the built-in Tags field, the mode (`fixed`: only the
+         *     registered tags; `auto`: the agent may create up to `new_limit` new tags per recording,
+         *     always preferring to reuse, while the catalog has fewer than `catalog_limit`) and the
+         *     catalog size. Only through the user's session.
          */
         get: operations["getTagAssignment"];
         put?: never;
@@ -336,8 +336,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Mudar como o agente atribui as tags
-         * @description Os campos enviados mudam, os demais ficam; vale para as próximas transcrições.
+         * Change how the agent assigns tags
+         * @description The fields sent change, the others stay; it applies to the next transcriptions.
          */
         patch: operations["updateTagAssignment"];
         trace?: never;
@@ -350,14 +350,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Listar os tokens do usuário
-         * @description PATs pessoais e credenciais de dispositivo. `?kind=device` é a lista de "App móvel" e "App desktop"; `?kind=personal`, a de "Tokens de acesso".
+         * List the user's tokens
+         * @description Personal PATs and device credentials. `?kind=device` is the list of the mobile app and the desktop app; `?kind=personal`, the one of the access tokens.
          */
         get: operations["listTokens"];
         put?: never;
         /**
-         * Criar um PAT
-         * @description O segredo (`eclp_...`) volta só nesta resposta; o servidor guarda apenas o hash. Cria sempre `kind: personal`: a credencial de dispositivo só nasce de `POST /devices/login` ou `POST /devices/pair`.
+         * Create a PAT
+         * @description The secret (`eclp_...`) comes back only in this response; the server keeps only the hash. It always creates `kind: personal`: a device credential is only born from `POST /devices/login` or `POST /devices/pair`.
          */
         post: operations["createToken"];
         delete?: never;
@@ -379,8 +379,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Revogar um token
-         * @description Vale para PAT e credencial de dispositivo ("Desvincular" desliga o aparelho).
+         * Revoke a token
+         * @description Applies to a PAT and to a device credential (unlinking turns the device off).
          */
         delete: operations["revokeToken"];
         options?: never;
@@ -396,10 +396,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Descritor público do servidor
-         * @description Nome, endereço, endereço MCP, impressão digital da CA raiz e versões. É a fonte do anúncio
-         *     mDNS, do link do QR, do pareamento e do endereço embutido no instalador: o app confirma
-         *     aqui o que recebeu e fixa a CA pela impressão digital (`ca_sha256`).
+         * Public server descriptor
+         * @description Name, address, MCP address, root CA fingerprint and versions. It is the source of the mDNS
+         *     announcement, the QR link, pairing and the address embedded in the installer: the app
+         *     confirms here what it received and pins the CA by its fingerprint (`ca_sha256`).
          */
         get: operations["getServerInfo"];
         put?: never;
@@ -418,13 +418,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Para onde vai cada dado, conforme a configuração em vigor
-         * @description Desde a 2.19.0. Diz, para a transcrição e para cada finalidade de agente, se o dado é
-         *     processado neste servidor, na rede local ou fora dele, com o nome de quem processa quando
-         *     sai. Pública como `GET /server`, porque quem se cadastra precisa saber antes de aceitar o
-         *     aviso; nunca devolve endereço, modelo, chave nem o nome que o admin deu ao provider. A
-         *     configuração muda em runtime: o cliente não guarda a resposta por tempo indeterminado.
-         *     O áudio e a transcrição ficam sempre guardados neste servidor.
+         * Where each piece of data goes, per the settings in force
+         * @description Since 2.19.0. Says, for transcription and for each agent purpose, whether the data is
+         *     processed on this server, on the local network or outside it, with the name of who
+         *     processes it when it leaves. Public like `GET /server`, because whoever signs up needs to
+         *     know before accepting the notice; it never returns the address, model, key nor the name
+         *     the admin gave the provider. The settings change at runtime: the client does not keep the
+         *     response indefinitely. The audio and the transcript are always stored on this server.
          */
         get: operations["getPrivacyInfo"];
         put?: never;
@@ -445,12 +445,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Conferir um link de redefinição de senha
-         * @description Desde a 2.18.0. A página `/redefinir-senha` lê o segredo do fragmento da URL e o manda no
-         *     corpo; a resposta diz o e-mail da conta e até quando o link vale, sem consumir o link.
-         *     Link inexistente, vencido, já usado, vencido por um mais novo ou de conta desativada,
-         *     401 `invalid_reset_link`; tentativas demais do mesmo IP, 429 `rate_limited` com
-         *     `Retry-After`.
+         * Check a password reset link
+         * @description Since 2.18.0. The `/redefinir-senha` page reads the secret from the URL fragment and sends
+         *     it in the body; the response gives the account's e-mail and until when the link is valid,
+         *     without consuming the link. A link that does not exist, expired, was already used, was
+         *     superseded by a newer one or belongs to a deactivated account, 401 `invalid_reset_link`;
+         *     too many attempts from the same IP, 429 `rate_limited` with `Retry-After`.
          */
         post: operations["checkPasswordReset"];
         delete?: never;
@@ -469,12 +469,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Redefinir a senha por um link gerado pelo admin
-         * @description Desde a 2.18.0. Troca a senha da conta do link (ao menos 12 caracteres, como no cadastro),
-         *     marca o link como usado e encerra todas as sessões da conta, sem abrir outra: a pessoa
-         *     entra de novo com a senha nova. Credenciais de aparelho e PATs seguem valendo. Link
-         *     inválido, 401 `invalid_reset_link`, como em `POST /auth/password-reset/check`; senha
-         *     curta, 422 `validation_failed` sem consumir o link.
+         * Reset the password through a link generated by the admin
+         * @description Since 2.18.0. Changes the password of the link's account (at least 12 characters, as at
+         *     sign-up), marks the link as used and closes every session of the account, without opening
+         *     another: the person logs in again with the new password. Device credentials and PATs stay
+         *     valid. Invalid link, 401 `invalid_reset_link`, as in `POST /auth/password-reset/check`;
+         *     short password, 422 `validation_failed` without consuming the link.
          */
         post: operations["resetPassword"];
         delete?: never;
@@ -493,16 +493,16 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Entrar num aparelho com e-mail e senha
-         * @description Confere a senha como o login do navegador e emite uma credencial de dispositivo: um token
-         *     `kind: device` com `recordings:read`, `recordings:write`, desde a 2.6.0 `summaries:read`
-         *     (o aviso de resumo pronto do app, com "Copiar") e, desde a 2.8.0, `transcripts:read` (a
-         *     pasta sincronizada do desktop lê transcrições), sem validade e revogável
-         *     em `DELETE /api/v1/tokens/{token_id}`. O segredo volta só nesta resposta. Senha errada ou
-         *     conta inativa, 401 com a mesma mensagem do login; conta que ainda não aceitou o aviso em
-         *     vigor, 403 `notice_required` (aceite na web e entre de novo); tentativas demais do mesmo
-         *     IP ou para a mesma conta (a janela da conta é comum com `POST /auth/login`), 429
-         *     `rate_limited` com `Retry-After`.
+         * Log in on a device with e-mail and password
+         * @description Checks the password like the browser login and issues a device credential: a
+         *     `kind: device` token with `recordings:read`, `recordings:write`, since 2.6.0
+         *     `summaries:read` (the app's summary-ready notice, with Copy) and, since 2.8.0,
+         *     `transcripts:read` (the desktop synced folder reads transcripts), with no expiry and
+         *     revocable at `DELETE /api/v1/tokens/{token_id}`. The secret comes back only in this
+         *     response. Wrong password or inactive account, 401 with the same message as login; an
+         *     account that has not yet accepted the notice in force, 403 `notice_required` (accept it on
+         *     the web and log in again); too many attempts from the same IP or for the same account (the
+         *     account window is shared with `POST /auth/login`), 429 `rate_limited` with `Retry-After`.
          */
         post: operations["deviceLogin"];
         delete?: never;
@@ -521,10 +521,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Gerar um código de pareamento
-         * @description Código de 6 caracteres (`K7Q-4MX`), válido por 10 minutos e de uso único, que o app troca
-         *     por uma credencial de dispositivo em `POST /api/v1/devices/pair`. `pair_url` é o conteúdo
-         *     do QR que o celular lê. Um código novo vence os anteriores ainda não usados. Só sessão.
+         * Generate a pairing code
+         * @description A 6-character code (`K7Q-4MX`), valid for 10 minutes and single use, that the app exchanges
+         *     for a device credential at `POST /api/v1/devices/pair`. `pair_url` is the content of the
+         *     QR the phone reads. A new code expires the earlier ones not yet used. Session only.
          */
         post: operations["createPairingCode"];
         delete?: never;
@@ -543,8 +543,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Estado de um código de pareamento
-         * @description A web consulta para trocar o QR por "Pareado" e mostrar o aparelho (`token_id`). Só sessão.
+         * State of a pairing code
+         * @description The web polls it to replace the QR with "Paired" and show the device (`token_id`). Session only.
          */
         get: operations["getPairingCode"];
         put?: never;
@@ -565,11 +565,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Trocar um código de pareamento por uma credencial de dispositivo
-         * @description O código aceita maiúsculas ou minúsculas, com ou sem hífen. Emite a credencial de
-         *     dispositivo do dono do código, como `POST /api/v1/devices/login`. Código inexistente,
-         *     vencido ou já usado, 401 `invalid_pairing_code`; tentativas demais do mesmo IP (ou,
-         *     somando todos os IPs, seis vezes esse limite), 429 `rate_limited` com `Retry-After`.
+         * Exchange a pairing code for a device credential
+         * @description The code accepts upper or lower case, with or without the hyphen. Issues the device
+         *     credential of the code's owner, like `POST /api/v1/devices/login`. A code that does not
+         *     exist, expired or was already used, 401 `invalid_pairing_code`; too many attempts from the
+         *     same IP (or, adding up all IPs, six times that limit), 429 `rate_limited` with
+         *     `Retry-After`.
          */
         post: operations["pairDevice"];
         delete?: never;
@@ -588,20 +589,20 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Iniciar um upload (ou deduplicar)
-         * @description O cliente calcula o `sha256` do arquivo antes de subir. Se o usuário já tem uma gravação
-         *     com o mesmo hash, a resposta é **200** com `status: deduplicated` e o `recording_id`
-         *     existente, e nada é transferido. Caso contrário, **201** com o upload, o `part_size`
-         *     fixado pelo servidor e as URLs das primeiras partes.
+         * Start an upload (or deduplicate)
+         * @description The client computes the file's `sha256` before uploading. If the user already has a
+         *     recording with the same hash, the response is **200** with `status: deduplicated` and the
+         *     existing `recording_id`, and nothing is transferred. Otherwise, **201** with the upload,
+         *     the `part_size` fixed by the server and the URLs of the first parts.
          *
-         *     Desde a 2.15.0, um upload novo que passa das cotas da conta (tamanho por arquivo,
-         *     armazenamento total ou uploads abertos) responde **403** `quota_exceeded`, com `quota`,
-         *     `limit` e `used`, antes de qualquer byte subir. Deduplicar e retomar não passam pela cota.
+         *     Since 2.15.0, a new upload that exceeds the account's quotas (size per file, total storage
+         *     or open uploads) answers **403** `quota_exceeded`, with `quota`, `limit` and `used`,
+         *     before any byte is uploaded. Deduplicating and resuming do not go through the quota.
          *
-         *     Partes: todas com `part_size` bytes, exceto a última; no máximo 10 000. Cada parte vai
-         *     por `PUT` na `url` da parte, com os `headers` indicados; o `ETag` da resposta é guardado
-         *     para o `complete`. A URL é opaca (MinIO pré-assinado ou o próprio
-         *     `PUT /api/v1/uploads/{upload_id}/parts/{part_number}`) e expira em `expires_at`.
+         *     Parts: all of `part_size` bytes, except the last; at most 10,000. Each part goes by `PUT`
+         *     to the part's `url`, with the given `headers`; the response's `ETag` is kept for the
+         *     `complete`. The URL is opaque (MinIO presigned or the API's own
+         *     `PUT /api/v1/uploads/{upload_id}/parts/{part_number}`) and expires at `expires_at`.
          */
         post: operations["createUpload"];
         delete?: never;
@@ -620,13 +621,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Estado do upload, para retomar
-         * @description `parts_received` lista as partes que o armazenamento já confirmou; o cliente sobe só as que faltam.
+         * Upload state, to resume
+         * @description `parts_received` lists the parts the storage has already confirmed; the client uploads only the missing ones.
          */
         get: operations["getUpload"];
         put?: never;
         post?: never;
-        /** Abortar o upload e descartar as partes */
+        /** Abort the upload and discard the parts */
         delete: operations["abortUpload"];
         options?: never;
         head?: never;
@@ -645,8 +646,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Pedir URLs para partes
-         * @description URLs novas para as partes indicadas, inclusive para substituir URLs expiradas numa retomada.
+         * Request URLs for parts
+         * @description New URLs for the given parts, including to replace expired URLs on a resume.
          */
         post: operations["createPartUrls"];
         delete?: never;
@@ -667,11 +668,11 @@ export interface paths {
         };
         get?: never;
         /**
-         * Enviar uma parte pela API
-         * @description Variante da URL de parte servida pela própria API, com a mesma semântica do `PUT` num
-         *     URL pré-assinado do S3. O cliente não monta este caminho: usa a `url` que recebeu.
-         *     `Content-Length` diferente do tamanho da parte é 409; sem o cabeçalho, o corpo é lido em
-         *     pedaços e passar do tamanho da parte é 413 `payload_too_large` (desde a 2.14.0).
+         * Upload a part through the API
+         * @description Variant of the part URL served by the API itself, with the same semantics as the `PUT` to
+         *     an S3 presigned URL. The client does not build this path: it uses the `url` it received.
+         *     A `Content-Length` other than the part size is 409; without the header, the body is read
+         *     in chunks and going past the part size is 413 `payload_too_large` (since 2.14.0).
          */
         put: operations["putUploadPart"];
         post?: never;
@@ -693,12 +694,13 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Concluir o upload e enfileirar a transcrição
-         * @description Monta o objeto a partir das partes, cria a gravação e enfileira o job. O servidor confere
-         *     o `sha256` declarado; divergência vira falha do job com `error.code: hash_mismatch`.
-         *     Repetir o `complete` de um upload já concluído devolve a mesma gravação. Desde a 2.14.0,
-         *     outro `complete` do mesmo upload em andamento (o servidor montando o objeto e conferindo o
-         *     hash) responde 409 `upload_completing` com `Retry-After`: é passageiro, tente de novo.
+         * Complete the upload and queue the transcription
+         * @description Assembles the object from the parts, creates the recording and queues the job. The server
+         *     checks the declared `sha256`; a mismatch becomes a job failure with
+         *     `error.code: hash_mismatch`. Repeating the `complete` of an already completed upload
+         *     returns the same recording. Since 2.14.0, another `complete` of the same upload while one
+         *     is in progress (the server assembling the object and checking the hash) answers 409
+         *     `upload_completing` with `Retry-After`: it is transient, try again.
          */
         post: operations["completeUpload"];
         delete?: never;
@@ -4985,7 +4987,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Serviço no ar. */
+            /** @description Service up. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5005,7 +5007,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Todas as dependências respondem. */
+            /** @description All dependencies answer. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5014,7 +5016,7 @@ export interface operations {
                     "application/json": components["schemas"]["HealthReady"];
                 };
             };
-            /** @description Alguma dependência não respondeu em 2 s; `checks` diz qual. */
+            /** @description Some dependency did not answer within 2 s; `checks` says which. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -5038,10 +5040,10 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Sessão aberta. */
+            /** @description Session opened. */
             204: {
                 headers: {
-                    /** @description `eclume_session` e `eclume_csrf`. */
+                    /** @description `eclume_session` and `eclume_csrf`. */
                     "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
@@ -5065,7 +5067,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Sessão encerrada e cookies removidos. */
+            /** @description Session closed and cookies removed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5085,7 +5087,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Cadastro. */
+            /** @description Sign-up. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5109,10 +5111,10 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Conta criada e sessão aberta. */
+            /** @description Account created and session opened. */
             204: {
                 headers: {
-                    /** @description `eclume_session` e `eclume_csrf`. */
+                    /** @description `eclume_session` and `eclume_csrf`. */
                     "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
@@ -5134,7 +5136,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Usuário corrente. */
+            /** @description Current user. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5155,7 +5157,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Uso e cotas. */
+            /** @description Usage and quotas. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5183,7 +5185,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Senha trocada. */
+            /** @description Password changed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5212,7 +5214,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Conta excluída; a sessão acabou. */
+            /** @description Account deleted; the session ended. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5241,7 +5243,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Aceite registrado. */
+            /** @description Acceptance recorded. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5262,7 +5264,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Preferência corrente. */
+            /** @description Current preference. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5291,7 +5293,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Preferência resultante. */
+            /** @description Resulting preference. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5314,7 +5316,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Preferência corrente. */
+            /** @description Current preference. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5343,7 +5345,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Preferência resultante. */
+            /** @description Resulting preference. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5418,7 +5420,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Preferência corrente. */
+            /** @description Current preference. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5447,7 +5449,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Preferência resultante. */
+            /** @description Resulting preference. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5470,7 +5472,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A configuração da conta. */
+            /** @description The account's settings. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5499,7 +5501,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A configuração atualizada. */
+            /** @description The updated settings. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5520,7 +5522,7 @@ export interface operations {
                 cursor?: components["parameters"]["Cursor"];
                 /** @description Itens por página. */
                 limit?: components["parameters"]["Limit"];
-                /** @description Só os tokens deste tipo. */
+                /** @description Only the tokens of this kind. */
                 kind?: components["schemas"]["TokenKind"];
             };
             header?: never;
@@ -5529,7 +5531,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tokens, inclusive revogados, do mais novo para o mais antigo. */
+            /** @description Tokens, revoked ones included, from newest to oldest. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5558,7 +5560,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description PAT criado. */
+            /** @description PAT created. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5586,7 +5588,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Revogado. Usos seguintes recebem 401. */
+            /** @description Revoked. Later uses get 401. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5607,7 +5609,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Descritor. */
+            /** @description Descriptor. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5627,7 +5629,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Destinos em vigor. */
+            /** @description Destinations in force. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5651,7 +5653,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Link válido. */
+            /** @description Valid link. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5679,7 +5681,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Senha redefinida e sessões da conta encerradas. */
+            /** @description Password reset and the account's sessions closed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5705,7 +5707,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Credencial de dispositivo emitida. */
+            /** @description Device credential issued. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5733,7 +5735,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Código gerado; `code`, `display` e `pair_url` só voltam aqui. */
+            /** @description Code generated; `code`, `display` and `pair_url` only come back here. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5757,7 +5759,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Estado do código, sem o código. */
+            /** @description State of the code, without the code. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5784,7 +5786,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Credencial de dispositivo emitida. */
+            /** @description Device credential issued. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5815,7 +5817,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Deduplicado. Já existe gravação com este hash. */
+            /** @description Deduplicated. A recording with this hash already exists. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5824,7 +5826,7 @@ export interface operations {
                     "application/json": components["schemas"]["Upload"];
                 };
             };
-            /** @description Upload criado. */
+            /** @description Upload created. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5877,7 +5879,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Abortado. */
+            /** @description Aborted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5907,7 +5909,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description URLs das partes pedidas. */
+            /** @description URLs of the requested parts. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5939,10 +5941,10 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Parte gravada. */
+            /** @description Part stored. */
             200: {
                 headers: {
-                    /** @description Identificador da parte, a devolver no `complete`. */
+                    /** @description Identifier of the part, to return in the `complete`. */
                     ETag: string;
                     [name: string]: unknown;
                 };
@@ -5973,7 +5975,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Gravação criada, job na fila. */
+            /** @description Recording created, job queued. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5985,10 +5987,10 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description O upload expirou (`code: upload_expired`), não está mais aberto (`code: conflict`) ou outro `complete` dele está em andamento (`code: upload_completing`, desde a 2.14.0, com `Retry-After`). */
+            /** @description The upload expired (`code: upload_expired`), is no longer open (`code: conflict`) or another `complete` of it is in progress (`code: upload_completing`, since 2.14.0, with `Retry-After`). */
             409: {
                 headers: {
-                    /** @description Com `upload_completing`, segundos até tentar de novo. */
+                    /** @description With `upload_completing`, seconds until trying again. */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };

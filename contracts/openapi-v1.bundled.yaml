@@ -4,102 +4,102 @@ openapi: 3.1.0
 info:
   title: eclume API
   version: 2.29.0
-  summary: Contrato v1 da API do eclume, o serviço de transcrição institucional.
-  description: "Fonte da verdade entre o servidor do eclume e os seus clientes: o frontend web, o app\n\
-    desktop e integrações por PAT, como o importador do lumea.\n\n**Convenções** (detalhe em `docs/standards/api/contrato-v1.md`):\n\
-    \n- Tudo sob `/api/v1`. Datas em RFC 3339 (UTC), durações em milissegundos, ids em UUID.\n- Listagens\
-    \ paginam por cursor opaco: `?cursor=&limit=`, resposta `{items, next_cursor}`;\n  `next_cursor: null`\
-    \ é a última página.\n- Erros em `application/problem+json` (RFC 9457) com o campo estável `code`.\
-    \ Desde a 2.14.0,\n  qualquer operação pode responder 500 `internal_error` (falha inesperada; o detalhe\
-    \ fica no\n  log do servidor) e qualquer operação com corpo, 413 `payload_too_large` (corpo acima\
-    \ do teto\n  da rota: 64 KiB nas rotas públicas de credencial `/auth/*`, `/admin/auth/*` e `/devices/*`,\n\
-    \  os bytes da parte no `PUT` de parte, 1 MiB no resto e no `/mcp`), também sem\n  `Content-Length`.\n\
-    - **Cotas por conta** (desde a 2.15.0): armazenamento, tamanho por arquivo, uploads abertos,\n  minutos\
-    \ de áudio e pedidos ao agente em 24 h (`GET /me/usage`). Estourada a cota, 403\n  `quota_exceeded`\
-    \ com `quota`, `limit` e `used`; os minutos de áudio nunca recusam: a\n  gravação espera na fila até\
-    \ a janela abrir.\n- **Marcação obrigatória dos locutores** (desde a 2.22.0): com `GET`/`PATCH\n \
-    \ /me/speaker-naming` ligada, a etapa `speakers` fica `waiting` quando algum locutor está sem\n  pessoa,\
-    \ e a cadeia (tipo, campos, coleções, resumo) espera; `Recording.awaiting` e o filtro\n  `awaiting=speakers`\
-    \ mostram essas gravações.\n- **Agente** (desde a 2.23.0): conversas guardadas em `/agent/sessions`,\
-    \ com anexos de\n  entrada e arquivos gerados para baixar; o chat sobre a base (`/base-chat`) fica\
-    \ obsoleto.\n- **Espera na fila** (desde a 2.16.0): enquanto o job está `queued`, `Job.queue` diz\
-    \ por que\n  espera (fila do processador, vez da própria conta ou janela de minutos), a posição, uma\n\
-    \  previsão rotulada como estimativa e se o processador está no ar.\n- Cada usuário tem a própria\
-    \ conta, isolada; não há organização. O painel admin usa uma\n  conta e uma sessão próprias (`adminSessionCookie`),\
-    \ que só alcançam `/api/v1/admin/*`.\n- **Evolução só aditiva.** O cliente ignora propriedades que\
-    \ não conhece e tolera valores\n  de enum novos em respostas. A 2.0.0 é a única quebra sob `/api/v1`\
-    \ (fim da organização);\n  a próxima mudança incompatível vira `/api/v2`.\n- **Servidor MCP em `/mcp`**\
-    \ (fora de `/api/v1`, fora deste documento): Model Context\n  Protocol em HTTP streamable sem estado,\
-    \ com respostas JSON. Aceita só\n  `Authorization: Bearer eclp_…` (PAT pessoal ou de dispositivo);\
-    \ cada ferramenta exige os\n  escopos da operação equivalente desta API, e a recusa por escopo volta\
-    \ como erro de\n  ferramenta que nomeia o escopo. Sem credencial válida, 401 `unauthorized`. Detalhe\
-    \ em\n  `docs/standards/code/server-mcp-e-dispositivos.md`.\n"
+  summary: Contract v1 of the eclume API, the institutional transcription service.
+  description: "Source of truth between the eclume server and its clients: the web frontend, the desktop\n\
+    app and PAT integrations, such as the lumea importer.\n\n**Conventions** (detail in `docs/standards/api/contrato-v1.md`):\n\
+    \n- Everything under `/api/v1`. Dates in RFC 3339 (UTC), durations in milliseconds, ids in UUID.\n\
+    - Listings paginate by opaque cursor: `?cursor=&limit=`, response `{items, next_cursor}`;\n  `next_cursor:\
+    \ null` is the last page.\n- Errors in `application/problem+json` (RFC 9457) with the stable `code`\
+    \ field. Since 2.14.0,\n  any operation may answer 500 `internal_error` (unexpected failure; the detail\
+    \ stays in the\n  server log) and any operation with a body, 413 `payload_too_large` (body above the\
+    \ route's\n  ceiling: 64 KiB on the public credential routes `/auth/*`, `/admin/auth/*` and `/devices/*`,\n\
+    \  the part's bytes on the part `PUT`, 1 MiB everywhere else and on `/mcp`), also without\n  `Content-Length`.\n\
+    - **Per-account quotas** (since 2.15.0): storage, size per file, open uploads, audio\n  minutes and\
+    \ agent requests in 24 h (`GET /me/usage`). Once a quota is exceeded, 403\n  `quota_exceeded` with\
+    \ `quota`, `limit` and `used`; audio minutes never refuse: the\n  recording waits in the queue until\
+    \ the window opens.\n- **Required speaker naming** (since 2.22.0): with `GET`/`PATCH /me/speaker-naming`\
+    \ on,\n  the `speakers` step stays `waiting` while some speaker has no person, and the chain (type,\n\
+    \  fields, collections, summary) waits; `Recording.awaiting` and the `awaiting=speakers`\n  filter\
+    \ show those recordings.\n- **Agent** (since 2.23.0): conversations stored in `/agent/sessions`, with\
+    \ input\n  attachments and generated files to download; the chat over the base (`/base-chat`) is\n\
+    \  deprecated.\n- **Queue wait** (since 2.16.0): while the job is `queued`, `Job.queue` says why it\
+    \ waits\n  (processor queue, the account's own turn or minutes window), the position, a forecast\n\
+    \  labelled as an estimate and whether the processor is up.\n- Each user has their own isolated account;\
+    \ there is no organization. The admin panel uses\n  its own account and session (`adminSessionCookie`),\
+    \ which only reach `/api/v1/admin/*`.\n- **Additive-only evolution.** The client ignores properties\
+    \ it does not know and tolerates\n  new enum values in responses. 2.0.0 is the only break under `/api/v1`\
+    \ (end of the\n  organization); the next incompatible change becomes `/api/v2`.\n- **MCP server at\
+    \ `/mcp`** (outside `/api/v1`, outside this document): stateless streamable\n  HTTP Model Context\
+    \ Protocol, with JSON responses. It accepts only\n  `Authorization: Bearer eclp_…` (personal or device\
+    \ PAT); each tool requires the scopes of\n  the equivalent operation of this API, and a scope refusal\
+    \ comes back as a tool error that\n  names the scope. Without a valid credential, 401 `unauthorized`.\
+    \ Detail in\n  `docs/standards/code/server-mcp-e-dispositivos.md`.\n"
   license:
     name: MIT
     identifier: MIT
 servers:
 - url: https://192.168.15.199:8443
-  description: Produção no host GPU (Caddy com `tls internal`).
+  description: Production on the GPU host (Caddy with `tls internal`).
 - url: http://127.0.0.1:4010
-  description: Mock server (Prism) de `deploy/docker-compose.mock.yml`.
+  description: Mock server (Prism) of `deploy/docker-compose.mock.yml`.
 security:
 - sessionCookie: []
 tags:
 - name: meta
-  description: Saúde e versão do contrato.
+  description: Health and contract version.
 - name: auth
-  description: Sessão do navegador, cadastro com o aviso de consentimento e usuário corrente.
+  description: Browser session, sign-up with the consent notice and current user.
 - name: tokens
-  description: PATs pessoais e credenciais de dispositivo. Só com sessão.
+  description: Personal PATs and device credentials. Session only.
 - name: devices
-  description: 'Ligação do desktop e do celular: login por e-mail e senha ou por código de pareamento,
-    que emitem uma credencial de dispositivo (um token `kind: device`).'
+  description: 'Linking the desktop and the phone: login by e-mail and password or by pairing code, which
+    issue a device credential (a `kind: device` token).'
 - name: uploads
-  description: Upload resumível em partes (multipart S3) com deduplicação por hash.
+  description: Resumable multipart upload (S3 multipart) with hash deduplication.
 - name: recordings
-  description: Gravações e estado do job.
+  description: Recordings and job state.
 - name: transcripts
-  description: Transcrições, export e edição de locutores e segmentos.
+  description: Transcripts, export and editing of speakers and segments.
 - name: people
-  description: Diretório de pessoas do usuário.
+  description: The user's people directory.
 - name: voice
-  description: 'Identificação por voz (LGPD): impressão de voz, recusa de sugestão e atribuição automática
-    de locutores. Só sessão: um PAT nunca lê nem apaga dado biométrico.'
+  description: 'Voice identification (LGPD): voiceprint, suggestion refusal and automatic speaker assignment.
+    Session only: a PAT never reads nor deletes biometric data.'
 - name: search
-  description: Busca full-text sobre segmentos.
+  description: Full-text search over segments.
 - name: organize
-  description: Coleções e tags.
+  description: Collections and tags.
 - name: agenda-types
-  description: 'Tipos de agenda do usuário: como reconhecer a gravação, o título e as tags que ela ganha
-    e as instruções do resumo.'
+  description: 'The user''s agenda types: how to recognize the recording, the title and tags it gets and
+    the summary instructions.'
 - name: fields
-  description: Campos do usuário (título e tags embutidos, mais os próprios) e as regras com que o agente
-    os preenche.
+  description: The user's fields (built-in title and tags, plus their own) and the rules the agent fills
+    them with.
 - name: previews
-  description: Resultado de testar a regra de um campo ou um tipo de agenda em rascunho.
+  description: Result of testing the rule of a field or an agenda type in draft.
 - name: summaries
-  description: Resumos gerados por agente com as instruções de um tipo de agenda.
+  description: Summaries generated by an agent with the instructions of an agenda type.
 - name: base-chat
-  description: 'Perguntas em linguagem natural sobre o conjunto das gravações do usuário. Obsoleto desde
-    a 2.23.0: o Agente (`agent`) faz o mesmo com conversas guardadas e arquivos.'
+  description: 'Natural-language questions about the whole set of the user''s recordings. Deprecated since
+    2.23.0: the Agent (`agent`) does the same with stored conversations and files.'
 - name: agent
-  description: 'O Agente: conversas guardadas por usuário, anexos de entrada (texto extraído) e arquivos
-    que o agente gera para baixar. Desde a 2.24.0, as habilidades da pessoa (instruções reutilizáveis)
-    e as ações no ambiente, que o agente só propõe e a pessoa confirma.'
+  description: 'The Agent: per-user stored conversations, input attachments (extracted text) and files
+    the agent generates to download. Since 2.24.0, the person''s skills (reusable instructions) and the
+    actions on the environment, which the agent only proposes and the person confirms.'
 - name: admin
-  description: Conta de admin, configuração e segredos da plataforma, usuários e saúde. Só a sessão de
-    admin (`adminSessionCookie`); nenhuma credencial de usuário alcança estas rotas.
+  description: Admin account, platform settings and secrets, users and health. Admin session only (`adminSessionCookie`);
+    no user credential reaches these routes.
 paths:
   /api/v1/health:
     get:
       tags:
       - meta
       operationId: getHealth
-      summary: Saúde do serviço e versão do contrato
+      summary: Service health and contract version
       security: []
       responses:
         '200':
-          description: Serviço no ar.
+          description: Service up.
           content:
             application/json:
               schema:
@@ -112,19 +112,19 @@ paths:
       tags:
       - meta
       operationId: getHealthReady
-      summary: Prontidão — Postgres, Redis e MinIO respondem
-      description: 'Desde a 2.13.0. Roda as sondas de Postgres, Redis e armazenamento em paralelo, com
-        teto de
+      summary: Readiness — Postgres, Redis and MinIO answer
+      description: 'Since 2.13.0. Runs the Postgres, Redis and storage probes in parallel, with a ceiling
+        of
 
-        2 s cada. Pública: devolve só o nome e `ok`/`down` de cada uma, sem latência nem mensagem
+        2 s each. Public: returns only the name and `ok`/`down` of each, with no latency nor error
 
-        de erro. `/api/v1/health` segue estático, como sinal de vida.
+        message. `/api/v1/health` stays static, as a liveness signal.
 
         '
       security: []
       responses:
         '200':
-          description: Todas as dependências respondem.
+          description: All dependencies answer.
           content:
             application/json:
               schema:
@@ -133,7 +133,7 @@ paths:
                 pronto:
                   $ref: '#/components/examples/HealthReady'
         '503':
-          description: Alguma dependência não respondeu em 2 s; `checks` diz qual.
+          description: Some dependency did not answer within 2 s; `checks` says which.
           content:
             application/json:
               schema:
@@ -143,12 +143,12 @@ paths:
       tags:
       - auth
       operationId: login
-      summary: Abrir sessão com e-mail e senha
-      description: 'Define os cookies `eclume_session` (HttpOnly, Secure, SameSite=Lax) e `eclume_csrf`
+      summary: Open a session with e-mail and password
+      description: 'Sets the `eclume_session` (HttpOnly, Secure, SameSite=Lax) and `eclume_csrf` cookies
 
-        (legível pelo JavaScript). Toda requisição mutável autenticada por sessão ecoa o valor
+        (readable by JavaScript). Every mutating request authenticated by session echoes the value
 
-        de `eclume_csrf` no header `X-CSRF-Token`.
+        of `eclume_csrf` in the `X-CSRF-Token` header.
 
         '
       security: []
@@ -163,10 +163,10 @@ paths:
                 $ref: '#/components/examples/LoginRequest'
       responses:
         '204':
-          description: Sessão aberta.
+          description: Session opened.
           headers:
             Set-Cookie:
-              description: '`eclume_session` e `eclume_csrf`.'
+              description: '`eclume_session` and `eclume_csrf`.'
               schema:
                 type: string
         '401':
@@ -182,12 +182,12 @@ paths:
       tags:
       - auth
       operationId: logout
-      summary: Encerrar a sessão
+      summary: Close the session
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Sessão encerrada e cookies removidos.
+          description: Session closed and cookies removed.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -197,13 +197,13 @@ paths:
       tags:
       - auth
       operationId: getSignupInfo
-      summary: Estado do cadastro e o aviso em vigor
-      description: Diz se o cadastro está aberto e devolve o texto e a versão do aviso que a conta nova
-        aceita.
+      summary: Sign-up state and the notice in force
+      description: Says whether sign-up is open and returns the text and version of the notice the new
+        account accepts.
       security: []
       responses:
         '200':
-          description: Cadastro.
+          description: Sign-up.
           content:
             application/json:
               schema:
@@ -215,17 +215,17 @@ paths:
       tags:
       - auth
       operationId: signup
-      summary: Criar uma conta e abrir a sessão
-      description: 'Cadastro aberto, sem convite e sem confirmação de e-mail. Exige o aceite do aviso
-        em vigor
+      summary: Create an account and open the session
+      description: 'Open sign-up, with no invitation and no e-mail confirmation. Requires accepting the
+        notice
 
-        (`notice_version` igual à versão de `GET /api/v1/auth/signup`). A conta nasce com os
+        in force (`notice_version` equal to the version of `GET /api/v1/auth/signup`). The account
 
-        tipos de agenda padrão, e a resposta define os cookies de sessão, como o login.
+        is born with the default agenda types, and the response sets the session cookies, like
 
-        Com o cadastro fechado (`ECLUME_SIGNUP_OPEN=false`), 403 `signup_closed`; e-mail já
+        login. With sign-up closed (`ECLUME_SIGNUP_OPEN=false`), 403 `signup_closed`; e-mail
 
-        cadastrado, 409 `email_taken`.
+        already registered, 409 `email_taken`.
 
         '
       security: []
@@ -240,10 +240,10 @@ paths:
                 $ref: '#/components/examples/SignupRequest'
       responses:
         '204':
-          description: Conta criada e sessão aberta.
+          description: Account created and session opened.
           headers:
             Set-Cookie:
-              description: '`eclume_session` e `eclume_csrf`.'
+              description: '`eclume_session` and `eclume_csrf`.'
               schema:
                 type: string
         '403':
@@ -261,15 +261,15 @@ paths:
       tags:
       - auth
       operationId: getMe
-      summary: Usuário e credencial correntes
-      description: Aceita qualquer credencial válida, sem escopo. O lumea usa para mostrar a conta conectada
-        e os escopos do PAT.
+      summary: Current user and credential
+      description: Accepts any valid credential, with no scope. lumea uses it to show the connected account
+        and the PAT's scopes.
       security:
       - sessionCookie: []
       - pat: []
       responses:
         '200':
-          description: Usuário corrente.
+          description: Current user.
           content:
             application/json:
               schema:
@@ -284,13 +284,12 @@ paths:
       tags:
       - auth
       operationId: getMyUsage
-      summary: Uso e cotas da conta
-      description: 'Desde a 2.15.0. O uso corrente da conta e a cota efetiva (a sobreposição da conta
-        pelo
+      summary: Account usage and quotas
+      description: 'Since 2.15.0. The account''s current usage and the effective quota (the admin''s per-account
 
-        admin sobre o padrão da plataforma; `null` é sem limite). Minutos de áudio e pedidos ao
+        override over the platform default; `null` is unlimited). Audio minutes and agent
 
-        agente contam numa janela móvel de 24 h. Aceita qualquer credencial válida, sem escopo.
+        requests count in a rolling 24 h window. Accepts any valid credential, with no scope.
 
         '
       security:
@@ -298,7 +297,7 @@ paths:
       - pat: []
       responses:
         '200':
-          description: Uso e cotas.
+          description: Usage and quotas.
           content:
             application/json:
               schema:
@@ -313,17 +312,17 @@ paths:
       tags:
       - auth
       operationId: changePassword
-      summary: Trocar a própria senha
-      description: 'Confere a senha atual (errada: 422 em `current_password`) e grava a nova, que segue
-        a regra
+      summary: Change one's own password
+      description: 'Checks the current password (wrong: 422 on `current_password`) and stores the new
+        one, which
 
-        do cadastro (curta: 422 em `new_password`). As outras sessões da conta acabam e esta
+        follows the sign-up rule (too short: 422 on `new_password`). The account''s other sessions
 
-        continua. Com `revoke_tokens: true` (desde a 2.14.0), as credenciais de aparelho e os PATs
+        end and this one continues. With `revoke_tokens: true` (since 2.14.0), the account''s device
 
-        da conta também são revogados; ausente ou `false`, continuam valendo. Só pela sessão do
+        credentials and PATs are also revoked; absent or `false`, they stay valid. Only through the
 
-        usuário, com o limite de tentativas das credenciais.
+        user''s session, with the credentials'' attempt limit.
 
         '
       security:
@@ -338,7 +337,7 @@ paths:
               $ref: '#/components/schemas/PasswordChange'
       responses:
         '204':
-          description: Senha trocada.
+          description: Password changed.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -352,14 +351,15 @@ paths:
       tags:
       - auth
       operationId: deleteAccount
-      summary: Excluir a própria conta
-      description: 'Confere a senha (errada: 422 em `password`) e apaga a conta com tudo o que é dela:
+      summary: Delete one's own account
+      description: 'Checks the password (wrong: 422 on `password`) and deletes the account with everything
+        it
 
-        gravações e áudios, transcrições, resumos, pessoas e impressões de voz, coleções, tags,
+        owns: recordings and audio, transcripts, summaries, people and voiceprints, collections,
 
-        campos, tipos de agenda, tokens e aparelhos. Não há como desfazer. A resposta apaga os
+        tags, fields, agenda types, tokens and devices. It cannot be undone. The response clears
 
-        cookies da sessão. Só pela sessão do usuário, com o limite de tentativas das credenciais.
+        the session cookies. Only through the user''s session, with the credentials'' attempt limit.
 
         '
       security:
@@ -374,7 +374,7 @@ paths:
               $ref: '#/components/schemas/AccountDeletion'
       responses:
         '204':
-          description: Conta excluída; a sessão acabou.
+          description: Account deleted; the session ended.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -388,9 +388,9 @@ paths:
       tags:
       - auth
       operationId: acceptNotice
-      summary: Aceitar o aviso de consentimento em vigor
-      description: Registra o aceite do aviso pela conta corrente, o que zera `notice_required` em `GET
-        /api/v1/me`. Uma versão diferente da em vigor é 422. Só sessão.
+      summary: Accept the consent notice in force
+      description: Records the current account's acceptance of the notice, which clears `notice_required`
+        in `GET /api/v1/me`. A version other than the one in force is 422. Session only.
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       requestBody:
@@ -404,7 +404,7 @@ paths:
                 $ref: '#/components/examples/NoticeAcceptRequest'
       responses:
         '204':
-          description: Aceite registrado.
+          description: Acceptance recorded.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -416,13 +416,13 @@ paths:
       tags:
       - voice
       operationId: getVoiceAssignment
-      summary: Ler a atribuição automática de locutores da conta
-      description: 'Preferência da conta: ligar sozinho o locutor à pessoa pela voz, e a pontuação mínima
-        para isso. `platform_enabled` é o liga-desliga da plataforma (`voice_identification.enabled`):
-        desligado, a preferência não tem efeito. Só sessão.'
+      summary: Read the account's automatic speaker assignment
+      description: 'The account''s preference: link the speaker to the person by voice on its own, and
+        the minimum score for that. `platform_enabled` is the platform''s on/off switch (`voice_identification.enabled`):
+        when off, the preference has no effect. Session only.'
       responses:
         '200':
-          description: Preferência corrente.
+          description: Current preference.
           content:
             application/json:
               schema:
@@ -438,11 +438,11 @@ paths:
       tags:
       - voice
       operationId: updateVoiceAssignment
-      summary: Mudar a atribuição automática de locutores da conta
-      description: 'Os campos enviados mudam e os demais ficam. Vale para as próximas transcrições: os
-        vínculos que já existem não mudam. Só sessão. `threshold` fora de 0,50 a 0,99 é 422; o padrão
-        é 0,75. Desde a 2.19.0, `keep_samples: false` apaga na hora as amostras, os vetores por gravação
-        e as sugestões pendentes da conta.'
+      summary: Change the account's automatic speaker assignment
+      description: 'The fields sent change and the others stay. It applies to the next transcriptions:
+        the links that already exist do not change. Session only. `threshold` outside 0.50 to 0.99 is
+        422; the default is 0.75. Since 2.19.0, `keep_samples: false` immediately deletes the account''s
+        samples, per-recording vectors and pending suggestions.'
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       requestBody:
@@ -456,7 +456,7 @@ paths:
                 $ref: '#/components/examples/VoiceAssignmentPatchRequest'
       responses:
         '200':
-          description: Preferência resultante.
+          description: Resulting preference.
           content:
             application/json:
               schema:
@@ -475,17 +475,17 @@ paths:
       tags:
       - recordings
       operationId: getTranscriptionPreference
-      summary: Ler o idioma de transcrição preferido da conta
-      description: 'Desde a 2.20.0. O idioma preferido da conta (`null` é o padrão do servidor) e o padrão
-        do servidor (`platform_default`), para os clientes nomearem o idioma real. O idioma de um job
-        sai, nesta ordem: o do arquivo, o da conta, o do servidor, `pt`. Sessão ou PAT com `recordings:read`.'
+      summary: Read the account's preferred transcription language
+      description: 'Since 2.20.0. The account''s preferred language (`null` is the server default) and
+        the server default (`platform_default`), so clients can name the actual language. A job''s language
+        comes, in this order, from: the file, the account, the server, `pt`. Session or PAT with `recordings:read`.'
       security:
       - sessionCookie: []
       - pat:
         - recordings:read
       responses:
         '200':
-          description: Preferência corrente.
+          description: Current preference.
           content:
             application/json:
               schema:
@@ -501,9 +501,10 @@ paths:
       tags:
       - recordings
       operationId: updateTranscriptionPreference
-      summary: Mudar o idioma de transcrição preferido da conta
-      description: Desde a 2.20.0. `language` é um idioma, `auto` (a engine detecta) ou `null` (volta
-        ao padrão do servidor). Vale para os próximos jobs; os que já estão na fila não mudam. Só sessão.
+      summary: Change the account's preferred transcription language
+      description: Since 2.20.0. `language` is a language, `auto` (the engine detects) or `null` (back
+        to the server default). It applies to the next jobs; the ones already queued do not change. Session
+        only.
       security:
       - sessionCookie: []
       parameters:
@@ -519,7 +520,7 @@ paths:
                 $ref: '#/components/examples/TranscriptionPreferencePatchRequest'
       responses:
         '200':
-          description: Preferência resultante.
+          description: Resulting preference.
           content:
             application/json:
               schema:
@@ -604,17 +605,17 @@ paths:
       tags:
       - recordings
       operationId: getSpeakerNaming
-      summary: Ler se a conta exige nomear os locutores
-      description: Desde a 2.22.0. `required` diz se a cadeia por agente espera todo locutor (com pelo
-        menos 10 s de fala) ter pessoa; `waiting_count` conta as gravações paradas à espera disso. Sessão
-        ou PAT com `recordings:read`.
+      summary: Read whether the account requires naming the speakers
+      description: Since 2.22.0. `required` says whether the agent chain waits for every speaker (with
+        at least 10 s of speech) to have a person; `waiting_count` counts the recordings stopped waiting
+        for that. Session or PAT with `recordings:read`.
       security:
       - sessionCookie: []
       - pat:
         - recordings:read
       responses:
         '200':
-          description: Preferência corrente.
+          description: Current preference.
           content:
             application/json:
               schema:
@@ -630,10 +631,10 @@ paths:
       tags:
       - recordings
       operationId: updateSpeakerNaming
-      summary: Ligar ou desligar a marcação obrigatória dos locutores
-      description: Desde a 2.22.0. Ligar vale para as próximas transcrições. Desligar solta toda gravação
-        parada da conta (etapa `speakers` `skipped` com `reason` `naming_not_required`) e a cadeia segue.
-        Só sessão.
+      summary: Turn required speaker naming on or off
+      description: Since 2.22.0. Turning it on applies to the next transcriptions. Turning it off releases
+        every stopped recording of the account (`speakers` step `skipped` with `reason` `naming_not_required`)
+        and the chain goes on. Session only.
       security:
       - sessionCookie: []
       parameters:
@@ -649,7 +650,7 @@ paths:
                 $ref: '#/components/examples/SpeakerNamingPatchRequest'
       responses:
         '200':
-          description: Preferência resultante.
+          description: Resulting preference.
           content:
             application/json:
               schema:
@@ -668,21 +669,22 @@ paths:
       tags:
       - organize
       operationId: getTagAssignment
-      summary: Como o agente atribui as tags
-      description: 'O automático e a regra do campo embutido Tags, o modo (`fixed`: só as tags cadastradas;
+      summary: How the agent assigns tags
+      description: 'The automatic switch and the rule of the built-in Tags field, the mode (`fixed`: only
+        the
 
-        `auto`: o agente pode criar até `new_limit` tags novas por gravação, sempre preferindo
+        registered tags; `auto`: the agent may create up to `new_limit` new tags per recording,
 
-        reusar, enquanto o cadastro tiver menos que `catalog_limit`) e o tamanho do cadastro. Só
+        always preferring to reuse, while the catalog has fewer than `catalog_limit`) and the
 
-        pela sessão do usuário.
+        catalog size. Only through the user''s session.
 
         '
       security:
       - sessionCookie: []
       responses:
         '200':
-          description: A configuração da conta.
+          description: The account's settings.
           content:
             application/json:
               schema:
@@ -698,8 +700,8 @@ paths:
       tags:
       - organize
       operationId: updateTagAssignment
-      summary: Mudar como o agente atribui as tags
-      description: Os campos enviados mudam, os demais ficam; vale para as próximas transcrições.
+      summary: Change how the agent assigns tags
+      description: The fields sent change, the others stay; it applies to the next transcriptions.
       security:
       - sessionCookie: []
       parameters:
@@ -712,7 +714,7 @@ paths:
               $ref: '#/components/schemas/TagAssignmentPatch'
       responses:
         '200':
-          description: A configuração atualizada.
+          description: The updated settings.
           content:
             application/json:
               schema:
@@ -728,20 +730,20 @@ paths:
       tags:
       - tokens
       operationId: listTokens
-      summary: Listar os tokens do usuário
-      description: PATs pessoais e credenciais de dispositivo. `?kind=device` é a lista de "App móvel"
-        e "App desktop"; `?kind=personal`, a de "Tokens de acesso".
+      summary: List the user's tokens
+      description: Personal PATs and device credentials. `?kind=device` is the list of the mobile app
+        and the desktop app; `?kind=personal`, the one of the access tokens.
       parameters:
       - $ref: '#/components/parameters/Cursor'
       - $ref: '#/components/parameters/Limit'
       - name: kind
         in: query
-        description: Só os tokens deste tipo.
+        description: Only the tokens of this kind.
         schema:
           $ref: '#/components/schemas/TokenKind'
       responses:
         '200':
-          description: Tokens, inclusive revogados, do mais novo para o mais antigo.
+          description: Tokens, revoked ones included, from newest to oldest.
           content:
             application/json:
               schema:
@@ -757,10 +759,10 @@ paths:
       tags:
       - tokens
       operationId: createToken
-      summary: Criar um PAT
-      description: 'O segredo (`eclp_...`) volta só nesta resposta; o servidor guarda apenas o hash. Cria
-        sempre `kind: personal`: a credencial de dispositivo só nasce de `POST /devices/login` ou `POST
-        /devices/pair`.'
+      summary: Create a PAT
+      description: 'The secret (`eclp_...`) comes back only in this response; the server keeps only the
+        hash. It always creates `kind: personal`: a device credential is only born from `POST /devices/login`
+        or `POST /devices/pair`.'
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       requestBody:
@@ -774,7 +776,7 @@ paths:
                 $ref: '#/components/examples/TokenCreateRequest'
       responses:
         '201':
-          description: PAT criado.
+          description: PAT created.
           content:
             application/json:
               schema:
@@ -795,13 +797,13 @@ paths:
       tags:
       - tokens
       operationId: revokeToken
-      summary: Revogar um token
-      description: Vale para PAT e credencial de dispositivo ("Desvincular" desliga o aparelho).
+      summary: Revoke a token
+      description: Applies to a PAT and to a device credential (unlinking turns the device off).
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Revogado. Usos seguintes recebem 401.
+          description: Revoked. Later uses get 401.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -813,19 +815,19 @@ paths:
       tags:
       - meta
       operationId: getServerInfo
-      summary: Descritor público do servidor
-      description: 'Nome, endereço, endereço MCP, impressão digital da CA raiz e versões. É a fonte do
-        anúncio
+      summary: Public server descriptor
+      description: 'Name, address, MCP address, root CA fingerprint and versions. It is the source of
+        the mDNS
 
-        mDNS, do link do QR, do pareamento e do endereço embutido no instalador: o app confirma
+        announcement, the QR link, pairing and the address embedded in the installer: the app
 
-        aqui o que recebeu e fixa a CA pela impressão digital (`ca_sha256`).
+        confirms here what it received and pins the CA by its fingerprint (`ca_sha256`).
 
         '
       security: []
       responses:
         '200':
-          description: Descritor.
+          description: Descriptor.
           content:
             application/json:
               schema:
@@ -838,25 +840,25 @@ paths:
       tags:
       - meta
       operationId: getPrivacyInfo
-      summary: Para onde vai cada dado, conforme a configuração em vigor
-      description: 'Desde a 2.19.0. Diz, para a transcrição e para cada finalidade de agente, se o dado
-        é
+      summary: Where each piece of data goes, per the settings in force
+      description: 'Since 2.19.0. Says, for transcription and for each agent purpose, whether the data
+        is
 
-        processado neste servidor, na rede local ou fora dele, com o nome de quem processa quando
+        processed on this server, on the local network or outside it, with the name of who
 
-        sai. Pública como `GET /server`, porque quem se cadastra precisa saber antes de aceitar o
+        processes it when it leaves. Public like `GET /server`, because whoever signs up needs to
 
-        aviso; nunca devolve endereço, modelo, chave nem o nome que o admin deu ao provider. A
+        know before accepting the notice; it never returns the address, model, key nor the name
 
-        configuração muda em runtime: o cliente não guarda a resposta por tempo indeterminado.
+        the admin gave the provider. The settings change at runtime: the client does not keep the
 
-        O áudio e a transcrição ficam sempre guardados neste servidor.
+        response indefinitely. The audio and the transcript are always stored on this server.
 
         '
       security: []
       responses:
         '200':
-          description: Destinos em vigor.
+          description: Destinations in force.
           content:
             application/json:
               schema:
@@ -869,17 +871,17 @@ paths:
       tags:
       - auth
       operationId: checkPasswordReset
-      summary: Conferir um link de redefinição de senha
-      description: 'Desde a 2.18.0. A página `/redefinir-senha` lê o segredo do fragmento da URL e o manda
-        no
+      summary: Check a password reset link
+      description: 'Since 2.18.0. The `/redefinir-senha` page reads the secret from the URL fragment and
+        sends
 
-        corpo; a resposta diz o e-mail da conta e até quando o link vale, sem consumir o link.
+        it in the body; the response gives the account''s e-mail and until when the link is valid,
 
-        Link inexistente, vencido, já usado, vencido por um mais novo ou de conta desativada,
+        without consuming the link. A link that does not exist, expired, was already used, was
 
-        401 `invalid_reset_link`; tentativas demais do mesmo IP, 429 `rate_limited` com
+        superseded by a newer one or belongs to a deactivated account, 401 `invalid_reset_link`;
 
-        `Retry-After`.
+        too many attempts from the same IP, 429 `rate_limited` with `Retry-After`.
 
         '
       security: []
@@ -891,7 +893,7 @@ paths:
               $ref: '#/components/schemas/PasswordResetCheck'
       responses:
         '200':
-          description: Link válido.
+          description: Valid link.
           content:
             application/json:
               schema:
@@ -912,16 +914,17 @@ paths:
       tags:
       - auth
       operationId: resetPassword
-      summary: Redefinir a senha por um link gerado pelo admin
-      description: 'Desde a 2.18.0. Troca a senha da conta do link (ao menos 12 caracteres, como no cadastro),
+      summary: Reset the password through a link generated by the admin
+      description: 'Since 2.18.0. Changes the password of the link''s account (at least 12 characters,
+        as at
 
-        marca o link como usado e encerra todas as sessões da conta, sem abrir outra: a pessoa
+        sign-up), marks the link as used and closes every session of the account, without opening
 
-        entra de novo com a senha nova. Credenciais de aparelho e PATs seguem valendo. Link
+        another: the person logs in again with the new password. Device credentials and PATs stay
 
-        inválido, 401 `invalid_reset_link`, como em `POST /auth/password-reset/check`; senha
+        valid. Invalid link, 401 `invalid_reset_link`, as in `POST /auth/password-reset/check`;
 
-        curta, 422 `validation_failed` sem consumir o link.
+        short password, 422 `validation_failed` without consuming the link.
 
         '
       security: []
@@ -933,7 +936,7 @@ paths:
               $ref: '#/components/schemas/PasswordReset'
       responses:
         '204':
-          description: Senha redefinida e sessões da conta encerradas.
+          description: Password reset and the account's sessions closed.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '422':
@@ -947,25 +950,24 @@ paths:
       tags:
       - devices
       operationId: deviceLogin
-      summary: Entrar num aparelho com e-mail e senha
-      description: 'Confere a senha como o login do navegador e emite uma credencial de dispositivo: um
-        token
+      summary: Log in on a device with e-mail and password
+      description: 'Checks the password like the browser login and issues a device credential: a
 
-        `kind: device` com `recordings:read`, `recordings:write`, desde a 2.6.0 `summaries:read`
+        `kind: device` token with `recordings:read`, `recordings:write`, since 2.6.0
 
-        (o aviso de resumo pronto do app, com "Copiar") e, desde a 2.8.0, `transcripts:read` (a
+        `summaries:read` (the app''s summary-ready notice, with Copy) and, since 2.8.0,
 
-        pasta sincronizada do desktop lê transcrições), sem validade e revogável
+        `transcripts:read` (the desktop synced folder reads transcripts), with no expiry and
 
-        em `DELETE /api/v1/tokens/{token_id}`. O segredo volta só nesta resposta. Senha errada ou
+        revocable at `DELETE /api/v1/tokens/{token_id}`. The secret comes back only in this
 
-        conta inativa, 401 com a mesma mensagem do login; conta que ainda não aceitou o aviso em
+        response. Wrong password or inactive account, 401 with the same message as login; an
 
-        vigor, 403 `notice_required` (aceite na web e entre de novo); tentativas demais do mesmo
+        account that has not yet accepted the notice in force, 403 `notice_required` (accept it on
 
-        IP ou para a mesma conta (a janela da conta é comum com `POST /auth/login`), 429
+        the web and log in again); too many attempts from the same IP or for the same account (the
 
-        `rate_limited` com `Retry-After`.
+        account window is shared with `POST /auth/login`), 429 `rate_limited` with `Retry-After`.
 
         '
       security: []
@@ -980,7 +982,7 @@ paths:
                 $ref: '#/components/examples/DeviceLoginRequest'
       responses:
         '201':
-          description: Credencial de dispositivo emitida.
+          description: Device credential issued.
           content:
             application/json:
               schema:
@@ -1003,20 +1005,20 @@ paths:
       tags:
       - devices
       operationId: createPairingCode
-      summary: Gerar um código de pareamento
-      description: 'Código de 6 caracteres (`K7Q-4MX`), válido por 10 minutos e de uso único, que o app
-        troca
+      summary: Generate a pairing code
+      description: 'A 6-character code (`K7Q-4MX`), valid for 10 minutes and single use, that the app
+        exchanges
 
-        por uma credencial de dispositivo em `POST /api/v1/devices/pair`. `pair_url` é o conteúdo
+        for a device credential at `POST /api/v1/devices/pair`. `pair_url` is the content of the
 
-        do QR que o celular lê. Um código novo vence os anteriores ainda não usados. Só sessão.
+        QR the phone reads. A new code expires the earlier ones not yet used. Session only.
 
         '
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '201':
-          description: Código gerado; `code`, `display` e `pair_url` só voltam aqui.
+          description: Code generated; `code`, `display` and `pair_url` only come back here.
           content:
             application/json:
               schema:
@@ -1035,12 +1037,12 @@ paths:
       tags:
       - devices
       operationId: getPairingCode
-      summary: Estado de um código de pareamento
-      description: A web consulta para trocar o QR por "Pareado" e mostrar o aparelho (`token_id`). Só
-        sessão.
+      summary: State of a pairing code
+      description: The web polls it to replace the QR with "Paired" and show the device (`token_id`).
+        Session only.
       responses:
         '200':
-          description: Estado do código, sem o código.
+          description: State of the code, without the code.
           content:
             application/json:
               schema:
@@ -1059,14 +1061,16 @@ paths:
       tags:
       - devices
       operationId: pairDevice
-      summary: Trocar um código de pareamento por uma credencial de dispositivo
-      description: 'O código aceita maiúsculas ou minúsculas, com ou sem hífen. Emite a credencial de
+      summary: Exchange a pairing code for a device credential
+      description: 'The code accepts upper or lower case, with or without the hyphen. Issues the device
 
-        dispositivo do dono do código, como `POST /api/v1/devices/login`. Código inexistente,
+        credential of the code''s owner, like `POST /api/v1/devices/login`. A code that does not
 
-        vencido ou já usado, 401 `invalid_pairing_code`; tentativas demais do mesmo IP (ou,
+        exist, expired or was already used, 401 `invalid_pairing_code`; too many attempts from the
 
-        somando todos os IPs, seis vezes esse limite), 429 `rate_limited` com `Retry-After`.
+        same IP (or, adding up all IPs, six times that limit), 429 `rate_limited` with
+
+        `Retry-After`.
 
         '
       security: []
@@ -1081,7 +1085,7 @@ paths:
                 $ref: '#/components/examples/DevicePairRequest'
       responses:
         '201':
-          description: Credencial de dispositivo emitida.
+          description: Device credential issued.
           content:
             application/json:
               schema:
@@ -1099,30 +1103,31 @@ paths:
       tags:
       - uploads
       operationId: createUpload
-      summary: Iniciar um upload (ou deduplicar)
-      description: 'O cliente calcula o `sha256` do arquivo antes de subir. Se o usuário já tem uma gravação
+      summary: Start an upload (or deduplicate)
+      description: 'The client computes the file''s `sha256` before uploading. If the user already has
+        a
 
-        com o mesmo hash, a resposta é **200** com `status: deduplicated` e o `recording_id`
+        recording with the same hash, the response is **200** with `status: deduplicated` and the
 
-        existente, e nada é transferido. Caso contrário, **201** com o upload, o `part_size`
+        existing `recording_id`, and nothing is transferred. Otherwise, **201** with the upload,
 
-        fixado pelo servidor e as URLs das primeiras partes.
-
-
-        Desde a 2.15.0, um upload novo que passa das cotas da conta (tamanho por arquivo,
-
-        armazenamento total ou uploads abertos) responde **403** `quota_exceeded`, com `quota`,
-
-        `limit` e `used`, antes de qualquer byte subir. Deduplicar e retomar não passam pela cota.
+        the `part_size` fixed by the server and the URLs of the first parts.
 
 
-        Partes: todas com `part_size` bytes, exceto a última; no máximo 10 000. Cada parte vai
+        Since 2.15.0, a new upload that exceeds the account''s quotas (size per file, total storage
 
-        por `PUT` na `url` da parte, com os `headers` indicados; o `ETag` da resposta é guardado
+        or open uploads) answers **403** `quota_exceeded`, with `quota`, `limit` and `used`,
 
-        para o `complete`. A URL é opaca (MinIO pré-assinado ou o próprio
+        before any byte is uploaded. Deduplicating and resuming do not go through the quota.
 
-        `PUT /api/v1/uploads/{upload_id}/parts/{part_number}`) e expira em `expires_at`.
+
+        Parts: all of `part_size` bytes, except the last; at most 10,000. Each part goes by `PUT`
+
+        to the part''s `url`, with the given `headers`; the response''s `ETag` is kept for the
+
+        `complete`. The URL is opaque (MinIO presigned or the API''s own
+
+        `PUT /api/v1/uploads/{upload_id}/parts/{part_number}`) and expires at `expires_at`.
 
         '
       security:
@@ -1144,7 +1149,7 @@ paths:
                 $ref: '#/components/examples/UploadCreateMobile'
       responses:
         '200':
-          description: Deduplicado. Já existe gravação com este hash.
+          description: Deduplicated. A recording with this hash already exists.
           content:
             application/json:
               schema:
@@ -1153,7 +1158,7 @@ paths:
                 deduplicado:
                   $ref: '#/components/examples/UploadDeduplicated'
         '201':
-          description: Upload criado.
+          description: Upload created.
           content:
             application/json:
               schema:
@@ -1174,9 +1179,9 @@ paths:
       tags:
       - uploads
       operationId: getUpload
-      summary: Estado do upload, para retomar
-      description: '`parts_received` lista as partes que o armazenamento já confirmou; o cliente sobe
-        só as que faltam.'
+      summary: Upload state, to resume
+      description: '`parts_received` lists the parts the storage has already confirmed; the client uploads
+        only the missing ones.'
       security:
       - sessionCookie: []
       - pat:
@@ -1201,7 +1206,7 @@ paths:
       tags:
       - uploads
       operationId: abortUpload
-      summary: Abortar o upload e descartar as partes
+      summary: Abort the upload and discard the parts
       security:
       - sessionCookie: []
       - pat:
@@ -1210,7 +1215,7 @@ paths:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Abortado.
+          description: Aborted.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1224,9 +1229,8 @@ paths:
       tags:
       - uploads
       operationId: createPartUrls
-      summary: Pedir URLs para partes
-      description: URLs novas para as partes indicadas, inclusive para substituir URLs expiradas numa
-        retomada.
+      summary: Request URLs for parts
+      description: New URLs for the given parts, including to replace expired URLs on a resume.
       security:
       - sessionCookie: []
       - pat:
@@ -1244,7 +1248,7 @@ paths:
                 $ref: '#/components/examples/PartUrlsRequest'
       responses:
         '200':
-          description: URLs das partes pedidas.
+          description: URLs of the requested parts.
           content:
             application/json:
               schema:
@@ -1276,15 +1280,15 @@ paths:
       tags:
       - uploads
       operationId: putUploadPart
-      summary: Enviar uma parte pela API
-      description: 'Variante da URL de parte servida pela própria API, com a mesma semântica do `PUT`
-        num
+      summary: Upload a part through the API
+      description: 'Variant of the part URL served by the API itself, with the same semantics as the `PUT`
+        to
 
-        URL pré-assinado do S3. O cliente não monta este caminho: usa a `url` que recebeu.
+        an S3 presigned URL. The client does not build this path: it uses the `url` it received.
 
-        `Content-Length` diferente do tamanho da parte é 409; sem o cabeçalho, o corpo é lido em
+        A `Content-Length` other than the part size is 409; without the header, the body is read
 
-        pedaços e passar do tamanho da parte é 413 `payload_too_large` (desde a 2.14.0).
+        in chunks and going past the part size is 413 `payload_too_large` (since 2.14.0).
 
         '
       security:
@@ -1300,10 +1304,10 @@ paths:
               contentMediaType: application/octet-stream
       responses:
         '200':
-          description: Parte gravada.
+          description: Part stored.
           headers:
             ETag:
-              description: Identificador da parte, a devolver no `complete`.
+              description: Identifier of the part, to return in the `complete`.
               required: true
               schema:
                 type: string
@@ -1326,17 +1330,19 @@ paths:
       tags:
       - uploads
       operationId: completeUpload
-      summary: Concluir o upload e enfileirar a transcrição
-      description: 'Monta o objeto a partir das partes, cria a gravação e enfileira o job. O servidor
-        confere
+      summary: Complete the upload and queue the transcription
+      description: 'Assembles the object from the parts, creates the recording and queues the job. The
+        server
 
-        o `sha256` declarado; divergência vira falha do job com `error.code: hash_mismatch`.
+        checks the declared `sha256`; a mismatch becomes a job failure with
 
-        Repetir o `complete` de um upload já concluído devolve a mesma gravação. Desde a 2.14.0,
+        `error.code: hash_mismatch`. Repeating the `complete` of an already completed upload
 
-        outro `complete` do mesmo upload em andamento (o servidor montando o objeto e conferindo o
+        returns the same recording. Since 2.14.0, another `complete` of the same upload while one
 
-        hash) responde 409 `upload_completing` com `Retry-After`: é passageiro, tente de novo.
+        is in progress (the server assembling the object and checking the hash) answers 409
+
+        `upload_completing` with `Retry-After`: it is transient, try again.
 
         '
       security:
@@ -1356,7 +1362,7 @@ paths:
                 $ref: '#/components/examples/UploadCompleteRequest'
       responses:
         '201':
-          description: Gravação criada, job na fila.
+          description: Recording created, job queued.
           content:
             application/json:
               schema:
@@ -1371,12 +1377,12 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 'O upload expirou (`code: upload_expired`), não está mais aberto (`code: conflict`)
-            ou outro `complete` dele está em andamento (`code: upload_completing`, desde a 2.14.0, com
+          description: 'The upload expired (`code: upload_expired`), is no longer open (`code: conflict`)
+            or another `complete` of it is in progress (`code: upload_completing`, since 2.14.0, with
             `Retry-After`).'
           headers:
             Retry-After:
-              description: Com `upload_completing`, segundos até tentar de novo.
+              description: With `upload_completing`, seconds until trying again.
               schema:
                 type: integer
                 minimum: 1
