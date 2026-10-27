@@ -2276,12 +2276,12 @@ paths:
       tags:
       - transcripts
       operationId: listTranscripts
-      summary: Listar transcrições (incremental)
-      description: 'Transcrições concluídas do usuário, em ordem crescente de `(updated_at, id)`.
+      summary: List transcripts (incremental)
+      description: 'The user''s completed transcripts, in ascending `(updated_at, id)` order.
 
-        `since` é inclusivo (`updated_at >= since`): o cliente guarda o maior `updated_at` que
+        `since` is inclusive (`updated_at >= since`): the client keeps the largest `updated_at` it
 
-        viu e deduplica por `id` + `revision`.
+        has seen and deduplicates by `id` + `revision`.
 
         '
       security:
@@ -2295,13 +2295,13 @@ paths:
       - $ref: '#/components/parameters/PersonFilter'
       - name: recording_id
         in: query
-        description: Transcrição de uma gravação específica.
+        description: The transcript of one specific recording.
         schema:
           type: string
           format: uuid
       responses:
         '200':
-          description: Transcrições.
+          description: Transcripts.
           content:
             application/json:
               schema:
@@ -2322,7 +2322,7 @@ paths:
       tags:
       - transcripts
       operationId: getTranscript
-      summary: Transcrição completa
+      summary: Full transcript
       security:
       - sessionCookie: []
       - pat:
@@ -2330,14 +2330,14 @@ paths:
       parameters:
       - name: include
         in: query
-        description: '`words` inclui as palavras com tempo em cada segmento.'
+        description: '`words` includes the timed words in each segment.'
         schema:
           type: string
           enum:
           - words
       responses:
         '200':
-          description: Transcrição, no schema de `contracts/transcript.schema.json`.
+          description: Transcript, in the schema of `contracts/transcript.schema.json`.
           content:
             application/json:
               schema:
@@ -2358,12 +2358,12 @@ paths:
       tags:
       - transcripts
       operationId: exportTranscript
-      summary: Exportar a transcrição
-      description: '`md`: frontmatter YAML (`id`, `title`, `recorded_at`, `language`, `duration_ms`,
+      summary: Export the transcript
+      description: '`md`: YAML frontmatter (`id`, `title`, `recorded_at`, `language`, `duration_ms`,
 
-        `source`, `revision`, `speakers`) e uma linha por segmento, `**Nome** [HH:MM:SS]: texto`,
+        `source`, `revision`, `speakers`) and one line per segment, `**Name** [HH:MM:SS]: text`,
 
-        separadas por linha em branco. O nome é o da pessoa ligada ou, sem pessoa, o `label`.
+        separated by a blank line. The name is that of the linked person or, with no person, the `label`.
 
         '
       security:
@@ -2374,14 +2374,14 @@ paths:
       - name: format
         in: query
         required: true
-        description: Formato do export. Formatos novos entram de forma aditiva.
+        description: Export format. New formats are added additively.
         schema:
           type: string
           enum:
           - md
       responses:
         '200':
-          description: Arquivo exportado.
+          description: Exported file.
           headers:
             Content-Disposition:
               schema:
@@ -2414,17 +2414,17 @@ paths:
       tags:
       - transcripts
       operationId: updateSpeaker
-      summary: Renomear o locutor ou ligá-lo a uma pessoa
-      description: '`person_id` liga o locutor a uma pessoa (confirmando, se for o caso, uma sugestão
-        por
+      summary: Rename the speaker or link it to a person
+      description: '`person_id` links the speaker to a person (confirming, where it applies, a voice
 
-        voz); `null` desfaz o vínculo. Ligar uma pessoa sem mandar `label` passa o `label` para
+        suggestion); `null` undoes the link. Linking a person without sending `label` sets the `label`
+        to
 
-        o nome da pessoa. Sobe a `revision`. Desde a 2.22.0, ligar a última pessoa que faltava a
+        the person''s name. Bumps the `revision`. Since 2.22.0, linking the last missing person to
 
-        uma gravação parada à espera dos nomes (etapa `speakers` `waiting`) a solta, e a cadeia
+        a recording stopped waiting for the names (stage `speakers` `waiting`) releases it, and the chain
 
-        segue sozinha.
+        goes on by itself.
 
         '
       security:
@@ -2444,7 +2444,7 @@ paths:
                 $ref: '#/components/examples/SpeakerPatchRequest'
       responses:
         '200':
-          description: Locutor atualizado.
+          description: Speaker updated.
           content:
             application/json:
               schema:
@@ -2474,19 +2474,20 @@ paths:
       tags:
       - voice
       operationId: rejectSpeakerSuggestion
-      summary: Recusar uma sugestão por voz
-      description: 'A pessoa deixa de ser sugerida para este locutor e nunca volta a ser, nem numa
+      summary: Reject a voice suggestion
+      description: 'The person stops being suggested for this speaker and never is again, not even in
+        a
 
-        comparação futura da mesma transcrição. Só o dono da gravação. Sobe a `revision`.
+        future comparison of the same transcript. Recording owner only. Bumps the `revision`.
 
-        Aceitar é o `PATCH` do locutor com `person_id`.
+        Accepting is the speaker''s `PATCH` with `person_id`.
 
         '
       parameters:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '200':
-          description: Locutor sem a sugestão recusada.
+          description: Speaker without the rejected suggestion.
           content:
             application/json:
               schema:
@@ -2507,10 +2508,10 @@ paths:
       tags:
       - transcripts
       operationId: mergeSpeakers
-      summary: Mesclar locutores
-      description: Os segmentos dos locutores de origem passam ao locutor de destino, e os de origem somem.
-        Sobe a `revision`. Desde a 2.22.0, se nenhum locutor ficou sem pessoa, solta a gravação parada
-        à espera dos nomes, como `updateSpeaker`.
+      summary: Merge speakers
+      description: The segments of the source speakers move to the target speaker, and the source ones
+        disappear. Bumps the `revision`. Since 2.22.0, if no speaker is left without a person, releases
+        the recording stopped waiting for the names, like `updateSpeaker`.
       security:
       - sessionCookie: []
       - pat:
@@ -2528,7 +2529,7 @@ paths:
                 $ref: '#/components/examples/SpeakerMergeRequest'
       responses:
         '200':
-          description: Transcrição depois da mesclagem.
+          description: Transcript after the merge.
           content:
             application/json:
               schema:
@@ -2553,8 +2554,8 @@ paths:
       tags:
       - transcripts
       operationId: updateSegment
-      summary: Corrigir o texto ou o locutor de um segmento
-      description: Corrigir o texto descarta as `words` do segmento. Sobe a `revision`.
+      summary: Correct the text or the speaker of a segment
+      description: Correcting the text discards the segment's `words`. Bumps the `revision`.
       security:
       - sessionCookie: []
       - pat:
@@ -2572,7 +2573,7 @@ paths:
                 $ref: '#/components/examples/SegmentPatchRequest'
       responses:
         '200':
-          description: Segmento atualizado.
+          description: Segment updated.
           content:
             application/json:
               schema:
@@ -2592,8 +2593,8 @@ paths:
       tags:
       - summaries
       operationId: listSummaries
-      summary: Resumos da transcrição
-      description: Da maior `version` para a menor; os números podem pular (ver `Summary`).
+      summary: Summaries of the transcript
+      description: From the highest `version` to the lowest; the numbers may skip (see `Summary`).
       security:
       - sessionCookie: []
       - pat:
@@ -2603,7 +2604,7 @@ paths:
       - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: Resumos, da versão mais nova para a mais antiga.
+          description: Summaries, from the newest version to the oldest.
           content:
             application/json:
               schema:
@@ -2623,18 +2624,17 @@ paths:
       tags:
       - summaries
       operationId: createSummary
-      summary: Gerar um resumo com um tipo de agenda
-      description: 'Cada geração é uma nova `version` do resumo daquele tipo de agenda, com as instruções
-        de
+      summary: Generate a summary with an agenda type
+      description: 'Each generation is a new `version` of the summary of that agenda type, with its summary
 
-        resumo dele. Sem `agenda_type_id`, vale o tipo da gravação; sem nenhum dos dois, 422. Sem
+        instructions. Without `agenda_type_id`, the recording''s type applies; with neither, 422. Without
 
-        `provider_id` e sem provider padrão habilitado na plataforma, também 422.
+        `provider_id` and with no default provider enabled on the platform, also 422.
 
 
-        Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h (estourada, 403
+        Since 2.15.0, the request counts against the quota of Agent requests in 24 h (exceeded, 403
 
-        `quota_exceeded`), e a conta tem no máximo 3 resumos na fila ou rodando (além disso, 429
+        `quota_exceeded`), and the account has at most 3 summaries queued or running (beyond that, 429
 
         `rate_limited`).
 
@@ -2656,7 +2656,7 @@ paths:
                 $ref: '#/components/examples/SummaryCreateRequest'
       responses:
         '202':
-          description: Resumo na fila.
+          description: Summary queued.
           content:
             application/json:
               schema:
@@ -2681,14 +2681,14 @@ paths:
       tags:
       - summaries
       operationId: getSummary
-      summary: Um resumo
+      summary: One summary
       security:
       - sessionCookie: []
       - pat:
         - summaries:read
       responses:
         '200':
-          description: Resumo.
+          description: Summary.
           content:
             application/json:
               schema:
@@ -2706,7 +2706,7 @@ paths:
       tags:
       - summaries
       operationId: deleteSummary
-      summary: Excluir uma versão de resumo
+      summary: Delete a summary version
       security:
       - sessionCookie: []
       - pat:
@@ -2715,7 +2715,7 @@ paths:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Excluído.
+          description: Deleted.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2734,15 +2734,15 @@ paths:
       tags:
       - summaries
       operationId: getSummaryChatMessage
-      summary: Uma mensagem do chat de ajuste
-      description: O cliente consulta a resposta do agente até `done` ou `failed`.
+      summary: One message of the adjustment chat
+      description: The client polls the Agent's reply until `done` or `failed`.
       security:
       - sessionCookie: []
       - pat:
         - summaries:read
       responses:
         '200':
-          description: Mensagem.
+          description: Message.
           content:
             application/json:
               schema:
@@ -2768,7 +2768,7 @@ paths:
       tags:
       - recordings
       operationId: updateMarker
-      summary: Editar a nota de um marcador
+      summary: Edit the note of a marker
       security:
       - sessionCookie: []
       - pat:
@@ -2783,7 +2783,7 @@ paths:
               $ref: '#/components/schemas/MarkerPatch'
       responses:
         '200':
-          description: Marcador atualizado.
+          description: Marker updated.
           content:
             application/json:
               schema:
@@ -2800,7 +2800,7 @@ paths:
       tags:
       - recordings
       operationId: deleteMarker
-      summary: Excluir um marcador
+      summary: Delete a marker
       security:
       - sessionCookie: []
       - pat:
@@ -2809,7 +2809,7 @@ paths:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Excluído.
+          description: Deleted.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2821,13 +2821,14 @@ paths:
       tags:
       - agenda-types
       operationId: listAgendaTypes
-      summary: Tipos de agenda do usuário
-      description: 'Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma. Desde
-        a
+      summary: The user's agenda types
+      description: 'In list order (`position`). The account starts with the platform''s default types.
+        Since
 
-        2.4.0, basta ao PAT `summaries:read` ou `recordings:read`: a credencial de dispositivo lê a
+        2.4.0, a PAT with `summaries:read` or `recordings:read` is enough: the device credential reads
+        the
 
-        lista para escolher o tipo ao parar a gravação (o resto de `/agenda-types` segue pedindo
+        list to choose the type when stopping the recording (the rest of `/agenda-types` still requires
 
         `summaries:*`).
 
@@ -2843,7 +2844,7 @@ paths:
       - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: Tipos de agenda.
+          description: Agenda types.
           content:
             application/json:
               schema:
@@ -2861,9 +2862,9 @@ paths:
       tags:
       - agenda-types
       operationId: createAgendaType
-      summary: Criar um tipo de agenda
-      description: Sem `position`, o tipo vai para o fim da lista. Nome repetido entre os tipos do usuário
-        é 409.
+      summary: Create an agenda type
+      description: Without `position`, the type goes to the end of the list. A name repeated among the
+        user's types is 409.
       security:
       - sessionCookie: []
       - pat:
@@ -2881,7 +2882,7 @@ paths:
                 $ref: '#/components/examples/AgendaTypeCreateRequest'
       responses:
         '201':
-          description: Tipo criado.
+          description: Type created.
           content:
             application/json:
               schema:
@@ -2899,13 +2900,13 @@ paths:
       tags:
       - agenda-types
       operationId: previewAgendaType
-      summary: Pré-visualizar um tipo de agenda numa gravação
-      description: 'Roda, numa gravação transcrita, a detecção com o rascunho no lugar do tipo salvo de
-        mesmo nome,
+      summary: Preview an agenda type on a recording
+      description: 'Runs, on a transcribed recording, the detection with the draft in place of the saved
+        type of the same name,
 
-        o título e as tags que ele aplicaria e o resumo com as instruções dele, sem gravar nada.
+        the title and the tags it would apply, and the summary with its instructions, without saving anything.
 
-        Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h (estourada, 403
+        Since 2.15.0, the request counts against the quota of Agent requests in 24 h (exceeded, 403
 
         `quota_exceeded`).
 
@@ -2927,7 +2928,7 @@ paths:
                 $ref: '#/components/examples/AgendaTypePreviewRequest'
       responses:
         '202':
-          description: Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`.
+          description: Preview queued; poll `GET /api/v1/previews/{preview_id}`.
           content:
             application/json:
               schema:
@@ -2947,14 +2948,14 @@ paths:
       tags:
       - agenda-types
       operationId: getAgendaType
-      summary: Um tipo de agenda
+      summary: One agenda type
       security:
       - sessionCookie: []
       - pat:
         - summaries:read
       responses:
         '200':
-          description: Tipo de agenda.
+          description: Agenda type.
           content:
             application/json:
               schema:
@@ -2969,11 +2970,11 @@ paths:
       tags:
       - agenda-types
       operationId: updateAgendaType
-      summary: Editar um tipo de agenda
-      description: 'Vale para as próximas detecções e resumos; os resumos já gerados guardam as instruções
-        do
+      summary: Edit an agenda type
+      description: 'Applies to the next detections and summaries; summaries already generated keep the
+        instructions of
 
-        momento. Nome repetido é 422 em `name`.
+        that moment. A repeated name is 422 on `name`.
 
         '
       security:
@@ -2990,7 +2991,7 @@ paths:
               $ref: '#/components/schemas/AgendaTypePatch'
       responses:
         '200':
-          description: Tipo atualizado.
+          description: Type updated.
           content:
             application/json:
               schema:
@@ -3007,10 +3008,11 @@ paths:
       tags:
       - agenda-types
       operationId: deleteAgendaType
-      summary: Excluir um tipo de agenda
-      description: 'As gravações que o usavam passam para o tipo padrão da conta (origem `auto`); os resumos
+      summary: Delete an agenda type
+      description: 'The recordings that used it move to the account''s default type (origin `auto`); the
+        summaries
 
-        ficam. O tipo padrão (`fallback`) não sai: 409 `fallback_agenda_type`.
+        stay. The default type (`fallback`) cannot be removed: 409 `fallback_agenda_type`.
 
         '
       security:
@@ -3021,7 +3023,7 @@ paths:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Excluído.
+          description: Deleted.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -3035,8 +3037,8 @@ paths:
       tags:
       - fields
       operationId: listFields
-      summary: Campos do usuário
-      description: 'Título e tags vêm embutidos em toda conta; os demais são do usuário.
+      summary: The user's fields
+      description: 'Title and tags come built into every account; the others are the user''s.
 
         '
       security:
@@ -3045,7 +3047,7 @@ paths:
         - recordings:read
       responses:
         '200':
-          description: Campos, na ordem da lista.
+          description: Fields, in list order.
           content:
             application/json:
               schema:
@@ -3063,9 +3065,9 @@ paths:
       tags:
       - fields
       operationId: createField
-      summary: Criar um campo
-      description: 'A chave (`key`) sai do nome e não muda depois. Escolha exige `options`; os outros
-        tipos não têm.
+      summary: Create a field
+      description: 'The key (`key`) comes from the name and does not change afterwards. A choice field
+        requires `options`; the other types have none.
 
         '
       security:
@@ -3082,7 +3084,7 @@ paths:
               $ref: '#/components/schemas/FieldCreate'
       responses:
         '201':
-          description: Campo criado.
+          description: Field created.
           content:
             application/json:
               schema:

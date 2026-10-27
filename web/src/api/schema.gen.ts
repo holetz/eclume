@@ -1091,10 +1091,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Listar transcrições (incremental)
-         * @description Transcrições concluídas do usuário, em ordem crescente de `(updated_at, id)`.
-         *     `since` é inclusivo (`updated_at >= since`): o cliente guarda o maior `updated_at` que
-         *     viu e deduplica por `id` + `revision`.
+         * List transcripts (incremental)
+         * @description The user's completed transcripts, in ascending `(updated_at, id)` order.
+         *     `since` is inclusive (`updated_at >= since`): the client keeps the largest `updated_at` it
+         *     has seen and deduplicates by `id` + `revision`.
          */
         get: operations["listTranscripts"];
         put?: never;
@@ -1114,7 +1114,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Transcrição completa */
+        /** Full transcript */
         get: operations["getTranscript"];
         put?: never;
         post?: never;
@@ -1134,10 +1134,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Exportar a transcrição
-         * @description `md`: frontmatter YAML (`id`, `title`, `recorded_at`, `language`, `duration_ms`,
-         *     `source`, `revision`, `speakers`) e uma linha por segmento, `**Nome** [HH:MM:SS]: texto`,
-         *     separadas por linha em branco. O nome é o da pessoa ligada ou, sem pessoa, o `label`.
+         * Export the transcript
+         * @description `md`: YAML frontmatter (`id`, `title`, `recorded_at`, `language`, `duration_ms`,
+         *     `source`, `revision`, `speakers`) and one line per segment, `**Name** [HH:MM:SS]: text`,
+         *     separated by a blank line. The name is that of the linked person or, with no person, the `label`.
          */
         get: operations["exportTranscript"];
         put?: never;
@@ -1165,12 +1165,12 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Renomear o locutor ou ligá-lo a uma pessoa
-         * @description `person_id` liga o locutor a uma pessoa (confirmando, se for o caso, uma sugestão por
-         *     voz); `null` desfaz o vínculo. Ligar uma pessoa sem mandar `label` passa o `label` para
-         *     o nome da pessoa. Sobe a `revision`. Desde a 2.22.0, ligar a última pessoa que faltava a
-         *     uma gravação parada à espera dos nomes (etapa `speakers` `waiting`) a solta, e a cadeia
-         *     segue sozinha.
+         * Rename the speaker or link it to a person
+         * @description `person_id` links the speaker to a person (confirming, where it applies, a voice
+         *     suggestion); `null` undoes the link. Linking a person without sending `label` sets the `label` to
+         *     the person's name. Bumps the `revision`. Since 2.22.0, linking the last missing person to
+         *     a recording stopped waiting for the names (stage `speakers` `waiting`) releases it, and the chain
+         *     goes on by itself.
          */
         patch: operations["updateSpeaker"];
         trace?: never;
@@ -1190,10 +1190,10 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Recusar uma sugestão por voz
-         * @description A pessoa deixa de ser sugerida para este locutor e nunca volta a ser, nem numa
-         *     comparação futura da mesma transcrição. Só o dono da gravação. Sobe a `revision`.
-         *     Aceitar é o `PATCH` do locutor com `person_id`.
+         * Reject a voice suggestion
+         * @description The person stops being suggested for this speaker and never is again, not even in a
+         *     future comparison of the same transcript. Recording owner only. Bumps the `revision`.
+         *     Accepting is the speaker's `PATCH` with `person_id`.
          */
         delete: operations["rejectSpeakerSuggestion"];
         options?: never;
@@ -1213,8 +1213,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Mesclar locutores
-         * @description Os segmentos dos locutores de origem passam ao locutor de destino, e os de origem somem. Sobe a `revision`. Desde a 2.22.0, se nenhum locutor ficou sem pessoa, solta a gravação parada à espera dos nomes, como `updateSpeaker`.
+         * Merge speakers
+         * @description The segments of the source speakers move to the target speaker, and the source ones disappear. Bumps the `revision`. Since 2.22.0, if no speaker is left without a person, releases the recording stopped waiting for the names, like `updateSpeaker`.
          */
         post: operations["mergeSpeakers"];
         delete?: never;
@@ -1240,8 +1240,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Corrigir o texto ou o locutor de um segmento
-         * @description Corrigir o texto descarta as `words` do segmento. Sobe a `revision`.
+         * Correct the text or the speaker of a segment
+         * @description Correcting the text discards the segment's `words`. Bumps the `revision`.
          */
         patch: operations["updateSegment"];
         trace?: never;
@@ -1256,19 +1256,19 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Resumos da transcrição
-         * @description Da maior `version` para a menor; os números podem pular (ver `Summary`).
+         * Summaries of the transcript
+         * @description From the highest `version` to the lowest; the numbers may skip (see `Summary`).
          */
         get: operations["listSummaries"];
         put?: never;
         /**
-         * Gerar um resumo com um tipo de agenda
-         * @description Cada geração é uma nova `version` do resumo daquele tipo de agenda, com as instruções de
-         *     resumo dele. Sem `agenda_type_id`, vale o tipo da gravação; sem nenhum dos dois, 422. Sem
-         *     `provider_id` e sem provider padrão habilitado na plataforma, também 422.
+         * Generate a summary with an agenda type
+         * @description Each generation is a new `version` of the summary of that agenda type, with its summary
+         *     instructions. Without `agenda_type_id`, the recording's type applies; with neither, 422. Without
+         *     `provider_id` and with no default provider enabled on the platform, also 422.
          *
-         *     Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h (estourada, 403
-         *     `quota_exceeded`), e a conta tem no máximo 3 resumos na fila ou rodando (além disso, 429
+         *     Since 2.15.0, the request counts against the quota of Agent requests in 24 h (exceeded, 403
+         *     `quota_exceeded`), and the account has at most 3 summaries queued or running (beyond that, 429
          *     `rate_limited`).
          */
         post: operations["createSummary"];
@@ -1287,11 +1287,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Um resumo */
+        /** One summary */
         get: operations["getSummary"];
         put?: never;
         post?: never;
-        /** Excluir uma versão de resumo */
+        /** Delete a summary version */
         delete: operations["deleteSummary"];
         options?: never;
         head?: never;
@@ -1308,8 +1308,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma mensagem do chat de ajuste
-         * @description O cliente consulta a resposta do agente até `done` ou `failed`.
+         * One message of the adjustment chat
+         * @description The client polls the Agent's reply until `done` or `failed`.
          */
         get: operations["getSummaryChatMessage"];
         put?: never;
@@ -1332,11 +1332,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Excluir um marcador */
+        /** Delete a marker */
         delete: operations["deleteMarker"];
         options?: never;
         head?: never;
-        /** Editar a nota de um marcador */
+        /** Edit the note of a marker */
         patch: operations["updateMarker"];
         trace?: never;
     };
@@ -1348,17 +1348,17 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Tipos de agenda do usuário
-         * @description Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma. Desde a
-         *     2.4.0, basta ao PAT `summaries:read` ou `recordings:read`: a credencial de dispositivo lê a
-         *     lista para escolher o tipo ao parar a gravação (o resto de `/agenda-types` segue pedindo
+         * The user's agenda types
+         * @description In list order (`position`). The account starts with the platform's default types. Since
+         *     2.4.0, a PAT with `summaries:read` or `recordings:read` is enough: the device credential reads the
+         *     list to choose the type when stopping the recording (the rest of `/agenda-types` still requires
          *     `summaries:*`).
          */
         get: operations["listAgendaTypes"];
         put?: never;
         /**
-         * Criar um tipo de agenda
-         * @description Sem `position`, o tipo vai para o fim da lista. Nome repetido entre os tipos do usuário é 409.
+         * Create an agenda type
+         * @description Without `position`, the type goes to the end of the list. A name repeated among the user's types is 409.
          */
         post: operations["createAgendaType"];
         delete?: never;
@@ -1377,10 +1377,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Pré-visualizar um tipo de agenda numa gravação
-         * @description Roda, numa gravação transcrita, a detecção com o rascunho no lugar do tipo salvo de mesmo nome,
-         *     o título e as tags que ele aplicaria e o resumo com as instruções dele, sem gravar nada.
-         *     Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h (estourada, 403
+         * Preview an agenda type on a recording
+         * @description Runs, on a transcribed recording, the detection with the draft in place of the saved type of the same name,
+         *     the title and the tags it would apply, and the summary with its instructions, without saving anything.
+         *     Since 2.15.0, the request counts against the quota of Agent requests in 24 h (exceeded, 403
          *     `quota_exceeded`).
          */
         post: operations["previewAgendaType"];
@@ -1399,22 +1399,22 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Um tipo de agenda */
+        /** One agenda type */
         get: operations["getAgendaType"];
         put?: never;
         post?: never;
         /**
-         * Excluir um tipo de agenda
-         * @description As gravações que o usavam passam para o tipo padrão da conta (origem `auto`); os resumos
-         *     ficam. O tipo padrão (`fallback`) não sai: 409 `fallback_agenda_type`.
+         * Delete an agenda type
+         * @description The recordings that used it move to the account's default type (origin `auto`); the summaries
+         *     stay. The default type (`fallback`) cannot be removed: 409 `fallback_agenda_type`.
          */
         delete: operations["deleteAgendaType"];
         options?: never;
         head?: never;
         /**
-         * Editar um tipo de agenda
-         * @description Vale para as próximas detecções e resumos; os resumos já gerados guardam as instruções do
-         *     momento. Nome repetido é 422 em `name`.
+         * Edit an agenda type
+         * @description Applies to the next detections and summaries; summaries already generated keep the instructions of
+         *     that moment. A repeated name is 422 on `name`.
          */
         patch: operations["updateAgendaType"];
         trace?: never;
@@ -1427,14 +1427,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Campos do usuário
-         * @description Título e tags vêm embutidos em toda conta; os demais são do usuário.
+         * The user's fields
+         * @description Title and tags come built into every account; the others are the user's.
          */
         get: operations["listFields"];
         put?: never;
         /**
-         * Criar um campo
-         * @description A chave (`key`) sai do nome e não muda depois. Escolha exige `options`; os outros tipos não têm.
+         * Create a field
+         * @description The key (`key`) comes from the name and does not change afterwards. A choice field requires `options`; the other types have none.
          */
         post: operations["createField"];
         delete?: never;
@@ -6669,7 +6669,7 @@ export interface operations {
                 since?: components["parameters"]["Since"];
                 /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
                 person?: components["parameters"]["PersonFilter"];
-                /** @description Transcrição de uma gravação específica. */
+                /** @description The transcript of one specific recording. */
                 recording_id?: string;
             };
             header?: never;
@@ -6678,7 +6678,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Transcrições. */
+            /** @description Transcripts. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6695,7 +6695,7 @@ export interface operations {
     getTranscript: {
         parameters: {
             query?: {
-                /** @description `words` inclui as palavras com tempo em cada segmento. */
+                /** @description `words` includes the timed words in each segment. */
                 include?: "words";
             };
             header?: never;
@@ -6706,7 +6706,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Transcrição, no schema de `contracts/transcript.schema.json`. */
+            /** @description Transcript, in the schema of `contracts/transcript.schema.json`. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6723,7 +6723,7 @@ export interface operations {
     exportTranscript: {
         parameters: {
             query: {
-                /** @description Formato do export. Formatos novos entram de forma aditiva. */
+                /** @description Export format. New formats are added additively. */
                 format: "md";
             };
             header?: never;
@@ -6734,7 +6734,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Arquivo exportado. */
+            /** @description Exported file. */
             200: {
                 headers: {
                     "Content-Disposition"?: string;
@@ -6768,7 +6768,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Locutor atualizado. */
+            /** @description Speaker updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6799,7 +6799,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Locutor sem a sugestão recusada. */
+            /** @description Speaker without the rejected suggestion. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6831,7 +6831,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Transcrição depois da mesclagem. */
+            /** @description Transcript after the merge. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6865,7 +6865,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Segmento atualizado. */
+            /** @description Segment updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6896,7 +6896,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Resumos, da versão mais nova para a mais antiga. */
+            /** @description Summaries, from the newest version to the oldest. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6929,7 +6929,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Resumo na fila. */
+            /** @description Summary queued. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6956,7 +6956,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Resumo. */
+            /** @description Summary. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6984,7 +6984,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7007,7 +7007,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Mensagem. */
+            /** @description Message. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7035,7 +7035,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7065,7 +7065,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Marcador atualizado. */
+            /** @description Marker updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7094,7 +7094,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tipos de agenda. */
+            /** @description Agenda types. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7124,7 +7124,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tipo criado. */
+            /** @description Type created. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7155,7 +7155,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`. */
+            /** @description Preview queued; poll `GET /api/v1/previews/{preview_id}`. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -7181,7 +7181,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tipo de agenda. */
+            /** @description Agenda type. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7209,7 +7209,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7240,7 +7240,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tipo atualizado. */
+            /** @description Type updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7264,7 +7264,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Campos, na ordem da lista. */
+            /** @description Fields, in list order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7294,7 +7294,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Campo criado. */
+            /** @description Field created. */
             201: {
                 headers: {
                     [name: string]: unknown;
