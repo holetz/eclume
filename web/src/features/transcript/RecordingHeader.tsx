@@ -13,8 +13,8 @@ import { formatDuration, shortDayLabel, shortRef, timeLabel } from '../../shared
 type Recording = Schemas['Recording']
 
 /**
- * "qui 24 set 2026 · 09:00 · 1 h 12 min · Português", com "· data do envio" quando o arquivo não
- * trazia data; o idioma é o da transcrição, que só aparece depois da detecção.
+ * "qui 24 set 2026 · 09:00 · 1 h 12 min · Português", with "· data do envio" when the file did not
+ * carry a date; the language is the transcript's, which only shows after detection.
  */
 function recordingKicker(
   recording: Pick<Recording, 'recorded_at' | 'recorded_at_source' | 'duration_ms' | 'language'>,
@@ -33,7 +33,7 @@ interface RecordingHeaderProps {
   onDeleted: () => void
 }
 
-/** Data, hora, duração e idioma no kicker, o título e as ações Transcrever de novo em…, Exportar e Excluir (frame "Recording"). */
+/** Date, time, duration and language in the kicker, the title and the Transcrever de novo em…, Exportar and Excluir actions (frame "Recording"). */
 export function RecordingHeader({ recording, hasSummary, onDeleted }: RecordingHeaderProps) {
   const [confirming, setConfirming] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
