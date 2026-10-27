@@ -1,7 +1,7 @@
 ---
 type: standard
-title: Pasta sincronizada do app desktop
-description: O app desktop espelha a biblioteca do usuário numa pasta local — o resumo atual de cada gravação em Markdown com front matter e a transcrição em JSONL, uma subpasta por Collection, um AGENTS.md na raiz e um manifesto que só deixa o app mexer no que ele criou — para servir de vault do Obsidian e de pasta de trabalho de agente; estes são o layout, os formatos, o ciclo incremental, a sobrescrita e o que o servidor precisa oferecer.
+title: Desktop app synced folder
+description: The desktop app mirrors the user's library into a local folder — the current summary of each recording in Markdown with front matter and the transcript in JSONL, one subfolder per Collection, an AGENTS.md at the root and a manifest that only lets the app touch what it created — to serve as an Obsidian vault and as an agent's working folder; these are the layout, the formats, the incremental cycle, overwriting and what the server must offer.
 resource: desktop/crates/mirror/**, desktop/src-tauri/src/mirror_sync.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/state.rs, desktop/ui/js/vistas/configuracoes.js, desktop/crates/sync/src/protocol.rs
 tags: [code, desktop, sync, markdown, jsonl, obsidian, agentes, collections]
 timestamp: 2026-09-29
@@ -11,17 +11,18 @@ source: holetz/eclume#68
 maintainer: holetz
 ---
 
-# Pasta sincronizada do app desktop
+# Desktop app synced folder
 
-O app desktop mantém, se a pessoa ligar, uma pasta do computador que espelha a **biblioteca dela**
-(não só o que aquele computador gravou): o resumo atual de cada gravação em `.md` e a transcrição
-em `.jsonl`. A pasta serve a dois usos ao mesmo tempo: **vault do Obsidian** e **pasta de trabalho
-de um agente** (Claude Code, Codex etc.). O servidor é a fonte; a pasta é um espelho.
+The desktop app keeps, if the person turns it on, a folder on the computer that mirrors **their
+library** (not only what that computer recorded): the current summary of each recording as `.md`
+and the transcript as `.jsonl`. The folder serves two uses at once: an **Obsidian vault** and **an
+agent's working folder** (Claude Code, Codex etc.). The server is the source; the folder is a mirror.
 
-A lógica pura vive no crate `eclume-mirror` (`desktop/crates/mirror`), sem Tauri nem rede (o app
-móvel também compila `desktop/crates`); o app (`desktop/src-tauri/src/mirror_sync.rs`) só lê do
-servidor e chama o crate. Configuração em `config.json` (`mirror`), aba **Pasta** das
-Configurações. O que a pessoa lê está no artigo de ajuda `pasta-sincronizada` do web.
+The pure logic lives in the `eclume-mirror` crate (`desktop/crates/mirror`), with no Tauri or
+network (the mobile app also compiles `desktop/crates`); the app (`desktop/src-tauri/src/mirror_sync.rs`)
+only reads from the server and calls the crate. Configuration lives in `config.json` (`mirror`), in
+the **Pasta** tab of Configurações. What the person reads is in the web's `pasta-sincronizada`
+help article.
 
 ## Layout
 
@@ -36,32 +37,34 @@ Configurações. O que a pessoa lê está no artigo de ajuda `pasta-sincronizada
   sem-colecao/                                ← gravações sem Collection (mesma divisão por mês)
 ```
 
-- **Collections viram subpastas.** O servidor tem Collections planas (sem hierarquia) e uma
-  gravação pode estar em várias: ela é escrita **em cada uma** (cópias idênticas).
-- **Um mês por subpasta** (`AAAA-MM`, como os apps de notas: mantém cada pasta em centenas de
-  arquivos, não milhares, e as pastas ordenam sozinhas). O mês e o nome usam a **hora local do
-  computador** (`recorded_at` convertido pelo app), para baterem com o que a pessoa vê; o
-  `recorded_at` do front matter segue em UTC.
-- **Nome-base** = `AAAA-MM-DD_HHMM_<id8>`: data e hora ordenáveis e os 8 primeiros caracteres
-  alfanuméricos do id da gravação (a **referência** que o eclume web mostra sob o título, com o
-  id completo na dica). Tem tamanho fixo (24 caracteres): **o título nunca entra no caminho**, então
-  nenhum título, por longo que seja, estoura o limite de caminho de sistema algum. O id é
-  `uuid4`, então dois nomes só colidem com data, hora e 8 caracteres iguais.
-- **O título vive no arquivo**: propriedades `title` e `aliases` do front matter (o Obsidian acha
-  a nota pelo alias), e `title` no meta do JSONL.
-- **Nomes de pasta de Collection** (`layout::slug`): caracteres proibidos no Windows
-  (`\ / : * ? " < > |` e controles) e os que quebram links do Obsidian (`[ ] # ^`) viram espaço;
-  espaços se juntam; ponto e espaço do fim caem; nomes reservados do Windows (`CON`, `NUL`,
-  `COM1`…) ganham `_`; limitados a 50 caracteres. Maiúsculas, acentos e espaços ficam. O
-  caminho relativo máximo fica em cerca de 90 caracteres.
-- Uma gravação sem resumo mas com transcrição escreve só o `.jsonl`; sem nenhum dos dois, nada.
-- **Mudança de layout.** O manifesto guarda a versão do layout (`layout`); com outra versão (ou
-  sem ela, como nos manifestos do desenho antigo `<Collection>/AAAA-MM-DD <título> - <id8>`), o
-  ciclo seguinte relê tudo e o manifesto move os arquivos e apaga os antigos, sem duplicar.
+- **Collections become subfolders.** The server has flat Collections (no hierarchy) and a
+  recording can be in several: it is written **into each one** (identical copies).
+- **One month per subfolder** (`AAAA-MM`, like note apps do: it keeps each folder at hundreds of
+  files, not thousands, and the folders sort themselves). The month and the name use the
+  **computer's local time** (`recorded_at` converted by the app), so they match what the person
+  sees; the front matter's `recorded_at` stays in UTC.
+- **Base name** = `AAAA-MM-DD_HHMM_<id8>`: a sortable date and time and the first 8 alphanumeric
+  characters of the recording id (the **reference** eclume web shows under the title, with the
+  full id in the tooltip). It has a fixed length (24 characters): **the title never goes into the
+  path**, so no title, however long, exceeds any system's path limit. The id is `uuid4`, so two
+  names only collide with equal date, time and 8 characters.
+- **The title lives in the file**: the `title` and `aliases` front matter properties (Obsidian
+  finds the note by its alias), and `title` in the JSONL meta.
+- **Collection folder names** (`layout::slug`): characters forbidden on Windows
+  (`\ / : * ? " < > |` and control characters) and those that break Obsidian links (`[ ] # ^`)
+  become spaces; spaces collapse; trailing dots and spaces drop; Windows reserved names (`CON`,
+  `NUL`, `COM1`…) get a `_`; limited to 50 characters. Capitals, accents and spaces stay. The
+  maximum relative path stays around 90 characters.
+- A recording with no summary but with a transcript writes only the `.jsonl`; with neither,
+  nothing.
+- **Layout change.** The manifest stores the layout version (`layout`); with another version (or
+  without one, as in the manifests of the old design `<Collection>/AAAA-MM-DD <título> - <id8>`),
+  the next cycle rereads everything and the manifest moves the files and deletes the old ones,
+  without duplicating.
 
-## Formatos
+## Formats
 
-**Resumo (`.md`)**: front matter YAML e o Markdown do servidor.
+**Summary (`.md`)**: YAML front matter and the server's Markdown.
 
 ```yaml
 ---
@@ -80,90 +83,95 @@ transcript: "2026-09-18_1100_01928f3a.jsonl"   # só com transcrição
 ---
 ```
 
-**Resumo desatualizado.** O app lê `transcript_revision` do resumo atual (contrato 2.25.0). Quando
-ela é menor que a `revision` da transcrição espelhada, o front matter ganha `summary_stale: true` e
-o corpo abre, logo abaixo dele, com o callout `> [!warning] Resumo de uma versão anterior da
-transcrição` e a linha `A transcrição foi alterada depois deste resumo. Use Regenerar para refletir
-as mudanças.` (o mesmo texto do aviso do web). Sem uma das duas revisões (servidor anterior ao
-2.25.0, ou transcrição não espelhada) não há aviso, e a propriedade não existe.
+**Stale summary.** The app reads `transcript_revision` from the current summary (contract 2.25.0).
+When it is lower than the `revision` of the mirrored transcript, the front matter gains
+`summary_stale: true` and the body opens, right below it, with the callout `> [!warning] Resumo de uma versão anterior da
+transcrição` and the line `A transcrição foi alterada depois deste resumo. Use Regenerar para refletir
+as mudanças.` (the same text as the web notice). Without one of the two revisions (a server older
+than 2.25.0, or a transcript that is not mirrored) there is no notice, and the property does not
+exist.
 
-Com marcador que tem nota, o `.md` termina com a seção `## Notas dos marcadores`: uma linha
-`- [HH:MM:SS] nota` por marcador, em ordem de instante, a nota achatada em uma linha. Sem nota
-nenhuma, a seção não existe. O app lê `GET /recordings/{id}/markers` (`recordings:read`) só das
-gravações que têm resumo a escrever; uma falha vira pendência, como as outras leituras.
+With a marker that has a note, the `.md` ends with the `## Notas dos marcadores` section: one line
+`- [HH:MM:SS] nota` per marker, in order of instant, the note flattened onto one line. With no
+note at all, the section does not exist. The app reads `GET /recordings/{id}/markers`
+(`recordings:read`) only for the recordings that have a summary to write; a failure becomes a
+pending item, like the other reads.
 
-**Transcrição (`.jsonl`)**: uma linha por objeto. A primeira é `{"type":"meta", id, recording_id,
-title, language, recorded_at, duration_ms, revision, speakers:[{id,label}]}`; as demais,
-`{"type":"segment", speaker, speaker_id, start_ms, end_ms, text}`. O Obsidian não indexa `.jsonl`,
-então as transcrições, longas, **não poluem a busca nem o grafo do vault**, e um agente as lê com
-`rg`/`jq`.
+**Transcript (`.jsonl`)**: one line per object. The first is `{"type":"meta", id, recording_id,
+title, language, recorded_at, duration_ms, revision, speakers:[{id,label}]}`; the rest,
+`{"type":"segment", speaker, speaker_id, start_ms, end_ms, text}`. Obsidian does not index
+`.jsonl`, so the transcripts, which are long, **do not pollute the vault's search or graph**, and
+an agent reads them with `rg`/`jq`.
 
-**`AGENTS.md`**: regerado a cada ciclo (a primeira linha é um marcador HTML de arquivo gerado)
-com a estrutura, as propriedades, o formato do JSONL e exemplos de busca. Um `AGENTS.md` da
-própria pessoa (sem o marcador) **nunca** é sobrescrito.
+**`AGENTS.md`**: regenerated on every cycle (the first line is an HTML generated-file marker)
+with the structure, the properties, the JSONL format and search examples. The person's own
+`AGENTS.md` (without the marker) is **never** overwritten.
 
-## O ciclo
+## The cycle
 
-Thread própria (`eclume-mirror`, a cada 60 s e a cada mudança de configuração), para uma
-biblioteca grande não atrasar o upload das gravações.
+Its own thread (`eclume-mirror`, every 60 s and on every configuration change), so a large
+library does not delay the upload of recordings.
 
-1. `GET /collections` (uma grafia só por nome, sem distinguir maiúsculas: "Clientes" e "clientes"
-   são a mesma pasta no Windows e no macOS) e `GET /recordings?since=<cursor>`, lido pela leitura
-   repartida (`sync::library_since`) que também serve os desfechos e as recentes, em vez de uma
-   leitura própria a cada minuto. O cursor é o maior
-   `updated_at` lido **menos 2 minutos** (o `now()` do servidor é o início da transação, então uma
-   confirmada depois de outra com `updated_at` maior não pode ser pulada) e fica **no manifesto**:
-   apagar ou trocar a pasta refaz tudo. Na primeira passada a listagem já é a biblioteca inteira.
-2. Para cada gravação com transcrição: `GET /recordings/{id}/summary` e, se ligadas,
-   `GET /transcripts?recording_id=`. Uma falha numa gravação não para as outras: ela vai para a
-   lista de **pendentes** do manifesto e o **cursor avança do mesmo jeito**; o ciclo seguinte relê
-   só as pendentes, **uma a uma por id** (`GET /recordings/{id}`), nunca pela listagem nem pela
-   biblioteca inteira. A escrita é idempotente.
-   **Servidor sem o escopo das transcrições** (403 `insufficient_scope`, um servidor anterior ao
-   contrato 2.8.0 ou um token que a migração 018 ainda não alcançou): a primeira recusa vale para o
-   ciclo todo, os resumos são escritos, o cursor avança e a aba avisa que falta atualizar o
-   servidor. Uma gravação que já tinha `.jsonl` **fica como está** (degradar é não atualizar, não
-   apagar). A varredura completa as transcrições que faltavam quando o escopo chegar.
-3. **Varredura** a cada 6 h e em "Sincronizar agora": lista a biblioteca inteira, traz o que o
-   manifesto ainda não tem e **apaga as gravações que saíram do servidor**. Só a varredura e a
-   passada completa (primeira vez, mudança de layout ou da opção de transcrições) apagam gravações
-   inteiras; o ciclo incremental só move ou tira os arquivos de uma gravação que mudou (Collection
-   ou início) e nunca esquece uma gravação.
-4. **Mudou a opção "Incluir as transcrições"** (o manifesto guarda com qual estava): o ciclo
-   seguinte refaz tudo, escrevendo ou tirando os `.jsonl` e o link `transcript` dos `.md`.
-5. Escreve o `AGENTS.md` (uma falha nele é só registrada no log) e grava o manifesto **sempre**,
-   mesmo depois de um erro: o que já foi escrito não pode ficar sem registro.
+1. `GET /collections` (a single spelling per name, case-insensitive: "Clientes" and "clientes"
+   are the same folder on Windows and macOS) and `GET /recordings?since=<cursor>`, read through
+   the shared read (`sync::library_since`) that also serves the outcomes and the recent ones,
+   instead of a read of its own every minute. The cursor is the highest
+   `updated_at` read **minus 2 minutes** (the server's `now()` is the start of the transaction, so
+   one committed after another with a higher `updated_at` cannot be skipped) and lives **in the
+   manifest**: deleting or switching the folder redoes everything. On the first pass the listing is
+   already the whole library.
+2. For each recording with a transcript: `GET /recordings/{id}/summary` and, if turned on,
+   `GET /transcripts?recording_id=`. A failure on one recording does not stop the others: it goes
+   to the manifest's **pending** list and the **cursor advances all the same**; the next cycle
+   rereads only the pending ones, **one by one by id** (`GET /recordings/{id}`), never through the
+   listing or the whole library. Writing is idempotent.
+   **Server without the transcripts scope** (403 `insufficient_scope`, a server older than
+   contract 2.8.0 or a token that migration 018 has not reached yet): the first refusal holds for
+   the whole cycle, the summaries are written, the cursor advances and the tab warns that the
+   server needs updating. A recording that already had a `.jsonl` **stays as it is** (degrading
+   means not updating, not deleting). The sweep fills in the missing transcripts once the scope
+   arrives.
+3. **Sweep** every 6 h and on "Sincronizar agora": it lists the whole library, brings what the
+   manifest does not have yet and **deletes the recordings that left the server**. Only the sweep
+   and the full pass (first time, layout change or a change of the transcripts option) delete whole
+   recordings; the incremental cycle only moves or removes the files of a recording that changed
+   (Collection or start) and never forgets a recording.
+4. **The "Incluir as transcrições" option changed** (the manifest stores which one it had): the
+   next cycle redoes everything, writing or removing the `.jsonl` files and the `transcript` link
+   in the `.md` files.
+5. It writes `AGENTS.md` (a failure on it is only logged) and saves the manifest **always**, even
+   after an error: what was already written cannot go unrecorded.
 
-Para o cursor ver as mudanças, o servidor move `recordings.updated_at` quando: um resumo termina,
-é editado ou é apagado; a transcrição é editada (locutor, segmento, mesclagem); a Collection é
-renomeada ou excluída; um marcador é criado, tem a nota editada ou é excluído
-(`markers.touch_recording`); e nas mudanças de campo que já existiam.
+For the cursor to see the changes, the server moves `recordings.updated_at` when: a summary
+finishes, is edited or is deleted; the transcript is edited (speaker, segment, merge); the
+Collection is renamed or deleted; a marker is created, has its note edited or is deleted
+(`markers.touch_recording`); and on the field changes that already existed.
 
-## Sobrescrita e segurança
+## Overwriting and safety
 
-- **O servidor manda.** O arquivo é reescrito quando o conteúdo em disco difere (hash SHA-256); uma
-  edição local num arquivo do app é sobrescrita no ciclo seguinte. Sem mudança, nada é escrito.
-- **Só o que o manifesto lista é movido ou apagado** (Collection ou início da gravação mudou,
-  gravação removida). Arquivos da pessoa na pasta, e pastas que os contenham, ficam. Um caminho do
-  manifesto que fuja da raiz (`..`, absoluto) é recusado. Um manifesto ilegível recomeça vazio e
-  **não apaga nada**.
-- A escrita é atômica (arquivo temporário com ponto e renomeação; se a renomeação falhar, como no
-  Windows com o arquivo aberto, o temporário é removido). A raiz não pode ser a raiz do disco nem
-  a pasta pessoal (uma Collection "Documents" escreveria em `~/Documents`). Links simbólicos
-  dentro da pasta escolhida não são seguidos de propósito; **não** aponte a pasta para dentro de
-  um diretório que contenha links para fora dela.
+- **The server rules.** The file is rewritten when the content on disk differs (SHA-256 hash); a
+  local edit to an app file is overwritten on the next cycle. With no change, nothing is written.
+- **Only what the manifest lists is moved or deleted** (the recording's Collection or start
+  changed, recording removed). The person's files in the folder, and folders that contain them,
+  stay. A manifest path that escapes the root (`..`, absolute) is refused. An unreadable manifest
+  starts over empty and **deletes nothing**.
+- Writing is atomic (a temporary file with a dot, then a rename; if the rename fails, as on
+  Windows with the file open, the temporary file is removed). The root cannot be the disk root
+  or the home folder (a "Documents" Collection would write into `~/Documents`). Symbolic links
+  inside the chosen folder are deliberately not followed; do **not** point the folder inside a
+  directory that holds links out of it.
 
-## O que o servidor oferece (contrato 2.8.0)
+## What the server offers (contract 2.8.0)
 
-- A credencial de dispositivo tem `transcripts:read` (migração `018_dispositivo_le_transcricao`,
-  que também estende os tokens já emitidos) além de `recordings:read` e `summaries:read`.
-- Um resumo que termina ou é editado move o `updated_at` da gravação **e** da transcrição
-  (`summaries.touch_recording`), então `?since=` percebe resumo novo ou refeito.
+- The device credential has `transcripts:read` (migration `018_dispositivo_le_transcricao`,
+  which also extends the tokens already issued) besides `recordings:read` and `summaries:read`.
+- A summary that finishes or is edited moves the `updated_at` of the recording **and** of the
+  transcript (`summaries.touch_recording`), so `?since=` notices a new or redone summary.
 
-## Testes
+## Tests
 
-`cargo test -p eclume-mirror` (layout, formatos, manifesto, reconciliação, `AGENTS.md`),
-`cargo test -p eclume-desktop -- mirror_sync` (ciclos contra uma fonte falsa: primeira passada,
-incremental, varredura, falha parcial) e `cargo test -p eclume-sync` (as leituras do cliente).
-A aba e o texto explicativo: `desktop/ui-tests/configuracoes.spec.ts`; no servidor,
-`server/tests/test_devices.py` e `test_summaries.py`.
+`cargo test -p eclume-mirror` (layout, formats, manifest, reconciliation, `AGENTS.md`),
+`cargo test -p eclume-desktop -- mirror_sync` (cycles against a fake source: first pass,
+incremental, sweep, partial failure) and `cargo test -p eclume-sync` (the client reads).
+The tab and its explanatory text: `desktop/ui-tests/configuracoes.spec.ts`; on the server,
+`server/tests/test_devices.py` and `test_summaries.py`.
