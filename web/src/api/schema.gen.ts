@@ -1824,9 +1824,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * O registro das ações do Agente
-         * @description Desde a 2.24.0. A auditoria: cada proposta, com quem confirmou, quando e o resultado por
-         *     alvo, da mais recente para trás. Fica mesmo depois que a conversa é excluída.
+         * The log of the Agent's actions
+         * @description Since 2.24.0. The audit trail: each proposal, with who confirmed it, when, and the result per
+         *     target, newest first. It remains even after the conversation is deleted.
          */
         get: operations["listAgentActions"];
         put?: never;
@@ -1847,8 +1847,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma ação do Agente
-         * @description Desde a 2.24.0. A consulta até `done` ou `failed`; a proposta com mais de 24 h vira `expired`.
+         * One Agent action
+         * @description Since 2.24.0. Polled until `done` or `failed`; a proposal older than 24 h becomes `expired`.
          */
         get: operations["getAgentAction"];
         put?: never;
@@ -1871,12 +1871,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Confirmar a proposta
-         * @description Desde a 2.24.0. Passa a proposta a `queued` e enfileira a execução, alvo a alvo, pelas mesmas
-         *     operações do servidor MCP. Idempotente: confirmar de novo devolve o estado atual sem
-         *     executar outra vez. Vencida ou descartada: 409 (`action_expired`, `action_cancelled`). Exige
-         *     o escopo de escrita da ferramenta: `summaries:write` para `regenerate_summaries`,
-         *     `recordings:write` para as demais (PAT sem ele: 403).
+         * Confirm the proposal
+         * @description Since 2.24.0. Moves the proposal to `queued` and enqueues the execution, target by target,
+         *     through the same operations as the MCP server. Idempotent: confirming again returns the
+         *     current state without executing again. Expired or dismissed: 409 (`action_expired`,
+         *     `action_cancelled`). Requires the tool's write scope: `summaries:write` for
+         *     `regenerate_summaries`, `recordings:write` for the others (a PAT without it: 403).
          */
         post: operations["confirmAgentAction"];
         delete?: never;
@@ -1897,8 +1897,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Descartar a proposta
-         * @description Desde a 2.24.0. Só de `proposed` (descartar de novo devolve o estado); senão 409 `action_not_proposed`.
+         * Dismiss the proposal
+         * @description Since 2.24.0. Only from `proposed` (dismissing again returns the state); otherwise 409 `action_not_proposed`.
          */
         post: operations["cancelAgentAction"];
         delete?: never;
@@ -1914,10 +1914,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Diretório de pessoas do usuário */
+        /** The user's people directory */
         get: operations["listPeople"];
         put?: never;
-        /** Cadastrar uma pessoa */
+        /** Register a person */
         post: operations["createPerson"];
         delete?: never;
         options?: never;
@@ -1933,11 +1933,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Empresas, áreas e tags de pessoa em uso
-         * @description Os valores dos atributos de cadastro das pessoas do usuário, com quantas pessoas usam cada
-         *     um. Empresa e área se agrupam sem acento e sem caixa, e o valor devolvido é a grafia mais
-         *     usada; as tags de pessoa se agrupam sem caixa. Servem às sugestões do cadastro e ao filtro
-         *     Participantes da biblioteca.
+         * Companies, areas and person tags in use
+         * @description The values of the registration attributes of the user's people, with how many people use
+         *     each one. Company and area are grouped accent- and case-insensitively, and the value returned
+         *     is the most used spelling; person tags are grouped case-insensitively. They feed the
+         *     registration suggestions and the library's Participants filter.
          */
         get: operations["listPersonFacets"];
         put?: never;
@@ -1957,18 +1957,18 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Uma pessoa */
+        /** One person */
         get: operations["getPerson"];
         put?: never;
         post?: never;
         /**
-         * Excluir uma pessoa
-         * @description Desfaz os vínculos de locutor e apaga a impressão de voz, se houver.
+         * Delete a person
+         * @description Undoes the speaker links and erases the voiceprint, if any.
          */
         delete: operations["deletePerson"];
         options?: never;
         head?: never;
-        /** Editar uma pessoa */
+        /** Edit a person */
         patch: operations["updatePerson"];
         trace?: never;
     };
@@ -1982,8 +1982,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Transcrições em que a pessoa fala
-         * @description Exige `people:read` e `transcripts:read` num PAT. As falas da pessoa saem de `GET /api/v1/search?person=`.
+         * Transcripts in which the person speaks
+         * @description Requires `people:read` and `transcripts:read` on a PAT. The person's utterances come from `GET /api/v1/search?person=`.
          */
         get: operations["listPersonTranscripts"];
         put?: never;
@@ -2004,15 +2004,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Impressão de voz da pessoa
-         * @description As amostras (locutores confirmados) que compõem a impressão, sem os vetores.
+         * The person's voiceprint
+         * @description The samples (confirmed speakers) that make up the voiceprint, without the vectors.
          */
         get: operations["getVoiceprint"];
         put?: never;
         post?: never;
         /**
-         * Excluir a impressão de voz
-         * @description Apaga todas as amostras e as sugestões pendentes da pessoa.
+         * Delete the voiceprint
+         * @description Erases all of the person's samples and pending suggestions.
          */
         delete: operations["deleteVoiceprint"];
         options?: never;
@@ -2035,9 +2035,9 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Remover uma amostra da impressão de voz
-         * @description Tira da impressão só aquela amostra; o locutor segue ligado à pessoa. As sugestões que a
-         *     impressão já fez não mudam.
+         * Remove a sample from the voiceprint
+         * @description Takes only that sample out of the voiceprint; the speaker stays linked to the person. The
+         *     suggestions the voiceprint already made do not change.
          */
         delete: operations["deleteVoiceSample"];
         options?: never;
@@ -2053,9 +2053,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Busca full-text sobre segmentos
-         * @description Busca em português (`tsvector` pt) nos segmentos das transcrições do usuário.
-         *     Pede `q` ou `person`; com só `person`, lista as falas da pessoa em ordem cronológica.
+         * Full-text search over segments
+         * @description Portuguese search (`tsvector` pt) over the segments of the user's transcripts.
+         *     Takes `q` or `person`; with only `person`, it lists the person's utterances in chronological order.
          */
         get: operations["search"];
         put?: never;
@@ -2073,10 +2073,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Coleções do usuário */
+        /** The user's collections */
         get: operations["listCollections"];
         put?: never;
-        /** Criar uma coleção */
+        /** Create a collection */
         post: operations["createCollection"];
         delete?: never;
         options?: never;
@@ -2097,13 +2097,13 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Excluir uma coleção
-         * @description As gravações ficam; só saem da coleção.
+         * Delete a collection
+         * @description The recordings stay; they only leave the collection.
          */
         delete: operations["deleteCollection"];
         options?: never;
         head?: never;
-        /** Renomear ou descrever uma coleção */
+        /** Rename or describe a collection */
         patch: operations["updateCollection"];
         trace?: never;
     };
@@ -2119,9 +2119,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Mesclar uma coleção em outra
-         * @description As gravações da coleção passam para `into`, sem repetição, e a coleção é excluída; `into`
-         *     fica com o nome, a descrição e a regra dela. `into` igual à coleção, ou inexistente, é 422.
+         * Merge a collection into another
+         * @description The collection's recordings move to `into`, without duplicates, and the collection is deleted;
+         *     `into` takes its name, description and rule. `into` equal to the collection, or nonexistent, is 422.
          */
         post: operations["mergeCollection"];
         delete?: never;
@@ -2138,17 +2138,17 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * O cadastro de tags do usuário
-         * @description As tags cadastradas, em ordem alfabética, com quantas gravações usam cada uma. As tags são
-         *     fixas por padrão: o agente só escolhe entre elas (ver `GET /me/tag-assignment`). Toda tag
-         *     que o usuário escreve numa gravação, num envio ou nas tags padrão de um tipo entra no
-         *     cadastro sozinha, e a gravação fica com a grafia do cadastro (sem acento e sem caixa).
+         * The user's tag registry
+         * @description The registered tags, in alphabetical order, with how many recordings use each one. Tags are
+         *     fixed by default: the agent only chooses among them (see `GET /me/tag-assignment`). Every tag
+         *     the user writes on a recording, on an upload or in an agenda type's default tags enters the
+         *     registry on its own, and the recording takes the registry's spelling (accent- and case-insensitive).
          */
         get: operations["listTags"];
         put?: never;
         /**
-         * Cadastrar uma tag
-         * @description O mesmo nome, sem acento e sem caixa, é 409 `tag_exists`.
+         * Register a tag
+         * @description The same name, compared accent- and case-insensitively, is 409 `tag_exists`.
          */
         post: operations["createTag"];
         delete?: never;
@@ -7982,7 +7982,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Uma página de ações. */
+            /** @description A page of actions. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8009,7 +8009,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A ação. */
+            /** @description The action. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8037,7 +8037,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A ação na fila (ou o estado atual, se já confirmada). */
+            /** @description The queued action (or the current state, if already confirmed). */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -8066,7 +8066,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A proposta descartada. */
+            /** @description The dismissed proposal. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8088,7 +8088,7 @@ export interface operations {
                 cursor?: components["parameters"]["Cursor"];
                 /** @description Itens por página. */
                 limit?: components["parameters"]["Limit"];
-                /** @description Busca por nome ou e-mail (prefixo, sem acento). */
+                /** @description Search by name or e-mail (prefix, accent-insensitive). */
                 q?: string;
             };
             header?: never;
@@ -8097,7 +8097,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Pessoas, em ordem alfabética. */
+            /** @description People, in alphabetical order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8126,7 +8126,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pessoa cadastrada. */
+            /** @description Person registered. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -8150,7 +8150,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Valores em uso, em ordem alfabética. */
+            /** @description Values in use, in alphabetical order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8174,7 +8174,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Pessoa. */
+            /** @description Person. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8202,7 +8202,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8232,7 +8232,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pessoa atualizada. */
+            /** @description Person updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8263,7 +8263,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Transcrições, da mais recente para a mais antiga. */
+            /** @description Transcripts, newest first. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8288,7 +8288,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Impressão. */
+            /** @description Voiceprint. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8316,7 +8316,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8344,7 +8344,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Removida. */
+            /** @description Removed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8359,7 +8359,7 @@ export interface operations {
     search: {
         parameters: {
             query?: {
-                /** @description Termos de busca (sintaxe `websearch_to_tsquery`, aceita "frase exata" e -exclusão). */
+                /** @description Search terms (`websearch_to_tsquery` syntax, accepts "exact phrase" and -exclusion). */
                 q?: string;
                 /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
                 person?: components["parameters"]["PersonFilter"];
@@ -8371,7 +8371,7 @@ export interface operations {
                 tag?: components["parameters"]["TagFilter"];
                 /** @description Só gravações desta coleção. */
                 collection?: components["parameters"]["CollectionFilter"];
-                /** @description Valor de um campo do usuário, `<field_id>:<valor>`; repetível, como em `GET /api/v1/recordings`: valores do mesmo campo combinam por OU, campos diferentes por E. Num campo de lista, basta o valor ser um dos itens; título e tags valem como os embutidos. */
+                /** @description Value of a user field, `<field_id>:<value>`; repeatable, as in `GET /api/v1/recordings`: values of the same field combine with OR, different fields with AND. On a list field, the value need only be one of the items; title and tags work like the built-in ones. */
                 field?: string[];
                 /** @description Cursor opaco devolvido em `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
@@ -8384,7 +8384,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Trechos encontrados, por relevância. */
+            /** @description Passages found, by relevance. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8412,7 +8412,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Coleções. */
+            /** @description Collections. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8441,7 +8441,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Coleção criada. */
+            /** @description Collection created. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -8469,7 +8469,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8499,7 +8499,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Coleção atualizada. */
+            /** @description Collection updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8532,7 +8532,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A coleção que recebeu as gravações. */
+            /** @description The collection that received the recordings. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8556,7 +8556,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tags com contagem. */
+            /** @description Tags with counts. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8585,7 +8585,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tag cadastrada. */
+            /** @description Tag registered. */
             201: {
                 headers: {
                     [name: string]: unknown;

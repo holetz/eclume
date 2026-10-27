@@ -3609,10 +3609,10 @@ paths:
     get:
       tags: [agent]
       operationId: listAgentActions
-      summary: O registro das ações do Agente
+      summary: The log of the Agent's actions
       description: |
-        Desde a 2.24.0. A auditoria: cada proposta, com quem confirmou, quando e o resultado por
-        alvo, da mais recente para trás. Fica mesmo depois que a conversa é excluída.
+        Since 2.24.0. The audit trail: each proposal, with who confirmed it, when, and the result per
+        target, newest first. It remains even after the conversation is deleted.
       security:
         - sessionCookie: []
         - pat: ["summaries:read"]
@@ -3621,7 +3621,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
       responses:
         "200":
-          description: Uma página de ações.
+          description: A page of actions.
           content:
             application/json:
               schema:
@@ -3645,14 +3645,14 @@ paths:
     get:
       tags: [agent]
       operationId: getAgentAction
-      summary: Uma ação do Agente
-      description: Desde a 2.24.0. A consulta até `done` ou `failed`; a proposta com mais de 24 h vira `expired`.
+      summary: One Agent action
+      description: Since 2.24.0. Polled until `done` or `failed`; a proposal older than 24 h becomes `expired`.
       security:
         - sessionCookie: []
         - pat: ["summaries:read"]
       responses:
         "200":
-          description: A ação.
+          description: The action.
           content:
             application/json:
               schema:
@@ -3673,13 +3673,13 @@ paths:
     post:
       tags: [agent]
       operationId: confirmAgentAction
-      summary: Confirmar a proposta
+      summary: Confirm the proposal
       description: |
-        Desde a 2.24.0. Passa a proposta a `queued` e enfileira a execução, alvo a alvo, pelas mesmas
-        operações do servidor MCP. Idempotente: confirmar de novo devolve o estado atual sem
-        executar outra vez. Vencida ou descartada: 409 (`action_expired`, `action_cancelled`). Exige
-        o escopo de escrita da ferramenta: `summaries:write` para `regenerate_summaries`,
-        `recordings:write` para as demais (PAT sem ele: 403).
+        Since 2.24.0. Moves the proposal to `queued` and enqueues the execution, target by target,
+        through the same operations as the MCP server. Idempotent: confirming again returns the
+        current state without executing again. Expired or dismissed: 409 (`action_expired`,
+        `action_cancelled`). Requires the tool's write scope: `summaries:write` for
+        `regenerate_summaries`, `recordings:write` for the others (a PAT without it: 403).
       security:
         - sessionCookie: []
         - pat: ["summaries:read", "summaries:write"]
@@ -3688,7 +3688,7 @@ paths:
         - $ref: "#/components/parameters/CsrfToken"
       responses:
         "202":
-          description: A ação na fila (ou o estado atual, se já confirmada).
+          description: The queued action (or the current state, if already confirmed).
           content:
             application/json:
               schema:
@@ -3708,8 +3708,8 @@ paths:
     post:
       tags: [agent]
       operationId: cancelAgentAction
-      summary: Descartar a proposta
-      description: Desde a 2.24.0. Só de `proposed` (descartar de novo devolve o estado); senão 409 `action_not_proposed`.
+      summary: Dismiss the proposal
+      description: Since 2.24.0. Only from `proposed` (dismissing again returns the state); otherwise 409 `action_not_proposed`.
       security:
         - sessionCookie: []
         - pat: ["summaries:read"]
@@ -3717,7 +3717,7 @@ paths:
         - $ref: "#/components/parameters/CsrfToken"
       responses:
         "200":
-          description: A proposta descartada.
+          description: The dismissed proposal.
           content:
             application/json:
               schema:
@@ -3735,7 +3735,7 @@ paths:
     get:
       tags: [people]
       operationId: listPeople
-      summary: Diretório de pessoas do usuário
+      summary: The user's people directory
       security:
         - sessionCookie: []
         - pat: ["people:read"]
@@ -3744,12 +3744,12 @@ paths:
         - $ref: "#/components/parameters/Limit"
         - name: q
           in: query
-          description: Busca por nome ou e-mail (prefixo, sem acento).
+          description: Search by name or e-mail (prefix, accent-insensitive).
           schema:
             type: string
       responses:
         "200":
-          description: Pessoas, em ordem alfabética.
+          description: People, in alphabetical order.
           content:
             application/json:
               schema:
@@ -3764,7 +3764,7 @@ paths:
     post:
       tags: [people]
       operationId: createPerson
-      summary: Cadastrar uma pessoa
+      summary: Register a person
       security:
         - sessionCookie: []
         - pat: ["people:write"]
@@ -3781,7 +3781,7 @@ paths:
                 $ref: "#/components/examples/PersonCreateRequest"
       responses:
         "201":
-          description: Pessoa cadastrada.
+          description: Person registered.
           content:
             application/json:
               schema:
@@ -3799,18 +3799,18 @@ paths:
     get:
       tags: [people]
       operationId: listPersonFacets
-      summary: Empresas, áreas e tags de pessoa em uso
+      summary: Companies, areas and person tags in use
       description: |
-        Os valores dos atributos de cadastro das pessoas do usuário, com quantas pessoas usam cada
-        um. Empresa e área se agrupam sem acento e sem caixa, e o valor devolvido é a grafia mais
-        usada; as tags de pessoa se agrupam sem caixa. Servem às sugestões do cadastro e ao filtro
-        Participantes da biblioteca.
+        The values of the registration attributes of the user's people, with how many people use
+        each one. Company and area are grouped accent- and case-insensitively, and the value returned
+        is the most used spelling; person tags are grouped case-insensitively. They feed the
+        registration suggestions and the library's Participants filter.
       security:
         - sessionCookie: []
         - pat: ["people:read"]
       responses:
         "200":
-          description: Valores em uso, em ordem alfabética.
+          description: Values in use, in alphabetical order.
           content:
             application/json:
               schema:
@@ -3826,13 +3826,13 @@ paths:
     get:
       tags: [people]
       operationId: getPerson
-      summary: Uma pessoa
+      summary: One person
       security:
         - sessionCookie: []
         - pat: ["people:read"]
       responses:
         "200":
-          description: Pessoa.
+          description: Person.
           content:
             application/json:
               schema:
@@ -3849,7 +3849,7 @@ paths:
     patch:
       tags: [people]
       operationId: updatePerson
-      summary: Editar uma pessoa
+      summary: Edit a person
       security:
         - sessionCookie: []
         - pat: ["people:write"]
@@ -3863,7 +3863,7 @@ paths:
               $ref: "#/components/schemas/PersonPatch"
       responses:
         "200":
-          description: Pessoa atualizada.
+          description: Person updated.
           content:
             application/json:
               schema:
@@ -3879,8 +3879,8 @@ paths:
     delete:
       tags: [people]
       operationId: deletePerson
-      summary: Excluir uma pessoa
-      description: Desfaz os vínculos de locutor e apaga a impressão de voz, se houver.
+      summary: Delete a person
+      description: Undoes the speaker links and erases the voiceprint, if any.
       security:
         - sessionCookie: []
         - pat: ["people:write"]
@@ -3888,7 +3888,7 @@ paths:
         - $ref: "#/components/parameters/CsrfToken"
       responses:
         "204":
-          description: Excluída.
+          description: Deleted.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -3902,8 +3902,8 @@ paths:
     get:
       tags: [people]
       operationId: listPersonTranscripts
-      summary: Transcrições em que a pessoa fala
-      description: Exige `people:read` e `transcripts:read` num PAT. As falas da pessoa saem de `GET /api/v1/search?person=`.
+      summary: Transcripts in which the person speaks
+      description: Requires `people:read` and `transcripts:read` on a PAT. The person's utterances come from `GET /api/v1/search?person=`.
       security:
         - sessionCookie: []
         - pat: ["people:read", "transcripts:read"]
@@ -3912,7 +3912,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
       responses:
         "200":
-          description: Transcrições, da mais recente para a mais antiga.
+          description: Transcripts, newest first.
           content:
             application/json:
               schema:
@@ -3930,11 +3930,11 @@ paths:
     get:
       tags: [voice]
       operationId: getVoiceprint
-      summary: Impressão de voz da pessoa
-      description: As amostras (locutores confirmados) que compõem a impressão, sem os vetores.
+      summary: The person's voiceprint
+      description: The samples (confirmed speakers) that make up the voiceprint, without the vectors.
       responses:
         "200":
-          description: Impressão.
+          description: Voiceprint.
           content:
             application/json:
               schema:
@@ -3951,13 +3951,13 @@ paths:
     delete:
       tags: [voice]
       operationId: deleteVoiceprint
-      summary: Excluir a impressão de voz
-      description: Apaga todas as amostras e as sugestões pendentes da pessoa.
+      summary: Delete the voiceprint
+      description: Erases all of the person's samples and pending suggestions.
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
       responses:
         "204":
-          description: Excluída.
+          description: Deleted.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -3978,15 +3978,15 @@ paths:
     delete:
       tags: [voice]
       operationId: deleteVoiceSample
-      summary: Remover uma amostra da impressão de voz
+      summary: Remove a sample from the voiceprint
       description: |
-        Tira da impressão só aquela amostra; o locutor segue ligado à pessoa. As sugestões que a
-        impressão já fez não mudam.
+        Takes only that sample out of the voiceprint; the speaker stays linked to the person. The
+        suggestions the voiceprint already made do not change.
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
       responses:
         "204":
-          description: Removida.
+          description: Removed.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -3998,17 +3998,17 @@ paths:
     get:
       tags: [search]
       operationId: search
-      summary: Busca full-text sobre segmentos
+      summary: Full-text search over segments
       description: |
-        Busca em português (`tsvector` pt) nos segmentos das transcrições do usuário.
-        Pede `q` ou `person`; com só `person`, lista as falas da pessoa em ordem cronológica.
+        Portuguese search (`tsvector` pt) over the segments of the user's transcripts.
+        Takes `q` or `person`; with only `person`, it lists the person's utterances in chronological order.
       security:
         - sessionCookie: []
         - pat: ["transcripts:read"]
       parameters:
         - name: q
           in: query
-          description: Termos de busca (sintaxe `websearch_to_tsquery`, aceita "frase exata" e -exclusão).
+          description: Search terms (`websearch_to_tsquery` syntax, accepts "exact phrase" and -exclusion).
           schema:
             type: string
         - $ref: "#/components/parameters/PersonFilter"
@@ -4029,9 +4029,9 @@ paths:
         - name: field
           in: query
           description: >-
-            Valor de um campo do usuário, `<field_id>:<valor>`; repetível, como em
-            `GET /api/v1/recordings`: valores do mesmo campo combinam por OU, campos diferentes por E.
-            Num campo de lista, basta o valor ser um dos itens; título e tags valem como os embutidos.
+            Value of a user field, `<field_id>:<value>`; repeatable, as in
+            `GET /api/v1/recordings`: values of the same field combine with OR, different fields with AND.
+            On a list field, the value need only be one of the items; title and tags work like the built-in ones.
           schema:
             type: array
             items:
@@ -4041,7 +4041,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
       responses:
         "200":
-          description: Trechos encontrados, por relevância.
+          description: Passages found, by relevance.
           content:
             application/json:
               schema:
@@ -4060,7 +4060,7 @@ paths:
     get:
       tags: [organize]
       operationId: listCollections
-      summary: Coleções do usuário
+      summary: The user's collections
       security:
         - sessionCookie: []
         - pat: ["recordings:read"]
@@ -4069,7 +4069,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
       responses:
         "200":
-          description: Coleções.
+          description: Collections.
           content:
             application/json:
               schema:
@@ -4084,7 +4084,7 @@ paths:
     post:
       tags: [organize]
       operationId: createCollection
-      summary: Criar uma coleção
+      summary: Create a collection
       security:
         - sessionCookie: []
         - pat: ["recordings:write"]
@@ -4098,7 +4098,7 @@ paths:
               $ref: "#/components/schemas/CollectionCreate"
       responses:
         "201":
-          description: Coleção criada.
+          description: Collection created.
           content:
             application/json:
               schema:
@@ -4116,7 +4116,7 @@ paths:
     patch:
       tags: [organize]
       operationId: updateCollection
-      summary: Renomear ou descrever uma coleção
+      summary: Rename or describe a collection
       security:
         - sessionCookie: []
         - pat: ["recordings:write"]
@@ -4130,7 +4130,7 @@ paths:
               $ref: "#/components/schemas/CollectionPatch"
       responses:
         "200":
-          description: Coleção atualizada.
+          description: Collection updated.
           content:
             application/json:
               schema:
@@ -4146,8 +4146,8 @@ paths:
     delete:
       tags: [organize]
       operationId: deleteCollection
-      summary: Excluir uma coleção
-      description: As gravações ficam; só saem da coleção.
+      summary: Delete a collection
+      description: The recordings stay; they only leave the collection.
       security:
         - sessionCookie: []
         - pat: ["recordings:write"]
@@ -4155,7 +4155,7 @@ paths:
         - $ref: "#/components/parameters/CsrfToken"
       responses:
         "204":
-          description: Excluída.
+          description: Deleted.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -4169,10 +4169,10 @@ paths:
     post:
       tags: [organize]
       operationId: mergeCollection
-      summary: Mesclar uma coleção em outra
+      summary: Merge a collection into another
       description: |
-        As gravações da coleção passam para `into`, sem repetição, e a coleção é excluída; `into`
-        fica com o nome, a descrição e a regra dela. `into` igual à coleção, ou inexistente, é 422.
+        The collection's recordings move to `into`, without duplicates, and the collection is deleted;
+        `into` takes its name, description and rule. `into` equal to the collection, or nonexistent, is 422.
       security:
         - sessionCookie: []
         - pat: ["recordings:write"]
@@ -4186,7 +4186,7 @@ paths:
               $ref: "#/components/schemas/CollectionMerge"
       responses:
         "200":
-          description: A coleção que recebeu as gravações.
+          description: The collection that received the recordings.
           content:
             application/json:
               schema:
@@ -4204,18 +4204,18 @@ paths:
     get:
       tags: [organize]
       operationId: listTags
-      summary: O cadastro de tags do usuário
+      summary: The user's tag registry
       description: |
-        As tags cadastradas, em ordem alfabética, com quantas gravações usam cada uma. As tags são
-        fixas por padrão: o agente só escolhe entre elas (ver `GET /me/tag-assignment`). Toda tag
-        que o usuário escreve numa gravação, num envio ou nas tags padrão de um tipo entra no
-        cadastro sozinha, e a gravação fica com a grafia do cadastro (sem acento e sem caixa).
+        The registered tags, in alphabetical order, with how many recordings use each one. Tags are
+        fixed by default: the agent only chooses among them (see `GET /me/tag-assignment`). Every tag
+        the user writes on a recording, on an upload or in an agenda type's default tags enters the
+        registry on its own, and the recording takes the registry's spelling (accent- and case-insensitive).
       security:
         - sessionCookie: []
         - pat: ["recordings:read"]
       responses:
         "200":
-          description: Tags com contagem.
+          description: Tags with counts.
           content:
             application/json:
               schema:
@@ -4230,8 +4230,8 @@ paths:
     post:
       tags: [organize]
       operationId: createTag
-      summary: Cadastrar uma tag
-      description: O mesmo nome, sem acento e sem caixa, é 409 `tag_exists`.
+      summary: Register a tag
+      description: The same name, compared accent- and case-insensitively, is 409 `tag_exists`.
       security:
         - sessionCookie: []
         - pat: ["recordings:write"]
@@ -4245,7 +4245,7 @@ paths:
               $ref: "#/components/schemas/TagCreate"
       responses:
         "201":
-          description: Tag cadastrada.
+          description: Tag registered.
           content:
             application/json:
               schema:
