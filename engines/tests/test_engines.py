@@ -55,7 +55,7 @@ def test_empty_options_use_the_defaults():
 
 
 def test_factory_refuses_an_unknown_engine():
-    with pytest.raises(UnknownEngineError, match="unknown"):
+    with pytest.raises(UnknownEngineError, match="desconhecida"):
         get_engine("does-not-exist")
 
 

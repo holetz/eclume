@@ -56,5 +56,5 @@ class _Exec:
 
 @pytest.mark.parametrize("payload", [_Exec(), ValueError("x"), datetime(2026, 1, 1, tzinfo=UTC)])
 def test_pickle_with_a_global_is_refused(payload: object) -> None:
-    with pytest.raises(pickle.UnpicklingError, match="global refused"):
+    with pytest.raises(pickle.UnpicklingError, match="global recusado"):
         deserialize(pickle.dumps({"r": payload}))

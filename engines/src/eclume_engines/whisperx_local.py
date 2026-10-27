@@ -202,7 +202,7 @@ class WhisperXLocalEngine:
         try:
             audio = whisperx.load_audio(str(audio_path))
         except Exception as exc:
-            raise EngineError(AUDIO_DECODE_FAILED, f"failed to decode the audio: {exc}") from exc
+            raise EngineError(AUDIO_DECODE_FAILED, f"falha ao decodificar o áudio: {exc}") from exc
         duration_s = len(audio) / SAMPLE_RATE
 
         try:
@@ -266,7 +266,7 @@ class WhisperXLocalEngine:
                 last_error = exc
                 continue
             return pipeline, compute_type
-        raise EngineError(ASR_FAILED, f"no usable compute_type: {last_error}")
+        raise EngineError(ASR_FAILED, f"nenhum compute_type utilizável: {last_error}")
 
     def _asr(
         self,
@@ -303,7 +303,7 @@ class WhisperXLocalEngine:
                     raise
                 except Exception as exc:
                     if not is_oom(exc):
-                        raise EngineError(ASR_FAILED, f"ASR failed: {exc}") from exc
+                        raise EngineError(ASR_FAILED, f"falha no ASR: {exc}") from exc
                 else:
                     return result, model, compute_type, batch
                 # Only the OOM gets here, already outside the `except`: the traceback died with `exc` and does not hold the model.
@@ -315,7 +315,7 @@ class WhisperXLocalEngine:
                 logger.warning("OOM in the ASR (%s); trying batch_size=%d", model, batch)
                 if WARN_BATCH_REDUCED not in warnings:
                     warnings.append(WARN_BATCH_REDUCED)
-        raise EngineError(OUT_OF_MEMORY, f"Insufficient VRAM even with batch_size=1 and the {fallback} model")
+        raise EngineError(OUT_OF_MEMORY, f"VRAM insuficiente mesmo com batch_size=1 e o modelo {fallback}")
 
     def _align(
         self,
@@ -329,20 +329,20 @@ class WhisperXLocalEngine:
             align_model, metadata = self._load(
                 ("align", options.language),
                 lambda: whisperx.load_align_model(language_code=options.language, device=self.device),
-                _align_model_name(options.language) or f"alignment ({options.language})",
+                _align_model_name(options.language) or f"alinhamento ({options.language})",
             )
         except ValueError as exc:  # language with no default alignment model
             logger.warning("no alignment for %s: %s", options.language, exc)
             warnings.append(WARN_ALIGN_UNAVAILABLE)
             return result, None
         except Exception as exc:
-            raise _stage_error(ALIGNMENT_FAILED, "alignment", exc) from exc
+            raise _stage_error(ALIGNMENT_FAILED, "alinhamento", exc) from exc
         try:
             aligned = whisperx.align(
                 result["segments"], align_model, metadata, audio, self.device, return_char_alignments=False
             )
         except Exception as exc:
-            raise _stage_error(ALIGNMENT_FAILED, "alignment", exc) from exc
+            raise _stage_error(ALIGNMENT_FAILED, "alinhamento", exc) from exc
         return aligned, _align_model_name(options.language)
 
     def _diarize(  # noqa: PLR0913, PLR0917 — pipeline stage receives the job state explicitly
@@ -376,7 +376,7 @@ class WhisperXLocalEngine:
             )
         except Exception as exc:
             if not _is_access_denied(exc):
-                raise _stage_error(DIARIZATION_FAILED, "diarization", exc) from exc
+                raise _stage_error(DIARIZATION_FAILED, "diarização", exc) from exc
             logger.warning(
                 "no access to %s with the current token (model terms not accepted?): transcribing "
                 "without diarization (a single speaker). Error: %s",
@@ -396,7 +396,7 @@ class WhisperXLocalEngine:
             diarize_df, embeddings = output if options.embeddings else (output, None)
             result = whisperx.assign_word_speakers(diarize_df, result, fill_nearest=True)
         except Exception as exc:
-            raise _stage_error(DIARIZATION_FAILED, "diarization", exc) from exc
+            raise _stage_error(DIARIZATION_FAILED, "diarização", exc) from exc
         return result, embeddings, model_name
 
 
@@ -447,8 +447,8 @@ def _clear_frames(exc: BaseException) -> None:
 
 def _stage_error(code: str, stage: str, exc: Exception) -> EngineError:
     if is_oom(exc):
-        return EngineError(OUT_OF_MEMORY, f"Insufficient VRAM in {stage}: {exc}")
-    return EngineError(code, f"{stage} failed: {exc}")
+        return EngineError(OUT_OF_MEMORY, f"VRAM insuficiente na {stage}: {exc}")
+    return EngineError(code, f"falha na {stage}: {exc}")
 
 
 def _score(value: Any) -> float | None:  # noqa: ANN401

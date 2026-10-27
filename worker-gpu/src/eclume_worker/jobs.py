@@ -158,7 +158,7 @@ class EngineRegistry:
             }
         if name == "openai-compatible":
             if not base_url:
-                msg = "openai-compatible engine with no endpoint_url in the options nor ECLUME_REMOTE_BASE_URL"
+                msg = "engine openai-compatible sem endpoint_url nas options nem ECLUME_REMOTE_BASE_URL"
                 raise JobFailedError(INTERNAL_ERROR, msg)
             kwargs: dict[str, Any] = {"base_url": base_url, "api_key": self.config.remote_api_key}
             if self.config.remote_model:
@@ -275,7 +275,7 @@ def _asr(run: Callable[..., EngineResult], paths: list[Path], options: EngineOpt
     merged = results[0]
     segments, embeddings = [], {}
     for channel, result in enumerate(results):
-        label = f"CHANNEL_{channel}"
+        label = f"CANAL_{channel}"
         for segment in result.segments:
             segment.speaker = label
             for word in segment.words:
@@ -386,7 +386,7 @@ async def _run(  # noqa: PLR0913 — the job, the progress reporter the failure 
         await asyncio.to_thread(store.download, audio_key, audio_path)
         content_hash = await asyncio.to_thread(sha256_file, audio_path)
     except Exception as exc:
-        raise JobFailedError(AUDIO_DOWNLOAD_FAILED, f"failed to download {audio_key}: {exc}") from exc
+        raise JobFailedError(AUDIO_DOWNLOAD_FAILED, f"falha ao baixar {audio_key}: {exc}") from exc
     await reporter.report("download", 100)
     _checkpoint(stop)
 
@@ -430,7 +430,7 @@ async def _run(  # noqa: PLR0913 — the job, the progress reporter the failure 
         await asyncio.to_thread(store.put_json, t_key, transcript)
         await asyncio.to_thread(store.put_json, e_key, build_embeddings(result))
     except Exception as exc:
-        raise JobFailedError(UPLOAD_FAILED, f"failed to write the artifacts: {exc}") from exc
+        raise JobFailedError(UPLOAD_FAILED, f"falha ao gravar os artefatos: {exc}") from exc
 
     info = _engine_info(result, processing_s, time.monotonic() - started, reporter.started_at, pre)
     _checkpoint(stop)

@@ -77,7 +77,7 @@ class OpenAICompatibleEngine:
             response.raise_for_status()
             body = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            raise EngineError(ASR_FAILED, f"remote server failed: {exc}") from exc
+            raise EngineError(ASR_FAILED, f"falha no servidor remoto: {exc}") from exc
         if progress is not None:
             progress("asr", 100.0)
 

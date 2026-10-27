@@ -29,14 +29,14 @@ def _key(encryption_key: str | None, secret_key: str | None) -> bytes:
         try:
             key = base64.b64decode(encryption_key, validate=True)
         except binascii.Error as exc:
-            msg = "ECLUME_ENCRYPTION_KEY must be base64"
+            msg = "ECLUME_ENCRYPTION_KEY precisa ser base64"
             raise SecretError(msg) from exc
         if len(key) != _KEY_BYTES:
-            msg = "ECLUME_ENCRYPTION_KEY must be 32 bytes"
+            msg = "ECLUME_ENCRYPTION_KEY precisa ter 32 bytes"
             raise SecretError(msg)
         return key
     if not secret_key:
-        msg = "the worker has neither ECLUME_ENCRYPTION_KEY nor ECLUME_SECRET_KEY"
+        msg = "o worker não tem ECLUME_ENCRYPTION_KEY nem ECLUME_SECRET_KEY"
         raise SecretError(msg)
     hkdf = HKDF(algorithm=hashes.SHA256(), length=_KEY_BYTES, salt=None, info=b"eclume-secrets-v1")
     return hkdf.derive(secret_key.encode())
@@ -45,12 +45,12 @@ def _key(encryption_key: str | None, secret_key: str | None) -> bytes:
 def open_secret(token: str, *, encryption_key: str | None, secret_key: str | None) -> str:
     """Plaintext of the secret encrypted by the server."""
     if not token.startswith(_PREFIX):
-        msg = "unknown secret format"
+        msg = "formato de segredo desconhecido"
         raise SecretError(msg)
     key = _key(encryption_key, secret_key)
     try:
         raw = base64.b64decode(token[len(_PREFIX) :], validate=True)
         return AESGCM(key).decrypt(raw[:_NONCE], raw[_NONCE:], None).decode()
     except (binascii.Error, InvalidTag, ValueError) as exc:
-        msg = "the secret does not open with the worker's encryption key"
+        msg = "o segredo não abre com a chave de cifra do worker"
         raise SecretError(msg) from exc

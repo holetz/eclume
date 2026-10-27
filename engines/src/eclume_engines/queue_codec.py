@@ -23,7 +23,7 @@ class _NoGlobals(pickle.Unpickler):
 
     def find_class(self, module: str, name: str) -> Any:  # noqa: ANN401 — Unpickler signature
         """Refuse every global class or function."""
-        msg = f"global refused in the queue payload: {module}.{name}"
+        msg = f"global recusado no payload da fila: {module}.{name}"
         raise pickle.UnpicklingError(msg)
 
 

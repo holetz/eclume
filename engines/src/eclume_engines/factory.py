@@ -27,7 +27,7 @@ def get_engine(name: str | None = None, **kwargs: Any) -> Engine:  # noqa: ANN40
         target = ENGINES[name]
     except KeyError:
         known = ", ".join(sorted(ENGINES))
-        msg = f"unknown engine: {name!r} (known: {known})"
+        msg = f"engine desconhecida: {name!r} (conhecidas: {known})"
         raise UnknownEngineError(msg) from None
     module_name, _, class_name = target.partition(":")
     cls = getattr(importlib.import_module(module_name), class_name)

@@ -408,7 +408,7 @@ def test_unknown_engine_fails(tmp_path: Path):
     ctx["engines"] = EngineRegistry(config, hf_token=lambda: None)
     out = run_job(ctx, {"engine": "does-not-exist"})
     assert out["error_code"] == "internal_error"
-    assert "unknown" in out["message"]
+    assert "desconhecida" in out["message"]
 
 
 def test_idle_unload(tmp_path: Path):

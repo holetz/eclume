@@ -71,7 +71,7 @@ class CpuEngine:
                 str(audio_path), language=options.language, word_timestamps=True, vad_filter=True
             )
         except Exception as exc:
-            raise EngineError(AUDIO_DECODE_FAILED, f"failed to open the audio: {exc}") from exc
+            raise EngineError(AUDIO_DECODE_FAILED, f"falha ao abrir o áudio: {exc}") from exc
 
         duration = float(info.duration)
         segments: list[Segment] = []
@@ -94,7 +94,7 @@ class CpuEngine:
                 if progress is not None and duration > 0:
                     progress("asr", min(100.0, raw.end / duration * 100))
         except Exception as exc:
-            raise EngineError(ASR_FAILED, f"ASR failed: {exc}") from exc
+            raise EngineError(ASR_FAILED, f"falha no ASR: {exc}") from exc
 
         return EngineResult(
             engine=self.name,

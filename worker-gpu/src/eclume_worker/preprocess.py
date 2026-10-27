@@ -107,7 +107,7 @@ def demuxer(path: Path) -> str:
     if len(head) >= 2 and head[0] == 0xFF and head[1] & 0xE0 == 0xE0:  # noqa: PLR2004 — MPEG sync
         # Layer 00 is the ADTS header (AAC); the others are MPEG audio (MP3).
         return "aac" if head[1] & 0x06 == 0 else "mp3"
-    msg = f"container outside the allow list (initial bytes {head[:8].hex()})"
+    msg = f"contêiner fora da lista permitida (bytes iniciais {head[:8].hex()})"
     raise PreprocessError(msg)
 
 
@@ -128,7 +128,7 @@ def _run(*args: str, timeout: float = FFMPEG_MAX_TIMEOUT_S) -> subprocess.Comple
     try:
         return subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(command, -1, "", f"timeout of {timeout:g} s exceeded")
+        return subprocess.CompletedProcess(command, -1, "", f"tempo limite de {timeout:g} s esgotado")
 
 
 def _tail(stderr: str) -> str:
@@ -168,13 +168,13 @@ def probe(path: Path, fmt: str) -> tuple[int, int | None]:
     try:
         result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=PROBE_TIMEOUT_S)
     except subprocess.TimeoutExpired as exc:
-        msg = f"the audio does not open: ffprobe exceeded {PROBE_TIMEOUT_S:g} s"
+        msg = f"o áudio não abre: ffprobe passou de {PROBE_TIMEOUT_S:g} s"
         raise PreprocessError(msg) from exc
     try:
         data = json.loads(result.stdout)
         channels = int(data["streams"][0]["channels"])
     except (ValueError, KeyError, IndexError) as exc:
-        msg = f"the audio does not open: {_tail(result.stderr)}"
+        msg = f"o áudio não abre: {_tail(result.stderr)}"
         raise PreprocessError(msg) from exc
     try:
         duration_ms = round(float(data["format"]["duration"]) * 1000)
@@ -348,7 +348,7 @@ def preprocess(src: Path, workdir: Path, config: dict[str, Any] | None, model: s
         ]
         failed = next((r for r in results if r.returncode != 0), None)
         if failed is not None:
-            msg = f"the audio does not open even when only converted: {_tail(failed.stderr)}"
+            msg = f"o áudio não abre nem só convertido: {_tail(failed.stderr)}"
             raise PreprocessError(msg)
     steps += chain_steps
     offset, trim_step = _trim(paths, config, timeout)

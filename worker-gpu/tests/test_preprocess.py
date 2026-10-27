@@ -228,7 +228,7 @@ def test_container_outside_the_list_is_refused_before_ffmpeg(
     with pytest.raises(PreprocessError) as info:
         preprocess(src, tmp_path, CONFIG, None)
     assert info.value.code == AUDIO_DECODE_FAILED
-    assert "allow list" in info.value.message
+    assert "lista permitida" in info.value.message
 
 
 def test_timeout_grows_with_the_duration_up_to_the_ceiling():
@@ -244,7 +244,7 @@ def test_ffmpeg_that_exceeds_the_timeout_fails(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(module.subprocess, "run", slow)
     result = module._run("-i", "x", timeout=5)
     assert result.returncode != 0
-    assert "timeout" in result.stderr
+    assert "tempo limite" in result.stderr
 
 
 @needs_ffmpeg
