@@ -1,4 +1,4 @@
-"""Ponta a ponta com o worker GPU fake: upload → transcribe → ingest → leitura e export."""
+"""End to end with the fake GPU worker: upload → transcribe → ingest → read and export."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def _metadata() -> dict[str, object]:
     }
 
 
-def test_upload_transcreve_e_o_lumea_le_por_pat(  # noqa: PLR0915 — o fluxo inteiro é o teste
+def test_upload_transcribes_and_lumea_reads_by_pat(  # noqa: PLR0915 — the whole flow is the test
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user(name="Mariana Couto")
@@ -51,7 +51,7 @@ def test_upload_transcreve_e_o_lumea_le_por_pat(  # noqa: PLR0915 — o fluxo in
     calls = run_gpu(services.settings)
     assert [call[0] for call in calls] == [recording["id"]]
 
-    # O worker GPU terminou e publicou progresso, mas a ingestão ainda não rodou.
+    # The GPU worker finished and published progress, but ingestion has not run yet.
     pending = desktop.get(f"/api/v1/recordings/{recording['id']}").json()
     assert pending["status"] == "processing"
     assert pending["job"]["stage"] == "finalizing"
@@ -102,16 +102,16 @@ def test_upload_transcreve_e_o_lumea_le_por_pat(  # noqa: PLR0915 — o fluxo in
     assert all(LUMEA_SEGMENT_RE.match(line) for line in body)
     assert lumea.get(f"/api/v1/transcripts/{transcript_id}/export", params={"format": "pdf"}).status_code == 422
 
-    # Escopos: o PAT do lumea não lê gravações; o do desktop não lê transcrições.
+    # Scopes: the lumea PAT does not read recordings; the desktop one does not read transcripts.
     assert lumea.get(f"/api/v1/recordings/{recording['id']}").json()["code"] == "insufficient_scope"
     assert desktop.get("/api/v1/transcripts").json()["required_scopes"] == ["transcripts:read"]
 
-    # `since` inclusivo: repetir com o maior `updated_at` visto devolve o item de novo.
+    # Inclusive `since`: repeating with the largest `updated_at` seen returns the item again.
     again = lumea.get("/api/v1/transcripts", params={"since": summary["updated_at"]}).json()
     assert [item["id"] for item in again["items"]] == [transcript_id]
 
 
-def test_ingestao_idempotente_e_retranscricao_sobe_revisao(
+def test_ingestion_is_idempotent_and_retranscription_bumps_revision(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -120,7 +120,7 @@ def test_ingestao_idempotente_e_retranscricao_sobe_revisao(
     run_cpu(services.settings)
     first = api.get(f"/api/v1/recordings/{recording['id']}").json()
 
-    # Um `ingest_transcript` repetido (reentrega) não muda nada.
+    # A repeated `ingest_transcript` (redelivery) changes nothing.
     async def redeliver() -> None:
         queue = await Queue.connect(services.settings.redis_url)
         try:
@@ -146,7 +146,7 @@ def test_ingestao_idempotente_e_retranscricao_sobe_revisao(
 
 
 class _EnqueueSpy:
-    """O Redis do `ingest_transcript` chamado direto: registra o que ele enfileiraria."""
+    """The Redis of a directly called `ingest_transcript`: records what it would enqueue."""
 
     def __init__(self) -> None:
         self.jobs: list[str] = []
@@ -159,7 +159,7 @@ class _EnqueueSpy:
 
 
 def _ingest_directly(services: Services, recording_id: str) -> list[str]:
-    """Roda `ingest_transcript` fora do arq (sem a deduplicação por `_job_id`); devolve o enfileirado."""
+    """Runs `ingest_transcript` outside arq (without the `_job_id` deduplication); returns what was enqueued."""
 
     async def go() -> list[str]:
         engine = make_engine(services.settings.database_url)
@@ -176,7 +176,7 @@ def _ingest_directly(services: Services, recording_id: str) -> list[str]:
 
 
 class _RedisSpy(_EnqueueSpy):
-    """Também registra as chaves apagadas."""
+    """Also records the deleted keys."""
 
     def __init__(self, progress: dict[str, str] | None = None) -> None:
         super().__init__()
@@ -194,7 +194,7 @@ class _RedisSpy(_EnqueueSpy):
 def _deliver(
     services: Services, job: str, job_id: str | None, *args: object, progress: dict[str, str] | None = None
 ) -> _RedisSpy:
-    """Roda um job de retorno fora do arq, com o `_job_id` dado em `ctx` e o hash de progresso dado."""
+    """Runs a return job outside arq, with the given `_job_id` in `ctx` and the given progress hash."""
 
     async def go() -> _RedisSpy:
         engine = make_engine(services.settings.database_url)
@@ -210,7 +210,7 @@ def _deliver(
     return run(go())
 
 
-def test_saida_atrasada_da_revisao_anterior_e_ignorada(
+def test_late_output_of_previous_revision_is_ignored(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -222,7 +222,7 @@ def test_saida_atrasada_da_revisao_anterior_e_ignorada(
     retried = api.post(f"/api/v1/recordings/{rid}/retranscribe")
     assert retried.status_code == 202
 
-    # A saída da revisão 1 chega depois de a revisão 2 existir: nem grava, nem falha, nem apaga o progresso.
+    # Revision 1 output arrives after revision 2 exists: it neither writes, fails nor deletes the progress.
     key = f"recordings/{rid}/r1/transcript.raw.json"
     spy = _deliver(services, "ingest_transcript", f"ingest_transcript:{rid}:1", rid, key, None, ENGINE_INFO)
     assert (spy.jobs, spy.deleted) == ([], [])
@@ -233,14 +233,14 @@ def test_saida_atrasada_da_revisao_anterior_e_ignorada(
     assert (body["job"]["state"], body["job"]["id"]) == ("queued", retried.json()["job"]["id"])
     assert api.get(f"/api/v1/transcripts/{first['transcript_id']}").json()["revision"] == 1
 
-    # A da revisão 2 fecha o job dela.
+    # Revision 2 output closes its own job.
     run_gpu(services.settings)
     run_cpu(services.settings)
     assert api.get(f"/api/v1/recordings/{rid}").json()["status"] == "transcribed"
     assert api.get(f"/api/v1/transcripts/{first['transcript_id']}").json()["revision"] == 2
 
 
-def test_worker_antigo_sem_revisao_no_job_id_ainda_ingere(
+def test_old_worker_without_revision_in_job_id_still_ingests(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -255,7 +255,7 @@ def test_worker_antigo_sem_revisao_no_job_id_ainda_ingere(
     assert api.get(f"/api/v1/recordings/{failed['id']}").json()["job"]["error"]["code"] == "gpu_oom"
 
 
-def test_retranscricao_apaga_artefatos_da_revisao_anterior(
+def test_retranscription_deletes_previous_revision_artifacts(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -271,7 +271,7 @@ def test_retranscricao_apaga_artefatos_da_revisao_anterior(
         )
 
     assert listed() == [f"recordings/{rid}/r1/transcript.raw.json"]
-    # Uma chave antiga, sem revisão, também sai.
+    # An old key, without a revision, goes too.
     s3.put_object(Bucket=bucket, Key=f"recordings/{rid}/transcript.raw.json", Body=b"{}")
 
     assert api.post(f"/api/v1/recordings/{rid}/retranscribe").status_code == 202
@@ -281,7 +281,7 @@ def test_retranscricao_apaga_artefatos_da_revisao_anterior(
 
 
 def _flaky_read(monkeypatch: pytest.MonkeyPatch, failures: int) -> list[str]:
-    """`Storage.read_json` com o S3 fora do ar nas `failures` primeiras chamadas; devolve as chamadas."""
+    """`Storage.read_json` with S3 down for the first `failures` calls; returns the calls."""
     original = Storage.read_json
     calls: list[str] = []
 
@@ -295,7 +295,7 @@ def _flaky_read(monkeypatch: pytest.MonkeyPatch, failures: int) -> list[str]:
     return calls
 
 
-def test_ingestao_com_falha_passageira_tenta_de_novo(
+def test_ingestion_with_transient_failure_retries(
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
     services: Services,
@@ -310,13 +310,13 @@ def test_ingestao_com_falha_passageira_tenta_de_novo(
     assert api.get(f"/api/v1/recordings/{recording['id']}").json()["status"] == "transcribed"
 
 
-def test_falha_passageira_persistente_vira_ingest_failed(
+def test_persistent_transient_failure_becomes_ingest_failed(
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
     services: Services,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    # As esperas cabem antes do teto do reaper, que não declara `ingest_failed` no meio das tentativas.
+    # The waits fit under the reaper's ceiling, which does not declare `ingest_failed` mid-retries.
     assert sum(INGEST_RETRY_DELAYS_S) < services.settings.job_stall_seconds
     api = as_user(make_user())
     recording = upload_file(api, audio_bytes(4100))
@@ -328,17 +328,17 @@ def test_falha_passageira_persistente_vira_ingest_failed(
     assert (body["status"], body["job"]["error"]["code"]) == ("failed", "ingest_failed")
 
 
-def test_so_a_ingestao_que_grava_abre_a_cadeia_por_agente(
+def test_only_the_ingestion_that_writes_opens_the_agent_chain(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
-    # Ingestão repetida depois da cadeia inteira: nada muda e nada entra na fila.
+    # Repeated ingestion after the whole chain: nothing changes and nothing is enqueued.
     done = upload_file(api, audio_bytes(3100))
     run_gpu(services.settings)
     run_cpu(services.settings)
     assert _ingest_directly(services, done["id"]) == []
 
-    # Job já falho pelo reaper quando a ingestão chega: a transcrição não é gravada e a cadeia não começa.
+    # Job already failed by the reaper when ingestion arrives: the transcript is not written and the chain does not start.
     reaped = upload_file(api, audio_bytes(3200))
     run_gpu(services.settings)
     run(services.sql(lambda conn: fail(conn, UUID(reaped["id"]), "job_lost", "sem worker")))
@@ -348,14 +348,14 @@ def test_so_a_ingestao_que_grava_abre_a_cadeia_por_agente(
     assert body["status"] == "failed"
     assert _states(body)["fields"] == "pending"
 
-    # A ingestão que grava abre a cadeia pelo tipo de agenda.
+    # The ingestion that writes opens the chain with the agenda type.
     fresh = upload_file(api, audio_bytes(3300))
     run_gpu(services.settings)
     assert _ingest_directly(services, fresh["id"]) == ["detect_agenda_type"]
     run_cpu(services.settings)
 
 
-def test_falha_do_worker_gpu_marca_job_e_gravacao(
+def test_gpu_worker_failure_marks_job_and_recording(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -376,7 +376,7 @@ def test_falha_do_worker_gpu_marca_job_e_gravacao(
 
 
 @pytest.mark.usefixtures("platform")
-def test_embeddings_so_com_a_voz_ligada_na_plataforma(
+def test_embeddings_only_with_voice_enabled_on_platform(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -393,7 +393,7 @@ def test_embeddings_so_com_a_voz_ligada_na_plataforma(
     without = upload_file(api, audio_bytes(3000))
     run(services.sql(opt_in))
     with_opt_in = upload_file(api, audio_bytes(3000))
-    # As `options` são fixadas ao criar o job; um `transcribe` por conta na GPU, então duas rodadas.
+    # The `options` are fixed when the job is created; one `transcribe` per account on the GPU, so two rounds.
     calls = {call[0]: call[2] for call in run_gpu(services.settings)}
     run_cpu(services.settings)
     calls |= {call[0]: call[2] for call in run_gpu(services.settings)}
@@ -437,10 +437,10 @@ def _embedded_speakers(services: Services, recording_id: str) -> list[str]:
 
 
 @pytest.mark.usefixtures("platform")
-def test_embedding_nao_finito_de_worker_antigo_nao_derruba_a_ingestao(
+def test_non_finite_embedding_from_old_worker_does_not_break_ingestion(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
-    # Fala curta demais: o pyannote gera NaN, e um worker antigo o grava no `speaker_embeddings.json`.
+    # Speech too short: pyannote yields NaN, and an old worker writes it to `speaker_embeddings.json`.
     api = as_user(make_user())
     run(services.sql(_voice_on))
     recording = upload_file(api, audio_bytes(3400))
@@ -453,10 +453,10 @@ def test_embedding_nao_finito_de_worker_antigo_nao_derruba_a_ingestao(
 
 
 @pytest.mark.usefixtures("platform")
-def test_ingestao_que_falha_vira_falha_recuperavel(
+def test_failing_ingestion_becomes_retryable_failure(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
-    # Qualquer erro na ingestão desfaz a transação; a gravação não pode ficar presa na fila.
+    # Any ingestion error rolls the transaction back; the recording must not stay stuck in the queue.
     api = as_user(make_user())
     run(services.sql(_voice_on))
     recording = upload_file(api, audio_bytes(3500))
@@ -471,7 +471,7 @@ def test_ingestao_que_falha_vira_falha_recuperavel(
     transcription = next(step for step in body["pipeline"] if step["step"] == "transcription")
     assert (transcription["state"], transcription["error"]["code"]) == ("failed", "ingest_failed")
 
-    # Retranscrever com um worker que grava embeddings válidos resolve.
+    # Retranscribing with a worker that writes valid embeddings fixes it.
     assert api.post(f"/api/v1/recordings/{recording['id']}/retranscribe").status_code == 202
     run_gpu(services.settings)
     run_cpu(services.settings)
@@ -482,7 +482,7 @@ def _states(body: dict) -> dict[str, str]:
     return {step["step"]: step["state"] for step in body["pipeline"]}
 
 
-def test_etapas_do_pipeline_por_revisao(
+def test_pipeline_steps_per_revision(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -506,7 +506,7 @@ def test_etapas_do_pipeline_por_revisao(
         "summary": "pending",
     }
 
-    # Com o worker GPU reportando progresso, a transcrição sai em andamento.
+    # With the GPU worker reporting progress, transcription shows as active.
     async def progress() -> None:
         queue = await Queue.connect(services.settings.redis_url)
         try:
@@ -526,7 +526,7 @@ def test_etapas_do_pipeline_por_revisao(
     assert transcription["finished_at"] is not None
     assert transcription["duration_ms"] >= 0
 
-    # A retranscrição abre uma revisão nova: a cadeia recomeça.
+    # Retranscription opens a new revision: the chain restarts.
     retried = api.post(f"/api/v1/recordings/{recording['id']}/retranscribe").json()
     assert (_states(retried)["received"], _states(retried)["transcription"]) == ("done", "pending")
     run_gpu(services.settings)
@@ -538,7 +538,7 @@ def _step(body: dict, name: str) -> dict:
     return next(step for step in body["pipeline"] if step["step"] == name)
 
 
-def test_pre_processamento_vai_nas_options_e_vira_etapa(
+def test_preprocessing_goes_into_options_and_becomes_a_step(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -556,7 +556,7 @@ def test_pre_processamento_vai_nas_options_e_vira_etapa(
     assert (pre["state"], pre["duration_ms"]) == ("done", 1500)
     assert pre["finished_at"] == transcription["started_at"]
 
-    # A cadeia que caiu para só o formato: a etapa falha e a transcrição segue.
+    # The chain fell back to format only: the step fails and transcription goes on.
     api.post(f"/api/v1/recordings/{recording['id']}/retranscribe")
     run_gpu(services.settings, preprocess_fallback=True)
     run_cpu(services.settings)
@@ -565,7 +565,7 @@ def test_pre_processamento_vai_nas_options_e_vira_etapa(
     assert _step(body, "transcription")["state"] == "done"
 
 
-def test_falha_no_pre_processamento_marca_a_etapa_certa(
+def test_preprocessing_failure_marks_the_right_step(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -590,7 +590,7 @@ def test_falha_no_pre_processamento_marca_a_etapa_certa(
     assert _step(body, "transcription")["state"] == "pending"
 
 
-def test_job_started_at_e_o_inicio_no_worker_gpu_no_sucesso(
+def test_job_started_at_is_gpu_worker_start_on_success(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -598,11 +598,11 @@ def test_job_started_at_e_o_inicio_no_worker_gpu_no_sucesso(
     run_gpu(services.settings)
     run_cpu(services.settings)
     body = api.get(f"/api/v1/recordings/{recording['id']}").json()
-    # O início do job é o do worker (`engine_info.started_at`), o mesmo do pré-processamento.
+    # The job start is the worker's (`engine_info.started_at`), the same as preprocessing's.
     assert body["job"]["started_at"] == _step(body, "preprocessing")["started_at"]
 
 
-def test_job_started_at_e_o_inicio_no_worker_gpu_na_falha(
+def test_job_started_at_is_gpu_worker_start_on_failure(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
