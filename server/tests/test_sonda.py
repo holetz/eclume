@@ -1,4 +1,4 @@
-"""Sonda leve de fila (`python -m eclume_server.sonda`) e o custo de import do CLI."""
+"""Lightweight queue probe (`python -m eclume_server.sonda`) and the CLI's import cost."""
 
 from __future__ import annotations
 
@@ -16,49 +16,49 @@ if TYPE_CHECKING:
 
     from eclume_server_testing.harness import Services
 
-PESADOS = ("anthropic", "fastapi", "sqlalchemy")
+HEAVY = ("anthropic", "fastapi", "sqlalchemy")
 
 
-def _modulos_depois_de(codigo: str) -> set[str]:
-    """Roda `codigo` num interpretador limpo e devolve os módulos de topo importados."""
-    script = f"import sys, json\n{codigo}\nprint(json.dumps(sorted({{m.split('.')[0] for m in sys.modules}})))"
-    saida = subprocess.run([sys.executable, "-c", script], check=True, capture_output=True, text=True).stdout  # noqa: S603
-    return set(json.loads(saida))
+def _modules_after(code: str) -> set[str]:
+    """Run `code` in a clean interpreter and return the top-level modules imported."""
+    script = f"import sys, json\n{code}\nprint(json.dumps(sorted({{m.split('.')[0] for m in sys.modules}})))"
+    output = subprocess.run([sys.executable, "-c", script], check=True, capture_output=True, text=True).stdout  # noqa: S603
+    return set(json.loads(output))
 
 
-def test_sonda_nao_importa_o_peso_da_api():
-    modulos = _modulos_depois_de("import eclume_server.sonda, redis.asyncio")
-    assert {m for m in PESADOS if m in modulos} == set()
+def test_probe_does_not_import_the_api_weight():
+    modules = _modules_after("import eclume_server.sonda, redis.asyncio")
+    assert {m for m in HEAVY if m in modules} == set()
 
 
-def test_cli_so_importa_o_ramo_que_roda():
-    modulos = _modulos_depois_de("from eclume_server import cli; cli.build_parser()")
-    assert {m for m in (*PESADOS, "boto3", "argon2") if m in modulos} == set()
+def test_cli_imports_only_the_branch_it_runs():
+    modules = _modules_after("from eclume_server import cli; cli.build_parser()")
+    assert {m for m in (*HEAVY, "boto3", "argon2") if m in modules} == set()
 
 
-def test_worker_nao_importa_provider_nem_docx_nem_fastapi():
-    modulos = _modulos_depois_de("import eclume_server.worker")
-    assert {m for m in ("anthropic", "docx", "fastapi", "zeroconf") if m in modulos} == set()
+def test_worker_imports_neither_provider_nor_docx_nor_fastapi():
+    modules = _modules_after("import eclume_server.worker")
+    assert {m for m in ("anthropic", "docx", "fastapi", "zeroconf") if m in modules} == set()
 
 
-def test_sonda_sem_argumentos_ou_com_verbo_errado_sai_2(capsys: pytest.CaptureFixture[str]):
+def test_probe_without_arguments_or_with_wrong_verb_exits_2(capsys: pytest.CaptureFixture[str]):
     assert sonda.main([]) == 2
     assert sonda.main(["fila"]) == 2
     assert sonda.main(["outra", "default"]) == 2
     assert "uso:" in capsys.readouterr().err
 
 
-def test_sonda_checa_as_duas_filas_numa_chamada(monkeypatch: pytest.MonkeyPatch, services: Services):
+def test_probe_checks_both_queues_in_one_call(monkeypatch: pytest.MonkeyPatch, services: Services):
     monkeypatch.setenv("ECLUME_REDIS_URL", services.settings.redis_url)
     client = redis.Redis.from_url(services.settings.redis_url)
-    chaves = ("eclume:default:health-check", "eclume:agents:health-check")
-    client.delete(*chaves)
+    keys = ("eclume:default:health-check", "eclume:agents:health-check")
+    client.delete(*keys)
     try:
         assert sonda.main(["fila", "default", "agents"]) == 1
-        client.set(chaves[0], "j_complete=1", ex=16)
+        client.set(keys[0], "j_complete=1", ex=16)
         assert sonda.main(["fila", "default"]) == 0
         assert sonda.main(["fila", "default", "agents"]) == 1
-        client.set(chaves[1], "j_complete=1", ex=16)
+        client.set(keys[1], "j_complete=1", ex=16)
         assert sonda.main(["fila", "default", "agents"]) == 0
     finally:
-        client.delete(*chaves)
+        client.delete(*keys)
