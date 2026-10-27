@@ -1,4 +1,4 @@
-"""Fila de exclusão no bucket: gatilhos no banco, dreno com retentativa e reconciliação."""
+"""Bucket deletion queue: database triggers, drain with retry and reconciliation."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def _queued(services: Services, recording_id: str) -> set[tuple[str | None, str 
     return {(key, prefix) for key, prefix in rows}
 
 
-def test_excluir_a_gravacao_enfileira_audio_e_artefatos_na_mesma_transacao(
+def test_deleting_the_recording_queues_audio_and_artifacts_in_the_same_transaction(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -49,7 +49,7 @@ def test_excluir_a_gravacao_enfileira_audio_e_artefatos_na_mesma_transacao(
     assert _queued(services, recording["id"]) == {(audio_key, None), (None, f"recordings/{recording['id']}/")}
 
 
-def test_upload_em_andamento_da_conta_excluida_enfileira_o_abort(
+def test_upload_in_progress_of_the_deleted_account_queues_the_abort(
     make_user: Callable[..., Account], as_user: Callable[[Account], Api], services: Services
 ):
     account = make_user()
@@ -83,7 +83,7 @@ def _run_with_engine(services: Services, fn: Callable[..., Any], *args: Any, **k
     return run(go())
 
 
-def test_dreno_apaga_chave_prefixo_e_multipart_e_esvazia_a_fila(services: Services):
+def test_drain_deletes_key_prefix_and_multipart_and_empties_the_queue(services: Services):
     s3, bucket = services.s3(), services.settings.s3_bucket
     tag = uuid4()
     key, prefix = f"users/{tag}/recordings/{tag}/audio", f"recordings/{tag}/"
@@ -120,7 +120,7 @@ class _BrokenStorage:
         raise ConnectionError(msg)
 
 
-def test_falha_adia_com_espera_crescente_e_nunca_desiste(services: Services):
+def test_failure_postpones_with_growing_backoff_and_never_gives_up(services: Services):
     key = f"users/{uuid4()}/quebrado"
     _sql(services, "INSERT INTO storage_deletions (key) VALUES (:k)", k=key)
     now = datetime.now(UTC) + timedelta(days=1)
@@ -137,7 +137,7 @@ def test_falha_adia_com_espera_crescente_e_nunca_desiste(services: Services):
     assert _sql(services, "SELECT count(*) FROM storage_deletions WHERE key = :k", k=key)[0][0] == 0
 
 
-def test_reconciliacao_enfileira_so_os_orfaos_antigos(
+def test_reconciliation_queues_only_the_old_orphans(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -151,7 +151,7 @@ def test_reconciliacao_enfileira_so_os_orfaos_antigos(
     orphan_upload = s3.create_multipart_upload(Bucket=bucket, Key=f"users/{tag}/pendente")["UploadId"]
 
     storage = Storage(services.settings)
-    # Recentes demais: a margem de 24 h os protege.
+    # Too recent: the 24 h margin protects them.
     _run_with_engine(services, reconcile, storage)
     assert (
         _sql(
@@ -174,7 +174,7 @@ def test_reconciliacao_enfileira_so_os_orfaos_antigos(
     assert (f"users/{tag}/pendente", None, orphan_upload) in queued
     assert not any(kept_key in (key, prefix) for key, prefix, _ in queued)
     assert (None, f"recordings/{kept['id']}/", None) not in queued
-    # Uma segunda passada não duplica.
+    # A second pass does not duplicate.
     before = _sql(services, "SELECT count(*) FROM storage_deletions")[0][0]
     _run_with_engine(services, reconcile, storage, now=later)
     assert _sql(services, "SELECT count(*) FROM storage_deletions")[0][0] == before

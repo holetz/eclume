@@ -1,6 +1,6 @@
-"""Crons do worker: o registro de `WorkerSettings` e as três tarefas que não tinham teste.
+"""Worker crons: the `WorkerSettings` registry and the three tasks that had no test.
 
-O registro é uma tabela literal, de propósito: tirar um cron ou mudar a agenda obriga a rever o teste.
+The registry is a literal table, on purpose: removing a cron or changing the schedule forces a test review.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
 
-# (função, minuto, hora, dia da semana, segundo): o que o arq guarda em cada campo da agenda.
+# (function, minute, hour, weekday, second): what arq stores in each schedule field.
 CRONS = [
     (expire_uploads, {0, 30}, None, None, 0),
     (expire_pairing_codes, 15, None, None, 0),
@@ -55,10 +55,10 @@ CRONS = [
 ]
 
 
-def test_registro_dos_nove_crons_com_agenda_unique_e_sem_run_at_startup():
-    registrados = worker_settings(Settings())["cron_jobs"]
-    assert [job.coroutine for job in registrados] == [c[0] for c in CRONS]
-    for job, (func, minute, hour, weekday, second) in zip(registrados, CRONS, strict=True):
+def test_registry_of_the_nine_crons_with_schedule_unique_and_no_run_at_startup():
+    registered = worker_settings(Settings())["cron_jobs"]
+    assert [job.coroutine for job in registered] == [c[0] for c in CRONS]
+    for job, (func, minute, hour, weekday, second) in zip(registered, CRONS, strict=True):
         assert job.name == f"cron:{func.__name__}"
         assert (job.minute, job.hour, job.weekday, job.second) == (minute, hour, weekday, second), job.name
         assert (job.month, job.day, job.microsecond) == (None, None, 123456), job.name
@@ -67,7 +67,7 @@ def test_registro_dos_nove_crons_com_agenda_unique_e_sem_run_at_startup():
 
 
 def _cron(services: Services, func: Callable[[dict[str, Any]], Any]) -> Any:  # noqa: ANN401
-    """Roda a função do cron como o arq a chama: com o `ctx` do worker (engine, Redis, bucket)."""
+    """Run the cron function the way arq calls it: with the worker's `ctx` (engine, Redis, bucket)."""
 
     async def go() -> Any:  # noqa: ANN401
         engine = make_engine(services.settings.database_url)
@@ -94,13 +94,13 @@ def _pairing_ids(services: Services, *ids: str) -> set[str]:
     return {str(row[0]) for row in rows}
 
 
-def test_pareamento_apaga_so_o_vencido_ha_mais_de_um_dia_sem_uso(
+def test_pairing_deletes_only_the_unused_one_expired_over_a_day_ago(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     session = as_user(make_user())
     old, recent, used = (session.post("/api/v1/devices/pairing-codes").json()["id"] for _ in range(3))
     _sql(services, "UPDATE pairing_codes SET expires_at = now() - interval '2 days' WHERE id = :id", id=old)
-    # Borda: vencido há pouco fica (a janela de um dia), e o usado fica mesmo velho (guarda o `token_id`).
+    # Edge: a recently expired one stays (the one-day window), and a used one stays even when old (it keeps the `token_id`).
     _sql(services, "UPDATE pairing_codes SET expires_at = now() - interval '1 hour' WHERE id = :id", id=recent)
     _sql(
         services,
@@ -126,7 +126,7 @@ def _gpu_queue(services: Services) -> list[str]:
 
 @pytest.fixture
 def _drain_gpu(services: Services) -> Iterator[None]:
-    """Termina drenando `eclume:gpu`: um job despachado e esquecido ficaria em aberto para os outros testes."""
+    """Finish by draining `eclume:gpu`: a dispatched and forgotten job would stay open for the other tests."""
     yield
     while _gpu_queue(services):
         run_gpu(services.settings)
@@ -134,7 +134,7 @@ def _drain_gpu(services: Services) -> Iterator[None]:
 
 
 @pytest.mark.usefixtures("_drain_gpu")
-def test_despacho_poe_na_gpu_o_job_retido_so_quando_a_janela_abre(
+def test_dispatch_puts_the_held_job_on_the_gpu_only_when_the_window_opens(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -144,13 +144,13 @@ def test_despacho_poe_na_gpu_o_job_retido_so_quando_a_janela_abre(
     run_gpu(services.settings)
     run_cpu(services.settings)
     job = transcribe_job_id(waiting["id"], 1)
-    # Borda: com os minutos de 24 h estourados a conta fica retida, e o cron não despacha nada dela.
-    # (o retorno do cron conta o banco inteiro, então a prova é a fila e o estado da gravação.)
+    # Edge: with the 24 h minutes exceeded the account is held, and the cron dispatches nothing of it.
+    # (the cron's return counts the whole database, so the proof is the queue and the recording's status.)
     _cron(services, dispatch_transcriptions)
     assert job not in _gpu_queue(services)
     assert api.get(f"/api/v1/recordings/{waiting['id']}").json()["status"] == "queued"
 
-    # A janela abre (o despacho do primeiro sai das 24 h): o cron despacha o retido, uma vez.
+    # The window opens (the first one's dispatch leaves the 24 h): the cron dispatches the held one, once.
     _sql(
         services,
         "UPDATE transcription_jobs SET dispatched_at = now() - interval '25 hours' WHERE recording_id = :r",
@@ -158,12 +158,12 @@ def test_despacho_poe_na_gpu_o_job_retido_so_quando_a_janela_abre(
     )
     assert _cron(services, dispatch_transcriptions) >= 1
     assert _gpu_queue(services).count(job) == 1
-    # Uma segunda passada não repete o despacho.
+    # A second pass does not repeat the dispatch.
     _cron(services, dispatch_transcriptions)
     assert _gpu_queue(services).count(job) == 1
 
 
-def test_reconcilia_enfileira_o_orfao_velho_e_poupa_o_recente_e_o_conhecido(
+def test_reconcile_queues_the_old_orphan_and_spares_the_recent_and_the_known(
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
     services: Services,
@@ -183,18 +183,18 @@ def test_reconcilia_enfileira_o_orfao_velho_e_poupa_o_recente_e_o_conhecido(
 
     before = {row[0] for row in _sql(services, "SELECT id FROM storage_deletions")}
     try:
-        # Borda: o objeto recém-criado está dentro da margem de 24 h e fica fora da fila.
+        # Edge: the freshly created object is inside the 24 h margin and stays out of the queue.
         _cron(services, reconcile_storage)
         assert not any(orphan in pair for pair in queued())
 
-        # Com a margem zerada o órfão entra na fila; o áudio de uma gravação do banco nunca entra.
+        # With the margin zeroed the orphan enters the queue; the audio of a recording in the database never does.
         monkeypatch.setattr(storage_deletions, "ORPHAN_AGE", -timedelta(hours=1))
         assert _cron(services, reconcile_storage) >= 1
         assert (orphan, None) in queued()
         assert not any(kept_key in pair or f"recordings/{kept['id']}/" in pair for pair in queued())
-        # Uma segunda passada não duplica o que já está na fila.
+        # A second pass does not duplicate what is already queued.
         assert _cron(services, reconcile_storage) == 0
     finally:
-        # Desfaz tudo o que esta passada enfileirou, inclusive os órfãos de outros testes.
+        # Undo everything this pass queued, including other tests' orphans.
         _sql(services, "DELETE FROM storage_deletions WHERE id <> ALL(CAST(:ids AS uuid[]))", ids=list(before))
         s3.delete_object(Bucket=bucket, Key=orphan)
