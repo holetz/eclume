@@ -65,7 +65,7 @@
   font-size: 14px;
 }
 
-/* O artigo, como no quadro Article: trilha, título sem o traço do page-head no lugar das ações. */
+/* The article, as in the Article board: breadcrumb, title without the page-head rule in place of the actions. */
 .article {
   display: grid;
 }
