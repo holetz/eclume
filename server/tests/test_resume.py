@@ -1,7 +1,7 @@
-"""Retomada da cadeia por agente (`resume_pipelines`): uma janela de perda por teste.
+"""Agent chain resume (`resume_pipelines`): one loss window per test.
 
-Cada teste perde, de propósito, o enfileiramento de uma etapa (o Redis oscilou entre o commit e a
-fila) e roda a varredura com o relógio adiantado além de `RESUME_AFTER`.
+Each test deliberately loses the enqueueing of one step (Redis flickered between the commit and the
+queue) and runs the sweep with the clock moved past `RESUME_AFTER`.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ async def _with_redis(services: Services, fn: Callable[[Any], Any]) -> Any:  # n
 
 
 def _sweep(services: Services, now: datetime) -> list[str]:
-    """Uma passada com o relógio em `now`, sem teto (a sessão de teste tem muitas gravações)."""
+    """One pass with the clock at `now`, with no cap (the test session has many recordings)."""
 
     async def go(pool: Any) -> list[str]:  # noqa: ANN401
         engine = make_engine(services.settings.database_url)
@@ -81,7 +81,7 @@ def _transcribed(api: Api, services: Services) -> str:
 
 
 def _lose(services: Services, recording_id: str, *steps: str) -> None:
-    """Apaga as etapas (e o resumo automático) como se o enfileiramento delas nunca tivesse ocorrido."""
+    """Delete the steps (and the automatic summary) as if their enqueueing had never happened."""
     _sql(
         services,
         "DELETE FROM pipeline_steps WHERE recording_id = :r AND step = ANY(:steps)",
@@ -98,7 +98,7 @@ def _lose(services: Services, recording_id: str, *steps: str) -> None:
 
 
 class _DroppingRedis:
-    """O Redis caído entre o commit da ingestão e o enfileiramento da cadeia."""
+    """Redis down between the ingestion commit and the chain enqueueing."""
 
     async def delete(self, *_keys: str) -> None:
         return None
@@ -108,7 +108,7 @@ class _DroppingRedis:
         raise ConnectionError(msg)
 
 
-def test_tipo_de_agenda_que_nao_chegou_a_fila_volta(
+def test_agenda_type_that_never_reached_the_queue_comes_back(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -130,7 +130,7 @@ def test_tipo_de_agenda_que_nao_chegou_a_fila_volta(
     assert "agenda_type" not in _steps(services, rid)
 
     now = datetime.now(UTC)
-    # Antes de `RESUME_AFTER`, nada.
+    # Before `RESUME_AFTER`, nothing.
     assert f"{rid}: detect_agenda_type" not in _sweep(services, now)
     assert f"{rid}: detect_agenda_type" in _sweep(services, now + LATER)
     run_cpu(services.settings)
@@ -138,13 +138,13 @@ def test_tipo_de_agenda_que_nao_chegou_a_fila_volta(
     assert {steps["agenda_type"], steps["fields"], steps["summary"]} <= {"done", "skipped", "failed"}
 
 
-def test_campos_que_nao_chegaram_a_fila_voltam(
+def test_fields_that_never_reached_the_queue_come_back(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
     rid = _transcribed(api, services)
     _lose(services, rid, "fields", "summary")
-    # O `fill_fields` desta revisão já rodou no arq; o resultado guardado deduplicaria o relançamento.
+    # This revision's `fill_fields` already ran in arq; the stored result would deduplicate the relaunch.
     run(_with_redis(services, lambda pool: pool.delete(f"{result_key_prefix}fill_fields:{rid}:1")))
 
     assert f"{rid}: fill_fields" in _sweep(services, datetime.now(UTC) + LATER)
@@ -154,7 +154,7 @@ def test_campos_que_nao_chegaram_a_fila_voltam(
     assert "summary" in steps
 
 
-def test_resumo_automatico_que_nao_foi_aberto_e_aberto_sem_refazer_os_campos(
+def test_unopened_automatic_summary_is_opened_without_redoing_the_fields(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -177,7 +177,7 @@ def test_resumo_automatico_que_nao_foi_aberto_e_aberto_sem_refazer_os_campos(
 def summary_ready(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ) -> tuple[Api, str]:
-    """Uma gravação transcrita numa plataforma com provider: devolve a sessão e a transcrição."""
+    """A transcribed recording on a platform with a provider: returns the session and the transcript."""
     admin.post("/api/v1/admin/agent-providers", json=CLAUDE)
     api = as_user(make_user())
     rid = _transcribed(api, services)
@@ -188,7 +188,7 @@ def _summary(api: Api, summary_id: str) -> dict[str, Any]:
     return api.get(f"/api/v1/summaries/{summary_id}").json()
 
 
-def test_resumo_sumido_do_arq_e_reenfileirado(summary_ready: tuple[Api, str], services: Services):
+def test_summary_missing_from_arq_is_requeued(summary_ready: tuple[Api, str], services: Services):
     api, tid = summary_ready
     queued = api.post(f"/api/v1/transcripts/{tid}/summaries", json={}).json()
     job_id = summarize_job_id(queued["id"])
@@ -208,7 +208,7 @@ async def _done_without_closing(_ctx: dict[str, Any], *_args: Any) -> str:  # no
     return "terminou sem gravar"
 
 
-def test_resumo_concluido_no_arq_sem_fechar_vira_falha(summary_ready: tuple[Api, str], services: Services):
+def test_summary_completed_in_arq_without_closing_becomes_a_failure(summary_ready: tuple[Api, str], services: Services):
     api, tid = summary_ready
     queued = api.post(f"/api/v1/transcripts/{tid}/summaries", json={}).json()
     run(
@@ -223,7 +223,7 @@ def test_resumo_concluido_no_arq_sem_fechar_vira_falha(summary_ready: tuple[Api,
     assert (summary["status"], summary["error"]["code"]) == ("failed", "internal_error")
 
 
-def test_resumo_que_o_arq_ainda_conhece_nao_e_tocado(summary_ready: tuple[Api, str], services: Services):
+def test_summary_arq_still_knows_is_not_touched(summary_ready: tuple[Api, str], services: Services):
     api, tid = summary_ready
     queued = api.post(f"/api/v1/transcripts/{tid}/summaries", json={}).json()
     swept = _sweep(services, datetime.now(UTC) + LATER)

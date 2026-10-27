@@ -1,4 +1,4 @@
-"""Fila justa da GPU: um `transcribe` por conta em `eclume:gpu`, despacho na vez e minutos de 24 h."""
+"""GPU fair queue: one `transcribe` per account in `eclume:gpu`, dispatch on turn and 24 h minutes."""
 
 from __future__ import annotations
 
@@ -34,10 +34,10 @@ async def _with_redis(services: Services, fn: Callable[[Any], Any]) -> Any:  # n
 
 @pytest.fixture(autouse=True)
 def _empty_gpu_queue(services: Services) -> Iterator[None]:
-    """Começa com `eclume:gpu` vazia (a ordem da fila é o que o teste confere) e termina drenando-a.
+    """Start with `eclume:gpu` empty (the queue order is what the test checks) and end by draining it.
 
-    Drenar, e não esvaziar: um job despachado e tirado da fila ficaria em aberto no banco para
-    sempre e apareceria na Saúde de outro teste.
+    Drain, not empty: a job dispatched and taken off the queue would stay open in the database
+    forever and would show up in another test's Health.
     """
 
     async def empty(pool: Any) -> None:  # noqa: ANN401
@@ -78,23 +78,23 @@ def _upload(api: Api, seed: str, **fields: Any) -> dict[str, Any]:  # noqa: ANN4
     return upload_file(api, audio_bytes(2000, seed=seed), **fields)
 
 
-def test_um_transcribe_por_conta_e_rodizio_entre_contas(
+def test_one_transcribe_per_account_and_rotation_between_accounts(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     ana, bruno = as_user(make_user()), as_user(make_user())
     first, second, third = (_upload(ana, f"ana-{n}") for n in range(3))
     other = _upload(bruno, "bruno")
-    # Os dez arquivos de uma pessoa não atrasam o primeiro de outra: um de cada conta na GPU.
+    # One person's ten files do not delay another's first: one from each account on the GPU.
     assert _gpu_queue(services) == [_job(first), _job(other)]
     assert ana.get(f"/api/v1/recordings/{second['id']}").json()["status"] == "queued"
 
-    # Terminado o primeiro, a ingestão despacha o próximo da conta.
+    # Once the first finishes, ingestion dispatches the account's next one.
     run_gpu(services.settings)
     run_cpu(services.settings)
     assert _gpu_queue(services) == [_job(second)]
     assert ana.get(f"/api/v1/recordings/{first['id']}").json()["status"] == "transcribed"
 
-    # A falha do `transcribe` também libera a vez.
+    # A `transcribe` failure also frees the turn.
     run_gpu(services.settings, fail=True)
     run_cpu(services.settings)
     assert _gpu_queue(services) == [_job(third)]
@@ -104,7 +104,7 @@ def test_um_transcribe_por_conta_e_rodizio_entre_contas(
     assert ana.get(f"/api/v1/recordings/{third['id']}").json()["status"] == "transcribed"
 
 
-def test_passou_dos_minutos_a_gravacao_espera_a_janela(
+def test_over_the_minutes_the_recording_waits_for_the_window(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -113,13 +113,13 @@ def test_passou_dos_minutos_a_gravacao_espera_a_janela(
     waiting = _upload(api, "espera")
     run_gpu(services.settings)
     run_cpu(services.settings)
-    # Três minutos despachados em 24 h: o segundo espera no banco, sem falha.
+    # Three minutes dispatched in 24 h: the second waits in the database, without failing.
     assert api.get("/api/v1/me/usage").json()["usage"]["gpu_minutes_24h"] == 3
     assert _job(waiting) not in _gpu_queue(services)
     assert waiting["id"] not in [str(rid) for rid in _dispatch_waiting(services)]
     assert api.get(f"/api/v1/recordings/{waiting['id']}").json()["status"] == "queued"
 
-    # A janela abre (aqui, o despacho do primeiro sai das 24 h): o cron despacha.
+    # The window opens (here, the first one's dispatch leaves the 24 h): the cron dispatches.
     async def age(conn: Any) -> None:  # noqa: ANN401
         await conn.execute(
             text("UPDATE transcription_jobs SET dispatched_at = now() - interval '25 hours' WHERE recording_id = :r"),
@@ -131,7 +131,7 @@ def test_passou_dos_minutos_a_gravacao_espera_a_janela(
     assert _job(waiting) in _gpu_queue(services)
 
 
-def test_retranscrever_e_retentar_passam_pelo_despacho(
+def test_retranscribe_and_retry_go_through_dispatch(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -140,7 +140,7 @@ def test_retranscrever_e_retentar_passam_pelo_despacho(
     run_cpu(services.settings)
     waiting = _upload(api, "dois")
     assert _gpu_queue(services) == [_job(waiting)]
-    # Retranscrever com outro job da conta na GPU: fica retido até a vez.
+    # Retranscribing with another account job on the GPU: it is held until its turn.
     assert api.post(f"/api/v1/recordings/{first['id']}/retranscribe").status_code == 202
     assert _gpu_queue(services) == [_job(waiting)]
     run_gpu(services.settings)
