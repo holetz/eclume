@@ -152,7 +152,7 @@ O app móvel ([mobile-app.md](mobile-app.md)) é Tauri 2 mobile, Android primeir
 - **Android:** `mobile/src-tauri/gen/android/` é gerado uma vez por `tauri android init` e
   **versionado** (manifesto, gradle e assinatura são código); `build/` e `.gradle/` ficam no
   `.gitignore` dele. O SDK, o NDK e o JDK vivem no host de build
-  ([host-setup.md](../../project/host-setup.md#ambiente-android-build-e-emulador-do-app-móvel)), e todo
+  ([host-setup.md](../../project/host-setup.md#android-environment-build-and-emulator-for-the-mobile-app)), e todo
   comando Android começa com `source ~/.config/eclume/android-env.sh`.
 
 ```bash

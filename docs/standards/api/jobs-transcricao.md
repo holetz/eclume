@@ -323,7 +323,7 @@ E2E e também **em produção** num host sem GPU NVIDIA: `deploy/deploy.sh --sem
 `deploy/docker-compose.cpu.yml`, que define `ECLUME_ENGINE=cpu` e `ECLUME_DEVICE=cpu` no
 `worker-gpu` e zera a reserva de GPU dele (`deploy: !reset {}`, Compose 2.24+), com a mesma
 imagem. A fila, o contrato do job e o raw são os mesmos; o heartbeat sai sem os campos da NVML
-([auto-hospedar.md](../../how-to/auto-hospedar.md#sem-gpu)). Os testes do server usam um worker
+([auto-hospedar.md](../../how-to/auto-hospedar.md#without-a-gpu)). Os testes do server usam um worker
 fake que publica um `transcript.raw.json` de fixture de `contracts/fixtures/`.
 
 ## Como o server cumpre a sua parte
