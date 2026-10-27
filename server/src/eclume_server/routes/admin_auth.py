@@ -1,7 +1,7 @@
-"""Sessão da conta de admin (`/admin/auth/login`, `/admin/auth/logout`, `/admin/me`).
+"""The admin account's session (`/admin/auth/login`, `/admin/auth/logout`, `/admin/me`).
 
-A conta de admin é separada das contas de usuário: o mesmo e-mail pode existir nas duas, com
-senhas e sessões próprias. O cookie da sessão só viaja para `/api/v1/admin` (SameSite=Strict).
+The admin account is separate from user accounts: the same e-mail may exist in both, with their own
+passwords and sessions. The session cookie travels only to `/api/v1/admin` (SameSite=Strict).
 """
 
 from __future__ import annotations
@@ -36,14 +36,14 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 async def admin_login(
     body: LoginRequest, request: Request, ctx: Ctx, _: Annotated[None, Depends(attempts("admin_login"))]
 ) -> Response:
-    """Abre a sessão de admin: `eclume_admin_session` (HttpOnly, só no painel) e `eclume_admin_csrf`."""
+    """Open the admin session: `eclume_admin_session` (HttpOnly, panel only) and `eclume_admin_csrf`."""
     ip = client_ip(request)
     await check_login(ctx, "admin", body.email, ip)
     now = datetime.now(UTC)
     async with system_tx(ctx.engine) as conn:
         query = select(t.admins).where(func.lower(t.admins.c.email) == body.email.lower())
         admin = (await conn.execute(query)).mappings().first()
-    # O argon2 roda numa thread e fora da transação.
+    # argon2 runs in a thread and outside the transaction.
     if (
         not await verify_password_async(admin["password_hash"] if admin else None, body.password)
         or not admin
@@ -82,7 +82,7 @@ async def admin_login(
 
 @router.post("/auth/logout", status_code=204)
 async def admin_logout(admin: Admin, ctx: Ctx) -> Response:
-    """Encerra a sessão de admin e remove os cookies."""
+    """End the admin session and remove the cookies."""
     async with system_tx(ctx.engine) as conn:
         await conn.execute(delete(t.admin_sessions).where(t.admin_sessions.c.id == admin.session_id))
     response = Response(status_code=204)
@@ -96,7 +96,7 @@ async def admin_logout(admin: Admin, ctx: Ctx) -> Response:
 
 @router.get("/me")
 async def admin_me(admin: Admin, ctx: Ctx) -> dict[str, Any]:
-    """Schema `AdminAccount` da conta de admin corrente."""
+    """Schema `AdminAccount` of the current admin account."""
     async with system_tx(ctx.engine) as conn:
         row = (await conn.execute(select(t.admins).where(t.admins.c.id == admin.admin_id))).mappings().one()
     return {

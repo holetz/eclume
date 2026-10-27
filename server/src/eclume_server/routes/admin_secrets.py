@@ -1,7 +1,8 @@
-"""Segredos da plataforma (`/admin/secrets`). Só a sessão de admin.
+"""Platform secrets (`/admin/secrets`). Admin session only.
 
-O valor entra cifrado (`crypto.encrypt`) e nunca volta: a listagem diz só `is_set` e `updated_at`.
-Os nomes são fixos (`settings_admin.KNOWN_SECRETS`), porque cada um tem um leitor definido.
+The value goes in encrypted (`crypto.encrypt`) and never comes back: the listing says only `is_set`
+and `updated_at`. The names are fixed (`settings_admin.KNOWN_SECRETS`), because each has a defined
+reader.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ class SecretPut(BaseModel):
 
 @router.get("/secrets")
 async def list_secrets(ctx: Ctx) -> dict[str, Any]:
-    """Cada segredo conhecido, definido ou não; nunca o valor."""
+    """Every known secret, set or not; never the value."""
     async with system_tx(ctx.engine) as conn:
         rows = (await conn.execute(select(t.platform_secrets.c.name, t.platform_secrets.c.updated_at))).all()
     stored = dict(rows)
@@ -47,7 +48,7 @@ async def list_secrets(ctx: Ctx) -> dict[str, Any]:
 
 @router.put("/secrets/{secret_name}", status_code=204)
 async def put_secret(secret_name: str, body: SecretPut, admin: Admin, ctx: Ctx) -> Response:
-    """Grava (ou troca) o segredo, cifrado."""
+    """Save (or replace) the secret, encrypted."""
     if secret_name not in KNOWN_SECRETS:
         raise invalid_field("secret_name", f"segredo desconhecido; use {', '.join(KNOWN_SECRETS)}")
     value = body.value.strip()
@@ -69,7 +70,7 @@ async def put_secret(secret_name: str, body: SecretPut, admin: Admin, ctx: Ctx) 
 
 @router.delete("/secrets/{secret_name}", status_code=204)
 async def delete_secret(secret_name: str, ctx: Ctx) -> Response:
-    """Apaga o segredo; 404 se não estava definido."""
+    """Delete the secret; 404 if it was not set."""
     async with system_tx(ctx.engine) as conn:
         result = await conn.execute(delete(t.platform_secrets).where(t.platform_secrets.c.name == secret_name))
     if result.rowcount == 0:

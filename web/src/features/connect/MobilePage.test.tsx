@@ -9,9 +9,9 @@ beforeAll(() => preloadRoute('/app-movel', '/parear'))
 
 const SERVER_DATE = 'Sun, 27 Sep 2026 14:02:18 GMT'
 
-// Só a data e o `performance.now()` (a âncora da contagem) são falsos, no instante do servidor da
-// fixture: a validade não depende do relógio real. Os temporizadores ficam reais, para o React Query
-// e o Testing Library.
+// Only the date and `performance.now()` (the countdown anchor) are fake, at the fixture's server
+// instant: the expiry does not depend on the real clock. The timers stay real, for React Query
+// and Testing Library.
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date', 'performance'] })
   vi.setSystemTime(new Date(SERVER_DATE))
@@ -49,8 +49,8 @@ function mockMobileApi(extra: Parameters<typeof mockFetch>[0] = {}) {
   })
 }
 
-describe('app móvel', () => {
-  it('gera o código ao abrir e mostra o QR, os passos, a validade e o código em texto', async () => {
+describe('mobile app', () => {
+  it('generates the code on opening and shows the QR, the steps, the expiry and the text code', async () => {
     const http = mockMobileApi()
     renderApp('/app-movel')
     expect(await screen.findByRole('heading', { name: 'App móvel' })).toBeInTheDocument()
@@ -63,7 +63,7 @@ describe('app móvel', () => {
     expect(http.requests('POST /api/v1/devices/pairing-codes').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('lista só os celulares vinculados e desvincula depois de confirmar', async () => {
+  it('lists only the paired phones and unpairs after confirming', async () => {
     const http = mockMobileApi({ 'DELETE /api/v1/tokens/:id': () => empty(204) })
     renderApp('/app-movel')
     const list = await screen.findByRole('region', { name: 'Celulares vinculados' })
@@ -83,15 +83,15 @@ describe('app móvel', () => {
     )
   })
 
-  it('sem celulares, diz que nenhum está vinculado', async () => {
+  it('with no phones, says none is paired', async () => {
     mockMobileApi({ 'GET /api/v1/tokens': () => ({ items: [], next_cursor: null }) })
     renderApp('/app-movel')
     expect(await screen.findByText('Nenhum celular vinculado ainda.')).toBeInTheDocument()
   })
 })
 
-describe('página de pareamento', () => {
-  it('é pública, mostra o código formatado e não chama a API', async () => {
+describe('pairing page', () => {
+  it('is public, shows the formatted code and does not call the API', async () => {
     const http = mockFetch({})
     renderApp('/parear?codigo=K7Q4MX&ca=3f9a')
     expect(await screen.findByRole('heading', { name: 'Parear o celular' })).toBeInTheDocument()

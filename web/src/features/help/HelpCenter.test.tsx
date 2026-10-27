@@ -15,8 +15,8 @@ function openHelp(path: string) {
   return renderApp(path)
 }
 
-describe('central de ajuda', () => {
-  it('mostra os seis tópicos com três artigos, o total e as perguntas frequentes', async () => {
+describe('help center', () => {
+  it('shows the six topics with three articles, the total and the frequently asked questions', async () => {
     openHelp('/ajuda')
     expect(await screen.findByRole('heading', { level: 1, name: 'Central de ajuda' })).toBeInTheDocument()
     for (const topic of TOPICS) {
@@ -35,20 +35,20 @@ describe('central de ajuda', () => {
     expect(details[1]).not.toHaveAttribute('open')
     expect(within(faq).getByText('Quem vê minhas gravações?')).toBeInTheDocument()
     expect(screen.getByText('Ainda com dúvida? Fale com quem administra este servidor.')).toBeInTheDocument()
-    // A central está ligada na navegação.
-    // A central mora no menu de ajuda do cabeçalho; a barra lateral não acende nada.
+    // The center is wired into navigation.
+    // The center lives in the header help menu; the sidebar highlights nothing.
     const nav = screen.getByRole('navigation', { name: 'Principal' })
     expect(within(nav).queryByRole('link', { current: 'page' })).not.toBeInTheDocument()
   })
 
-  it('lista um tópico inteiro por ?topico=', async () => {
+  it('lists a whole topic via ?topico=', async () => {
     openHelp('/ajuda?topico=organizar')
     const list = await screen.findByRole('list', { name: 'Campos, regras e tipos de agenda' })
     expect(within(list).getAllByRole('listitem')).toHaveLength(articlesByTopic('organizar').length)
     expect(screen.getByRole('link', { name: '← Todos os tópicos' })).toHaveAttribute('href', '/ajuda')
   })
 
-  it('busca sem acento, guarda a consulta em ?q= e marca o termo no trecho', async () => {
+  it('searches without accents, keeps the query in ?q= and marks the term in the snippet', async () => {
     openHelp('/ajuda')
     const search = await screen.findByRole('searchbox', { name: 'Buscar na ajuda' })
     await userEvent.type(search, 'impressao de voz')
@@ -62,12 +62,12 @@ describe('central de ajuda', () => {
     expect(screen.queryByRole('region', { name: 'Perguntas frequentes' })).not.toBeInTheDocument()
   })
 
-  it('diz quando nada foi encontrado', async () => {
+  it('says when nothing was found', async () => {
     openHelp('/ajuda?q=girafa')
     expect(await screen.findByText(/Nada encontrado para “girafa”/)).toBeInTheDocument()
   })
 
-  it('/ fora de um campo põe o foco na busca', async () => {
+  it('/ outside a field focuses the search', async () => {
     openHelp('/ajuda')
     const search = await screen.findByRole('searchbox', { name: 'Buscar na ajuda' })
     await userEvent.keyboard('/')
@@ -76,8 +76,8 @@ describe('central de ajuda', () => {
   })
 })
 
-describe('artigo da ajuda', () => {
-  it('mostra trilha, meta, corpo com alerta, índice e relacionados', async () => {
+describe('help article', () => {
+  it('shows breadcrumb, meta, body with alert, table of contents and related articles', async () => {
     openHelp('/ajuda/sugestoes-por-voz')
     expect(await screen.findByRole('heading', { level: 1, name: 'Como funcionam as sugestões por voz' })).toBeInTheDocument()
     const crumbs = screen.getByRole('link', { name: 'Transcrição e locutores' })
@@ -107,7 +107,7 @@ describe('artigo da ajuda', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Apague a impressão de voz de uma pessoa' })).toBeInTheDocument()
   })
 
-  it('um link para /downloads/ é um link comum', async () => {
+  it('a link to /downloads/ is an ordinary link', async () => {
     openHelp('/ajuda/certificado-do-servidor')
     const download = await screen.findByRole('link', { name: '/downloads/eclume-root.crt' })
     expect(download).toHaveAttribute('href', '/downloads/eclume-root.crt')
@@ -115,22 +115,22 @@ describe('artigo da ajuda', () => {
     expect(next).toHaveAttribute('href', '/downloads/eclume-root-proxima.crt')
   })
 
-  it('um link para outro artigo navega sem recarregar', async () => {
+  it('a link to another article navigates without reloading', async () => {
     openHelp('/ajuda/conectar-assistente-mcp')
     const body = await screen.findByRole('article')
     await userEvent.click(within(body).getByRole('link', { name: 'Crie um token de acesso' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'Crie um token de acesso' })).toBeInTheDocument()
   })
 
-  it('slug desconhecido mostra "Artigo não encontrado"', async () => {
+  it('an unknown slug shows "Artigo não encontrado"', async () => {
     openHelp('/ajuda/nao-existe')
     expect(await screen.findByRole('heading', { level: 1, name: 'Artigo não encontrado' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'central de ajuda' })).toHaveAttribute('href', '/ajuda')
   })
 })
 
-describe('ajuda nas páginas', () => {
-  it('? na página de Pessoas abre a gaveta com os artigos dela, e a dica leva ao artigo', async () => {
+describe('help on pages', () => {
+  it('? on the Pessoas page opens the drawer with its articles, and the hint leads to the article', async () => {
     mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
       'GET /api/v1/people': () => fixtures.personPage(),

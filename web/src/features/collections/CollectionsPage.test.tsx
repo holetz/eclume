@@ -12,7 +12,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 const SERRA = '01928f3a-1c00-7a00-8000-000000000801'
 
-/** API de coleções com estado, como o servidor. */
+/** A stateful collections API, like the server. */
 function mockCollections(initial: Schemas['Collection'][] = fixtures.collectionPage().items) {
   let items = initial
   return mockFetch({
@@ -44,8 +44,8 @@ function mockCollections(initial: Schemas['Collection'][] = fixtures.collectionP
   })
 }
 
-describe('coleções', () => {
-  it('é aberta por "Gerenciar coleções" no filtro da biblioteca, com o cabeçalho do DS', async () => {
+describe('collections', () => {
+  it('is opened from "Gerenciar coleções" in the library filter, with the DS header', async () => {
     mockCollections()
     mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
@@ -62,7 +62,7 @@ describe('coleções', () => {
     expect(screen.getByText(/Coleção agrupa gravações; tag marca assuntos\. As duas convivem/)).toBeInTheDocument()
   })
 
-  it('avisa que as coleções também organizam a pasta sincronizada do desktop, com link para a ajuda', async () => {
+  it('warns that collections also organize the desktop synced folder, with a link to help', async () => {
     mockCollections()
     renderApp('/colecoes')
     expect(await screen.findByRole('heading', { level: 1, name: 'Coleções' })).toBeInTheDocument()
@@ -71,7 +71,7 @@ describe('coleções', () => {
     expect(screen.getByRole('link', { name: 'Saiba como funciona' })).toHaveAttribute('href', '/ajuda/pasta-sincronizada')
   })
 
-  it('sem coleções, ensina a incluir pela gravação ou pela regra', async () => {
+  it('with no collections, teaches how to include by recording or by rule', async () => {
     mockCollections([])
     renderApp('/colecoes')
     const empty = await screen.findByText(/^Nenhuma coleção ainda\./)
@@ -80,7 +80,7 @@ describe('coleções', () => {
     )
   })
 
-  it('lista com contagem e leva às gravações da coleção', async () => {
+  it('lists with counts and leads to the collection recordings', async () => {
     mockCollections()
     renderApp('/colecoes')
     expect(await screen.findByRole('heading', { level: 1, name: 'Coleções' })).toBeInTheDocument()
@@ -92,13 +92,13 @@ describe('coleções', () => {
     expect(within(row).getByRole('link', { name: 'Ver gravações' })).toHaveAttribute('href', `/?colecao=${SERRA}`)
   })
 
-  it('cria, renomeia e exclui em diálogos', async () => {
+  it('creates, renames and deletes in dialogs', async () => {
     const http = mockCollections()
     renderApp('/colecoes')
     await userEvent.click(await screen.findByRole('button', { name: 'Nova coleção' }))
-    const nova = screen.getByRole('dialog', { name: 'Nova coleção' })
-    await userEvent.type(within(nova).getByLabelText('Nome da coleção'), 'Programa de lideranças')
-    await userEvent.click(within(nova).getByRole('button', { name: 'Criar coleção' }))
+    const createDialog = screen.getByRole('dialog', { name: 'Nova coleção' })
+    await userEvent.type(within(createDialog).getByLabelText('Nome da coleção'), 'Programa de lideranças')
+    await userEvent.click(within(createDialog).getByRole('button', { name: 'Criar coleção' }))
     const list = await screen.findByRole('list', { name: 'Coleções' })
     expect(await within(list).findByText('Programa de lideranças')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -110,21 +110,21 @@ describe('coleções', () => {
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Editar Metalúrgica Serra Azul' }))
-    const editar = screen.getByRole('dialog', { name: 'Editar coleção' })
-    const nome = within(editar).getByLabelText('Nome da coleção')
-    await userEvent.clear(nome)
-    await userEvent.type(nome, 'Serra Azul')
-    await userEvent.click(within(editar).getByRole('button', { name: 'Salvar' }))
+    const editDialog = screen.getByRole('dialog', { name: 'Editar coleção' })
+    const nameField = within(editDialog).getByLabelText('Nome da coleção')
+    await userEvent.clear(nameField)
+    await userEvent.type(nameField, 'Serra Azul')
+    await userEvent.click(within(editDialog).getByRole('button', { name: 'Salvar' }))
     expect(await within(list).findByText('Serra Azul')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Excluir Serra Azul' }))
-    const excluir = screen.getByRole('dialog', { name: 'Excluir Serra Azul?' })
-    await userEvent.click(within(excluir).getByRole('button', { name: 'Excluir coleção' }))
+    const deleteDialog = screen.getByRole('dialog', { name: 'Excluir Serra Azul?' })
+    await userEvent.click(within(deleteDialog).getByRole('button', { name: 'Excluir coleção' }))
     await waitFor(() => expect(within(list).queryByText('Serra Azul')).not.toBeInTheDocument())
     expect(within(list).getByText('Programa de lideranças')).toBeInTheDocument()
   })
 
-  it('a biblioteca filtra pela coleção da URL', async () => {
+  it('the library filters by the collection in the URL', async () => {
     const http = mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
       'GET /api/v1/collections': () => fixtures.collectionPage(),
@@ -132,7 +132,7 @@ describe('coleções', () => {
     })
     renderApp(`/?colecao=${SERRA}`)
     await waitFor(() => expect(http.requests('GET /api/v1/recordings').length).toBeGreaterThan(0))
-    // A primeira consulta da biblioteca, depois da pergunta "a conta tem alguma?" (limit=1) do shell.
+    // The library's first query, after the shell's "does the account have any?" question (limit=1).
     const [query] = http
       .requests('GET /api/v1/recordings')
       .map((r) => new URL(r.url).searchParams)
@@ -140,7 +140,7 @@ describe('coleções', () => {
     expect(query.getAll('collection')).toEqual([SERRA])
   })
 
-  it('cria uma coleção automática com a regra, usando um exemplo', async () => {
+  it('creates an automatic collection with the rule, using an example', async () => {
     const http = mockCollections()
     renderApp('/colecoes')
     const list = await screen.findByRole('list', { name: 'Coleções' })
@@ -164,7 +164,7 @@ describe('coleções', () => {
     })
   })
 
-  it('mescla uma coleção em outra escolhida na lista', async () => {
+  it('merges a collection into another one picked from the list', async () => {
     const [first] = fixtures.collectionPage().items
     const second = { ...first, id: 'clientes', name: 'Clientes', auto_assign: false, instructions: '' }
     const http = mockCollections([first, second])

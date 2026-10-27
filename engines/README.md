@@ -1,15 +1,15 @@
 # eclume-engines
 
-Interface de engine de ASR do eclume (`eclume_engines`), compartilhada pelo server e pelo worker
-pelo workspace uv: `Engine`, `EngineOptions`, `EngineResult` e a fábrica `get_engine(nome)`.
+eclume's ASR engine interface (`eclume_engines`), shared by the server and the worker through the
+uv workspace: `Engine`, `EngineOptions`, `EngineResult` and the `get_engine(nome)` factory.
 
-| Engine | Módulo | Extra | O que faz |
+| Engine | Module | Extra | What it does |
 |---|---|---|---|
-| `whisperx-local` (padrão) | `whisperx_local.py` | `whisperx` | WhisperX 3.8.6 na GPU: ASR `large-v3-turbo` `int8_float16`, alinhamento wav2vec2, diarização pyannote `community-1` e embeddings |
-| `cpu` | `cpu.py` | `cpu` | faster-whisper `small` `int8`, para dev sem GPU; sem diarização |
-| `openai-compatible` | `openai_compatible.py` | — | cliente de `POST /v1/audio/transcriptions` (speaches); sem diarização |
+| `whisperx-local` (default) | `whisperx_local.py` | `whisperx` | WhisperX 3.8.6 on the GPU: ASR `large-v3-turbo` `int8_float16`, wav2vec2 alignment, pyannote `community-1` diarization and embeddings |
+| `cpu` | `cpu.py` | `cpu` | faster-whisper `small` `int8`, for dev without a GPU; no diarization |
+| `openai-compatible` | `openai_compatible.py` | — | client of `POST /v1/audio/transcriptions` (speaches); no diarization |
 
-O núcleo não importa torch, WhisperX nem faster-whisper: cada engine pesada importa as próprias
-dependências ao transcrever, e elas vêm dos extras, que `uv sync --all-packages` não instala. Os
-testes rodam sem GPU, sobre módulos fake. Operação e medidas na GTX 1660:
-[docs/project/worker-gpu.md](../docs/project/worker-gpu.md).
+The core does not import torch, WhisperX or faster-whisper: each heavy engine imports its own
+dependencies when it transcribes, and they come from the extras, which `uv sync --all-packages`
+does not install. The tests run without a GPU, over fake modules. Operation and measurements on the
+GTX 1660: [docs/project/worker-gpu.md](../docs/project/worker-gpu.md).

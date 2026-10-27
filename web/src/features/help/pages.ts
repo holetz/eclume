@@ -1,6 +1,6 @@
-// Chaves de página da ajuda: cada tela declara a sua com `useHelpTopic`, e o cabeçalho `paginas`
-// de cada artigo diz em que telas ele aparece na gaveta ("Nesta página"). `biblioteca`, `gravacao`
-// e `busca` são das telas de holetz/eclume#37.
+// Help page keys: each screen declares its own with `useHelpTopic`, and each article's `paginas`
+// header says on which screens it appears in the drawer ("Nesta página"). `biblioteca`, `gravacao`
+// and `busca` belong to the screens of holetz/eclume#37.
 export const HELP_PAGES = {
   biblioteca: 'Biblioteca',
   gravacao: 'Gravação',

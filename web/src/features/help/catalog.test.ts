@@ -14,9 +14,9 @@ import {
 import { parseFrontmatter } from './frontmatter'
 import { HELP_PAGES, type HelpPageKey } from './pages'
 
-// O produto é por usuário (holetz/eclume#32): sem organização, sem convite, sem termo de
-// consentimento por pessoa, sem compartilhamento entre contas, sem transcrição ao vivo e sem os
-// templates de resumo (que viraram instruções do tipo de agenda).
+// The product is per user (holetz/eclume#32): no organization, no invitation, no per-person consent
+// form, no sharing between accounts, no live transcription and no summary templates (which became
+// agenda type instructions).
 const FORBIDDEN: RegExp[] = [
   /organiza[çc](ão|ões|ao|oes)/i,
   /\btenant/i,
@@ -28,7 +28,7 @@ const FORBIDDEN: RegExp[] = [
   /\btemplates?\b/i,
 ]
 
-// Rotas do app que um artigo pode citar num link interno.
+// App routes an article may cite in an internal link.
 const APP_ROUTES = [
   /^\/$/,
   /^\/busca$/,
@@ -46,14 +46,14 @@ const APP_ROUTES = [
 
 const links = (markdown: string) => [...markdown.matchAll(/\]\(([^)\s]+)\)/g)].map((match) => match[1])
 
-describe('artigos da central de ajuda', () => {
-  it('existem e têm slug em kebab-case, único', () => {
+describe('help center articles', () => {
+  it('exist and have a unique kebab-case slug', () => {
     expect(ARTICLES.length).toBeGreaterThan(0)
     for (const article of ARTICLES) expect(article.slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/)
     expect(new Set(ARTICLES.map((a) => a.slug)).size).toBe(ARTICLES.length)
   })
 
-  it('cobrem a central inteira: 44 artigos, três ou mais por tópico e um ou mais por chave de página', () => {
+  it('cover the whole center: 44 articles, three or more per topic and one or more per page key', () => {
     expect(ARTICLES).toHaveLength(44)
     for (const topic of TOPICS) expect(articlesByTopic(topic.key).length, topic.key).toBeGreaterThanOrEqual(3)
     for (const key of Object.keys(HELP_PAGES) as HelpPageKey[]) {
@@ -90,7 +90,7 @@ describe('artigos da central de ajuda', () => {
     for (const term of FORBIDDEN) expect(text, `termo proibido ${term}`).not.toMatch(term)
   })
 
-  it('o artigo das sugestões por voz é o do DS, sem organização', () => {
+  it('the voice suggestions article is the DS one, without organization', () => {
     const article = getArticle('sugestoes-por-voz')!
     expect(article.topic).toBe('transcricao')
     expect(article.headings.map((h) => h.text)).toEqual([
@@ -104,8 +104,8 @@ describe('artigos da central de ajuda', () => {
   })
 })
 
-describe('perguntas frequentes', () => {
-  it('têm pergunta e resposta, sem termos do produto antigo', () => {
+describe('frequently asked questions', () => {
+  it('have a question and an answer, without terms of the old product', () => {
     expect(QUESTIONS).toHaveLength(6)
     for (const { question, answer } of QUESTIONS) {
       expect(question).toMatch(/\?$/)
@@ -115,7 +115,7 @@ describe('perguntas frequentes', () => {
     expect(QUESTIONS[1]).toMatchObject({ question: 'Quem vê minhas gravações?' })
   })
 
-  it('cada ## é uma pergunta, e o texto até o próximo é a resposta', () => {
+  it('each ## is a question, and the text up to the next one is the answer', () => {
     expect(parseQuestions('## Um?\n\nResposta um.\n\n## Dois?\nResposta\ndois.')).toEqual([
       { question: 'Um?', answer: 'Resposta um.' },
       { question: 'Dois?', answer: 'Resposta\ndois.' },
@@ -126,15 +126,15 @@ describe('perguntas frequentes', () => {
 const HEAD = 'titulo: Um artigo\ntopico: comecar\npaginas: [biblioteca]\nrelacionados: []\ntermos: [a, b]\nordem: 1\natualizado: 2026-09-27'
 const article = (head: string, body = 'Texto.') => `---\n${head}\n---\n${body}`
 
-describe('leitor do cabeçalho', () => {
-  it('lê valores e listas, com CRLF', () => {
+describe('header reader', () => {
+  it('reads values and lists, with CRLF', () => {
     expect(parseFrontmatter('---\r\ntitulo: Olá: mundo\r\ntermos: [a, b c]\r\nvazia: []\r\n---\r\nCorpo', 'x.md')).toEqual({
       data: { titulo: 'Olá: mundo', termos: ['a', 'b c'], vazia: [] },
       body: 'Corpo',
     })
   })
 
-  it('lança com o nome do arquivo', () => {
+  it('throws with the file name', () => {
     expect(() => parseFrontmatter('sem cabeçalho', 'a.md')).toThrow(/^a\.md: /)
     expect(() => parseFrontmatter('---\ntitulo: x\n', 'b.md')).toThrow(/b\.md: o cabeçalho não fecha/)
     expect(() => parseFrontmatter('---\n- item\n---\n', 'c.md')).toThrow(/c\.md: linha inválida/)
@@ -143,8 +143,8 @@ describe('leitor do cabeçalho', () => {
   })
 })
 
-describe('validação de um artigo', () => {
-  it('monta slug, títulos, texto puro e minutos de leitura', () => {
+describe('article validation', () => {
+  it('builds slug, headings, plain text and reading minutes', () => {
     const body = `Abertura com [link](/ajuda/outro) e **negrito**.\n\n## Primeiro passo\n\n${'palavra '.repeat(390)}`
     const parsed = parseArticle('./articles/um-artigo.md', article(HEAD, body))
     expect(parsed).toMatchObject({ slug: 'um-artigo', title: 'Um artigo', topic: 'comecar', order: 1 })
@@ -165,7 +165,7 @@ describe('validação de um artigo', () => {
     expect(() => parseArticle('./articles/x.md', article(head))).toThrow(error)
   })
 
-  it('ordena por tópico e depois por ordem', () => {
+  it('sorts by topic and then by order', () => {
     const catalog = buildCatalog({
       './articles/b.md': article(HEAD.replace('topico: comecar', 'topico: conectar')),
       './articles/c.md': article(HEAD.replace('ordem: 1', 'ordem: 2')),
@@ -174,11 +174,11 @@ describe('validação de um artigo', () => {
     expect(catalog.map((a) => a.slug)).toEqual(['c', 'a', 'b'])
   })
 
-  it('o id do título tira acento e pontuação', () => {
+  it('the heading id strips accents and punctuation', () => {
     expect(headingId('Consentimento e remoção: o que fazer?')).toBe('consentimento-e-remocao-o-que-fazer')
   })
 
-  it('os seis tópicos seguem a ordem do DS', () => {
+  it('the six topics follow the DS order', () => {
     expect(TOPICS.map((t) => t.key)).toEqual(['comecar', 'processamento', 'transcricao', 'resumos', 'organizar', 'conectar'])
   })
 })

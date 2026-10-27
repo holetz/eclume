@@ -15,8 +15,8 @@ const gigabytes = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 })
 const gb = (mb: number) => gigabytes.format(mb / 1024)
 
 /**
- * Saúde da plataforma, relida a cada 15 s só com a aba visível. Sem conteúdo de usuário: nem
- * título nem arquivo de gravação aparecem aqui.
+ * Platform health, reread every 15 s only with the tab visible. No user content: neither
+ * a recording's title nor its file shows here.
  */
 export function HealthPage() {
   const health = useAdminHealth()
@@ -34,7 +34,7 @@ export function HealthPage() {
         }
       />
       {health.isPending && <p role="status">Consultando a saúde do serviço…</p>}
-      {/* Um erro de leitura mantém os últimos dados na tela. */}
+      {/* A read error keeps the last data on screen. */}
       {health.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(health.error)}
@@ -192,7 +192,7 @@ function Stat({ kicker, value, sub, danger }: { kicker: string; value: string; s
   )
 }
 
-/** Uma falha, sem link para a gravação: a sessão de admin não abre /gravacoes. */
+/** A failure, without a link to the recording: the admin session does not open /gravacoes. */
 function FailureRow({ failure }: { failure: Failure }) {
   const retry = useRetryJob()
   return (
@@ -202,7 +202,7 @@ function FailureRow({ failure }: { failure: Failure }) {
       <td className="mono">{failure.code}</td>
       <td>{failure.message}</td>
       <td className={styles.actionsCell}>
-        {/* Só a transcrição tem job para retentar (holetz/eclume#33). */}
+        {/* Only transcription has a job to retry (holetz/eclume#33). */}
         {failure.job_id &&
           (retry.isSuccess ? (
             <span className="text-muted">Na fila de novo.</span>

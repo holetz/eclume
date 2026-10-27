@@ -1,13 +1,13 @@
-"""As conversas do Agente: sessões, mensagens e arquivos no Postgres, e o job `agent_turn`.
+"""The Agent's conversations: sessions, messages and files in Postgres, and the `agent_turn` job.
 
-Tudo vive sob a RLS do dono (`user_tx`): outra conta não enxerga nada, e a rota responde 404. A
-pergunta grava a mensagem `user`, liga os anexos a ela, cria a resposta `assistant` em `queued` e,
-depois do commit, enfileira `agent_turn` no worker de agentes, que roda o laço de
-`agents/agent.py` e grava a resposta, as fontes, os arquivos gerados (no bucket, sob o dono) e as
-propostas de ação (`agent_actions.py`, que a pessoa confirma depois). A pergunta pode escolher uma
-habilidade (`skill` ou `/nome` no começo do texto), guardada na mensagem (holetz/eclume#145). A
-conta tem até `MAX_OPEN` respostas em aberto e a conversa, uma. Uma resposta em aberto há mais de
-`STALE_AFTER` vira `failed` (`agent_expired`) na leitura. Contrato em
+Everything lives under the owner's RLS (`user_tx`): another account sees nothing, and the route answers
+404. The question writes the `user` message, links the attachments to it, creates the `assistant` reply
+as `queued` and, after the commit, enqueues `agent_turn` on the agents worker, which runs the loop of
+`agents/agent.py` and writes the reply, the sources, the generated files (in the bucket, under the owner)
+and the action proposals (`agent_actions.py`, which the person confirms later). The question may pick a
+skill (`skill` or `/name` at the start of the text), stored in the message (holetz/eclume#145). The
+account has up to `MAX_OPEN` open replies and the conversation, one. A reply open for longer than
+`STALE_AFTER` becomes `failed` (`agent_expired`) on read. Contract in
 docs/standards/code/server-agentes.md §Agente.
 """
 
@@ -73,7 +73,7 @@ log = logging.getLogger(__name__)
 S, M, F = t.agent_sessions.c, t.agent_messages.c, t.agent_files.c
 
 
-# --- vistas --------------------------------------------------------------------------------------
+# --- views ---------------------------------------------------------------------------------------
 
 
 def session_json(row: Row) -> dict[str, Any]:
@@ -87,7 +87,7 @@ def session_json(row: Row) -> dict[str, Any]:
 
 
 def file_json(row: Row) -> dict[str, Any]:
-    """Schema `AgentFile`; o conteúdo se baixa em `GET /agent/files/{id}/content`."""
+    """Schema `AgentFile`; the content is downloaded at `GET /agent/files/{id}/content`."""
     text = row.get("text_content")
     return {
         "id": str(row["id"]),
@@ -97,14 +97,14 @@ def file_json(row: Row) -> dict[str, Any]:
         "name": row["name"],
         "media_type": row["media_type"],
         "size_bytes": row["size_bytes"],
-        # Só a entrada tem texto; o anexo sem texto legível (PDF escaneado) avisa na tela.
+        # Only the input has text; an attachment without readable text (scanned PDF) warns on screen.
         "text_chars": len(text) if text is not None else None,
         "created_at": iso(row["created_at"]),
     }
 
 
 def message_json(row: Row, files: list[dict[str, Any]], actions: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Schema `AgentMessage`, com os arquivos e as propostas de ação ligados a ela."""
+    """Schema `AgentMessage`, with the files and the action proposals linked to it."""
     return {
         "id": str(row["id"]),
         "session_id": str(row["session_id"]),
@@ -135,7 +135,7 @@ _FILE_COLUMNS = (
 )
 
 
-# --- sessões -------------------------------------------------------------------------------------
+# --- sessions ------------------------------------------------------------------------------------
 
 
 async def _session(conn: AsyncConnection, session_id: UUID, *, lock: bool = False) -> Row:
@@ -153,7 +153,7 @@ def _title(value: str) -> str:
 
 
 async def list_sessions(conn: AsyncConnection, cursor: str | None, limit: int) -> dict[str, Any]:
-    """As conversas da conta, da mais recente para a mais antiga (`updated_at`)."""
+    """The account's conversations, from the most recent to the oldest (`updated_at`)."""
     stmt = select(t.agent_sessions).order_by(S.updated_at.desc(), S.id.desc()).limit(limit + 1)
     if cursor:
         stmt = stmt.where(tuple_(S.updated_at, S.id) < decode_cursor(cursor))
@@ -166,14 +166,14 @@ async def list_sessions(conn: AsyncConnection, cursor: str | None, limit: int) -
 
 
 async def create_session(conn: AsyncConnection, owner_id: UUID, title: str) -> dict[str, Any]:
-    """Uma conversa nova; sem título, a primeira pergunta dá o título."""
+    """A new conversation; without a title, the first question gives the title."""
     stmt = insert(t.agent_sessions).values(owner_id=owner_id, title=_title(title)).returning(t.agent_sessions)
     row = (await conn.execute(stmt)).mappings().one()
     return session_json(row)
 
 
 async def rename_session(conn: AsyncConnection, session_id: UUID, title: str) -> dict[str, Any]:
-    """Troca o título (sem mexer na última atividade)."""
+    """Changes the title (without touching the last activity)."""
     await _session(conn, session_id)
     stmt = update(t.agent_sessions).where(S.id == session_id).values(title=_title(title)).returning(t.agent_sessions)
     row = (await conn.execute(stmt)).mappings().one()
@@ -181,13 +181,13 @@ async def rename_session(conn: AsyncConnection, session_id: UUID, title: str) ->
 
 
 async def delete_session(conn: AsyncConnection, session_id: UUID) -> None:
-    """Exclui a conversa; as mensagens e os arquivos saem em cascata, e o gatilho limpa o bucket."""
+    """Deletes the conversation; the messages and files go in cascade, and the trigger cleans the bucket."""
     await _session(conn, session_id)
     await conn.execute(delete(t.agent_sessions).where(S.id == session_id))
 
 
 async def expire_stale(conn: AsyncConnection, session_id: UUID | None = None) -> None:
-    """Marca `failed` as respostas em aberto há mais de `STALE_AFTER` (o job morreu ou sumiu)."""
+    """Marks as `failed` the replies open for longer than `STALE_AFTER` (the job died or vanished)."""
     stmt = (
         update(t.agent_messages)
         .where(and_(M.status.in_(OPEN), M.created_at < func.now() - STALE_AFTER))
@@ -214,7 +214,7 @@ async def _files_by_message(
 
 
 async def session_detail(conn: AsyncConnection, session_id: UUID) -> dict[str, Any]:
-    """Schema `AgentSessionDetail`: a conversa, as mensagens em ordem e os anexos ainda não enviados."""
+    """Schema `AgentSessionDetail`: the conversation, the messages in order and the attachments not yet sent."""
     session = await _session(conn, session_id)
     await expire_stale(conn, session_id)
     by_message, pending = await _files_by_message(conn, session_id)
@@ -228,7 +228,7 @@ async def session_detail(conn: AsyncConnection, session_id: UUID) -> dict[str, A
 
 
 async def read_message(conn: AsyncConnection, session_id: UUID, message_id: UUID) -> dict[str, Any]:
-    """Schema `AgentMessage` (a consulta da resposta até `done` ou `failed`)."""
+    """Schema `AgentMessage` (the reply's query until `done` or `failed`)."""
     await expire_stale(conn, session_id)
     row = (
         (await conn.execute(select(t.agent_messages).where(and_(M.id == message_id, M.session_id == session_id))))
@@ -246,12 +246,12 @@ async def read_message(conn: AsyncConnection, session_id: UUID, message_id: UUID
     return message_json(row, [file_json(item) for item in files], actions.get(message_id))
 
 
-# --- anexos --------------------------------------------------------------------------------------
+# --- attachments ---------------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class PreparedFile:
-    """O anexo com o texto já extraído (ou a recusa), pronto para `add_input_file`."""
+    """The attachment with its text already extracted (or the refusal), ready for `add_input_file`."""
 
     name: str
     data: bytes
@@ -260,11 +260,11 @@ class PreparedFile:
 
 
 async def prepare_input_file(name: str, data: bytes) -> PreparedFile:
-    """Extrai o texto do anexo numa thread, **antes** da transação com trava da conversa.
+    """Extracts the attachment's text in a thread, **before** the transaction that locks the conversation.
 
-    A extração de um PDF grande leva segundos; feita dentro da transação, ela seguraria a linha
-    da conversa (`FOR UPDATE`) e uma conexão do pool. A recusa fica guardada e só sobe em
-    `add_input_file`, no ponto de sempre, para a ordem dos erros (413, 404, 409, 415) não mudar.
+    Extracting a large PDF takes seconds; done inside the transaction, it would hold the conversation's
+    row (`FOR UPDATE`) and a pool connection. The refusal is kept and only raised in
+    `add_input_file`, at the usual point, so the order of the errors (413, 404, 409, 415) does not change.
     """
     filename = clean_name(name)
     if len(data) > MAX_INPUT_BYTES:
@@ -278,7 +278,7 @@ async def prepare_input_file(name: str, data: bytes) -> PreparedFile:
 async def add_input_file(
     conn: AsyncConnection, storage: Storage, owner_id: UUID, session_id: UUID, prepared: PreparedFile
 ) -> dict[str, Any]:
-    """Guarda o anexo e o texto extraído; 413 acima do teto, 415 fora dos tipos, 409 na conversa cheia."""
+    """Stores the attachment and the extracted text; 413 above the ceiling, 415 outside the types, 409 on a full conversation."""
     data = prepared.data
     if len(data) > MAX_INPUT_BYTES:
         raise payload_too_large(MAX_INPUT_BYTES)
@@ -296,7 +296,7 @@ async def add_input_file(
     if prepared.rejection is not None:
         raise unsupported_media_type(str(prepared.rejection)) from prepared.rejection
     extracted = prepared.extracted
-    assert extracted is not None  # noqa: S101 — sem recusa e sem excesso de tamanho, a extração existe
+    assert extracted is not None  # noqa: S101 — with no refusal and no excess size, the extraction exists
     file_id = uuid4()
     key = file_key(owner_id, session_id, file_id)
     row = (
@@ -320,13 +320,13 @@ async def add_input_file(
         .mappings()
         .one()
     )
-    # Dentro da transação: se o bucket falha, a linha não fica.
+    # Inside the transaction: if the bucket fails, the row does not stay.
     await storage.put_object(key, data, extracted.media_type)
     return file_json(row)
 
 
 async def delete_input_file(conn: AsyncConnection, session_id: UUID, file_id: UUID) -> None:
-    """Tira um anexo ainda não enviado; o que já foi com uma pergunta fica no histórico (409)."""
+    """Removes an attachment not yet sent; one already sent with a question stays in the history (409)."""
     stmt = select(F.message_id, F.direction).where(and_(F.id == file_id, F.session_id == session_id))
     row = (await conn.execute(stmt)).mappings().first()
     if row is None or row["direction"] != "input":
@@ -337,7 +337,7 @@ async def delete_input_file(conn: AsyncConnection, session_id: UUID, file_id: UU
 
 
 async def file_for_download(conn: AsyncConnection, file_id: UUID) -> Row:
-    """O nome, o tipo e a chave de um arquivo da conta, ou 404."""
+    """The name, type and key of an account file, or 404."""
     row = (
         (await conn.execute(select(F.name, F.media_type, F.storage_key, F.size_bytes).where(F.id == file_id)))
         .mappings()
@@ -348,12 +348,12 @@ async def file_for_download(conn: AsyncConnection, file_id: UUID) -> Row:
     return row
 
 
-# --- a pergunta ----------------------------------------------------------------------------------
+# --- the question --------------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class Turn:
-    """A pergunta e a resposta na fila, e o que o job precisa."""
+    """The question and the queued reply, and what the job needs."""
 
     question: dict[str, Any]
     answer: dict[str, Any]
@@ -361,7 +361,7 @@ class Turn:
 
 
 async def _chosen_skill(conn: AsyncConnection, message: str, skill: str | None) -> tuple[Row | None, str]:
-    """A habilidade pedida (`skill` ou `/nome` no começo) e a pergunta sem o prefixo; 422 se não vale."""
+    """The requested skill (`skill` or `/name` at the start) and the question without the prefix; 422 if invalid."""
     prefixed, rest = split_prefix(message)
     chosen = skill_name(skill) or prefixed
     if chosen is None:
@@ -377,7 +377,7 @@ async def _chosen_skill(conn: AsyncConnection, message: str, skill: str | None) 
 
 
 async def _pending_attachments(conn: AsyncConnection, session_id: UUID, attachments: list[UUID]) -> list[UUID]:
-    """Os anexos pedidos, sem repetição; 422 acima do teto ou em anexo que não está pendente nesta conversa."""
+    """The requested attachments, deduplicated; 422 above the ceiling or on an attachment not pending in this conversation."""
     wanted = list(dict.fromkeys(attachments))
     if len(wanted) > MAX_INPUTS_PER_MESSAGE:
         raise invalid_field("attachments", f"até {MAX_INPUTS_PER_MESSAGE} anexos por pergunta")
@@ -404,7 +404,7 @@ async def _pending_attachments(conn: AsyncConnection, session_id: UUID, attachme
     return wanted
 
 
-async def send_message(  # noqa: PLR0913 — a conversa, o dono, a pergunta, os anexos e a habilidade
+async def send_message(  # noqa: PLR0913 — the conversation, the owner, the question, the attachments and the skill
     conn: AsyncConnection,
     owner_id: UUID,
     session_id: UUID,
@@ -413,11 +413,11 @@ async def send_message(  # noqa: PLR0913 — a conversa, o dono, a pergunta, os 
     *,
     skill: str | None = None,
 ) -> Turn:
-    """Grava a pergunta com os anexos e a resposta `queued`; quem chama enfileira depois do commit.
+    """Writes the question with the attachments and the `queued` reply; the caller enqueues after the commit.
 
-    409 com outra resposta em aberto na conversa, 429 com `MAX_OPEN` na conta, 422 em anexo que não é
-    desta conversa ou já foi enviado, e em habilidade (`skill` ou `/nome` no começo) inexistente ou
-    desligada.
+    409 with another open reply in the conversation, 429 with `MAX_OPEN` on the account, 422 on an attachment
+    that is not from this conversation or was already sent, and on a skill (`skill` or `/name` at the
+    start) that does not exist or is disabled.
     """
     session = await _session(conn, session_id, lock=True)
     skill_row, message = await _chosen_skill(conn, message, skill)
@@ -480,9 +480,9 @@ async def send_message(  # noqa: PLR0913 — a conversa, o dono, a pergunta, os 
 async def enqueue_turn(
     redis: ArqRedis, message_id: UUID, *, transcripts: bool, scopes: frozenset[str] = frozenset()
 ) -> None:
-    """Enfileira `agent_turn` (depois do commit, para o job enxergar as linhas).
+    """Enqueues `agent_turn` (after the commit, so the job sees the rows).
 
-    `scopes` são os de escrita da credencial: decidem quais ações o agente pode propor.
+    `scopes` are the credential's write scopes: they decide which actions the agent may propose.
     """
     await redis.enqueue_job(
         "agent_turn",
@@ -494,12 +494,12 @@ async def enqueue_turn(
     )
 
 
-# --- o job `agent_turn` --------------------------------------------------------------------------
+# --- the `agent_turn` job ------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class SessionEnv:
-    """`agents.agent_tools.AgentEnv` sobre o banco: a base e os anexos desta conversa, como o dono."""
+    """`agents.agent_tools.AgentEnv` over the database: the base and this conversation's attachments, as the owner."""
 
     engine: AsyncEngine
     owner_id: UUID
@@ -507,11 +507,11 @@ class SessionEnv:
 
     @property
     def base(self) -> BaseTools:
-        """A base de gravações do dono."""
+        """The owner's recordings base."""
         return BaseTools(self.engine, self.owner_id)
 
     async def read_file(self, file_id: UUID) -> InputFile | None:
-        """Um anexo enviado nesta conversa."""
+        """An attachment sent in this conversation."""
         stmt = select(F.name, F.text_content).where(
             and_(
                 F.id == file_id,
@@ -525,13 +525,13 @@ class SessionEnv:
         return InputFile(file_id, row.name, row.text_content or "") if row else None
 
     async def skill(self, name: str) -> Skill | None:
-        """A habilidade ligada do dono com esse nome."""
+        """The owner's enabled skill with that name."""
         async with user_tx(self.engine, self.owner_id) as conn:
             row = await enabled_skill(conn, name)
         return as_skill(row) if row else None
 
     async def plan_action(self, tool: str, params: dict[str, Any], limit: int) -> ProposedAction | str:
-        """A proposta da ação, com os alvos resolvidos sob a RLS do dono."""
+        """The action proposal, with the targets resolved under the owner's RLS."""
         return await Planner(self.engine, self.owner_id).plan(tool, params, limit)
 
 
@@ -621,10 +621,10 @@ async def _answer(
 async def run_agent_turn_job(
     ctx: dict[str, Any],
     message_id: str,
-    transcripts: bool = True,  # noqa: FBT001, FBT002 — argumento posicional do job
+    transcripts: bool = True,  # noqa: FBT001, FBT002 — positional argument of the job
     scopes: list[str] | None = None,
 ) -> str:
-    """O job `agent_turn`: responde a pergunta e grava a resposta (ou o erro) na conversa."""
+    """The `agent_turn` job: answers the question and writes the reply (or the error) in the conversation."""
     engine: AsyncEngine = ctx["engine"]
     async with system_tx(engine) as conn:
         found = (await conn.execute(select(M.owner_id).where(M.id == UUID(message_id)))).first()
@@ -654,7 +654,7 @@ async def run_agent_turn_job(
     except TimeoutError:
         error = {"code": "provider_timeout", "message": "A resposta passou do tempo limite."}
     except Exception as exc:
-        log.exception("agente %s: falha inesperada", message_id)
+        log.exception("agent %s: unexpected failure", message_id)
         error = {"code": INTERNAL_ERROR, "message": type(exc).__name__}
     else:
         return "done"

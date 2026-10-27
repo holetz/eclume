@@ -1,6 +1,6 @@
 # eclume design system
 
-eclume is a self-hosted institutional transcription service ([holetz/eclume](https://github.com/holetz/eclume)). The name joins eco and lume. This system keeps the Modernist grammar: flat and architectural, set entirely in Archivo, a warm linen-and-walnut palette, a visible grid, zero corner radius and strong 2px rules. On top of that it adds the eclume brand and the product layer the web app and the desktop app need: recording status, transcripts with six speaker hues, the grouped app shell, the tray window, and a dark theme.
+eclume is a self-hosted institutional transcription service (this repository). The name joins eco and lume. This system keeps the Modernist grammar: flat and architectural, set entirely in Archivo, a warm linen-and-walnut palette, a visible grid, zero corner radius and strong 2px rules. On top of that it adds the eclume brand and the product layer the web app and the desktop app need: recording status, transcripts with six speaker hues, the grouped app shell, the tray window, and a dark theme.
 
 ## How to use this
 

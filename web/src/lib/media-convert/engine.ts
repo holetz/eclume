@@ -1,6 +1,6 @@
 import type { ProgressTracker } from './progress'
 
-/** O que cada motor recebe; o orquestrador já validou o contexto e o bitrate. */
+/** What each engine receives; the orchestrator has already validated the context and the bitrate. */
 export interface EngineRequest {
   file: Blob
   bitrate: number
@@ -13,6 +13,6 @@ export type EngineName = 'webcodecs' | 'ffmpeg'
 export interface ProbeResult {
   durationSec: number | null
   hasAudio: boolean
-  /** O navegador decodifica a faixa de áudio (senão a conversão cairá para o ffmpeg.wasm). */
+  /** The browser decodes the audio track (otherwise the conversion falls back to ffmpeg.wasm). */
   decodable: boolean
 }

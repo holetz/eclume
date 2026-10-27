@@ -1,13 +1,13 @@
 import { externalDestinations, PURPOSE_LABEL, usePrivacy, type DataDestination } from '../../app/privacy'
 
 interface ExternalDataNoticeProps {
-  /** As finalidades que a tela configura. */
+  /** The purposes the screen configures. */
   purposes: DataDestination['purpose'][]
-  /** Muda quando a configuração muda, para reler os destinos. */
+  /** Changes when the configuration changes, to reread the destinations. */
   revision?: string | number
 }
 
-/** Avisa que uma finalidade manda dados para fora do servidor, e que os usuários veem isso em Conta. */
+/** Warns that a purpose sends data outside the server, and that users see it in Conta. */
 export function ExternalDataNotice({ purposes, revision }: ExternalDataNoticeProps) {
   const outside = externalDestinations(usePrivacy(revision).data).filter((d) => purposes.includes(d.purpose))
   if (outside.length === 0) return null

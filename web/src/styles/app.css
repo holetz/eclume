@@ -1,4 +1,4 @@
-/* Camada de produto: só o que o web precisa e o Design System (eclume.css) não define. */
+/* Product layer: only what the web needs and the Design System (eclume.css) does not define. */
 :root {
   color-scheme: light;
 }
@@ -17,7 +17,7 @@
   margin-top: var(--space-1);
 }
 
-/* O rótulo de 12px do DS, para <legend> e rótulos que não são <label> filho de .field. */
+/* The DS 12px label, for <legend> and labels that are not a <label> child of .field. */
 .field-label {
   display: block;
   font-size: 12px;
@@ -65,8 +65,8 @@
   gap: var(--space-2);
 }
 
-/* Sem a busca (enquanto o Suspense da gaveta mostra o carregamento), a gaveta de ajuda tem três
-   linhas: cabeçalho, corpo e rodapé. */
+/* Without search (while the drawer's Suspense shows the loading state), the help drawer has three
+   rows: header, body and footer. */
 .help-drawer:not(:has(.help-search)) {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
@@ -76,7 +76,7 @@
   gap: var(--space-2);
 }
 
-/* As composições do DS desenham os ícones Lucide com ponta quadrada. */
+/* The DS compositions draw the Lucide icons with square caps. */
 svg.lucide {
   stroke-linecap: square;
   stroke-linejoin: miter;
@@ -86,7 +86,7 @@ svg.lucide {
   font-size: 13px;
 }
 
-/* Título e rodapé do formulário de acesso, como nas composições do DS. */
+/* Title and footer of the sign-in form, as in the DS compositions. */
 .auth-form h2 {
   margin: 0;
 }
@@ -108,8 +108,8 @@ svg.lucide {
   }
 }
 
-/* No celular, os `.stats` do DS quebram em linhas com a régua da esquerda no começo da linha
-   nova: empilhados, cada número ganha a régua de cima. */
+/* On a phone, the DS `.stats` wrap into rows with the left rule at the start of the new row:
+   stacked, each number gets the top rule. */
 @media (max-width: 30rem) {
   .stats {
     grid-template-columns: minmax(0, 1fr);
@@ -136,7 +136,7 @@ svg.lucide {
   }
 }
 
-/* Ambiente: "Reduzir movimento" vale como o prefers-reduced-motion do sistema. */
+/* Environment: "Reduzir movimento" counts as the system's prefers-reduced-motion. */
 :root[data-motion='reduce'] *,
 :root[data-motion='reduce'] *::before,
 :root[data-motion='reduce'] *::after {
@@ -145,7 +145,7 @@ svg.lucide {
   scroll-behavior: auto !important;
 }
 
-/* Ambiente: a densidade compacta aperta a escala de espaço do DS; tipo e controles não mudam. */
+/* Environment: the compact density tightens the DS space scale; type and controls do not change. */
 :root[data-density='compact'] {
   --space-3: 8px;
   --space-4: 12px;
@@ -153,7 +153,7 @@ svg.lucide {
   --space-8: 24px;
 }
 
-/* O diálogo fica acima da barra lateral aberta em tela estreita e rola quando não cabe. */
+/* The dialog sits above the open sidebar on a narrow screen and scrolls when it does not fit. */
 .dialog-backdrop {
   z-index: 50;
 }
@@ -163,7 +163,7 @@ svg.lucide {
   overflow: auto;
 }
 
-/* O `.menu` do DS aberto por um botão, ancorado abaixo dele. */
+/* The DS `.menu` opened by a button, anchored below it. */
 .menu-button {
   position: relative;
   display: inline-flex;
@@ -176,7 +176,7 @@ svg.lucide {
   z-index: 20;
 }
 
-/* Rótulo de uma parte do menu (a engrenagem agrupada): não focável, com o filete do .menu-sep acima. */
+/* Label of a menu part (the grouped gear): not focusable, with the .menu-sep rule above it. */
 .menu-heading {
   padding: 8px 12px 2px;
   font-size: 11px;
@@ -191,33 +191,33 @@ svg.lucide {
   border-top: 1px solid var(--color-divider);
 }
 
-/* O conteúdo usa a largura toda da área ao lado da barra: o DS limita o .main a --content-width,
-   mas o eclume é ferramenta de trabalho em desktop. Texto corrido mantém a própria medida (68ch). */
+/* The content uses the full width of the area beside the sidebar: the DS caps .main at --content-width,
+   but eclume is a desktop work tool. Running text keeps its own measure (68ch). */
 .main {
   max-width: none;
 }
 
-/* Telas de largura total (a biblioteca com o painel de filtros, a gravação com o chat): o .main do
-   shell cede também o respiro, e a tela cuida do seu. */
+/* Full-width screens (the library with the filter panel, the recording with the chat): the shell's
+   .main also gives up its padding, and the screen takes care of its own. */
 .main:has(> .bleed) {
   padding: 0;
 }
 
-/* O código de vínculo, como no quadro Desktop app. */
+/* The pairing code, as in the Desktop app panel. */
 .code-block-lg {
   max-width: 260px;
   font-size: 22px;
   letter-spacing: 0.2em;
 }
 
-/* O título do page-head com a dica em linha ao lado. */
+/* The page-head title with the inline hint beside it. */
 .page-head-title {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 
-/* A dica em linha: o popover abre abaixo do `?`. */
+/* The inline hint: the popover opens below the `?`. */
 .hint-anchor {
   position: relative;
   display: inline-block;
@@ -237,8 +237,8 @@ svg.lucide {
   color: var(--color-text);
 }
 
-/* O título recebe o foco depois de uma troca de rota (PageHead) só para o leitor de tela e o
-   teclado recomeçarem dele: não é um controle, então não ganha o anel de foco. */
+/* The title gets focus after a route change (PageHead) only so the screen reader and the keyboard
+   start again from it: it is not a control, so it does not get the focus ring. */
 .page-head h1[tabindex='-1']:focus {
   outline: none;
 }

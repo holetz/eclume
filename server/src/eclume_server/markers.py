@@ -1,7 +1,7 @@
-"""Marcadores: instantes da gravação com nota opcional, vindos dos apps (desktop e celular).
+"""Markers: instants of a recording with an optional note, sent by the apps (desktop and phone).
 
-Idempotentes por `client_id`: o app reenvia depois de uma falha de rede, e o mesmo marcador só
-atualiza a nota. Regras em docs/standards/code/server-nucleo.md.
+Idempotent by `client_id`: the app resends after a network failure, and the same marker only
+updates the note. Rules in docs/standards/code/server-nucleo.md.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 MAX_NOTE = 500
 MAX_BATCH = 1000
-# O teto do `bigint`: acima dele, 422 em vez de erro do banco.
+# The `bigint` ceiling: above it, 422 instead of a database error.
 MAX_AT_MS = 2**63 - 1
 
 
@@ -49,7 +49,7 @@ def marker_json(row: Row) -> dict[str, Any]:
     }
 
 
-async def upsert_markers(  # noqa: PLR0913 — a gravação, o lote e quem marcou
+async def upsert_markers(  # noqa: PLR0913 — the recording, the batch and who marked it
     conn: AsyncConnection,
     *,
     owner_id: UUID,
@@ -58,7 +58,7 @@ async def upsert_markers(  # noqa: PLR0913 — a gravação, o lote e quem marco
     device_name: str | None,
     created_by: UUID,
 ) -> None:
-    """Grava o lote; um `client_id` já conhecido atualiza só a nota (o último do lote vale)."""
+    """Store the batch; an already known `client_id` only updates the note (the last of the batch wins)."""
     unique = {str(marker["client_id"]): marker for marker in markers}
     if not unique:
         return
@@ -78,7 +78,7 @@ async def upsert_markers(  # noqa: PLR0913 — a gravação, o lote e quem marco
     await conn.execute(
         statement.on_conflict_do_update(
             index_elements=["recording_id", "client_id"],
-            # Um reenvio sem nota não apaga a nota editada depois (na web).
+            # A resend without a note does not erase the note edited afterwards (on the web).
             set_={"note": func.coalesce(statement.excluded.note, t.markers.c.note), "updated_at": func.now()},
         )
     )
@@ -86,12 +86,12 @@ async def upsert_markers(  # noqa: PLR0913 — a gravação, o lote e quem marco
 
 
 async def touch_recording(conn: AsyncConnection, recording_id: UUID) -> None:
-    """Move `updated_at` da gravação: é por ele que o `?since=` da pasta sincronizada vê a nota nova."""
+    """Bump the recording's `updated_at`: it is how the synced folder's `?since=` sees the new note."""
     await conn.execute(update(t.recordings).where(t.recordings.c.id == recording_id).values(updated_at=func.now()))
 
 
 async def list_markers(conn: AsyncConnection, recording_id: UUID) -> list[Row]:
-    """Os marcadores da gravação, em ordem de `at_ms`."""
+    """The recording's markers, in `at_ms` order."""
     m = t.markers.c
     query = select(t.markers).where(m.recording_id == recording_id).order_by(m.at_ms, m.id)
     return list((await conn.execute(query)).mappings().all())

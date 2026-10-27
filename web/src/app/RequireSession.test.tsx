@@ -35,8 +35,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('guarda da sessão', () => {
-  it('um 503 no refetch de /me com a sessão carregada mantém o shell e a fila de importação', async () => {
+describe('session guard', () => {
+  it('a 503 on the /me refetch with the session loaded keeps the shell and the import queue', async () => {
     const user = userEvent.setup()
     let down = false
     mockFetch({
@@ -64,14 +64,14 @@ describe('guarda da sessão', () => {
     expect(within(screen.getByRole('dialog', { name: 'Importar arquivos' })).getByText('Pronto para enviar')).toBeInTheDocument()
   })
 
-  it('sem sessão em cache, a falha de /me mostra o erro com Tentar de novo', async () => {
+  it('with no session in cache, the /me failure shows the error with Tentar de novo', async () => {
     mockFetch({ 'GET /api/v1/me': () => problem('unavailable', 503) })
     renderApp('/')
     expect(await screen.findByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Principal' })).not.toBeInTheDocument()
   })
 
-  it('o painel admin também fica de pé num refetch de /admin/me que falha', async () => {
+  it('the admin panel also stays up on a failing /admin/me refetch', async () => {
     let down = false
     mockFetch({
       'GET /api/v1/admin/me': () => (down ? problem('unavailable', 503) : fixtures.adminMe()),

@@ -1,4 +1,4 @@
-/** SHA-256 em hex minúsculo — o formato que o upload com dedup recebe. */
+/** SHA-256 in lowercase hex — the format the deduplicating upload accepts. */
 export async function sha256Hex(
   data: Blob | ArrayBuffer | Uint8Array<ArrayBuffer>,
   subtle: SubtleCrypto = globalThis.crypto.subtle,

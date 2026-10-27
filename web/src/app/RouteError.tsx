@@ -4,7 +4,7 @@ import { PageHead } from './PageHead'
 import { PageStatus } from './RequireSession'
 import { usePageTitle } from './usePageTitle'
 
-// Mensagens do `import()` dinâmico que falhou no Chromium, no Firefox e no WebKit, e a do preload do Vite.
+// Messages of the failed dynamic `import()` in Chromium, Firefox and WebKit, and Vite's preload one.
 const CHUNK_FAILURE =
   /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i
 
@@ -28,7 +28,7 @@ function ReloadButton() {
   )
 }
 
-/** Erro de uma página autenticada: aparece no `Outlet` do shell, que continua de pé. */
+/** Error of an authenticated page: shows in the shell's `Outlet`, which stays up. */
 export function RouteError() {
   const { title, text } = useErrorCopy()
   return (
@@ -40,7 +40,7 @@ export function RouteError() {
   )
 }
 
-/** Erro fora do shell (login, cadastro, parear, admin): página inteira, sem a raiz desmontar. */
+/** Error outside the shell (login, signup, pair, admin): full page, without the root unmounting. */
 export function RootError() {
   const { title, text } = useErrorCopy()
   usePageTitle(title)

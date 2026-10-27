@@ -4,63 +4,63 @@
 
 | Token | Type | Portable value | Description |
 | --- | --- | --- | --- |
-| `colors.background` | `color` | `#F7F5F2` | Fundo de página, linho claro. |
-| `colors.surface` | `color` | `#ECE8E2` | Superfície de cartões, campos e painéis. |
-| `colors.on-surface` | `color` | `#262420` | Tinta principal de leitura. |
-| `colors.text-muted` | `color` | `#625B52` | Texto secundário, metadados e rótulos. |
-| `colors.primary` | `color` | `#6F5A44` | Nogueira: ação primária, links e foco. |
-| `colors.on-primary` | `color` | `#F7F5F2` | Texto sobre a nogueira. |
-| `colors.accent-ink` | `color` | `#5E4C39` | Nogueira escura para kickers e texto de ênfase. |
-| `colors.recording` | `color` | `#B8432C` | Terracota: só gravação em curso e falha. |
-| `colors.neutral` | `color` | `#9A9288` | Neutro médio da rampa de linho. |
-| `colors.success` | `color` | `#56663A` | Estado concluído. |
-| `colors.warning` | `color` | `#875C17` | Atenção. |
-| `colors.danger` | `color` | `#A33A26` | Erro e ação destrutiva. |
-| `colors.highlight` | `color` | `#E9E1D4` | Realce de busca e seleção suave. |
-| `colors.divider` | `color` | `rgb(38 36 32 / 0.32)` | Fio divisor: tinta a 32% sobre o fundo. |
-| `colors.control-border` | `color` | `#7C746A` | Borda de controle interativo (campo, caixa, botão secundário, trilho do switch): ≥ 3:1 sobre fundo e superfície nos dois temas; o divisor fica para a estrutura. |
-| `colors.dark-background` | `color` | `#1E1C19` | Tema escuro: fundo. |
-| `colors.dark-surface` | `color` | `#292622` | Tema escuro: superfície. |
-| `colors.dark-on-surface` | `color` | `#ECE8E2` | Tema escuro: tinta. |
-| `colors.dark-text-muted` | `color` | `#B3ACA2` | Tema escuro: texto secundário. |
-| `colors.dark-primary` | `color` | `#B9A48A` | Tema escuro: nogueira clara. |
-| `colors.dark-recording` | `color` | `#E0735A` | Tema escuro: gravação. |
-| `colors.dark-danger` | `color` | `#F08A73` | Tema escuro: erro. |
-| `colors.dark-success` | `color` | `#A9B98A` | Tema escuro: sucesso. |
-| `colors.dark-warning` | `color` | `#D9AE6A` | Tema escuro: atenção. |
-| `colors.dark-accent-ink` | `color` | `#D6C8B5` | Tema escuro: tinta do acento (links, texto de destaque). |
-| `colors.dark-highlight` | `color` | `#3A2F24` | Tema escuro: realce. |
-| `colors.dark-divider` | `color` | `rgb(236 232 226 / 0.3)` | Tema escuro: divisor de estrutura. |
-| `colors.secondary` | `color` | `#E9E1D4` | Superfície de apoio (tags e realce), linho-nogueira claro. |
-| `colors.on-secondary` | `color` | `#3A2F24` | Tinta sobre a superfície de apoio. |
-| `typography.display` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":42,"unit":"px"},"fontWeight":800,"letterSpacing":{"value":-0.63,"unit":"px"},"lineHeight":1.12}` | h1 de página. |
+| `colors.background` | `color` | `#F7F5F2` | Page background, light linen. |
+| `colors.surface` | `color` | `#ECE8E2` | Surface of cards, fields and panels. |
+| `colors.on-surface` | `color` | `#262420` | Main reading ink. |
+| `colors.text-muted` | `color` | `#625B52` | Secondary text, metadata and labels. |
+| `colors.primary` | `color` | `#6F5A44` | Walnut: primary action, links and focus. |
+| `colors.on-primary` | `color` | `#F7F5F2` | Text on walnut. |
+| `colors.accent-ink` | `color` | `#5E4C39` | Dark walnut for kickers and emphasis text. |
+| `colors.recording` | `color` | `#B8432C` | Terracotta: only a recording in progress and failure. |
+| `colors.neutral` | `color` | `#9A9288` | Mid neutral of the linen ramp. |
+| `colors.success` | `color` | `#56663A` | Completed state. |
+| `colors.warning` | `color` | `#875C17` | Warning. |
+| `colors.danger` | `color` | `#A33A26` | Error and destructive action. |
+| `colors.highlight` | `color` | `#E9E1D4` | Search highlight and soft selection. |
+| `colors.divider` | `color` | `rgb(38 36 32 / 0.32)` | Divider rule: ink at 32% over the background. |
+| `colors.control-border` | `color` | `#7C746A` | Border of an interactive control (field, checkbox, secondary button, switch track): ≥ 3:1 over background and surface in both themes; the divider is kept for structure. |
+| `colors.dark-background` | `color` | `#1E1C19` | Dark theme: background. |
+| `colors.dark-surface` | `color` | `#292622` | Dark theme: surface. |
+| `colors.dark-on-surface` | `color` | `#ECE8E2` | Dark theme: ink. |
+| `colors.dark-text-muted` | `color` | `#B3ACA2` | Dark theme: secondary text. |
+| `colors.dark-primary` | `color` | `#B9A48A` | Dark theme: light walnut. |
+| `colors.dark-recording` | `color` | `#E0735A` | Dark theme: recording. |
+| `colors.dark-danger` | `color` | `#F08A73` | Dark theme: error. |
+| `colors.dark-success` | `color` | `#A9B98A` | Dark theme: success. |
+| `colors.dark-warning` | `color` | `#D9AE6A` | Dark theme: warning. |
+| `colors.dark-accent-ink` | `color` | `#D6C8B5` | Dark theme: accent ink (links, highlight text). |
+| `colors.dark-highlight` | `color` | `#3A2F24` | Dark theme: highlight. |
+| `colors.dark-divider` | `color` | `rgb(236 232 226 / 0.3)` | Dark theme: structural divider. |
+| `colors.secondary` | `color` | `#E9E1D4` | Support surface (tags and highlight), light linen-walnut. |
+| `colors.on-secondary` | `color` | `#3A2F24` | Ink on the support surface. |
+| `typography.display` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":42,"unit":"px"},"fontWeight":800,"letterSpacing":{"value":-0.63,"unit":"px"},"lineHeight":1.12}` | Page h1. |
 | `typography.headline` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":32,"unit":"px"},"fontWeight":800,"letterSpacing":{"value":-0.48,"unit":"px"},"lineHeight":1.12}` | h2. |
-| `typography.title` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":25,"unit":"px"},"fontWeight":800,"letterSpacing":{"value":-0.375,"unit":"px"},"lineHeight":1.12}` | h3 e títulos de seção. |
-| `typography.body` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":15,"unit":"px"},"fontWeight":400,"letterSpacing":{"value":0,"unit":"px"},"lineHeight":1.55}` | Texto corrido e transcrição. |
-| `typography.control` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":14,"unit":"px"},"fontWeight":400,"letterSpacing":{"value":0,"unit":"px"},"lineHeight":1.4}` | Campos, rádios e listas. |
-| `typography.label` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":14,"unit":"px"},"fontWeight":800,"letterSpacing":{"value":0,"unit":"px"},"lineHeight":1.2}` | Botões. |
-| `typography.nav` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":14,"unit":"px"},"fontWeight":400,"letterSpacing":{"value":0,"unit":"px"},"lineHeight":1.2}` | Itens de navegação. |
-| `typography.kicker` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":11,"unit":"px"},"fontWeight":600,"letterSpacing":{"value":1.1,"unit":"px"},"lineHeight":1.2}` | Kicker e badge em caixa alta. |
-| `typography.mono` | `typography` | `{"fontFamily":["IBM Plex Mono","ui-monospace","Menlo","monospace"],"fontSize":{"value":13,"unit":"px"},"fontWeight":500,"letterSpacing":{"value":0,"unit":"px"},"lineHeight":1.3}` | Tempos e números tabulares. |
-| `rounded.none` | `dimension` | `0px` | Raio zero em tudo: controles, cartões e diálogos. |
-| `rounded.sm` | `dimension` | `0px` | Controles: raio zero. |
-| `rounded.md` | `dimension` | `0px` | Cartões: raio zero. |
-| `rounded.full` | `dimension` | `0px` | Nem pílulas são redondas: badges e tags são retos. |
+| `typography.title` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":25,"unit":"px"},"fontWeight":800,"letterSpacing":{"value":-0.375,"unit":"px"},"lineHeight":1.12}` | h3 and section titles. |
+| `typography.body` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":15,"unit":"px"},"fontWeight":400,"letterSpacing":{"value":0,"unit":"px"},"lineHeight":1.55}` | Body text and transcript. |
+| `typography.control` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":14,"unit":"px"},"fontWeight":400,"letterSpacing":{"value":0,"unit":"px"},"lineHeight":1.4}` | Fields, radios and lists. |
+| `typography.label` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":14,"unit":"px"},"fontWeight":800,"letterSpacing":{"value":0,"unit":"px"},"lineHeight":1.2}` | Buttons. |
+| `typography.nav` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":14,"unit":"px"},"fontWeight":400,"letterSpacing":{"value":0,"unit":"px"},"lineHeight":1.2}` | Navigation items. |
+| `typography.kicker` | `typography` | `{"fontFamily":["Archivo","system-ui","sans-serif"],"fontSize":{"value":11,"unit":"px"},"fontWeight":600,"letterSpacing":{"value":1.1,"unit":"px"},"lineHeight":1.2}` | Uppercase kicker and badge. |
+| `typography.mono` | `typography` | `{"fontFamily":["IBM Plex Mono","ui-monospace","Menlo","monospace"],"fontSize":{"value":13,"unit":"px"},"fontWeight":500,"letterSpacing":{"value":0,"unit":"px"},"lineHeight":1.3}` | Times and tabular numbers. |
+| `rounded.none` | `dimension` | `0px` | Zero radius everywhere: controls, cards and dialogs. |
+| `rounded.sm` | `dimension` | `0px` | Controls: zero radius. |
+| `rounded.md` | `dimension` | `0px` | Cards: zero radius. |
+| `rounded.full` | `dimension` | `0px` | Not even pills are round: badges and tags are square. |
 | `spacing.xs` | `dimension` | `4px` |  |
 | `spacing.sm` | `dimension` | `8px` |  |
 | `spacing.md` | `dimension` | `12px` |  |
 | `spacing.lg` | `dimension` | `16px` |  |
 | `spacing.xl` | `dimension` | `24px` |  |
 | `spacing.2xl` | `dimension` | `32px` |  |
-| `sizes.control` | `dimension` | `36px` | Altura mínima de campo e botão. |
-| `layout.sidebar` | `dimension` | `240px` | Largura da barra lateral. |
-| `layout.content` | `dimension` | `1040px` | Largura do conteúdo no DS (design-system/styles.css); o web a dispensa e usa a largura toda. |
-| `layout.content-wide` | `dimension` | `1040px` | Quadro largo das mídias: a largura do conteúdo. |
-| `layout.reading` | `dimension` | `45rem` | Medida de leitura das mídias (relatórios). |
-| `strokes.control` | `dimension` | `1px` | Borda de controle. |
-| `strokes.rule` | `dimension` | `2px` | Fio estrutural: cabeçalho, barra lateral, divisores. |
-| `shadows.sm` | `shadow` | `0px 1px 2px 0px rgb(45 42 38 / 0.14)` | Elevação baixa. |
-| `shadows.md` | `shadow` | `0px 3px 10px 0px rgb(45 42 38 / 0.16)` | Menus e popovers. |
-| `shadows.lg` | `shadow` | `0px 12px 32px 0px rgb(45 42 38 / 0.22)` | Diálogos e gaveta. |
-| `shadows.ambient-low` | `shadow` | `0px 3px 10px 0px rgb(45 42 38 / 0.16)` | Separação difusa das mídias: a sombra média. |
-| `motion.standard` | `transition` | `150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms` | Transição de estado sem mola; o web não anima além de indicadores de progresso. |
+| `sizes.control` | `dimension` | `36px` | Minimum height of a field and a button. |
+| `layout.sidebar` | `dimension` | `240px` | Sidebar width. |
+| `layout.content` | `dimension` | `1040px` | Content width in the DS (design-system/styles.css); the web does without it and uses the full width. |
+| `layout.content-wide` | `dimension` | `1040px` | Wide frame of the media: the content width. |
+| `layout.reading` | `dimension` | `45rem` | Reading measure of the media (reports). |
+| `strokes.control` | `dimension` | `1px` | Control border. |
+| `strokes.rule` | `dimension` | `2px` | Structural rule: header, sidebar, dividers. |
+| `shadows.sm` | `shadow` | `0px 1px 2px 0px rgb(45 42 38 / 0.14)` | Low elevation. |
+| `shadows.md` | `shadow` | `0px 3px 10px 0px rgb(45 42 38 / 0.16)` | Menus and popovers. |
+| `shadows.lg` | `shadow` | `0px 12px 32px 0px rgb(45 42 38 / 0.22)` | Dialogs and drawer. |
+| `shadows.ambient-low` | `shadow` | `0px 3px 10px 0px rgb(45 42 38 / 0.16)` | Diffuse separation of the media: the medium shadow. |
+| `motion.standard` | `transition` | `150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms` | State transition without spring; the web animates nothing beyond progress indicators. |

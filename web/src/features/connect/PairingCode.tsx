@@ -8,7 +8,7 @@ interface PairingCodeProps {
   regenerating?: boolean
 }
 
-/** O código de vínculo para digitar no app: o valor para copiar, a validade e o resultado. */
+/** The pairing code to type into the app: the value to copy, the expiry and the outcome. */
 export function PairingCode({ pairing, onRegenerate, regenerating = false }: PairingCodeProps) {
   const state = usePairingState(pairing)
 

@@ -1,7 +1,7 @@
-"""Upload resumível em partes (multipart S3 orquestrado pela API), com dedup e retomada por hash.
+"""Resumable upload in parts (S3 multipart orchestrated by the API), with dedup and resume by hash.
 
-A URL de cada parte é o `PUT /api/v1/uploads/{id}/parts/{n}` da própria API, assinado como um
-pré-assinado do S3 (`?expires=&sig=`): a URL se autoriza sozinha e dispensa credencial e CSRF.
+Each part's URL is the API's own `PUT /api/v1/uploads/{id}/parts/{n}`, signed like an S3
+presigned URL (`?expires=&sig=`): the URL authorizes itself and needs no credential or CSRF.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ PartNumber = Annotated[int, Path(ge=1, le=10000)]
 
 MAX_PARTS = 10_000
 FIRST_PART_URLS = 100
-# Um idioma (`pt`, `pt-BR`) ou `auto`: a engine detecta e a gravação guarda o detectado.
+# A language (`pt`, `pt-BR`) or `auto`: the engine detects it and the recording stores the detected one.
 LANGUAGE = r"^(auto|[a-z]{2,3}(-[A-Z]{2})?)$"
 Kind = Literal["meeting", "note"]
 RecordedAtSource = Literal["capture", "file_metadata", "user", "upload"]
@@ -104,7 +104,7 @@ class PartUrlsRequest(BaseModel):
 
 
 class CompletedPart(BaseModel):
-    """Item de `UploadComplete.parts`."""
+    """Item of `UploadComplete.parts`."""
 
     part_number: int = Field(ge=1, le=MAX_PARTS)
     etag: str
@@ -127,7 +127,7 @@ def _status(row: Row) -> str:
 
 
 def _part_size(row: Row, part_number: int) -> int:
-    """Tamanho esperado da parte: `part_size`, menos a última, que leva o resto."""
+    """Expected part size: `part_size`, except the last one, which carries the remainder."""
     if part_number < row["part_count"]:
         return row["part_size"]
     return row["size_bytes"] - row["part_size"] * (row["part_count"] - 1)
@@ -195,7 +195,7 @@ def _expired() -> Exception:
 
 
 async def _expire(ctx: AppContext, upload_id: UUID) -> None:
-    """O multipart sumiu do bucket (vencido no MinIO ou abortado): o upload fica `expired`."""
+    """The multipart is gone from the bucket (expired in MinIO or aborted): the upload becomes `expired`."""
     async with system_tx(ctx.engine) as conn:
         await conn.execute(
             update(t.uploads)
@@ -216,7 +216,7 @@ def _require_open(row: Row) -> None:
 async def create_upload(
     body: UploadCreate, request: Request, response: Response, principal: Writer, ctx: Ctx
 ) -> dict[str, Any]:
-    """Inicia um upload; mesmo hash de uma gravação do usuário deduplica (200), de um upload aberto retoma."""
+    """Starts an upload; the hash of a user's recording deduplicates (200), that of an open upload resumes."""
     part_size = ctx.settings.upload_part_size
     part_count = math.ceil(body.size_bytes / part_size)
     if part_count > MAX_PARTS:
@@ -268,7 +268,7 @@ async def create_upload(
                     .mappings()
                     .one()
                 )
-                # O app pode ter caído depois de subir o áudio: os marcadores entram na gravação existente.
+                # The app may have crashed after uploading the audio: the markers go into the existing recording.
                 await _add_markers(conn, duplicate, request_fields, principal)
                 response.status_code = 200
                 return upload_json(row, [], [])
@@ -294,7 +294,7 @@ async def create_upload(
                     try:
                         return await _resume(ctx, request, open_upload)
                     except MultipartGoneError:
-                        # O multipart sumiu do bucket: este upload expira e outro começa.
+                        # The multipart is gone from the bucket: this upload expires and another starts.
                         closed = "expired"
                 else:
                     await ctx.storage.abort_multipart(open_upload["audio_key"], open_upload["s3_upload_id"])
@@ -330,7 +330,7 @@ async def create_upload(
 
 @router.get("/uploads/{upload_id}")
 async def get_upload(upload_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Estado do upload, com as partes já confirmadas pelo armazenamento."""
+    """Upload state, with the parts storage has already confirmed."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id)
     try:
@@ -343,7 +343,7 @@ async def get_upload(upload_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, 
 
 @router.delete("/uploads/{upload_id}", status_code=204)
 async def abort_upload(upload_id: UUID, principal: Writer, ctx: Ctx) -> Response:
-    """Aborta um upload em andamento e descarta as partes; nos demais estados, nada muda."""
+    """Aborts an in-progress upload and discards its parts; in any other state, nothing changes."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id, lock=True)
         if row["status"] == "in_progress":
@@ -356,7 +356,7 @@ async def abort_upload(upload_id: UUID, principal: Writer, ctx: Ctx) -> Response
 async def create_part_urls(
     upload_id: UUID, body: PartUrlsRequest, request: Request, principal: Writer, ctx: Ctx
 ) -> dict[str, Any]:
-    """URLs novas para as partes pedidas (inclusive para trocar URLs expiradas)."""
+    """Fresh URLs for the requested parts (including to replace expired URLs)."""
     if len(set(body.part_numbers)) != len(body.part_numbers):
         raise invalid_field("part_numbers", "números repetidos")
     async with user_tx(ctx.engine, principal.user_id) as conn:
@@ -377,7 +377,7 @@ async def put_part(
     expires: int | None = None,
     sig: str | None = None,
 ) -> Response:
-    """Grava uma parte; a assinatura da URL é a autorização."""
+    """Stores one part; the URL signature is the authorization."""
     if (
         expires is None
         or not sig
@@ -407,21 +407,21 @@ async def put_part(
 
 
 async def _read_part(request: Request, expected: int) -> bytearray:
-    """O corpo da parte, lido em pedaços; passar de `expected` é 413 sem ler o resto."""
+    """The part body, read in chunks; exceeding `expected` is a 413 without reading the rest."""
     data = bytearray()
     async for chunk in request.stream():
         data += chunk
         if len(data) > expected:
             raise payload_too_large(expected)
-    return data  # o boto3 aceita bytearray: sem a cópia de `bytes(data)` (até 8 MiB por parte)
+    return data  # boto3 accepts a bytearray: no `bytes(data)` copy (up to 8 MiB per part)
 
 
 @asynccontextmanager
 async def _completing(ctx: AppContext, upload_id: UUID) -> AsyncIterator[None]:
-    """Trava de um `complete` em andamento, renovada enquanto o S3 trabalha.
+    """Lock of an in-progress `complete`, renewed while S3 works.
 
-    Outro `complete` com a trava presa recebe 409 `upload_completing`; a trava de um processo morto
-    vence em `COMPLETING_TTL_S` e o próximo `complete` retoma (o passo do S3 é idempotente).
+    Another `complete` while the lock is held gets 409 `upload_completing`; a dead process's lock
+    expires after `COMPLETING_TTL_S` and the next `complete` resumes (the S3 step is idempotent).
     """
     redis = ctx.queue.pool
     key = f"eclume:upload:completing:{upload_id}"
@@ -450,10 +450,10 @@ async def _completing(ctx: AppContext, upload_id: UUID) -> AsyncIterator[None]:
 
 @router.post("/uploads/{upload_id}/complete", status_code=201)
 async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Monta o objeto, confere o SHA-256, cria a gravação e enfileira a transcrição.
+    """Assembles the object, checks the SHA-256, creates the recording and enqueues the transcription.
 
-    Em três passos, sem S3 dentro de transação: lê o upload; sob a trava, monta o multipart e calcula
-    o hash; numa transação curta com `FOR UPDATE`, grava gravação e job.
+    In three steps, with no S3 inside a transaction: reads the upload; under the lock, assembles the
+    multipart and computes the hash; in a short `FOR UPDATE` transaction, writes recording and job.
     """
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id)
@@ -485,7 +485,7 @@ async def complete_upload(upload_id: UUID, body: UploadComplete, principal: Writ
 
 
 async def _assemble(ctx: AppContext, row: Row, body: UploadComplete) -> str:
-    """Fecha o multipart (se ainda não montado) e devolve o SHA-256 do objeto."""
+    """Closes the multipart (if not yet assembled) and returns the object's SHA-256."""
     key = row["audio_key"]
     if not await _parts_or_assembled(ctx, row, body):
         parts = await ctx.storage.list_parts(key, row["s3_upload_id"])
@@ -494,10 +494,11 @@ async def _assemble(ctx: AppContext, row: Row, body: UploadComplete) -> str:
 
 
 async def _parts_or_assembled(ctx: AppContext, row: Row, body: UploadComplete) -> bool:
-    """Confere as partes; devolve `True` se o objeto já foi montado por um `complete` anterior.
+    """Checks the parts; returns `True` if an earlier `complete` already assembled the object.
 
-    Multipart sumido com o objeto presente é o `complete` cujo commit falhou depois de montar: segue
-    sem remontar. Sumido sem objeto é `MultipartGoneError` (o upload expira).
+    A missing multipart with the object present is the `complete` whose commit failed after
+    assembling: it proceeds without reassembling. Missing with no object is `MultipartGoneError`
+    (the upload expires).
     """
     try:
         await _check_parts(ctx, row, body)
@@ -531,7 +532,7 @@ async def _agenda_type(conn: AsyncConnection, agenda_type_id: UUID) -> Row | Non
 async def _add_markers(
     conn: AsyncConnection, recording_id: UUID, requested: dict[str, Any], principal: Principal
 ) -> None:
-    """Os marcadores pedidos no upload, com o dispositivo da captura."""
+    """The markers requested in the upload, with the capture device."""
     await upsert_markers(
         conn,
         owner_id=principal.user_id,
@@ -543,7 +544,7 @@ async def _add_markers(
 
 
 def recorded_at_source(requested: dict[str, Any], source: str) -> str:
-    """A origem pedida, ou a regra: o relógio do app que gravou, a data informada, ou a hora do envio."""
+    """The requested source, or the rule: the recording app's clock, the given date, or the upload time."""
     if requested.get("recorded_at_source"):
         return requested["recorded_at_source"]
     if not requested.get("recorded_at"):
@@ -552,16 +553,16 @@ def recorded_at_source(requested: dict[str, Any], source: str) -> str:
 
 
 async def _finish(conn: AsyncConnection, row: Row, principal: Principal, actual: str) -> tuple[UUID, bool, bool]:
-    """Grava gravação e job do objeto montado com hash `actual`.
+    """Writes the recording and job of the assembled object with hash `actual`.
 
-    Devolve a gravação, se há job a despachar e se o objeto, duplicado, deve ser apagado depois do
-    commit.
+    Returns the recording, whether there is a job to dispatch, and whether the object, a duplicate,
+    must be deleted after the commit.
     """
     key = row["audio_key"]
     matches = actual == row["sha256"]
     requested = row["request"]
     recording_id = row["new_recording_id"]
-    # Coleções pedidas na criação que o usuário excluiu enquanto o upload andava ficam de fora.
+    # Collections requested at creation that the user deleted while the upload ran are left out.
     wanted = [UUID(c) for c in dict.fromkeys(requested.get("collection_ids") or [])]
     existing = set((await conn.execute(select(t.collections.c.id).where(t.collections.c.id.in_(wanted)))).scalars())
     now = _now()
@@ -580,7 +581,7 @@ async def _finish(conn: AsyncConnection, row: Row, principal: Principal, actual:
         "language": requested.get("language"),
         "size_bytes": row["size_bytes"],
         "content_type": row["content_type"],
-        # Com hash divergente, a gravação guarda o hash real: o declarado segue livre para um novo upload.
+        # With a mismatched hash, the recording stores the real hash: the declared one stays free for a new upload.
         "content_hash": f"sha256:{actual}",
         "audio_key": key,
         "tags": requested.get("tags") or [],
@@ -596,7 +597,7 @@ async def _finish(conn: AsyncConnection, row: Row, principal: Principal, actual:
         )
     ).scalar()
     if duplicate is not None:
-        # O conteúdo real já é de outra gravação do usuário: o upload vira deduplicado.
+        # The real content already belongs to another of the user's recordings: the upload becomes deduplicated.
         await conn.execute(
             update(t.uploads)
             .where(t.uploads.c.id == row["id"])
@@ -606,12 +607,12 @@ async def _finish(conn: AsyncConnection, row: Row, principal: Principal, actual:
         return duplicate, False, True
     await conn.execute(insert(t.recordings).values(**values))
     await _add_markers(conn, recording_id, requested, principal)
-    # Título e tags pedidos no upload são do usuário; sem título (o nome do arquivo), o automático o troca.
+    # Title and tags requested in the upload are the user's; with no title (the file name), the automatic one replaces it.
     await mark_edited(
         conn, recording_id, principal.user_id, {key: requested[key] for key in ("title", "tags") if requested.get(key)}
     )
-    # O tipo escolhido ao parar a gravação é do usuário (origem `edited`): dispensa a detecção.
-    # Depois dos valores do usuário: o padrão de título não troca um título que ele escreveu.
+    # The type chosen when stopping the recording is the user's (source `edited`): no detection needed.
+    # After the user's values: the title pattern does not replace a title the user wrote.
     agenda_type = (
         await _agenda_type(conn, UUID(requested["agenda_type_id"])) if requested.get("agenda_type_id") else None
     )

@@ -1,11 +1,11 @@
-"""Recursos do processo da API, criados no lifespan e lidos pelas rotas."""
+"""Resources of the API process, created in the lifespan and read by the routes."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-# Em runtime: o FastAPI resolve a anotação de `get_ctx` para injetar a requisição.
+# At runtime: FastAPI resolves the annotation of `get_ctx` to inject the request.
 from fastapi import Request
 
 if TYPE_CHECKING:
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class AppContext:
-    """Configuração e clientes compartilhados pelas requisições."""
+    """Configuration and clients shared by the requests."""
 
     settings: Settings
     engine: AsyncEngine
@@ -27,5 +27,5 @@ class AppContext:
 
 
 def get_ctx(request: Request) -> AppContext:
-    """Dependência FastAPI: o contexto do app."""
+    """FastAPI dependency: the app context."""
     return request.app.state.ctx

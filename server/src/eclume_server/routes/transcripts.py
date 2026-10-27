@@ -1,4 +1,4 @@
-"""Transcrições: listagem incremental (`?since=`), leitura, export em Markdown e edição pelo dono."""
+"""Transcripts: incremental listing (`?since=`), reading, Markdown export and editing by the owner."""
 
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ async def list_transcripts(
     person: UUID | None = None,
     recording_id: UUID | None = None,
 ) -> dict[str, Any]:
-    """Transcrições do usuário, em ordem crescente de `(updated_at, id)`; `since` é inclusivo."""
+    """The user's transcripts, in ascending `(updated_at, id)` order; `since` is inclusive."""
     c = t.transcripts.c
     query = transcript_select().order_by(c.updated_at, c.id).limit(limit + 1)
     if since is not None:
@@ -97,7 +97,7 @@ async def list_transcripts(
 async def get_transcript(
     transcript_id: UUID, principal: Reader, ctx: Ctx, include: Literal["words"] | None = None
 ) -> dict[str, Any]:
-    """Transcrição completa; `include=words` traz as palavras com tempo."""
+    """Full transcript; `include=words` brings the timed words."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await load_transcript(conn, transcript_id, words=include == "words")
 
@@ -109,10 +109,10 @@ async def export_transcript(
     principal: Reader,
     ctx: Ctx,
 ) -> Response:
-    """Exporta a transcrição (`md`: frontmatter YAML e uma linha por segmento)."""
+    """Exports the transcript (`md`: YAML frontmatter and one line per segment)."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         transcript = await load_transcript(conn, transcript_id, words=False)
-    del export_format  # só `md` existe na v1; formatos novos entram de forma aditiva
+    del export_format  # only `md` exists in v1; new formats come in additively
     return Response(
         render_markdown(transcript),
         media_type="text/markdown; charset=utf-8",
@@ -121,7 +121,7 @@ async def export_transcript(
 
 
 def _patch_values(body: BaseModel) -> dict[str, Any]:
-    """Campos enviados (`minProperties: 1`); `null` só vale onde o schema o admite."""
+    """Fields sent (`minProperties: 1`); `null` only holds where the schema allows it."""
     values = body.model_dump(exclude_unset=True)
     if not values:
         raise invalid_field("body", "informe ao menos um campo")
@@ -144,7 +144,7 @@ async def update_speaker(
     principal: Editor,
     ctx: Ctx,
 ) -> dict[str, Any]:
-    """Renomeia o locutor e/ou o liga a uma pessoa (`null` desfaz); ligar sem `label` usa o nome dela."""
+    """Renames the speaker and/or links it to a person (`null` undoes); linking without `label` uses the person's name."""
     values = _patch_values(body)
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await editable_transcript(conn, transcript_id)
@@ -159,7 +159,7 @@ async def update_speaker(
                 raise invalid_field("person_id", "pessoa inexistente") from exc
             values.setdefault("label", person["name"])
         if "person_id" in values:
-            # Ligar, confirmar ou desligar é decisão de uma pessoa: deixa de ser vínculo automático.
+            # Linking, confirming or unlinking is a person's decision: it stops being an automatic link.
             values["auto_score"] = None
         await conn.execute(update(t.speakers).where(*where).values(**values))
         if "person_id" in values:
@@ -173,7 +173,7 @@ async def update_speaker(
 
 
 async def _release(conn: AsyncConnection, transcript_id: UUID) -> tuple[UUID, int] | None:
-    """Solta a gravação parada à espera dos nomes quando o último locutor ganhou pessoa."""
+    """Releases the recording held waiting for names once the last speaker got a person."""
     recording_id = (
         await conn.execute(select(t.transcripts.c.recording_id).where(t.transcripts.c.id == transcript_id))
     ).scalar_one()
@@ -182,13 +182,13 @@ async def _release(conn: AsyncConnection, transcript_id: UUID) -> tuple[UUID, in
 
 
 async def _resume_chain(ctx: AppContext, released: tuple[UUID, int] | None) -> None:
-    """Depois do commit, a cadeia por agente segue pelo tipo de agenda."""
+    """After the commit, the agent chain proceeds by agenda type."""
     if released is not None:
         await ctx.queue.enqueue_step("detect_agenda_type", *released)
 
 
 async def speaker_response(conn: AsyncConnection, transcript_id: UUID, speaker_id: str) -> dict[str, Any]:
-    """Schema `Speaker` do locutor, com as sugestões pendentes."""
+    """Schema `Speaker` of the speaker, with the pending suggestions."""
     where = (t.speakers.c.transcript_id == transcript_id, t.speakers.c.speaker_id == speaker_id)
     row = (await conn.execute(speakers_select().where(*where))).mappings().one()
     suggestions = await load_suggestions(conn, [transcript_id])
@@ -197,7 +197,7 @@ async def speaker_response(conn: AsyncConnection, transcript_id: UUID, speaker_i
 
 @router.post("/transcripts/{transcript_id}/speakers/merge")
 async def merge_speakers(transcript_id: UUID, body: SpeakerMerge, principal: Editor, ctx: Ctx) -> dict[str, Any]:
-    """Passa os segmentos dos locutores de origem ao de destino e apaga os de origem."""
+    """Moves the segments of the source speakers to the target one and deletes the source ones."""
     sources = set(body.source_speaker_ids)
     if len(sources) != len(body.source_speaker_ids):
         raise invalid_field("source_speaker_ids", "ids repetidos")
@@ -215,14 +215,14 @@ async def merge_speakers(transcript_id: UUID, body: SpeakerMerge, principal: Edi
             .where(t.segments.c.transcript_id == transcript_id, t.segments.c.speaker_id.in_(sources))
             .values(speaker_id=body.target_speaker_id)
         )
-        # A impressão de voz de quem some não descreve mais ninguém.
+        # The voiceprint of whoever disappears no longer describes anyone.
         for table in (t.speaker_embeddings, t.speakers):
             await conn.execute(
                 delete(table).where(table.c.transcript_id == transcript_id, table.c.speaker_id.in_(sources))
             )
         await recompute_talk(conn, transcript_id, {body.target_speaker_id})
         await bump_revision(conn, transcript_id)
-        # Mesclar um locutor sem pessoa num nomeado também pode zerar o que faltava.
+        # Merging a speaker with no person into a named one can also clear what was missing.
         released = await _release(conn, transcript_id)
         response = await load_transcript(conn, transcript_id, words=False)
     await _resume_chain(ctx, released)
@@ -233,7 +233,7 @@ async def merge_speakers(transcript_id: UUID, body: SpeakerMerge, principal: Edi
 async def update_segment(
     transcript_id: UUID, segment_id: str, body: SegmentPatch, principal: Editor, ctx: Ctx
 ) -> dict[str, Any]:
-    """Corrige o texto (descarta as `words`) e/ou troca o locutor do segmento."""
+    """Fixes the text (discards the `words`) and/or changes the segment's speaker."""
     values = _patch_values(body)
     where = (t.segments.c.transcript_id == transcript_id, t.segments.c.segment_id == segment_id)
     async with user_tx(ctx.engine, principal.user_id) as conn:

@@ -1,10 +1,10 @@
-"""Chat sobre a base de gravações: o estado no Redis, as ferramentas sob a RLS e o job `base_chat`.
+"""Chat over the recordings base: the state in Redis, the tools under RLS and the `base_chat` job.
 
-O estado vive no Redis (`eclume:basechat:{id}`, hash com `owner_id`, `status`, `request`, `result` e
-`error`) por 1 h, como as pré-visualizações; o job `base_chat` do worker CPU roda o harness de
-`agents/base_chat.py` e o preenche. Cada conta tem no máximo `MAX_OPEN` pedidos em aberto; além
-disso, 429. As ferramentas abrem uma transação do dono a cada consulta, então só enxergam o que é
-dele. Contrato em docs/standards/code/server-agentes.md.
+The state lives in Redis (`eclume:basechat:{id}`, a hash with `owner_id`, `status`, `request`, `result`
+and `error`) for 1 h, like the previews; the CPU worker's `base_chat` job runs the harness of
+`agents/base_chat.py` and fills it. Each account has at most `MAX_OPEN` open requests; beyond
+that, 429. The tools open an owner transaction for each query, so they only see what is
+theirs. Contract in docs/standards/code/server-agentes.md.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ if TYPE_CHECKING:
     from eclume_server.agents.base import Provider
 
 TTL_S = 3600
-# Pedidos em aberto (na fila ou rodando) por conta: cada um ocupa o agente por vários minutos.
+# Open requests (queued or running) per account: each one occupies the agent for several minutes.
 MAX_OPEN = 2
 _OPEN = {"queued", "running"}
 NO_PROVIDER = "no_provider"
@@ -56,12 +56,12 @@ log = logging.getLogger(__name__)
 
 
 def chat_key(chat_id: UUID | str) -> str:
-    """Hash do estado do pedido."""
+    """Hash of the request's state."""
     return f"eclume:basechat:{chat_id}"
 
 
 def open_key(owner_id: UUID | str) -> str:
-    """Conjunto ordenado (pelo instante do pedido) dos pedidos em aberto da conta."""
+    """Sorted set (by the request's instant) of the account's open requests."""
     return f"eclume:basechat:open:{owner_id}"
 
 
@@ -72,7 +72,7 @@ def _decode(raw: dict[Any, Any]) -> dict[str, str]:
 
 
 async def _open_count(redis: ArqRedis, owner_id: UUID) -> int:
-    """Quantos a conta tem em aberto, tirando do conjunto os que terminaram ou expiraram."""
+    """How many the account has open, removing from the set the ones that finished or expired."""
     key = open_key(owner_id)
     await redis.zremrangebyscore(key, "-inf", time.time() - TTL_S)
     for member in await redis.zrange(key, 0, -1):
@@ -96,7 +96,7 @@ def _view(chat_id: UUID | str, state: dict[str, str]) -> dict[str, Any]:
     }
 
 
-async def create_chat(  # noqa: PLR0913 — o pedido, a credencial e a cota
+async def create_chat(  # noqa: PLR0913 — the request, the credential and the quota
     redis: ArqRedis,
     owner_id: UUID,
     message: str,
@@ -105,11 +105,11 @@ async def create_chat(  # noqa: PLR0913 — o pedido, a credencial e a cota
     transcripts: bool,
     agent_quota: int | None,
 ) -> dict[str, Any]:
-    """Guarda o pedido e enfileira `base_chat`; devolve o schema `BaseChat` na fila.
+    """Stores the request and enqueues `base_chat`; returns the queued `BaseChat` schema.
 
-    `transcripts` diz se a credencial lê transcrições: sem isso, o agente só consulta resumos. Com
-    `MAX_OPEN` em aberto, 429 `rate_limited`; o pedido conta na cota `agent_quota` de 24 h (403
-    `quota_exceeded`).
+    `transcripts` says whether the credential reads transcripts: without it, the agent only queries
+    summaries. With `MAX_OPEN` open, 429 `rate_limited`; the request counts against the 24 h
+    `agent_quota` (403 `quota_exceeded`).
     """
     if await _open_count(redis, owner_id) >= MAX_OPEN:
         raise rate_limited(f"Já há {MAX_OPEN} perguntas em andamento; espere uma terminar.")
@@ -127,14 +127,14 @@ async def create_chat(  # noqa: PLR0913 — o pedido, a credencial e a cota
 
 
 async def get_chat(redis: ArqRedis, chat_id: UUID, owner_id: UUID) -> dict[str, Any] | None:
-    """Schema `BaseChat`, se existe e é do usuário."""
+    """Schema `BaseChat`, if it exists and belongs to the user."""
     state = _decode(await redis.hgetall(chat_key(chat_id)))
     if state.get("owner_id") != str(owner_id):
         return None
     return _view(chat_id, state)
 
 
-# --- as ferramentas, sob a RLS do dono -----------------------------------------------------------
+# --- the tools, under the owner's RLS ------------------------------------------------------------
 
 
 def _one_line(text: str) -> str:
@@ -143,13 +143,13 @@ def _one_line(text: str) -> str:
 
 @dataclass(frozen=True)
 class BaseTools:
-    """`agents.base_chat.BaseTools` sobre o banco, como o usuário `owner_id`."""
+    """`agents.base_chat.BaseTools` over the database, as the user `owner_id`."""
 
     engine: AsyncEngine
     owner_id: UUID
 
     async def search_summaries(self, query: str, limit: int) -> list[Hit]:
-        """As gravações cujo título, tags ou resumo atual batem com os termos, por relevância."""
+        """The recordings whose title, tags or current summary match the terms, by relevance."""
         s, tr, r = t.summaries.c, t.transcripts.c, t.recordings.c
         current = (
             select(s.transcript_id, s.content_md)
@@ -185,7 +185,7 @@ class BaseTools:
         return [Hit(row.id, row.title, _one_line(row.snippet)) for row in rows]
 
     async def read_summary(self, recording_id: UUID) -> Hit | None:
-        """O resumo atual (a maior versão concluída) da gravação."""
+        """The current summary (the highest completed version) of the recording."""
         s, tr, r = t.summaries.c, t.transcripts.c, t.recordings.c
         stmt = (
             select(r.title, s.content_md)
@@ -201,7 +201,7 @@ class BaseTools:
         return Hit(recording_id, row.title, row.content_md) if row else None
 
     async def search_transcripts(self, query: str, limit: int) -> list[Hit]:
-        """As falas que batem com os termos (a busca de `GET /search`), com a gravação e o momento."""
+        """The utterances that match the terms (the `GET /search` search), with the recording and the moment."""
         filters = SearchFilters(q=query, person=None, date_from=None, date_to=None, tag=None, collection=None)
         async with user_tx(self.engine, self.owner_id) as conn:
             found = await search(conn, filters, 0, limit)
@@ -217,7 +217,7 @@ class BaseTools:
     async def read_transcript(
         self, recording_id: UUID, from_ms: int, to_ms: int
     ) -> tuple[str, list[tuple[int, str]]] | None:
-        """O título e as falas que cruzam `[from_ms, to_ms]`, em ordem."""
+        """The title and the utterances that cross `[from_ms, to_ms]`, in order."""
         sg, tr, r, sp = t.segments.c, t.transcripts.c, t.recordings.c, t.speakers.c
         title_stmt = select(r.title).where(r.id == recording_id)
         stmt = (
@@ -240,21 +240,21 @@ class BaseTools:
         ]
 
 
-# --- o job `base_chat` ---------------------------------------------------------------------------
+# --- the `base_chat` job -------------------------------------------------------------------------
 
 
 class ChatError(Exception):
-    """Falha que vira `BaseChat.error`."""
+    """Failure that becomes `BaseChat.error`."""
 
     def __init__(self, code: str, message: str) -> None:
-        """Código e mensagem legível."""
+        """Code and readable message."""
         super().__init__(message)
         self.code = code
         self.message = message
 
 
 async def chat_provider(ctx: dict[str, Any]) -> Provider:
-    """O provider marcado para `chat` (o chat da base e o Agente); sem ele, `ChatError`."""
+    """The provider marked for `chat` (the base chat and the Agent); without it, `ChatError`."""
     async with system_tx(ctx["engine"]) as conn:
         public = await provider_for(conn, "chat")
         if public is None:
@@ -282,7 +282,7 @@ async def _answer(ctx: dict[str, Any], owner_id: UUID, request: dict[str, Any]) 
 
 
 async def run_base_chat_job(ctx: dict[str, Any], chat_id: str) -> str:
-    """O job `base_chat`: responde a pergunta e grava o resultado (ou o erro) no Redis."""
+    """The `base_chat` job: answers the question and writes the result (or the error) to Redis."""
     redis: ArqRedis = ctx["redis"]
     key = chat_key(chat_id)
     state = _decode(await redis.hgetall(key))
@@ -297,7 +297,7 @@ async def run_base_chat_job(ctx: dict[str, Any], chat_id: str) -> str:
     except TimeoutError:
         error = {"code": "provider_timeout", "message": "A pergunta passou do tempo limite."}
     except Exception as exc:
-        log.exception("chat da base %s: falha inesperada", chat_id)
+        log.exception("base chat %s: unexpected failure", chat_id)
         error = {"code": INTERNAL_ERROR, "message": type(exc).__name__}
     else:
         await redis.hset(key, mapping={"status": "done", "result": json.dumps(result, ensure_ascii=False)})

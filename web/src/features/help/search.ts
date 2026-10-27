@@ -1,23 +1,24 @@
-// Busca local da central de ajuda: sem servidor, sem acento, por prefixo de palavra. Com ~34
-// artigos, a varredura linear responde em menos de 1 ms.
+// Local search for the help center: no server, accent-insensitive, by word prefix. With ~34
+// articles, the linear scan answers in under 1 ms.
 import type { Article } from './catalog'
 
 /**
- * Minúsculas, sem acento e sem pontuação, caractere a caractere: o resultado tem o mesmo tamanho
- * do texto, para uma posição achada no normalizado valer no original (o trecho da busca).
+ * Lowercase, without accents and without punctuation, character by character: the result has the
+ * same length as the text, so a position found in the normalized text holds in the original (the
+ * search snippet).
  */
 export function normalize(text: string): string {
   let out = ''
   for (const char of text) {
     const base = char.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
     const one = base.length === 1 && /[\p{L}\p{N}]/u.test(base) ? base : ' '
-    // Caracteres fora do BMP ocupam duas posições no texto original.
+    // Characters outside the BMP take two positions in the original text.
     out += char.length === 2 ? `${one} ` : one
   }
   return out
 }
 
-/** Os termos da consulta: palavras normalizadas com 2 caracteres ou mais. */
+/** The query terms: normalized words of 2 characters or more. */
 export function queryTerms(query: string): string[] {
   return [...new Set(normalize(query).split(/\s+/).filter((term) => term.length >= 2))]
 }
@@ -33,7 +34,7 @@ interface Indexed {
 export interface SearchHit {
   article: Article
   score: number
-  /** Até 160 caracteres do corpo em volta da primeira ocorrência, com os termos marcados. */
+  /** Up to 160 characters of the body around the first occurrence, with the terms marked. */
   snippet: { text: string; marks: [number, number][] } | null
 }
 
@@ -56,7 +57,7 @@ function indexOf(articles: readonly Article[]): Indexed[] {
   return index
 }
 
-/** Posição da primeira palavra do texto que começa com o termo, ou -1 (campos com espaço inicial). */
+/** Position of the first word in the text that starts with the term, or -1 (fields with a leading space). */
 function wordStart(field: string, term: string): number {
   const at = field.indexOf(` ${term}`)
   return at < 0 ? -1 : at
@@ -64,7 +65,7 @@ function wordStart(field: string, term: string): number {
 
 const SNIPPET = 160
 
-/** `body` é o campo indexado (espaço + corpo normalizado): o índice i do corpo é o i + 1 dele. */
+/** `body` is the indexed field (space + normalized body): index i of the body is its i + 1. */
 function snippetOf(plain: string, body: string, terms: string[]): SearchHit['snippet'] {
   const positions = terms.map((term) => wordStart(body, term)).filter((at) => at >= 0)
   if (positions.length === 0) return null
@@ -88,7 +89,7 @@ function snippetOf(plain: string, body: string, terms: string[]): SearchHit['sni
   return { text: `${prefix}${plain.slice(start, end)}${end < plain.length ? '…' : ''}`, marks: merged }
 }
 
-/** Artigos em que todos os termos casam, do mais ao menos relevante; empate pela ordem do catálogo. */
+/** Articles where every term matches, from most to least relevant; ties go by catalog order. */
 export function searchArticles(query: string, articles: readonly Article[], limit = Infinity): SearchHit[] {
   const terms = queryTerms(query)
   if (terms.length === 0) return []

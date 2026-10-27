@@ -1,10 +1,11 @@
 # `standards/agents/`
 
-**Como instruímos os agentes** — o que a superfície sempre carregada do repositório declara a quem
-a lê no início da sessão: o idioma da prosa e a conduta esperada do agente que a escreve.
+**How we instruct agents** — what the repository's always-loaded surface declares to whoever reads
+it at the start of a session: the language of the prose and the conduct expected of the agent that
+writes it.
 
-**Fronteira:** `agents/` governa as *instruções* que o repositório dá a um agente. O layout e os
-comandos vivem em [../code/](../code/index.md). Um padrão por arquivo; cada um com
-`type: standard` e um `resource:` derivado.
+**Boundary:** `agents/` governs the *instructions* the repository gives an agent. The layout and
+the commands live in [../code/](../code/index.md). One standard per file; each with
+`type: standard` and a derived `resource:`.
 
-* [communication.md](communication.md) — o idioma declarado (`pt-BR`, na linha `Language:` do `CLAUDE.md` da raiz) e o contrato de conduta dos agentes
+* [communication.md](communication.md) — the declared language (`en`, on the `Language:` line of the root `CLAUDE.md`) and the agents' conduct contract

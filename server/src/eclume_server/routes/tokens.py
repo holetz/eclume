@@ -1,4 +1,4 @@
-"""Tokens: PATs pessoais (criar) e credenciais de dispositivo; listar e revogar os dois. Só com sessão."""
+"""Tokens: personal PATs (create) and device credentials; list and revoke both. Session only."""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def token_json(row: Row) -> dict[str, Any]:
 async def list_tokens(
     principal: SessionUser, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50, kind: TokenKind | None = None
 ) -> dict[str, Any]:
-    """Tokens do usuário, inclusive revogados, do mais novo para o mais antigo."""
+    """The user's tokens, revoked ones included, from the newest to the oldest."""
     query = select(t.api_tokens).order_by(t.api_tokens.c.created_at.desc(), t.api_tokens.c.id.desc()).limit(limit + 1)
     if kind:
         query = query.where(t.api_tokens.c.kind == kind)
@@ -78,7 +78,7 @@ async def list_tokens(
 
 @router.post("/tokens", status_code=201)
 async def create_token(body: TokenCreate, principal: SessionUser, ctx: Ctx) -> dict[str, Any]:
-    """Cria um PAT; o segredo volta só nesta resposta."""
+    """Create a PAT; the secret comes back only in this response."""
     if len(set(body.scopes)) != len(body.scopes):
         raise invalid_field("scopes", "escopos repetidos")
     if body.expires_at is not None and body.expires_at.tzinfo is None:
@@ -110,7 +110,7 @@ async def create_token(body: TokenCreate, principal: SessionUser, ctx: Ctx) -> d
 
 @router.delete("/tokens/{token_id}", status_code=204)
 async def revoke_token(token_id: UUID, principal: SessionUser, ctx: Ctx) -> Response:
-    """Revoga um token do usuário (PAT ou dispositivo); usos seguintes recebem 401."""
+    """Revoke one of the user's tokens (PAT or device); later uses get 401."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         found = (await conn.execute(select(t.api_tokens.c.id).where(t.api_tokens.c.id == token_id))).first()
         if found is None:

@@ -15,7 +15,7 @@ import { MediaConvertError, throwIfAborted, toMediaConvertError } from './errors
 import { OUTPUT_FORMAT } from './estimate'
 import type { ProgressTracker } from './progress'
 
-/** Lê o arquivo em fatias, sob demanda: um vídeo de vários GB nunca entra inteiro na memória. */
+/** Reads the file in slices, on demand: a multi-GB video never enters memory whole. */
 function sliceSource(file: Blob, progress?: ProgressTracker): CustomSource {
   return new CustomSource({
     getSize: () => file.size,
@@ -50,7 +50,7 @@ export async function probeWithWebCodecs(file: Blob): Promise<ProbeResult> {
   }
 }
 
-/** Opus mono 16 kHz em Ogg pelo WebCodecs. Falha com `unsupported` quando não dá para decodificar ou codificar. */
+/** Mono 16 kHz Opus in Ogg through WebCodecs. Fails with `unsupported` when it cannot decode or encode. */
 export async function convertWithWebCodecs({
   file,
   bitrate,
@@ -62,7 +62,7 @@ export async function convertWithWebCodecs({
   try {
     if (!track) throw new MediaConvertError('no-audio')
 
-    // O Ogg do Mediabunny é append-only: os chunks chegam em ordem e viram o Blob final.
+    // Mediabunny's Ogg is append-only: the chunks arrive in order and become the final Blob.
     const parts: Uint8Array<ArrayBuffer>[] = []
     let written = 0
     const target = new StreamTarget(
@@ -116,7 +116,7 @@ export async function convertWithWebCodecs({
   }
 }
 
-/** Duração, em segundos, de um Ogg/Opus já convertido (relida do próprio arquivo). */
+/** Duration, in seconds, of an already converted Ogg/Opus (read back from the file itself). */
 export async function measureOutputDuration(blob: Blob): Promise<number> {
   const input = new Input({ formats: ALL_FORMATS, source: new BufferSource(await blob.arrayBuffer()) })
   try {

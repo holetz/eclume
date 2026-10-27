@@ -1,4 +1,4 @@
-"""Gravações: consulta com o job mais recente, biblioteca, forma JSON e início de job de transcrição."""
+"""Recordings: query with the most recent job, library, JSON shape and start of a transcription job."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from eclume_server.context import AppContext
 
 Status = Literal["uploading", "queued", "processing", "transcribed", "failed"]
-# O que a gravação espera do dono para seguir (`Recording.awaiting`): hoje, só os nomes dos locutores.
+# What the recording waits for from the owner to go on (`Recording.awaiting`): today, only the speaker names.
 Awaiting = Literal["speakers"]
 Sort = Literal["created_desc", "recorded_asc", "recorded_desc"]
 
@@ -49,9 +49,9 @@ _markers = (
 
 
 def recording_select() -> Select:
-    """Gravações com tipo de agenda, job mais recente, transcrição e marcadores (sob a RLS).
+    """Recordings with agenda type, most recent job, transcript and markers (under RLS).
 
-    `owner_name` é o nome do usuário da transação (`requester_name`): só ele vê as gravações.
+    `owner_name` is the name of the transaction's user (`requester_name`): only they see the recordings.
     """
     return select(
         t.recordings,
@@ -106,7 +106,7 @@ def recording_json(
     progress: tuple[str | None, float] | None = None,
     queue: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Schema `Recording`, com as etapas, o progresso publicado pelo worker GPU e a espera na fila."""
+    """Schema `Recording`, with the steps, the progress published by the GPU worker and the queue wait."""
     job = _job_json(row, progress, queue)
     agenda_type = None
     if row["agenda_type_id"] is not None:
@@ -151,7 +151,7 @@ def recording_json(
 
 
 async def get_visible(conn: AsyncConnection, recording_id: UUID) -> Any:  # noqa: ANN401
-    """Gravação do usuário da transação (a RLS só mostra as dele), ou 404."""
+    """The transaction user's recording (RLS only shows theirs), or 404."""
     row = (await conn.execute(recording_select().where(t.recordings.c.id == recording_id))).mappings().first()
     if row is None:
         raise not_found("Gravação inexistente ou sem acesso.")
@@ -159,12 +159,12 @@ async def get_visible(conn: AsyncConnection, recording_id: UUID) -> Any:  # noqa
 
 
 async def lock_recording(conn: AsyncConnection, recording_id: UUID) -> Any:  # noqa: ANN401
-    """Trava a linha da gravação num comando e relê o estado (job, transcrição) em outro, ou 404.
+    """Lock the recording row in one statement and re-read the state (job, transcript) in another, or 404.
 
-    Todo caminho que cria uma revisão passa por aqui antes de olhar o job. Em comandos separados
-    porque, em READ COMMITTED, o comando que esperou o lock vê a versão nova só da linha travada:
-    a leitura junto da trava veria o job antigo, e dois pedidos simultâneos criariam duas revisões.
-    Sob `user_tx`, a trava respeita a RLS.
+    Every path that creates a revision goes through here before looking at the job. In separate
+    statements because, under READ COMMITTED, the statement that waited for the lock sees the new
+    version of the locked row only: reading together with the lock would see the old job, and two
+    simultaneous requests would create two revisions. Under `user_tx`, the lock respects RLS.
     """
     locked = (
         await conn.execute(select(t.recordings.c.id).where(t.recordings.c.id == recording_id).with_for_update())
@@ -179,11 +179,11 @@ _OPEN = ("queued", "running")
 
 
 async def cancel_open_job(conn: AsyncConnection, row: Row, progress: dict[str, str] | None) -> int | None:
-    """Cancela o job em aberto da gravação já travada (`lock_recording`); devolve a revisão cancelada.
+    """Cancel the open job of the already locked recording (`lock_recording`); return the cancelled revision.
 
-    Job `cancelled`, gravação `failed` e a etapa em curso — o pré-processamento, se o progresso da
-    revisão está no download ou nele; senão, a transcrição — `skipped` com o motivo `cancelled`.
-    Quem chama pede a parada ao worker GPU depois do commit (`Queue.request_cancel`).
+    Job `cancelled`, recording `failed` and the running step — preprocessing, if the revision's
+    progress is in the download or in it; otherwise, transcription — `skipped` with reason `cancelled`.
+    The caller asks the GPU worker to stop after the commit (`Queue.request_cancel`).
     """
     if row["job_state"] not in _OPEN:
         return None
@@ -204,10 +204,10 @@ async def cancel_open_job(conn: AsyncConnection, row: Row, progress: dict[str, s
 
 
 async def cancel_transcription(ctx: AppContext, user_id: UUID, recording_id: UUID) -> Any:  # noqa: ANN401
-    """`POST /recordings/{id}/cancel`: cancela o job em aberto (409 sem ele); devolve a gravação.
+    """`POST /recordings/{id}/cancel`: cancel the open job (409 without one); return the recording.
 
-    A RLS decide o acesso (404 para a gravação de outro); o job muda com o papel de conexão, porque
-    o usuário não escreve em `transcription_jobs` — o mesmo caminho do worker que o fecha.
+    RLS decides access (404 for someone else's recording); the job changes with the connection role,
+    because the user does not write to `transcription_jobs` — the same path as the worker that closes it.
     """
     async with user_tx(ctx.engine, user_id) as conn:
         await get_visible(conn, recording_id)
@@ -223,19 +223,19 @@ async def cancel_transcription(ctx: AppContext, user_id: UUID, recording_id: UUI
 
 
 async def open_jobs_of(conn: AsyncConnection, owner_id: UUID) -> list[tuple[UUID, int]]:
-    """`(gravação, revisão)` dos jobs de transcrição em aberto da conta, para cancelar ao excluí-la."""
+    """`(recording, revision)` of the account's open transcription jobs, to cancel when deleting it."""
     jobs = t.transcription_jobs.c
     query = select(jobs.recording_id, jobs.revision).where(jobs.owner_id == owner_id, jobs.state.in_(_OPEN))
     return [(recording_id, revision) for recording_id, revision in await conn.execute(query)]
 
 
 async def delete_recording_of(ctx: AppContext, user_id: UUID, recording_id: UUID) -> None:
-    """Exclui a gravação e tudo o que é dela: transcrição, versões do resumo, chat, marcadores e áudio.
+    """Delete the recording and everything of it: transcript, summary versions, chat, markers and audio.
 
-    As FKs levam os filhos em cascata, o job em aberto inclusive; o gatilho da gravação põe o áudio
-    e `recordings/{id}/` na fila de exclusão do bucket na mesma transação (`storage_deletions.py`).
-    Depois do commit, o worker GPU é avisado para parar e liberar a GPU, e um resultado que ainda
-    chegue encontra a gravação apagada e não faz nada.
+    The FKs cascade to the children, the open job included; the recording trigger puts the audio
+    and `recordings/{id}/` in the bucket deletion queue in the same transaction (`storage_deletions.py`).
+    After the commit, the GPU worker is told to stop and free the GPU, and a result that still
+    arrives finds the recording deleted and does nothing.
     """
     async with user_tx(ctx.engine, user_id) as conn:
         row = await lock_recording(conn, recording_id)
@@ -259,7 +259,7 @@ async def render(ctx: AppContext, user_id: UUID, rows: list[Row]) -> list[dict[s
 
 
 async def account_language(conn: AsyncConnection, user_id: UUID) -> str | None:
-    """O idioma de transcrição preferido da conta; nulo é o padrão do servidor."""
+    """The account's preferred transcription language; null is the server default."""
     query = select(t.users.c.transcription_language).where(t.users.c.id == user_id)
     return (await conn.execute(query)).scalar()
 
@@ -272,14 +272,14 @@ async def insert_job(
     error: tuple[str, str] | None = None,
     speakers: tuple[int | None, int | None] | None = None,
 ) -> None:
-    """Cria o job da revisão, retido até a vez da conta (`dispatch.py`). Com `error`, nasce falho.
+    """Create the revision's job, held until the account's turn (`dispatch.py`). With `error`, it is born failed.
 
-    Locutores: o `speakers` pedido; sem ele, a nota de voz (uma pessoa só) leva `(1, 1)`; o resto,
-    os limites do admin.
+    Speakers: the requested `speakers`; without it, the voice note (a single person) gets `(1, 1)`; the
+    rest, the admin limits.
     """
     platform = (await conn.execute(select(t.platform_settings))).mappings().one()
     keep = await keeps_samples(conn, recording["owner_id"])
-    # O idioma do arquivo, o da conta; sem nenhum, `transcribe_options` cai no do servidor e em `pt`.
+    # The file's language, then the account's; with neither, `transcribe_options` falls back to the server's and to `pt`.
     language = recording["language"] or await account_language(conn, recording["owner_id"])
     if speakers is None:
         kind = (await conn.execute(select(t.recordings.c.kind).where(t.recordings.c.id == recording["id"]))).scalar()
@@ -295,7 +295,7 @@ async def insert_job(
     if error is not None:
         values |= {"state": "failed", "error_code": error[0], "error_message": error[1], "finished_at": func.now()}
     await conn.execute(insert(t.transcription_jobs).values(**values))
-    # O áudio está no bucket: a revisão nova começa com o recebido (falho, se o hash divergiu).
+    # The audio is in the bucket: the new revision starts with received (failed, if the hash diverged).
     await set_step(conn, recording, revision, "received", "failed" if error else "done", error=error)
 
 
@@ -305,10 +305,10 @@ async def start_next_revision(
     language: str | None,
     speakers: tuple[int | None, int | None] | None = None,
 ) -> int:
-    """Cria o job da revisão seguinte e põe a gravação na fila; devolve a revisão.
+    """Create the next revision's job and queue the recording; return the revision.
 
-    A revisão é uma acima da maior entre a transcrição e o último job (retranscrever e retentar).
-    `recording` traz `id`, `owner_id`, `job_revision` e `audio_deleted_at` (a linha de `recording_select`).
+    The revision is one above the highest of the transcript and the last job (retranscribe and retry).
+    `recording` carries `id`, `owner_id`, `job_revision` and `audio_deleted_at` (the `recording_select` row).
     """
     if recording["audio_deleted_at"] is not None:
         raise conflict("O áudio desta gravação foi apagado pela política de retenção.", "audio_deleted")
@@ -333,7 +333,7 @@ VOCABULARY_MAX_CHARS = 400
 
 
 def limit_vocabulary(names: list[str]) -> list[str]:
-    """Os nomes sem repetição nem vazios, na ordem dada, até o teto de termos e de caracteres; o nome que não cabe é pulado, os seguintes ainda entram."""
+    """The names without repeats or blanks, in the given order, up to the term and character ceilings; a name that does not fit is skipped, the following ones still go in."""
     terms: list[str] = []
     seen: set[str] = set()
     chars = 0
@@ -352,7 +352,7 @@ def limit_vocabulary(names: list[str]) -> list[str]:
 
 
 async def account_vocabulary(conn: AsyncConnection, owner_id: UUID | str) -> list[str]:
-    """Os nomes das pessoas da conta, para o ASR: filtrados por dono, nunca de outra conta."""
+    """The names of the account's people, for ASR: filtered by owner, never from another account."""
     rows = await conn.execute(
         select(t.people.c.name).where(t.people.c.owner_id == owner_id).order_by(t.people.c.sort_name, t.people.c.id)
     )
@@ -360,7 +360,7 @@ async def account_vocabulary(conn: AsyncConnection, owner_id: UUID | str) -> lis
 
 
 async def transcribe_payload(conn: AsyncConnection, options: dict[str, Any], owner_id: UUID | str) -> dict[str, Any]:
-    """As `options` do `transcribe` com o token do HF cifrado e o vocabulário da conta (só no payload)."""
+    """The `transcribe` `options` with the encrypted HF token and the account's vocabulary (payload only)."""
     payload = dict(options)
     hf_token = await secret_encrypted(conn, HF_TOKEN)
     if hf_token:
@@ -374,13 +374,13 @@ async def transcribe_payload(conn: AsyncConnection, options: dict[str, Any], own
 
 
 def _sort_key(sort: Sort) -> tuple[Any, bool]:
-    """A coluna da ordenação e se é decrescente."""
+    """The sort column and whether it is descending."""
     r = t.recordings.c
     return (r.created_at, True) if sort == "created_desc" else (r.recorded_at, sort == "recorded_desc")
 
 
 def _person_filter(people: list[UUID]) -> ColumnElement[bool]:
-    """Algum locutor da transcrição da gravação está ligado a uma das pessoas."""
+    """Some speaker of the recording's transcript is linked to one of the people."""
     return exists(
         select(1)
         .select_from(t.speakers.join(t.transcripts, t.transcripts.c.id == t.speakers.c.transcript_id))
@@ -402,15 +402,15 @@ class Library:
     person: list[UUID] | None
     field: list[str] | None = None
     agenda_type: list[UUID] | None = None
-    # Atributos de um mesmo participante (pessoa ligada a um locutor).
+    # Attributes of a single participant (a person linked to a speaker).
     person_company: list[str] | None = None
     person_department: list[str] | None = None
     person_tag: list[str] | None = None
-    # `?awaiting=speakers`: a revisão atual parada à espera dos nomes dos locutores.
+    # `?awaiting=speakers`: the current revision paused waiting for the speaker names.
     awaiting: list[Awaiting] | None = None
 
     def filters(self) -> list[ColumnElement[bool]]:
-        """As condições SQL (E entre filtros; OU dentro de cada um)."""
+        """The SQL conditions (AND between filters; OR within each one)."""
         r = t.recordings.c
         conditions: list[ColumnElement[bool]] = []
         if self.since is not None:
@@ -422,14 +422,14 @@ class Library:
         if self.kind:
             conditions.append(r.kind.in_(self.kind))
         if self.status:
-            # `processing` é o `queued` com o worker já reportando progresso: filtra pelos dois e refina depois.
+            # `processing` is `queued` with the worker already reporting progress: filter by both and refine later.
             conditions.append(r.status.in_({"queued" if s == "processing" else s for s in self.status}))
         if self.awaiting:
             conditions.append(awaiting_condition())
         return conditions + self._organizing()
 
     def _organizing(self) -> list[ColumnElement[bool]]:
-        """As condições de organização: tag, coleção, tipo, pessoa e atributos de um participante."""
+        """The organization conditions: tag, collection, type, person and attributes of a participant."""
         r = t.recordings.c
         conditions: list[ColumnElement[bool]] = []
         if self.tag:
@@ -446,10 +446,10 @@ class Library:
         return conditions
 
 
-async def list_library(  # noqa: PLR0913 — a consulta, o dono e a página
+async def list_library(  # noqa: PLR0913 — the query, the owner and the page
     ctx: AppContext, user_id: UUID, library: Library, *, sort: Sort, cursor: str | None, limit: int
 ) -> dict[str, Any]:
-    """Uma página da biblioteca (schema `RecordingPage`); o cursor vale só para o `sort` que o gerou."""
+    """A library page (schema `RecordingPage`); the cursor is valid only for the `sort` that produced it."""
     r = t.recordings.c
     key, descending = _sort_key(sort)
     order = (key.desc(), r.id.desc()) if descending else (key.asc(), r.id.asc())

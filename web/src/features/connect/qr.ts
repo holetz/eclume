@@ -5,16 +5,16 @@ interface QrMatrix {
   dark(x: number, y: number): boolean
 }
 
-/** A matriz de módulos do QR (correção de erro M) do pacote `qrcode`, sem desenhar nada. */
+/** The QR module matrix (error correction M) from the `qrcode` package, without drawing anything. */
 export function qrMatrix(text: string): QrMatrix {
   const { size, data } = QRCode.create(text, { errorCorrectionLevel: 'M' }).modules
   return { size, dark: (x, y) => data[y * size + x] === 1 }
 }
 
-/** A zona de silêncio que o leitor precisa em volta do símbolo, em módulos. */
+/** The quiet zone the reader needs around the symbol, in modules. */
 export const QUIET_ZONE = 4
 
-/** Um caminho SVG por linha de módulos: cada trecho escuro vira um retângulo de altura 1. */
+/** One SVG path per row of modules: each dark run becomes a rectangle of height 1. */
 export function qrRowPaths(matrix: QrMatrix): string[] {
   const rows: string[] = []
   for (let y = 0; y < matrix.size; y++) {

@@ -1,4 +1,4 @@
-"""Provider `anthropic`: a API da Anthropic pelo SDK oficial, com a chave cadastrada pelo admin."""
+"""Provider `anthropic`: Anthropic's API through the official SDK, with the key registered by the admin."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ _SERVER_ERROR = 500
 
 
 def _content(context: str, prompt: str) -> str | list[dict[str, Any]]:
-    """A mensagem do usuário; o contexto vira um bloco à parte, marcado para o cache de prompt."""
+    """The user message; the context becomes a separate block, marked for the prompt cache."""
     if not context:
         return prompt
     return [
@@ -46,21 +46,21 @@ def _status_error(exc: anthropic.APIStatusError) -> ProviderError:
 
 
 class AnthropicProvider:
-    """Messages API em streaming (respostas longas não esbarram no timeout HTTP)."""
+    """Messages API in streaming (long replies do not hit the HTTP timeout)."""
 
     def __init__(self, config: ProviderConfig, *, http_client: httpx2.AsyncClient | None = None) -> None:
-        """Provider para `config`; `http_client` troca o transporte (testes)."""
+        """Provider for `config`; `http_client` swaps the transport (tests)."""
         self.config = config
         self._http_client = http_client
 
     def _client(self) -> anthropic.AsyncAnthropic:
         if not self.config.api_key:
-            # Sem chave explícita o SDK cairia em variáveis de ambiente e perfis do processo.
+            # Without an explicit key the SDK would fall back to the process's environment variables and profiles.
             raise ProviderError(
                 PROVIDER_NOT_CONFIGURED,
                 "O provider anthropic não tem api_key cadastrada nem o segredo anthropic_api_key da plataforma.",
             )
-        # As retentativas são do job de resumo, que registra cada tentativa.
+        # The retries belong to the summary job, which records each attempt.
         return anthropic.AsyncAnthropic(
             api_key=self.config.api_key,
             base_url=self.config.base_url or None,
@@ -70,7 +70,7 @@ class AnthropicProvider:
         )
 
     async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
-        """Uma mensagem com o prompt; recusa e erros da API viram `ProviderError`."""
+        """One message with the prompt; refusals and API errors become `ProviderError`."""
         params: dict[str, Any] = {
             "model": self.config.model,
             "max_tokens": self.config.max_output_tokens,

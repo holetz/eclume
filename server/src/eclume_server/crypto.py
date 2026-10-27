@@ -1,8 +1,8 @@
-"""Cifra de segredos guardados no banco (chaves de API dos providers, segredos do admin).
+"""Encryption of secrets stored in the database (providers' API keys, admin secrets).
 
-AES-256-GCM com nonce aleatório; o texto cifrado é `v1:` + base64(nonce + cifra + tag). A chave
-vem de `ECLUME_ENCRYPTION_KEY` (base64 de 32 bytes) ou, sem ela, é derivada de
-`ECLUME_SECRET_KEY` por HKDF-SHA256. O valor em claro nunca volta pela API.
+AES-256-GCM with a random nonce; the ciphertext is `v1:` + base64(nonce + ciphertext + tag). The key
+comes from `ECLUME_ENCRYPTION_KEY` (base64 of 32 bytes) or, without it, is derived from
+`ECLUME_SECRET_KEY` by HKDF-SHA256. The plaintext value never goes back through the API.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ _KEY_BYTES = 32
 
 
 class SecretDecryptError(ValueError):
-    """O texto cifrado não abre com a chave atual (chave trocada ou dado corrompido)."""
+    """The ciphertext does not open with the current key (key changed or data corrupted)."""
 
 
 def _key(settings: Settings) -> bytes:
@@ -45,14 +45,14 @@ def _key(settings: Settings) -> bytes:
 
 
 def encrypt(settings: Settings, plaintext: str) -> str:
-    """Cifra um segredo para guardar no banco."""
+    """Encrypt a secret to store in the database."""
     nonce = os.urandom(_NONCE)
     sealed = AESGCM(_key(settings)).encrypt(nonce, plaintext.encode(), None)
     return _PREFIX + base64.b64encode(nonce + sealed).decode()
 
 
 def decrypt(settings: Settings, token: str) -> str:
-    """Abre um segredo guardado; chave errada ou dado corrompido → `SecretDecryptError`."""
+    """Open a stored secret; wrong key or corrupted data → `SecretDecryptError`."""
     if not token.startswith(_PREFIX):
         msg = "formato de segredo desconhecido"
         raise SecretDecryptError(msg)

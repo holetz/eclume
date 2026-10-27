@@ -1,4 +1,4 @@
-"""Configuração em runtime da plataforma (`/admin/settings`). Só a sessão de admin."""
+"""The platform's runtime configuration (`/admin/settings`). Admin session only."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ async def _read(conn: AsyncConnection, *, lock: bool = False) -> Row:
 
 @router.get("/settings")
 async def get_admin_settings(_: Admin, ctx: Ctx) -> dict[str, Any]:
-    """Configuração atual da plataforma."""
+    """The platform's current configuration."""
     async with system_tx(ctx.engine) as conn:
         row = await _read(conn)
     return settings_json(row, row["updated_by_name"])
@@ -42,7 +42,7 @@ async def get_admin_settings(_: Admin, ctx: Ctx) -> dict[str, Any]:
 
 @router.patch("/settings")
 async def update_admin_settings(body: AdminSettingsPatch, admin: Admin, ctx: Ctx) -> dict[str, Any]:
-    """Mescla os campos enviados; a configuração resultante vale para os próximos jobs."""
+    """Merge the fields sent; the resulting configuration applies to future jobs."""
     changes = changes_of(body)
     async with system_tx(ctx.engine) as conn:
         current = await _read(conn, lock=True)
@@ -52,13 +52,13 @@ async def update_admin_settings(body: AdminSettingsPatch, admin: Admin, ctx: Ctx
         validate_merged(merged, changes)
         turned_off = voice_before["enabled"] and not merged["voice_identification"]["enabled"]
         if turned_off:
-            # LGPD: desligada, nenhuma impressão de voz por gravação fica guardada na plataforma.
+            # LGPD: when off, no per-recording voiceprint is kept on the platform.
             await purge_embeddings(conn)
         await conn.execute(
             update(t.platform_settings).values(**merged, updated_at=func.now(), updated_by=admin.admin_id)
         )
         row = await _read(conn)
     if turned_off:
-        # Os `speaker_embeddings.json` do bucket saem no worker CPU, depois do commit.
+        # The bucket's `speaker_embeddings.json` files go in the CPU worker, after the commit.
         await ctx.queue.enqueue_purge_embedding_objects()
     return settings_json(row, row["updated_by_name"])

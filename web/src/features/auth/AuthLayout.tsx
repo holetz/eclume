@@ -13,8 +13,8 @@ const COPY = {
 } as const
 
 /**
- * A `.auth` do Design System: o campo da marca ao lado do formulário alinhado à esquerda. A
- * variante `admin` (`.auth-admin`) pinta o campo da marca em tinta, para o login do painel.
+ * The Design System's `.auth`: the brand field beside the left-aligned form. The
+ * `admin` variant (`.auth-admin`) paints the brand field in ink, for the panel login.
  */
 export function AuthLayout({ children, variant = 'user' }: { children: ReactNode; variant?: 'user' | 'admin' }) {
   const copy = COPY[variant]

@@ -1,162 +1,161 @@
-# Changelog do eclume
+# eclume changelog
 
-O que muda no **produto** — server, worker GPU, engines e web, que sobem juntos no mesmo deploy —
-para quem hospeda e para quem usa. Os apps têm o próprio: [desktop](desktop/CHANGELOG.md) e
-[celular](mobile/CHANGELOG.md). O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
-e as versões, o [SemVer](https://semver.org/lang/pt-BR/); quando cada linha sobe e o que entra aqui
-está em [versionamento.md](docs/standards/code/versionamento.md). A versão do contrato
-(`info.version` da v1) tem linha própria e cada entrada a cita.
+What changes in the **product** — server, GPU worker, engines and web, which ship together in the
+same deploy — for those who host it and those who use it. The apps have their own:
+[desktop](desktop/CHANGELOG.md) and [phone](mobile/CHANGELOG.md). The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow
+[SemVer](https://semver.org/); when each line is bumped and what goes in here is in
+[versionamento.md](docs/standards/code/versionamento.md). The contract version (`info.version` of
+v1) has its own line and each entry cites it.
 
 ## [Não lançado]
 
-### Adicionado
+### Added
 
-- Marcação obrigatória dos locutores: com a preferência da conta ligada, a cadeia por agente espera
-  todo locutor ter nome, com a etapa `speakers` e o aviso "Aguardando locutores" (contrato 2.22.0,
-  holetz/eclume#144).
-- Agente no lugar de Perguntas: conversas guardadas, arquivos de entrada e de saída e o histórico
-  das sessões (contrato 2.23.0, holetz/eclume#142).
-- Habilidades do usuário no Agente e ações no ambiente que o agente propõe e a pessoa confirma
-  (contrato 2.24.0, holetz/eclume#145).
-- Nota de voz transcrita com um locutor só e, ao retranscrever, o número de locutores esperado
-  (`min_speakers`/`max_speakers`; contrato 2.25.0, holetz/eclume#175).
+- Required speaker naming: with the account preference turned on, the agent chain waits for every
+  speaker to have a name, with the `speakers` step and the "Aguardando locutores" notice (contract
+  2.22.0, #144).
+- Agent in place of Questions: stored conversations, input and output files, and the session
+  history (contract 2.23.0, #142).
+- User skills in the Agent, and actions on the workspace that the agent proposes and the person
+  confirms (contract 2.24.0, #145).
+- Voice note transcribed with a single speaker and, when re-transcribing, the expected number of
+  speakers (`min_speakers`/`max_speakers`; contract 2.25.0, #175).
 - Audio retention: each account can choose how many days the server keeps the audio of its
   recordings, the admin can set a ceiling, and a daily job deletes the audio past the window while
-  the transcript, summary and chat stay (contract 2.29.0, holetz/eclume#179).
+  the transcript, summary and chat stay (contract 2.29.0, #179).
 
-### Corrigido
+### Fixed
 
 - Re-transcribing with only the minimum or only the maximum number of speakers filled in keeps the
   platform limit on the empty side, as the help text promises; before, the whole pair was replaced
-  and the ceiling disappeared (holetz/eclume#216).
+  and the ceiling disappeared (#216).
 
-### Alterado
+### Changed
 
 - Python dependencies raised to clear the `auditoria` pillar: aiohttp 3.14.5, certifi 2026.10.23,
   filelock 4.2.4, opentelemetry 1.45.1, pillow 13.0.0 (GPU worker image only, through matplotlib),
-  pypdf 6.21.2 (floor raised in `server/pyproject.toml`) and setuptools 84.2.1
-  (holetz/eclume#296).
-- Server mais enxuto em CPU e memória, sem mudar comportamento: sonda de fila mínima, imports sob
-  demanda, `eclume-server worker` com as filas `eclume:default` e `eclume:agents` num só processo,
-  pool de conexões configurável, `last_used_at` do PAT a cada 60 s, upload sem cópia e índice
-  parcial dos jobs em aberto (migration 033_indice_jobs_em_aberto, holetz/eclume#150).
-- Produção mais enxuta para quem hospeda: o SPA embutido na borda Caddy (imagem `eclume-edge`, sem
-  o serviço `web`), um `worker` CPU único para as filas `eclume:default` e `eclume:agents` (sem
-  `worker-agents`; `ECLUME_AGENT_MAX_JOBS` passa a 2 no compose), healthchecks espaçados com
-  `start_interval`, peso de CPU por papel, `memswap_limit` de 1,5 × o teto
-  (`ECLUME_MEMSWAP_<SERVIÇO>`) e tetos revistos. O deploy retira os contêineres antigos, retém a
-  borda nova ao lado dos trios antigos com `web` e poda o cache de build com mais de 7 dias.
-  `ECLUME_MEM_WORKER` substitui `ECLUME_MEM_WORKER_AGENTS` (ainda aceito);
-  `ECLUME_MEM_WORKER_CPU` e `ECLUME_MEM_WEB` deixam de valer. Pede o Docker Engine 25 ou mais novo
-  (holetz/eclume#151).
-- Tela da gravação com a transcrição numa área de rolagem própria e os locutores num bloco
-  recolhível (holetz/eclume#143).
-- Locutores esperados (`min_speakers`/`max_speakers`), ao retranscrever e nos limites do admin, passam a aceitar de 1 a 30 e a recusar booleano com 422, em vez de falhar a diarização depois de gastar a GPU (contrato 2.26.0, holetz/eclume#191).
+  pypdf 6.21.2 (floor raised in `server/pyproject.toml`) and setuptools 84.2.1 (#296).
+- Leaner server in CPU and memory, with no behaviour change: minimal queue probe, on-demand imports,
+  `eclume-server worker` with the `eclume:default` and `eclume:agents` queues in a single process,
+  configurable connection pool, the PAT's `last_used_at` every 60 s, upload without copying and a
+  partial index of the open jobs (migration 033_indice_jobs_em_aberto, #150).
+- Leaner production for those who host it: the SPA embedded in the Caddy edge (image `eclume-edge`,
+  without the `web` service), a single CPU `worker` for the `eclume:default` and `eclume:agents`
+  queues (without `worker-agents`; `ECLUME_AGENT_MAX_JOBS` becomes 2 in the compose), spaced-out
+  healthchecks with `start_interval`, CPU weight per role, `memswap_limit` of 1.5 × the ceiling
+  (`ECLUME_MEMSWAP_<SERVIÇO>`) and revised ceilings. The deploy removes the old containers, keeps
+  the new edge alongside the old trios with `web` and prunes the build cache older than 7 days.
+  `ECLUME_MEM_WORKER` replaces `ECLUME_MEM_WORKER_AGENTS` (still accepted);
+  `ECLUME_MEM_WORKER_CPU` and `ECLUME_MEM_WEB` no longer apply. Requires Docker Engine 25 or newer
+  (#151).
+- Recording screen with the transcript in its own scroll area and the speakers in a collapsible
+  block (#143).
+- Expected speakers (`min_speakers`/`max_speakers`), when re-transcribing and in the admin limits,
+  now accept 1 to 30 and reject a boolean with 422, instead of failing diarization after spending
+  the GPU (contract 2.26.0, #191).
 
-### Obsoleto
+### Deprecated
 
-- O chat sobre a base (`/base-chat`), que o Agente substitui (contrato 2.23.0, holetz/eclume#142).
+- The chat over the knowledge base (`/base-chat`), which the Agent replaces (contract 2.23.0, #142).
 
-### Para quem hospeda
+### For those who host
 
-- **Migrations**, nenhuma destrutiva: `030_marcacao_dos_locutores` (troca os `CHECK` das etapas),
+- **Migrations**, none destructive: `030_marcacao_dos_locutores` (swaps the step `CHECK`s),
   `031_agente_conversas`, `032_agente_habilidades_e_acoes` and `034_audio_retention` (adds the
   account and platform retention settings and makes `recordings.audio_key` nullable).
 
 ## [0.2.0] - 2026-10-03
 
-O que entrou em `main` depois da 0.1.0, antes de existir a norma de versionamento (holetz/eclume#89 a
-#130, mesclados entre 2026-10-01 e 2026-10-02).
+What landed in `main` after 0.1.0, before the versioning standard existed (#89 to #130, merged
+between 2026-10-01 and 2026-10-02).
 
-### Adicionado
+### Added
 
-- Etapas do processamento que se retomam sozinhas depois de uma queda e podem ser canceladas
-  (holetz/eclume#96).
-- Upload retomável por 7 dias e exclusão completa: apagar gravação ou conta não deixa objeto no
-  bucket (holetz/eclume#97).
-- Deploy rastreável e reversível: o `/health` diz o commit da imagem e o `deploy.sh --voltar` sobe
-  um deploy retido (holetz/eclume#92).
-- Observabilidade e alertas da produção: `eclume-server saude --json`, o `vigia.sh` e o aviso de
-  vencimento do token do agente (holetz/eclume#93).
-- Backup cifrado fora do host, com os segredos e o ensaio de restauração (holetz/eclume#91).
-- Cotas por conta (armazenamento, arquivo, uploads abertos, minutos de áudio e pedidos ao agente) e
-  fila justa da GPU (holetz/eclume#98).
-- Posição na fila de transcrição e estado do processador (holetz/eclume#117).
-- Aviso de resumo pronto ou com falha em qualquer cliente (holetz/eclume#118).
-- Recuperação de senha por link de uso único gerado pelo admin (holetz/eclume#119).
-- Conta que não guarda amostras de voz e a tela que diz o que sai do servidor (holetz/eclume#116).
-- Idioma da transcrição por conta e por arquivo (holetz/eclume#121).
-- Primeiros passos e estados vazios que ensinam, do resumo até a regra (holetz/eclume#115).
-- CA própria do servidor com restrição de nome, com rotação anunciada no descritor
-  (`ca_next_sha256`) (holetz/eclume#101).
-- Referência da API navegável e offline em `/referencia-api.html`, ligada pela tela de tokens de
-  acesso (holetz/eclume#127).
+- Processing steps that resume on their own after a crash and can be cancelled (#96).
+- Resumable upload for 7 days and complete deletion: deleting a recording or an account leaves no
+  object in the bucket (#97).
+- Traceable and reversible deploy: `/health` reports the image's commit and `deploy.sh --voltar`
+  brings back a retained deploy (#92).
+- Production observability and alerts: `eclume-server saude --json`, `vigia.sh` and the agent token
+  expiry warning (#93).
+- Encrypted off-host backup, with the secrets and the restore drill (#91).
+- Per-account quotas (storage, file, open uploads, audio minutes and agent requests) and a fair GPU
+  queue (#98).
+- Position in the transcription queue and processor state (#117).
+- Notice of a summary that is ready or has failed, in any client (#118).
+- Password recovery through a single-use link generated by the admin (#119).
+- Account that keeps no voice samples, and the screen that says what leaves the server (#116).
+- Transcription language per account and per file (#121).
+- First steps and empty states that teach, from the summary to the rule (#115).
+- The server's own name-constrained CA, with rotation announced in the descriptor
+  (`ca_next_sha256`) (#101).
+- Browsable, offline API reference at `/referencia-api.html`, linked from the access tokens screen
+  (#127).
 
-### Mudado
+### Changed
 
-- Estados do processamento com nome e motivo, iguais no web, no desktop e no celular
-  (holetz/eclume#114).
-- Configurações e regras do processamento automático reorganizadas (holetz/eclume#120).
-- Transcrição amarrada à revisão de ponta a ponta (holetz/eclume#95).
-- Servidor endurecido: limites de corpo, cabeçalhos de segurança, tentativas de login e escopos
-  (holetz/eclume#99).
-- Serviços de produção isolados e com limite de memória; MinIO e Redis com credencial por serviço
-  (holetz/eclume#94).
-- O provider de resumo deixa de exigir binário proprietário: a CLI `claude` na imagem passa a ser
-  escolha de quem hospeda (holetz/eclume#129).
-- Web em data router, com erro por rota e rascunho do resumo protegido (holetz/eclume#110),
-  resiliente a queda de rede, sessão vencida e troca de conta (holetz/eclume#111), com transcrição
-  longa fluida (holetz/eclume#112) e no Design System, com o contraste dos controles corrigido
-  (holetz/eclume#122, holetz/eclume#130).
-- `owner` e `created_by` marcados como obsoletos na v1: continuam preenchidos e saem na `/api/v2`
-  (contrato 2.11.0, holetz/eclume#100).
-- Toolchains, imagens e dependências fixadas e atualizadas (holetz/eclume#90).
+- Processing states with a name and a reason, the same on the web, the desktop and the phone
+  (#114).
+- Automatic processing settings and rules reorganized (#120).
+- Transcription tied to the revision end to end (#95).
+- Hardened server: body limits, security headers, login attempts and scopes (#99).
+- Production services isolated and memory-limited; MinIO and Redis with per-service credentials
+  (#94).
+- The summary provider no longer requires a proprietary binary: the `claude` CLI in the image
+  becomes the host's choice (#129).
+- Web on a data router, with per-route errors and a protected summary draft (#110), resilient to
+  network loss, expired session and account switching (#111), with smooth long transcripts (#112)
+  and on the Design System, with the control contrast fixed (#122, #130).
+- `owner` and `created_by` marked deprecated in v1: they stay filled in and leave in `/api/v2`
+  (contract 2.11.0, #100).
+- Toolchains, images and dependencies pinned and updated (#90).
 
-### Para quem hospeda
+### For those who host
 
-- **Migrations**, nenhuma destrutiva: `024_exclusao_no_armazenamento`, `025_validade_da_chave`,
-  `026_cotas_e_fila_justa`, `027_redefinicao_de_senha`, `028_conta_sem_amostras_de_voz` e
+- **Migrations**, none destructive: `024_exclusao_no_armazenamento`, `025_validade_da_chave`,
+  `026_cotas_e_fila_justa`, `027_redefinicao_de_senha`, `028_conta_sem_amostras_de_voz` and
   `029_idioma_da_conta`.
-- **Variáveis novas** no env de produção (o modelo é o `deploy/.env.prod.example`):
-  - `ECLUME_CLAUDE_CLI` (`0` ou `1`), **obrigatória**: o deploy recusa um env que não a declare;
-    `1` mantém a CLI do provider `claude-cli` na imagem.
-  - `ECLUME_MINIO_SERVER_PASSWORD`, `ECLUME_MINIO_GPU_PASSWORD`, `ECLUME_REDIS_SERVER_PASSWORD` e
-    `ECLUME_REDIS_GPU_PASSWORD`: o deploy gera as que faltarem.
-  - `ECLUME_TLS_CA` (`eclume` ou `local`) e `ECLUME_CA_NOMES`: a CA do HTTPS; a troca da raiz do
-    Caddy pela própria segue a rotação em três passos de
+- **New variables** in the production env (the template is `deploy/.env.prod.example`):
+  - `ECLUME_CLAUDE_CLI` (`0` or `1`), **required**: the deploy refuses an env that does not declare
+    it; `1` keeps the `claude-cli` provider's CLI in the image.
+  - `ECLUME_MINIO_SERVER_PASSWORD`, `ECLUME_MINIO_GPU_PASSWORD`, `ECLUME_REDIS_SERVER_PASSWORD` and
+    `ECLUME_REDIS_GPU_PASSWORD`: the deploy generates the missing ones.
+  - `ECLUME_TLS_CA` (`eclume` or `local`) and `ECLUME_CA_NOMES`: the HTTPS CA; replacing Caddy's
+    root with the server's own follows the three-step rotation in
     [deploy-producao.md](docs/project/deploy-producao.md).
-  - `ECLUME_SIGNUPS_PER_IP_PER_DAY` (padrão 5) e os limites de memória `ECLUME_MEM_*` (com padrão
-    no compose).
-- **Contrato**: 2.9.0 → 2.21.0, só crescendo.
-- **Apps compatíveis**: desktop 0.4.1 e celular 0.1.1, que trazem a fixação estrita da CA
-  (holetz/eclume#102).
+  - `ECLUME_SIGNUPS_PER_IP_PER_DAY` (default 5) and the `ECLUME_MEM_*` memory limits (with defaults
+    in the compose).
+- **Contract**: 2.9.0 → 2.21.0, only growing.
+- **Compatible apps**: desktop 0.4.1 and phone 0.1.1, which bring strict CA pinning (#102).
 
 ## [0.1.0] - 2026-09-30
 
-A linha de base: o que está em produção no host desde o primeiro deploy até 2026-09-30.
+The baseline: what has been in production on the host from the first deploy up to 2026-09-30.
 
-### Adicionado
+### Added
 
-- API com contas de usuário isoladas e cadastro aberto, conta de admin separada, PATs e
-  dispositivos pareados; gravações, pessoas, busca, coleções automáticas e tags.
-- Transcrição na GPU com WhisperX: alinhamento, diarização, identificação de locutores por voz e
-  atribuição automática.
-- Resumo pelo agente que o admin configura, com tipos de agenda, campos e chat sobre a base.
-- Web com a biblioteca, a gravação, as configurações, a ajuda e o painel do admin, com conversão
-  local de áudio e vídeo antes do upload.
-- Servidor MCP para dispositivos e integrações.
+- API with isolated user accounts and open sign-up, a separate admin account, PATs and paired
+  devices; recordings, people, search, auto collections and tags.
+- GPU transcription with WhisperX: alignment, diarization, speaker identification by voice and
+  automatic assignment.
+- Summary by the agent the admin configures, with agenda types, fields and chat over the knowledge
+  base.
+- Web with the library, the recording, the settings, the help and the admin panel, with local
+  audio and video conversion before upload.
+- MCP server for devices and integrations.
 
-### Para quem hospeda
+### For those who host
 
 - **Migrations**: `001_nucleo`, `002_agentes`, `003_pessoas_e_busca`, `004_painel_admin`,
   `005_identificacao_por_voz`, `006_papel_de_conexao`, `007_purga_de_embeddings`,
-  `008_conta_por_usuario` (**destrutiva**: tira a organização, os grupos, o compartilhamento, os
-  convites e a auditoria de voz; faça o backup antes, como em
+  `008_conta_por_usuario` (**destructive**: removes the organization, the groups, the sharing, the
+  invitations and the voice audit; take the backup first, as in
   [deploy-producao.md](docs/project/deploy-producao.md)), `009_tipos_de_agenda`,
   `010_campos_e_valores`, `011_plataforma_de_processamento`, `012_etapas_do_pipeline`,
   `013_revisao_do_processamento`, `014_gravacao_resumo`, `015_dispositivos_e_mcp`,
   `016_origem_mobile`, `017_dispositivo_le_resumo`, `018_dispositivo_le_transcricao`,
   `019_atribuicao_automatica_de_locutores`, `020_pessoas_enriquecidas`,
-  `021_tipo_de_agenda_padrao`, `022_colecoes_automaticas` e `023_cadastro_de_tags`.
-- **Contrato**: 2.9.0.
-- **Apps compatíveis**: desktop 0.4.0, publicado junto com ela, e celular 0.1.0.
+  `021_tipo_de_agenda_padrao`, `022_colecoes_automaticas` and `023_cadastro_de_tags`.
+- **Contract**: 2.9.0.
+- **Compatible apps**: desktop 0.4.0, published together with it, and phone 0.1.0.

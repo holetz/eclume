@@ -26,7 +26,7 @@ function row(name: string) {
 }
 
 describe('Agentes', () => {
-  it('lista os providers com o tipo, o endereço e as finalidades', async () => {
+  it('lists the providers with the type, the address and the purposes', async () => {
     mockAgentsApi()
     renderApp('/admin/agentes')
     expect(await screen.findByText('Claude (servidor)')).toBeInTheDocument()
@@ -34,19 +34,19 @@ describe('Agentes', () => {
     const claude = row('Claude (servidor)')
     expect(within(claude).getByText('Claude Code do servidor · resumos, preenchimento de campos, chat do resumo')).toBeInTheDocument()
     expect(within(claude).getByText('Habilitado')).toBeInTheDocument()
-    // O claude-cli sem token guardado.
+    // The claude-cli without a stored token.
     expect(within(claude).getByText('Sem token')).toHaveClass('badge-warning')
     const deepseek = row('DeepSeek')
     expect(
       within(deepseek).getByText('OpenAI-compatível · https://api.deepseek.com/v1 · detecção do tipo de agenda'),
     ).toBeInTheDocument()
     expect(within(deepseek).queryByText('Sem chave')).not.toBeInTheDocument()
-    // Todas as finalidades têm dono habilitado: sem aviso.
+    // Every purpose has an enabled owner: no notice.
     expect(screen.queryByText(/Sem provider para/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Provider padrão')).not.toBeInTheDocument()
   })
 
-  it('avisa as finalidades sem provider habilitado e o "sem uso"', async () => {
+  it('warns about the purposes without an enabled provider and the "sem uso"', async () => {
     const page = fixtures.agentProviderPage()
     page.items[1].enabled = false
     page.items[0].used_for = []
@@ -61,7 +61,7 @@ describe('Agentes', () => {
     expect(within(row('DeepSeek')).getByText('Desligado')).toBeInTheDocument()
   })
 
-  it('o anthropic sem chave própria só pede chave quando a compartilhada falta', async () => {
+  it('anthropic without its own key only asks for a key when the shared one is missing', async () => {
     const page = fixtures.agentProviderPage()
     page.items.push({ ...page.items[1], id: 'a1', name: 'Sonnet', kind: 'anthropic', base_url: null, api_key_set: false })
     const secrets = fixtures.secretList()
@@ -77,7 +77,7 @@ describe('Agentes', () => {
     expect(within(row('Sonnet')).queryByText('Sem chave')).not.toBeInTheDocument()
   })
 
-  it('cadastra com endereço, finalidades livres marcadas e a chave no POST', async () => {
+  it('creates with the address, free purposes checked and the key in the POST', async () => {
     const page = fixtures.agentProviderPage()
     page.items[1].used_for = []
     const http = mockAgentsApi({
@@ -92,7 +92,7 @@ describe('Agentes', () => {
     await userEvent.type(within(form).getByLabelText('Modelo'), 'llama-3.3-70b')
     await userEvent.type(within(form).getByLabelText('Endereço da API'), 'https://api.groq.com/openai/v1')
     await userEvent.type(within(form).getByLabelText('Chave de API'), 'gsk_segredo')
-    // A detecção estava sem dono: vem marcada. As outras são do Claude.
+    // Detection had no owner: it comes checked. The others belong to Claude.
     const detection = within(form).getByRole('checkbox', { name: /Detecção do tipo de agenda/ })
     expect(detection).toBeChecked()
     const summaries = within(form).getByRole('checkbox', { name: /Resumos/ })
@@ -113,12 +113,12 @@ describe('Agentes', () => {
     await vi.waitFor(() => expect(screen.queryByRole('form', { name: 'Novo provider' })).not.toBeInTheDocument())
   })
 
-  it('o claude-cli pede o token do claude setup-token, os outros a chave de API', async () => {
+  it('claude-cli asks for the claude setup-token token, the others for the API key', async () => {
     mockAgentsApi()
     renderApp('/admin/agentes')
     await userEvent.click(await screen.findByRole('button', { name: 'Cadastrar provider' }))
     const form = screen.getByRole('form', { name: 'Novo provider' })
-    // O tipo que vem escolhido não é a CLI proprietária.
+    // The type that comes preselected is not the proprietary CLI.
     expect(within(form).getByLabelText('Tipo')).toHaveValue('ollama')
     await userEvent.selectOptions(within(form).getByLabelText('Tipo'), 'claude-cli')
     expect(within(form).getByText(/exige a imagem construída com a CLI/)).toBeInTheDocument()
@@ -129,7 +129,7 @@ describe('Agentes', () => {
     expect(within(form).queryByLabelText('Endereço da API')).not.toBeInTheDocument()
   })
 
-  it('edita: tipo fixo, finalidades, token substituído e apagado na hora', async () => {
+  it('edits: fixed type, purposes, token replaced and deleted at once', async () => {
     const http = mockAgentsApi({
       'PATCH /api/v1/admin/agent-providers/:id': () => fixtures.agentProviderPage().items[1],
     })
@@ -166,7 +166,7 @@ describe('Agentes', () => {
     })
   })
 
-  it('exclui o provider depois de confirmar', async () => {
+  it('deletes the provider after confirming', async () => {
     const http = mockAgentsApi({ 'DELETE /api/v1/admin/agent-providers/:id': () => empty(204) })
     renderApp('/admin/agentes')
     await userEvent.click(await screen.findByRole('button', { name: 'Editar DeepSeek' }))
@@ -181,7 +181,7 @@ describe('Agentes', () => {
     )
   })
 
-  it('grava a chave compartilhada da Anthropic sem mostrar o valor', async () => {
+  it('saves the shared Anthropic key without showing the value', async () => {
     const http = mockAgentsApi({ 'PUT /api/v1/admin/secrets/:name': () => empty(204) })
     renderApp('/admin/agentes')
     const shared = await screen.findByRole('group', { name: 'Chave da API da Anthropic' })
@@ -197,13 +197,13 @@ describe('Agentes', () => {
     expect(screen.queryByText('sk-ant-segredo')).not.toBeInTheDocument()
   })
 
-  it('/admin/segredos leva a Locutores', async () => {
+  it('/admin/segredos leads to Locutores', async () => {
     mockAgentsApi({ 'GET /api/v1/admin/settings': () => fixtures.adminSettings() })
     renderApp('/admin/segredos')
     expect(await screen.findByRole('heading', { level: 1, name: 'Locutores' })).toBeInTheDocument()
   })
 
-  it('avisa as finalidades que mandam dados para fora do servidor', async () => {
+  it('warns about the purposes that send data outside the server', async () => {
     mockAgentsApi()
     renderApp('/admin/agentes')
     const note = await screen.findByRole('note', { name: 'Dados fora do servidor' })

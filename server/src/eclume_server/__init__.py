@@ -1,4 +1,4 @@
-"""API do eclume."""
+"""The eclume API."""
 
 from importlib.metadata import version
 

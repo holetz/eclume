@@ -1,9 +1,9 @@
-// O localStorage pode faltar (modo privado, dados bloqueados) ou lançar: ler e gravar nunca quebram
-// a tela, e a falta vira "sem valor guardado".
+// localStorage may be missing (private mode, blocked data) or throw: reading and writing never break
+// the screen, and the absence becomes "no stored value".
 
 export const STORAGE_KEYS = {
   filtersCollapsed: 'eclume-biblioteca-filtros-recolhidos',
-  /** Prefixo: a chave leva o id da conta (`lastLibraryKey`). */
+  /** Prefix: the key carries the account id (`lastLibraryKey`). */
   lastLibrary: 'eclume-biblioteca-ultima',
   libraryOpening: 'eclume-biblioteca-abertura',
   workHours: 'eclume-expediente',
@@ -23,19 +23,19 @@ export function readStored(key: string): string | null {
   }
 }
 
-/** Grava o valor; `null` apaga a chave. */
+/** Writes the value; `null` removes the key. */
 export function writeStored(key: string, value: string | null): void {
   try {
     if (value === null) window.localStorage.removeItem(key)
     else window.localStorage.setItem(key, value)
   } catch {
-    // Sem armazenamento, a preferência vale só nesta visita.
+    // Without storage, the preference holds only for this visit.
   }
 }
 
 /**
- * A última biblioteca guarda ids de pessoa, tag, coleção e valor de campo: é por conta, e não por
- * aparelho como as outras preferências. A chave global antiga, de antes da conta, sai na primeira leitura.
+ * The last library stores ids of person, tag, collection and field value: it is per account, and not per
+ * device like the other preferences. The old global key, from before the account, goes away on the first read.
  */
 export function readLastLibrary(userId: string): string | null {
   writeStored(STORAGE_KEYS.lastLibrary, null)

@@ -1,7 +1,7 @@
-// Testes reais de conversão em Chrome, Firefox e WebKit headless (npm run test:browser, no host de
-// build). As fixtures vêm de scripts/media-fixtures.sh: 10 s de áudio estéreo 48 kHz. Cada motor
-// converte pelo caminho que ele tem: o WebCodecs quando decodifica a faixa e codifica Opus, a
-// reserva ffmpeg.wasm quando não; o que depende só do WebCodecs é pulado com o motivo.
+// Real conversion tests in headless Chrome, Firefox and WebKit (npm run test:browser, on the build
+// host). The fixtures come from scripts/media-fixtures.sh: 10 s of 48 kHz stereo audio. Each browser engine
+// converts through the path it has: WebCodecs when it decodes the track and encodes Opus, the
+// ffmpeg.wasm fallback when not; what depends only on WebCodecs is skipped with the reason.
 import { ALL_FORMATS, BufferSource, Input } from 'mediabunny'
 import { server } from 'vitest/browser'
 import { describe, expect, it } from 'vitest'
@@ -20,15 +20,15 @@ const VORBIS = new Set(['video.mkv', 'audio.ogg'])
 
 async function fixture(name: string): Promise<File> {
   const response = await fetch(`/src/lib/media-convert/__fixtures__/${name}`)
-  if (!response.ok) throw new Error(`fixture ausente: ${name} (rode npm run fixtures)`)
+  if (!response.ok) throw new Error(`missing fixture: ${name} (run npm run fixtures)`)
   return new File([await response.blob()], name)
 }
 
-/** Lê canais e taxa de entrada do cabeçalho `OpusHead` do primeiro pacote Ogg. */
+/** Reads the channels and input rate from the `OpusHead` header of the first Ogg packet. */
 function readOpusHead(bytes: Uint8Array) {
   const magic = new TextEncoder().encode('OpusHead')
   const at = bytes.findIndex((_, i) => magic.every((b, j) => bytes[i + j] === b))
-  if (at < 0) throw new Error('OpusHead ausente')
+  if (at < 0) throw new Error('OpusHead missing')
   const view = new DataView(bytes.buffer, bytes.byteOffset + at)
   return { channels: view.getUint8(9), inputSampleRate: view.getUint32(12, true) }
 }
@@ -48,14 +48,14 @@ async function expectSpeechOgg(blob: Blob) {
   expect(Math.abs(duration - FIXTURE_SECONDS)).toBeLessThanOrEqual(0.5)
 }
 
-/** O motor sabe codificar Opus pelo WebCodecs (o Firefox e o Chrome sabem; o WebKit, nem sempre). */
+/** The browser engine can encode Opus through WebCodecs (Firefox and Chrome can; WebKit, not always). */
 async function webCodecsOpus(): Promise<boolean> {
   if (!checkEnvironment().webCodecs) return false
   const config = { codec: 'opus', sampleRate: 48_000, numberOfChannels: 1 }
   return (await AudioEncoder.isConfigSupported(config).catch(() => ({ supported: false }))).supported === true
 }
 
-/** O caminho que este motor usa para o arquivo: o WebCodecs se decodifica e codifica, senão a reserva. */
+/** The path this browser engine uses for the file: WebCodecs if it decodes and encodes, otherwise the fallback. */
 async function expectedEngine(file: File): Promise<'webcodecs' | 'ffmpeg'> {
   const probe = await probeMedia(file)
   return probe.engine === 'webcodecs' && (await webCodecsOpus()) ? 'webcodecs' : 'ffmpeg'
@@ -95,10 +95,10 @@ async function rejection(promise: Promise<unknown>): Promise<MediaConvertError> 
     expect(error).toBeInstanceOf(MediaConvertError)
     return error as MediaConvertError
   }
-  throw new Error('esperava uma rejeição')
+  throw new Error('expected a rejection')
 }
 
-describe('conversão pelo WebCodecs, ou pela reserva onde o motor não decodifica', () => {
+describe('conversion through WebCodecs, or through the fallback where the browser engine does not decode', () => {
   it.for([
     'video.mp4',
     'video.mov',
@@ -108,31 +108,31 @@ describe('conversão pelo WebCodecs, ou pela reserva onde o motor não decodific
     'audio.mp3',
     'audio.wav',
     'audio.ogg',
-  ])('%s vira Opus mono 16 kHz em Ogg', async (name, { skip }) => {
-    // O WebKit diz decodificar Vorbis pelo WebCodecs e trava sem erro (2026-10-01, Playwright no host).
-    skip(server.browser === 'webkit' && VORBIS.has(name), 'o WebKit trava ao decodificar Vorbis pelo WebCodecs')
+  ])('%s becomes mono 16 kHz Opus in Ogg', async (name, { skip }) => {
+    // WebKit claims to decode Vorbis through WebCodecs and hangs without an error (2026-10-01, Playwright on the host).
+    skip(server.browser === 'webkit' && VORBIS.has(name), 'WebKit hangs when decoding Vorbis through WebCodecs')
     const engine = await expectedEngine(await fixture(name))
     expect((await convertFixture(name)).engine).toBe(engine)
   })
 
-  it('estima o tamanho antes de converter', async ({ skip }) => {
+  it('estimates the size before converting', async ({ skip }) => {
     const probe = await probeMedia(await fixture('video.mp4'))
-    skip(probe.engine !== 'webcodecs', 'o motor não decodifica AAC pelo WebCodecs: sem estimativa antes da reserva')
+    skip(probe.engine !== 'webcodecs', 'the browser engine does not decode AAC through WebCodecs: no estimate before the fallback')
     expect(probe.engine).toBe('webcodecs')
     expect(probe.hasAudio).toBe(true)
     expect(Math.abs((probe.durationSec ?? 0) - FIXTURE_SECONDS)).toBeLessThanOrEqual(0.5)
     expect(probe.estimatedBytes).toBe(estimateOutputSize(probe.durationSec!))
   })
 
-  it('recusa vídeo sem áudio', async ({ skip }) => {
-    skip(!checkEnvironment().webCodecs, 'sem WebCodecs, a reserva só descobre a falta de áudio convertendo')
+  it('refuses a video without audio', async ({ skip }) => {
+    skip(!checkEnvironment().webCodecs, 'without WebCodecs, the fallback only finds the missing audio by converting')
     const file = await fixture('sem-audio.mp4')
     expect((await rejection(convertAudio(file))).code).toBe('no-audio')
     expect((await rejection(probeMedia(file))).code).toBe('no-audio')
   })
 
-  it('cancela no meio com aborted', async ({ skip }) => {
-    skip(!(await webCodecsOpus()), 'o motor não codifica Opus pelo WebCodecs')
+  it('cancels midway with aborted', async ({ skip }) => {
+    skip(!(await webCodecsOpus()), 'the browser engine does not encode Opus through WebCodecs')
     const controller = new AbortController()
     const error = await rejection(
       convertAudio(await fixture('longo.webm'), {
@@ -148,13 +148,13 @@ describe('conversão pelo WebCodecs, ou pela reserva onde o motor não decodific
 })
 
 describe('fallback ffmpeg.wasm', () => {
-  it('converte AVI, que o Mediabunny não lê', async () => {
+  it('converts AVI, which Mediabunny does not read', async () => {
     const probe = await probeMedia(await fixture('video.avi'))
     expect(probe).toEqual({ durationSec: null, hasAudio: null, estimatedBytes: null, engine: 'ffmpeg' })
     expect((await convertFixture('video.avi')).engine).toBe('ffmpeg')
   })
 
-  it('cancela no meio com aborted', async () => {
+  it('cancels midway with aborted', async () => {
     const controller = new AbortController()
     const error = await rejection(
       convertAudio(await fixture('longo.avi'), {

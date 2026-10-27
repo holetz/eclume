@@ -3,10 +3,10 @@ import type { Schemas } from '../../api/client'
 export type Scope = Schemas['Scope']
 export type DevicePlatform = Schemas['DevicePlatform']
 
-/** A chave de todas as listas de tokens: invalidá-la atualiza Tokens de acesso e os aparelhos. */
+/** The key of every token list: invalidating it refreshes Tokens de acesso and the devices. */
 export const TOKENS_KEY = ['tokens'] as const
 
-/** Os grupos de escopo de holetz/eclume#35: a escolha principal em Tokens de acesso e em Conexão MCP. */
+/** The scope groups of holetz/eclume#35: the main choice in Tokens de acesso and in Conexão MCP. */
 export const SCOPE_GROUPS: readonly { id: string; label: string; short: string; scopes: readonly Scope[] }[] = [
   { id: 'ler', label: 'Buscar e ler gravações', short: 'ler', scopes: ['recordings:read', 'transcripts:read'] },
   { id: 'resumos', label: 'Ler e editar resumos', short: 'resumos', scopes: ['summaries:read', 'summaries:write'] },
@@ -26,7 +26,7 @@ export const SCOPES: readonly { scope: Scope; label: string; description: string
   { scope: 'summaries:write', label: 'Editar resumos', description: 'Gerar e editar resumos.' },
 ]
 
-/** Combinações prontas para os clientes conhecidos, em "Escopos individuais". */
+/** Ready-made combinations for the known clients, in "Escopos individuais". */
 export const PRESETS: readonly { name: string; label: string; scopes: Scope[] }[] = [
   { name: 'lumea — importador', label: 'lumea', scopes: ['transcripts:read', 'people:read'] },
 ]
@@ -36,8 +36,8 @@ export function hasGroup(scopes: readonly Scope[], group: (typeof SCOPE_GROUPS)[
 }
 
 /**
- * O resumo curto da tabela ("ler, resumos, campos"): um nome por grupo completo e "+N" pelos escopos
- * soltos. Sem nenhum grupo completo, lista os escopos como vieram.
+ * The table's short summary ("ler, resumos, campos"): one name per complete group and "+N" for the
+ * loose scopes. With no complete group, it lists the scopes as they came.
  */
 export function summarizeScopes(scopes: readonly Scope[]): string {
   const groups = SCOPE_GROUPS.filter((group) => hasGroup(scopes, group))

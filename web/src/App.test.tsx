@@ -6,7 +6,7 @@ import { problem, mockFetch } from './test/http'
 describe('App', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('sem sessão, abre o login', async () => {
+  it('opens the login with no session', async () => {
     mockFetch({ 'GET /api/v1/me': () => problem('unauthorized', 401) })
     render(<App />)
     expect(await screen.findByRole('heading', { name: 'Entrar' })).toBeInTheDocument()

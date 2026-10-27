@@ -1,6 +1,6 @@
-// Fronteiras entre as features do web, como um teste da suíte: o grafo de imports entre
-// `src/features/*` não tem ciclo, só o próprio admin e as rotas importam `features/admin/`, e
-// `src/shared/` não importa de `features/` nem de `app/`.
+// Boundaries between the web features, as a suite test: the import graph between
+// `src/features/*` has no cycle, only admin itself and the routes import `features/admin/`, and
+// `src/shared/` imports from neither `features/` nor `app/`.
 import { describe, expect, it } from 'vitest'
 
 const sources = import.meta.glob<string>('/src/**/*.{ts,tsx}', { query: '?raw', import: 'default', eager: true })
@@ -20,7 +20,7 @@ function resolve(from: string, spec: string): string | null {
 
 const featureOf = (path: string) => /^\/src\/features\/([^/]+)\//.exec(path)?.[1] ?? null
 
-/** Os imports de código de produção (sem testes), já resolvidos. */
+/** The imports of production code (without tests), already resolved. */
 function edges(): { from: string; to: string }[] {
   const list: { from: string; to: string }[] = []
   for (const [file, text] of Object.entries(sources)) {
@@ -58,12 +58,12 @@ function findCycle(graph: Map<string, Set<string>>): string[] | null {
   return null
 }
 
-describe('fronteiras entre features', () => {
-  it('lê o código do app', () => {
+describe('boundaries between features', () => {
+  it('reads the app code', () => {
     expect(Object.keys(sources).length).toBeGreaterThan(100)
   })
 
-  it('o grafo de imports entre features não tem ciclo', () => {
+  it('the import graph between features has no cycle', () => {
     const graph = new Map<string, Set<string>>()
     for (const { from, to } of edges()) {
       const a = featureOf(from)
@@ -71,12 +71,12 @@ describe('fronteiras entre features', () => {
       if (!a || !b || a === b) continue
       graph.set(a, (graph.get(a) ?? new Set()).add(b))
     }
-    // O grafo foi montado de fato (a gravação usa pessoas, a busca usa a gravação…).
+    // The graph was really built (the recording uses people, search uses the recording…).
     expect(graph.get('transcript')?.has('people')).toBe(true)
     expect(findCycle(graph)).toBeNull()
   })
 
-  it('só o próprio admin e as rotas importam features/admin/', () => {
+  it('only admin itself and the routes import features/admin/', () => {
     const outside = edges().filter(
       ({ from, to }) =>
         featureOf(to) === 'admin' && featureOf(from) !== 'admin' && from !== '/src/app/routes.tsx',
@@ -84,7 +84,7 @@ describe('fronteiras entre features', () => {
     expect(outside.map(({ from, to }) => `${from} → ${to}`)).toEqual([])
   })
 
-  it('src/shared/ não importa de features/ nem de app/', () => {
+  it('src/shared/ imports from neither features/ nor app/', () => {
     const leaks = edges().filter(
       ({ from, to }) => from.startsWith('/src/shared/') && /^\/src\/(features|app)\//.test(to),
     )

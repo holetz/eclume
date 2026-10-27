@@ -16,7 +16,7 @@
   max-width: 62ch;
 }
 
-/* Três cartões separados por linhas de 2px, como no quadro Desktop app do DS. */
+/* Three cards separated by 2px lines, as in the DS Desktop app board. */
 .platforms {
   list-style: none;
   display: grid;
@@ -39,8 +39,8 @@
   padding: 20px;
 }
 
-/* O `.card-body` do DS cresce para encher o cartão; aqui o cartão estica até a altura do vizinho,
-   e o requisito crescendo empurraria o Baixar do macOS para baixo dos outros dois. */
+/* The DS `.card-body` grows to fill the card; here the card stretches to its neighbor's height,
+   and a growing requirement would push the macOS Baixar below the other two. */
 .card > :global(.card-body) {
   flex: none;
 }
