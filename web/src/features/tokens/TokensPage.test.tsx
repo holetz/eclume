@@ -17,8 +17,8 @@ function mockTokensApi(extra: Parameters<typeof mockFetch>[0] = {}) {
   })
 }
 
-describe('tokens de acesso', () => {
-  it('lista os tokens com o resumo dos escopos, a validade, o uso e o aparelho marcado', async () => {
+describe('access tokens', () => {
+  it('lists the tokens with the scope summary, expiry, usage and the device marked', async () => {
     mockTokensApi()
     renderApp('/tokens')
     expect(await screen.findByRole('heading', { name: 'Tokens de acesso' })).toBeInTheDocument()
@@ -32,14 +32,14 @@ describe('tokens de acesso', () => {
     expect(within(rows[1]).queryByText(/Aparelho/)).not.toBeInTheDocument()
   })
 
-  it('leva à referência da API servida pelo próprio servidor', async () => {
+  it('links to the API reference served by the server itself', async () => {
     mockTokensApi()
     renderApp('/tokens')
     const link = await screen.findByRole('link', { name: 'Referência da API' })
     expect(link).toHaveAttribute('href', '/referencia-api.html')
   })
 
-  it('põe os revogados no fim e marca os expirados', async () => {
+  it('puts the revoked ones last and marks the expired ones', async () => {
     const page = fixtures.tokenPage()
     page.items[0].revoked_at = '2026-09-20T10:00:00Z'
     page.items[1].expires_at = '2026-01-01T00:00:00Z'
@@ -52,7 +52,7 @@ describe('tokens de acesso', () => {
     expect(within(rows[1]).queryByRole('button', { name: /Revogar/ })).not.toBeInTheDocument()
   })
 
-  it('cria pelo diálogo com grupos e validade, e mostra o segredo uma vez', async () => {
+  it('creates through the dialog with groups and expiry, and shows the secret once', async () => {
     const writeText = vi.fn(() => Promise.resolve())
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     const http = mockTokensApi({ 'POST /api/v1/tokens': () => json(fixtures.tokenCreated(), 201) })
@@ -85,7 +85,7 @@ describe('tokens de acesso', () => {
     expect(screen.queryByText('eclp_7Hq2vN4kR8sT1wX6yZ3bC5dF0gJ9mP2a')).not.toBeInTheDocument()
   })
 
-  it('usa a combinação do lumea nos escopos individuais', async () => {
+  it('uses the lumea combination in the individual scopes', async () => {
     const http = mockTokensApi({ 'POST /api/v1/tokens': () => json(fixtures.tokenCreated(), 201) })
     renderApp('/tokens')
     await userEvent.click(await screen.findByRole('button', { name: 'Novo token' }))
@@ -102,7 +102,7 @@ describe('tokens de acesso', () => {
     expect(new Date(body.expires_at).getTime()).toBeGreaterThan(Date.now() + 89 * 86_400_000)
   })
 
-  it('revoga só depois de confirmar no diálogo', async () => {
+  it('revokes only after confirming in the dialog', async () => {
     const http = mockTokensApi({ 'DELETE /api/v1/tokens/:id': () => empty(204) })
     renderApp('/tokens')
     await userEvent.click(await screen.findByRole('button', { name: 'Revogar lumea — importador' }))
@@ -116,7 +116,7 @@ describe('tokens de acesso', () => {
     )
   })
 
-  it('avisa que revogar um aparelho o desliga', async () => {
+  it('warns that revoking a device disconnects it', async () => {
     mockTokensApi()
     renderApp('/tokens')
     await userEvent.click(await screen.findByRole('button', { name: 'Revogar Desktop — notebook da Mariana' }))
