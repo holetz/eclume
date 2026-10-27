@@ -11,7 +11,7 @@ import { TokenForm } from '../tokens/TokenForm'
 import styles from './Connect.module.css'
 import { useServerInfo } from './serverInfo'
 
-// Os três primeiros grupos marcados; "Excluir gravações" fica desmarcado.
+// The first three groups checked; "Excluir gravações" stays unchecked.
 const ASSISTANT_DEFAULTS: { name: string; scopes: Scope[]; expiration: string } = {
   name: 'Claude Desktop',
   scopes: ['recordings:read', 'transcripts:read', 'summaries:read', 'summaries:write', 'recordings:write'],
@@ -94,7 +94,7 @@ function CreatedToken({
   mcpUrl: string | undefined
   onAnother: () => void
 }) {
-  // O formulário que tinha o foco sai da tela: o foco vai para o aviso, e o leitor de tela o lê.
+  // The form that had focus leaves the screen: focus moves to the notice, and the screen reader reads it.
   const region = useRef<HTMLDivElement>(null)
   useEffect(() => region.current?.focus(), [])
   return (

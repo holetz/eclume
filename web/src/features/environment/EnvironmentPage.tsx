@@ -61,7 +61,7 @@ const SHORTCUTS: { keys: string[]; action: string }[] = [
 
 const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
 
-/** Um controle segmentado do DS com rótulo e dica. */
+/** A DS segmented control with a label and a hint. */
 function Segmented<T extends string>({
   label,
   hint,
@@ -109,7 +109,7 @@ function Segmented<T extends string>({
   )
 }
 
-/** Ajustes deste navegador: aparência, agenda e atalhos. Nada aqui vai para a conta ou o servidor. */
+/** Settings for this browser: appearance, agenda and shortcuts. Nothing here goes to the account or the server. */
 export function EnvironmentPage() {
   useHelpTopic('ambiente')
   const id = useId()

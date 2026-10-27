@@ -11,10 +11,10 @@ export function MobilePage() {
   useHelpTopic('app-movel')
   const create = useCreatePairingCode()
   const { mutate } = create
-  // O último código fica na tela enquanto outro é gerado (o `data` da mutação zera a cada pedido).
+  // The last code stays on screen while another is generated (the mutation's `data` resets on each request).
   const [pairing, setPairing] = useState<Pairing | null>(null)
   const generate = useCallback(() => mutate(undefined, { onSuccess: setPairing }), [mutate])
-  // Cada página gera o seu código ao abrir: um código novo anula o anterior.
+  // Each page generates its own code on opening: a new code voids the previous one.
   useEffect(generate, [generate])
 
   return (

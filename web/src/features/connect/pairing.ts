@@ -9,7 +9,7 @@ type PairingCode = Schemas['PairingCode']
 
 const PAIRING_POLL_MS = 3000
 
-/** Quanto faltava quando a resposta chegou, medido no relógio do servidor, e o `performance.now()` de então. */
+/** How much time was left when the response arrived, measured on the server's clock, and the `performance.now()` at that moment. */
 interface CountdownAnchor {
   expiresInMs: number
   at: number
@@ -20,14 +20,14 @@ export interface Pairing {
   anchor: CountdownAnchor
 }
 
-/** Um código vale 10 minutos (holetz/eclume#35). */
+/** A code is valid for 10 minutes (holetz/eclume#35). */
 const PAIRING_TTL_MS = 10 * 60_000
 
 /**
- * A âncora da contagem: `expires_at` menos o `Date` da resposta (o relógio do servidor), contada a
- * partir do `performance.now()`. Assim a contagem não depende do relógio do computador estar certo.
- * O `Date` só tem segundos e o servidor o renova uma vez por segundo, então pode ficar até ~2 s
- * atrás: a validade nunca passa dos 10 minutos do código.
+ * The countdown anchor: `expires_at` minus the response's `Date` (the server's clock), counted from
+ * `performance.now()`. That way the countdown does not depend on the computer's clock being right.
+ * `Date` only has seconds and the server renews it once per second, so it can lag up to ~2 s
+ * behind: the expiry never goes past the code's 10 minutes.
  */
 export function anchorFrom(expiresAt: string, dateHeader: string | null, now: number = performance.now()): CountdownAnchor {
   const serverNow = dateHeader ? Date.parse(dateHeader) : Number.NaN
@@ -35,7 +35,7 @@ export function anchorFrom(expiresAt: string, dateHeader: string | null, now: nu
   return { expiresInMs: Math.min(Date.parse(expiresAt) - base, PAIRING_TTL_MS), at: now }
 }
 
-/** Gera um código de vínculo. Um código novo anula o anterior (holetz/eclume#35). */
+/** Generates a pairing code. A new code voids the previous one (holetz/eclume#35). */
 export function useCreatePairingCode() {
   return useMutation({
     mutationFn: async (): Promise<Pairing> => {
@@ -51,15 +51,15 @@ function remainingMs(anchor: CountdownAnchor, now: number = performance.now()): 
 }
 
 /**
- * `m:ss`, arredondado para baixo: o header `Date` só tem segundos, e arredondar para cima mostraria
- * "10:01" num código de 10 minutos.
+ * `m:ss`, rounded down: the `Date` header only has seconds, and rounding up would show "10:01" on a
+ * 10-minute code.
  */
 export function formatCountdown(ms: number): string {
   const total = Math.floor(ms / 1000)
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
-/** O tempo que falta, recalculado a cada segundo e parado quando zera. */
+/** The time left, recomputed every second and stopped when it reaches zero. */
 function useCountdown(anchor: CountdownAnchor | null): number {
   const [left, setLeft] = useState(() => (anchor ? remainingMs(anchor) : 0))
   const [current, setCurrent] = useState(anchor)
@@ -82,8 +82,8 @@ function useCountdown(anchor: CountdownAnchor | null): number {
 }
 
 /**
- * Consulta o estado do código a cada 3 s enquanto ele está `pending` e a contagem não zerou. No
- * `used`, atualiza as listas de tokens, onde o aparelho novo aparece.
+ * Polls the code state every 3 s while it is `pending` and the countdown has not reached zero. On
+ * `used`, it refreshes the token lists, where the new device appears.
  */
 function usePairingStatus(id: string, counting: boolean) {
   const queryClient = useQueryClient()
@@ -103,7 +103,7 @@ function usePairingStatus(id: string, counting: boolean) {
   return status.data
 }
 
-/** Os tokens de aparelho (`GET /tokens?kind=device`), sob a chave das listas de tokens. */
+/** The device tokens (`GET /tokens?kind=device`), under the token lists key. */
 export function useDeviceTokens() {
   return useQuery({
     queryKey: [...TOKENS_KEY, 'device'],
@@ -116,7 +116,7 @@ type PairingState =
   | { phase: 'expired'; announce: string }
   | { phase: 'used'; deviceName: string | null; announce: string }
 
-/** A contagem e o estado de um código: pendente com o tempo que falta, vencido ou já usado. */
+/** A code's countdown and state: pending with the time left, expired or already used. */
 export function usePairingState(pairing: Pairing): PairingState {
   const left = useCountdown(pairing.anchor)
   const polled = usePairingStatus(pairing.code.id, left > 0)
@@ -127,6 +127,6 @@ export function usePairingState(pairing: Pairing): PairingState {
     return { phase: 'used', deviceName: device?.name ?? null, announce: 'Pareado' }
   }
   if (status === 'expired' || left === 0) return { phase: 'expired', announce: 'Código vencido' }
-  // O leitor de tela só ouve o último minuto, não cada segundo.
+  // The screen reader only hears the last minute, not every second.
   return { phase: 'pending', left: formatCountdown(left), announce: left <= 60_000 ? 'Falta 1 minuto' : '' }
 }
