@@ -11,13 +11,13 @@ import { NEW, useGuardedSelection } from './useGuardedSelection'
 
 const SUMMARY_LINE_MAX = 60
 
-/** "Resumo: " com os títulos `##` das instruções, em minúsculas; sem títulos, a primeira linha, cortada numa palavra. */
+/** "Resumo: " with the `##` headings of the instructions, in lowercase; with no headings, the first line, cut at a word. */
 function summaryLabel(instructions: string): string {
   const headings = [...instructions.matchAll(/^##\s+(.+?)\s*$/gm)].map((match) => match[1].toLowerCase())
   if (headings.length) return `Resumo: ${headings.join(', ')}`
   const first = instructions.split('\n').find((line) => line.trim())?.trim() ?? ''
   if (first.length <= SUMMARY_LINE_MAX) return `Resumo: ${first}`
-  // Corta na última palavra inteira, sem a pontuação solta do fim.
+  // Cuts at the last whole word, without the stray punctuation at the end.
   const cut = first
     .slice(0, SUMMARY_LINE_MAX + 1)
     .replace(/\s+\S*$/, '')
@@ -29,12 +29,12 @@ export function AgendaTypesPage() {
   useHelpTopic('agendas')
   useEffect(markAgendaTypesSeen, [])
   const types = useAgendaTypes()
-  // O tipo padrão fica no topo, com o selo; os outros na ordem do usuário.
+  // The fallback agenda type stays on top, with the badge; the others in the user's order.
   const items = [...(types.data?.items ?? [])].sort(
     (a, b) => Number(b.fallback) - Number(a.fallback) || a.position - b.position,
   )
   const { selected, select, apply, setDirty, discardDialog } = useGuardedSelection('tipo')
-  // O pedido que o chat do resumo mandou para este tipo, no `state` da navegação.
+  // The request the summary chat sent for this agenda type, in the navigation `state`.
   const location = useLocation()
   const instructionsRequest = (location.state as Partial<InstructionsRequestState> | null)?.instructionsRequest
   const current = selected === NEW ? null : (items.find((t) => t.id === selected) ?? (selected ? undefined : items[0]))
