@@ -1,19 +1,19 @@
-# `standards/` — contratos atuais do eclume
+# `standards/` — eclume's current contracts
 
-O **padrão/contrato** atual — "como deve ser e por quê", a fonte da verdade compartilhada. Um
-padrão por arquivo; subpastas por **assunto**. Cada doc tem `type: standard` e um `resource:`
-derivado (o escopo do repositório que ele governa).
+The current **standard/contract** — "how it should be and why", the shared source of truth. One
+standard per file; subfolders by **subject**. Each doc has `type: standard` and a derived
+`resource:` (the scope of the repository it governs).
 
-**Fronteira:** `standards/` = "como **NÓS** fazemos (atual)". Direção vive em
-[vision/](../vision/index.md). Uma regra **acordada mas não provada** fica aqui como
-`authority: background` e passa a `current` quando provada.
+**Boundary:** `standards/` = "how **WE** do it (current)". Direction lives in
+[vision/](../vision/index.md). A rule that is **agreed but not proven** stays here as
+`authority: background` and becomes `current` once proven.
 
 ## Subtopics
 
-* [agents/](agents/index.md) — o idioma declarado e o contrato de conduta dos agentes
-* [api/](api/index.md) — o contrato de API v1, suas convenções e a regra de evolução só aditiva
-* [code/](code/index.md) — layout do monorepo, toolchains e comandos de cada pilar
-* [design/](design/index.md) — a marca do eclume e o portão de produção de artefatos
+* [agents/](agents/index.md) — the declared language and the agents' conduct contract
+* [api/](api/index.md) — the v1 API contract, its conventions and the additive-only evolution rule
+* [code/](code/index.md) — monorepo layout, toolchains and the commands of each pillar
+* [design/](design/index.md) — the eclume brand and the artifact production gate
 
 ## Current docs
 
@@ -56,6 +56,6 @@ derivado (o escopo do repositório que ele governa).
 ### design/
 | Doc | Covers |
 | --- | --- |
-| [brand.md](design/brand.md) | A identidade visual do eclume — linho e nogueira, Archivo com IBM Plex Mono, raio zero, fios de 2px e terracota só para gravação e falha — com os papéis dos tokens, o vocabulário de componentes e os compromissos projetados no DESIGN.md. |
-| [production.md](design/production.md) | O portão para produzir um artefato com a marca do eclume a partir de uma fonte única de tokens, em web, Typst e PDF. |
+| [brand.md](design/brand.md) | The eclume visual identity — linen and walnut, Archivo with IBM Plex Mono, zero radius, 2px rules and terracotta only for recording and failure — with the token roles, the component vocabulary and the commitments projected into DESIGN.md. |
+| [production.md](design/production.md) | The gate for producing an artifact with the eclume brand from a single token source, across web, Typst and PDF. |
 <!-- END GENERATED -->

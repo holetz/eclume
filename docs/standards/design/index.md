@@ -1,4 +1,4 @@
-# `design/` — marca e produção
+# `design/` — brand and production
 
-- [Marca](brand.md) — a identidade visual do eclume e o sentido por trás dos tokens.
-- [Produção](production.md) — o portão que todo artefato gerado segue.
+- [Brand](brand.md) — eclume's visual identity and the meaning behind the tokens.
+- [Production](production.md) — the gate every generated artifact follows.
