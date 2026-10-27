@@ -53,7 +53,7 @@
   resize: vertical;
 }
 
-/* O cartão de configuração, como o de atribuição automática de locutores em Pessoas. */
+/* The configuration card, like the automatic speaker assignment one in Pessoas. */
 .config {
   display: grid;
   gap: var(--space-3);
@@ -78,7 +78,7 @@
   justify-content: flex-start;
 }
 
-/* O .seg do DS tem a largura das opções, não a do campo. */
+/* The DS .seg takes the width of its options, not that of the field. */
 .config :global(.seg) {
   justify-self: start;
 }

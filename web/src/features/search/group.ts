@@ -1,5 +1,5 @@
-// Os resultados da busca agrupados por gravação, sem mexer no ranking: só os acertos consecutivos da
-// mesma transcrição se juntam, então a mesma gravação pode aparecer em dois grupos.
+// The search results grouped by recording, without touching the ranking: only the consecutive hits of the
+// same transcript are joined, so the same recording can show up in two groups.
 import type { Schemas } from '../../api/client'
 
 type Hit = Schemas['SearchHit']
@@ -19,7 +19,7 @@ export function groupHits(hits: readonly Hit[]): HitGroup[] {
   return groups
 }
 
-/** "7 trechos em 3 gravações" (com "ou mais" quando há outra página). */
+/** "7 trechos em 3 gravações" (with "ou mais" when there is another page). */
 export function totalLabel(hits: readonly Hit[], more: boolean): string {
   const recordings = new Set(hits.map((hit) => hit.transcript.recording_id)).size
   const passages = hits.length === 1 ? '1 trecho' : `${hits.length} trechos`

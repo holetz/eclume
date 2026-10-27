@@ -1,5 +1,5 @@
-// O `highlight` da busca chega com o texto escapado e os termos entre <mark> e </mark>, e nenhum
-// outro HTML (contrato). Aqui vira pedaços de texto puro, renderizados pelo React sem innerHTML.
+// The search `highlight` arrives with the text escaped and the terms between <mark> and </mark>, and no
+// other HTML (contract). Here it becomes plain-text pieces, rendered by React without innerHTML.
 interface HighlightPart {
   text: string
   marked: boolean
