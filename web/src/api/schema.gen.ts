@@ -717,10 +717,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Listar as gravações do usuário
-         * @description A biblioteca: por intervalo de `recorded_at` (semana, mês) e com filtros. Os filtros são
-         *     repetíveis: valores repetidos do mesmo filtro combinam por OU, e filtros diferentes, por E
-         *     (`?tag=a&tag=b&kind=note` = nota com a tag `a` ou `b`).
+         * List the user's recordings
+         * @description The library: by `recorded_at` range (week, month) and with filters. Filters are
+         *     repeatable: repeated values of the same filter combine with OR, and different filters with AND
+         *     (`?tag=a&tag=b&kind=note` = a note with the tag `a` or `b`).
          */
         get: operations["listRecordings"];
         put?: never;
@@ -740,18 +740,18 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Gravação e estado do job */
+        /** Recording and job state */
         get: operations["getRecording"];
         put?: never;
         post?: never;
         /**
-         * Excluir a gravação, o áudio e a transcrição
-         * @description Com PAT, exige `recordings:delete` desde a 2.3.0 (antes, `recordings:write`); a migração concedeu `recordings:delete` a todo token que tinha `recordings:write`.
+         * Delete the recording, the audio and the transcript
+         * @description With a PAT, it requires `recordings:delete` since 2.3.0 (before, `recordings:write`); the migration granted `recordings:delete` to every token that had `recordings:write`.
          */
         delete: operations["deleteRecording"];
         options?: never;
         head?: never;
-        /** Editar metadados da gravação */
+        /** Edit the recording metadata */
         patch: operations["updateRecording"];
         trace?: never;
     };
@@ -765,8 +765,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Áudio da gravação (redirecionamento)
-         * @description Redireciona para uma URL temporária do áudio, que aceita `Range` para o player. Desde a 2.29.0, 410 (`code: audio_deleted`) quando a retenção já apagou o áudio; o endereço assinado responde o mesmo.
+         * Recording audio (redirect)
+         * @description Redirects to a temporary URL of the audio, which accepts `Range` for the player. Since 2.29.0, 410 (`code: audio_deleted`) when retention has already erased the audio; the signed address answers the same.
          */
         get: operations["getRecordingAudio"];
         put?: never;
@@ -789,8 +789,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Transcrever de novo com a configuração atual
-         * @description A transcrição mantém o id e sobe de `revision`; os vínculos de locutor a pessoa são refeitos pela nova diarização. Desde a 2.29.0, 409 com `code: audio_deleted` quando a retenção já apagou o áudio.
+         * Transcribe again with the current configuration
+         * @description The transcript keeps its id and goes up a `revision`; the speaker-to-person links are redone by the new diarization. Since 2.29.0, 409 with `code: audio_deleted` when retention has already erased the audio.
          */
         post: operations["retranscribeRecording"];
         delete?: never;
@@ -811,11 +811,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Cancelar a transcrição em curso ou na fila
-         * @description Desde a 2.10.0. O job `queued`/`running` da gravação termina `cancelled`, a gravação fica
-         *     `failed` com `Job.error.code` `cancelled` (recuperável) e a etapa em curso fica `skipped`
-         *     com `reason` `cancelled`. O worker GPU para no próximo ponto de checagem e libera a GPU;
-         *     "Transcrever de novo" (`/retranscribe`) é a volta. Sem job em aberto, 409.
+         * Cancel the running or queued transcription
+         * @description Since 2.10.0. The recording's `queued`/`running` job ends `cancelled`, the recording becomes
+         *     `failed` with `Job.error.code` `cancelled` (recoverable) and the running step becomes `skipped`
+         *     with `reason` `cancelled`. The GPU worker stops at the next checkpoint and frees the GPU;
+         *     "Transcrever de novo" (`/retranscribe`) is the way back. With no open job, 409.
          */
         post: operations["cancelRecordingTranscription"];
         delete?: never;
@@ -836,10 +836,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Seguir sem nomear os locutores
-         * @description Desde a 2.22.0. Solta a gravação parada à espera dos nomes: a etapa `speakers` fica
-         *     `skipped` com `reason` `continued_by_user` e a cadeia segue pelo tipo de agenda. Fora da
-         *     espera, 409.
+         * Continue without naming the speakers
+         * @description Since 2.22.0. Releases the recording stopped waiting for the names: the `speakers` step
+         *     becomes `skipped` with `reason` `continued_by_user` and the chain goes on through the agenda
+         *     type. Outside the wait, 409.
          */
         post: operations["continueRecordingWithoutNames"];
         delete?: never;
@@ -858,23 +858,23 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Estado do resumo da gravação
-         * @description A versão atual (a de maior `version` concluída), a gerada de referência (a gerada mais
-         *     recente concluída, para comparar e voltar) e a geração em andamento. Sem transcrição, 409
-         *     `transcript_missing`.
+         * Summary state of the recording
+         * @description The current version (the completed one with the highest `version`), the generated reference
+         *     (the most recent completed generated one, to compare and go back to) and the generation in
+         *     progress. With no transcript, 409 `transcript_missing`.
          */
         get: operations["getRecordingSummary"];
         /**
-         * Editar o resumo à mão
-         * @description Grava o Markdown como uma versão `manual`, que vira a atual. `base_version` é a versão que
-         *     a pessoa abriu (0 sem resumo concluído); se outra versão entrou nesse meio-tempo, 409
-         *     `summary_changed` e nada é sobrescrito.
+         * Edit the summary by hand
+         * @description Stores the Markdown as a `manual` version, which becomes the current one. `base_version` is
+         *     the version the person opened (0 with no completed summary); if another version came in
+         *     meanwhile, 409 `summary_changed` and nothing is overwritten.
          */
         put: operations["editRecordingSummary"];
         post?: never;
         /**
-         * Excluir o resumo inteiro
-         * @description Apaga todas as versões e o chat de ajuste da gravação.
+         * Delete the whole summary
+         * @description Erases every version and the adjustment chat of the recording.
          */
         delete: operations["deleteRecordingSummary"];
         options?: never;
@@ -894,9 +894,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Voltar à versão gerada
-         * @description Cria uma versão `manual` com o conteúdo da gerada de referência e `restored_from_id`
-         *     apontando para ela: nada se perde. Sem versão gerada, 409 `summary_missing`.
+         * Go back to the generated version
+         * @description Creates a `manual` version with the content of the generated reference and `restored_from_id`
+         *     pointing at it: nothing is lost. With no generated version, 409 `summary_missing`.
          */
         post: operations["revertRecordingSummary"];
         delete?: never;
@@ -914,18 +914,18 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Mensagens do chat de ajuste */
+        /** Messages of the adjustment chat */
         get: operations["listSummaryChat"];
         put?: never;
         /**
-         * Pedir um ajuste do resumo ao agente
-         * @description Grava o pedido e a resposta do agente em `queued`; o cliente consulta
-         *     `GET /api/v1/summary-chat-messages/{message_id}` da resposta até `done` ou `failed`. O
-         *     agente trabalha sobre o resumo atual e só lê a transcrição quando o pedido precisa; cada
-         *     leitura fica em `reads`. Uma resposta que muda o resumo cria uma versão `chat`. Com um
-         *     pedido ainda em aberto na gravação, 409 `chat_busy`; sem transcrição, 409
-         *     `transcript_missing`. Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h
-         *     (estourada, 403 `quota_exceeded`).
+         * Ask the agent for a summary adjustment
+         * @description Stores the request and the agent's reply in `queued`; the client polls
+         *     `GET /api/v1/summary-chat-messages/{message_id}` of the reply until `done` or `failed`. The
+         *     agent works on the current summary and reads the transcript only when the request needs it;
+         *     each read lands in `reads`. A reply that changes the summary creates a `chat` version. With a
+         *     request still open on the recording, 409 `chat_busy`; with no transcript, 409
+         *     `transcript_missing`. Since 2.15.0, the request counts toward the quota of agent requests in
+         *     24 h (exceeded, 403 `quota_exceeded`).
          */
         post: operations["sendSummaryChat"];
         delete?: never;
@@ -943,13 +943,14 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Marcadores da gravação */
+        /** Markers of the recording */
         get: operations["listMarkers"];
         put?: never;
         /**
-         * Enviar marcadores em lote
-         * @description Idempotente por `client_id`: reenviar o mesmo marcador atualiza a nota e não duplica; um
-         *     reenvio sem nota mantém a que já existe. `device_name` é o do corpo (sem ele, nulo).
+         * Send markers in a batch
+         * @description Idempotent by `client_id`: resending the same marker updates the note and does not duplicate
+         *     it; a resend with no note keeps the existing one. `device_name` is the body's (without it,
+         *     null).
          */
         post: operations["upsertMarkers"];
         delete?: never;
@@ -968,17 +969,17 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Exportar a gravação
-         * @description - `txt`: título, data (horário de Brasília), duração, participantes e uma linha
-         *       `[HH:MM:SS] Nome: texto` por segmento.
-         *     - `srt`: uma legenda por segmento, `HH:MM:SS,mmm --> HH:MM:SS,mmm` e `Nome: texto`.
-         *     - `md`: `# Título`, uma linha com a data e o tipo de agenda, e o resumo atual. Sem resumo,
-         *       409 `summary_missing`.
-         *     - `docx`: título, data, duração e participantes, o resumo (títulos e listas do Markdown
-         *       viram estilos do Word) e a transcrição; sem resumo, só a transcrição.
+         * Export the recording
+         * @description - `txt`: title, date (America/Sao_Paulo time), duration, participants and one
+         *       `[HH:MM:SS] Name: text` line per segment.
+         *     - `srt`: one subtitle per segment, `HH:MM:SS,mmm --> HH:MM:SS,mmm` and `Name: text`.
+         *     - `md`: `# Title`, one line with the date and the agenda type, and the current summary. With
+         *       no summary, 409 `summary_missing`.
+         *     - `docx`: title, date, duration and participants, the summary (Markdown headings and lists
+         *       become Word styles) and the transcript; with no summary, only the transcript.
          *
-         *     Exige `transcripts:read` num PAT, e também `summaries:read` para `md` e `docx`. Sem
-         *     transcrição, 409 `transcript_missing`.
+         *     Requires `transcripts:read` on a PAT, and also `summaries:read` for `md` and `docx`. With no
+         *     transcript, 409 `transcript_missing`.
          */
         get: operations["exportRecording"];
         put?: never;
@@ -999,9 +1000,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Campos da gravação
-         * @description Todo campo do usuário, na ordem da lista; os sem valor saem com `value` e `origin` nulos.
-         *     Título e tags vêm de `Recording.title`/`tags`.
+         * Fields of the recording
+         * @description Every user field, in list order; those with no value come out with null `value` and `origin`.
+         *     Title and tags come from `Recording.title`/`tags`.
          */
         get: operations["listRecordingFields"];
         put?: never;
@@ -1024,8 +1025,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Aceitar todos os valores automáticos
-         * @description Todo valor `auto` da gravação vira `accepted`, que o preenchimento automático não sobrescreve.
+         * Accept all the automatic values
+         * @description Every `auto` value of the recording becomes `accepted`, which automatic filling does not overwrite.
          */
         post: operations["acceptRecordingFields"];
         delete?: never;
@@ -1046,9 +1047,10 @@ export interface paths {
         };
         get?: never;
         /**
-         * Escrever o valor de um campo
-         * @description Origem `edited`. O valor segue o `kind` do campo: string (texto, uma das opções da escolha,
-         *     até 300 caracteres) ou lista de strings; `null` limpa (o título não fica vazio).
+         * Write the value of a field
+         * @description Origin `edited`. The value follows the field's `kind`: a string (text, one of the choice's
+         *     options, up to 300 characters) or a list of strings; `null` clears it (the title never
+         *     becomes empty).
          */
         put: operations["putRecordingField"];
         post?: never;
@@ -1071,8 +1073,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Aceitar o valor automático de um campo
-         * @description `auto` vira `accepted`; um valor que não é `auto` dá 409 `not_auto`.
+         * Accept the automatic value of a field
+         * @description `auto` becomes `accepted`; a value that is not `auto` gives 409 `not_auto`.
          */
         post: operations["acceptRecordingField"];
         delete?: never;
@@ -6019,27 +6021,27 @@ export interface operations {
                 from?: string;
                 /** @description `recorded_at < to`. */
                 to?: string;
-                /** @description `created_desc` (padrão, a mais recente enviada primeiro), `recorded_asc` ou `recorded_desc` (pelo início da gravação). O cursor vale só para a mesma ordenação. */
+                /** @description `created_desc` (default, the most recently uploaded first), `recorded_asc` or `recorded_desc` (by the recording start). The cursor is valid only for the same order. */
                 sort?: "created_desc" | "recorded_asc" | "recorded_desc";
-                /** @description Natureza da gravação; repetível. */
+                /** @description Nature of the recording; repeatable. */
                 kind?: components["schemas"]["RecordingKind"][];
-                /** @description Estado da gravação; repetível. */
+                /** @description State of the recording; repeatable. */
                 status?: components["schemas"]["RecordingStatus"][];
-                /** @description Tag; repetível. */
+                /** @description Tag; repeatable. */
                 tag?: string[];
-                /** @description Coleção; repetível. */
+                /** @description Collection; repeatable. */
                 collection?: string[];
-                /** @description Pessoa ligada a um locutor da transcrição; repetível. */
+                /** @description Person linked to a speaker of the transcript; repeatable. */
                 person?: string[];
-                /** @description Valor de um campo do usuário, `<field_id>:<valor>`; repetível. Cada campo é um filtro: valores do mesmo campo combinam por OU, campos diferentes por E. Num campo de lista, basta o valor ser um dos itens; título e tags valem como os embutidos. */
+                /** @description Value of a user field, `<field_id>:<value>`; repeatable. Each field is a filter: values of the same field combine with OR, different fields with AND. In a list field, it is enough for the value to be one of the items; title and tags count as the built-in ones. */
                 field?: string[];
-                /** @description Empresa de um participante (pessoa ligada a um locutor), sem acento nem caixa; repetível. Os atributos `person_*` valem para uma mesma pessoa: com `person_company` e `person_tag`, alguém da empresa e com a tag falou na gravação. */
+                /** @description Company of a participant (a person linked to a speaker), ignoring accents and case; repeatable. The `person_*` attributes apply to one and the same person: with `person_company` and `person_tag`, someone from the company and with the tag spoke in the recording. */
                 person_company?: string[];
-                /** @description Área de um participante, sem acento nem caixa; repetível (ver `person_company`). */
+                /** @description Department of a participant, ignoring accents and case; repeatable (see `person_company`). */
                 person_department?: string[];
-                /** @description Tag de pessoa de um participante, sem caixa; repetível (ver `person_company`). */
+                /** @description Person tag of a participant, ignoring case; repeatable (see `person_company`). */
                 person_tag?: string[];
-                /** @description Desde a 2.22.0. `speakers`: só as gravações cuja revisão atual está parada à espera de nomear os locutores (`Recording.awaiting`). */
+                /** @description Since 2.22.0. `speakers`: only the recordings whose current revision is stopped waiting for the speakers to be named (`Recording.awaiting`). */
                 awaiting?: "speakers"[];
             };
             header?: never;
@@ -6048,7 +6050,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Gravações, na ordem de `sort`. */
+            /** @description Recordings, in the `sort` order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6072,7 +6074,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Gravação. */
+            /** @description Recording. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6100,7 +6102,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -6130,7 +6132,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Gravação atualizada. */
+            /** @description Recording updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6156,7 +6158,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Redirecionamento para o áudio. */
+            /** @description Redirect to the audio. */
             302: {
                 headers: {
                     Location: string;
@@ -6188,7 +6190,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Job na fila. */
+            /** @description Job queued. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6217,7 +6219,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Transcrição cancelada; a gravação com o job `cancelled`. */
+            /** @description Transcription cancelled; the recording with the job `cancelled`. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6246,7 +6248,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A gravação, com a etapa `speakers` solta. */
+            /** @description The recording, with the `speakers` step released. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6272,7 +6274,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Estado do resumo. */
+            /** @description Summary state. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6305,7 +6307,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A versão nova. */
+            /** @description The new version. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6335,7 +6337,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -6362,7 +6364,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A versão nova. */
+            /** @description The new version. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -6393,7 +6395,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Mensagens, em ordem cronológica. */
+            /** @description Messages, in chronological order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6426,7 +6428,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pedido e resposta na fila. */
+            /** @description Request and reply queued. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6453,7 +6455,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Marcadores em ordem de `at_ms` (página única). */
+            /** @description Markers in `at_ms` order (single page). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6485,7 +6487,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Todos os marcadores da gravação, em ordem de `at_ms`. */
+            /** @description All the markers of the recording, in `at_ms` order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6503,7 +6505,7 @@ export interface operations {
     exportRecording: {
         parameters: {
             query: {
-                /** @description Formato do export. Formatos novos entram de forma aditiva. */
+                /** @description Export format. New formats are added additively. */
                 format: "txt" | "srt" | "md" | "docx";
             };
             header?: never;
@@ -6514,7 +6516,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Arquivo exportado, com o nome em slug do título. */
+            /** @description Exported file, named with the slug of the title. */
             200: {
                 headers: {
                     "Content-Disposition"?: string;
@@ -6545,7 +6547,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Os campos da gravação com valor e origem. */
+            /** @description The fields of the recording with value and origin. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6573,7 +6575,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Os campos da gravação com valor e origem. */
+            /** @description The fields of the recording with value and origin. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6606,7 +6608,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Os campos da gravação com valor e origem. */
+            /** @description The fields of the recording with value and origin. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6636,7 +6638,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Os campos da gravação com valor e origem. */
+            /** @description The fields of the recording with value and origin. */
             200: {
                 headers: {
                     [name: string]: unknown;
