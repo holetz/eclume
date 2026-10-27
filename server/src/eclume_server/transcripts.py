@@ -1,4 +1,4 @@
-"""Transcrições: ingestão da saída do worker GPU, forma JSON (schema v1) e export em Markdown."""
+"""Transcripts: ingestion of the GPU worker output, JSON shape (schema v1) and Markdown export."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ _SPEAKER_ID = re.compile(r"^S[0-9]+$")
 log = logging.getLogger(__name__)
 
 
-# --- ingestão ---------------------------------------------------------------------------------
+# --- ingestion --------------------------------------------------------------------------------
 
 
 def _int(value: Any, default: int = 0) -> int:  # noqa: ANN401 — JSON do worker
@@ -51,10 +51,10 @@ def _int(value: Any, default: int = 0) -> int:  # noqa: ANN401 — JSON do worke
 
 
 def normalize_raw(raw: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, str]]:
-    """Locutores e segmentos do `transcript.raw.json`, tolerante a campos ausentes.
+    """Speakers and segments of `transcript.raw.json`, tolerant of missing fields.
 
-    Devolve também o mapa id-do-worker → id `S<n>`: um id fora do padrão é renumerado na ordem em
-    que aparece, e o mesmo mapa vale para os embeddings.
+    Also returns the worker-id → `S<n>` id map: an id outside the pattern is renumbered in the order
+    it appears, and the same map applies to the embeddings.
     """
     mapping: dict[str, str] = {}
     labels: dict[str, str] = {}
@@ -96,11 +96,11 @@ def normalize_raw(raw: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[
 
 
 def _embeddings(document: Any, mapping: dict[str, str]) -> tuple[str, dict[str, list[float]]]:  # noqa: ANN401
-    """`(modelo, {S<n>: vetor})` do `speaker_embeddings.json`.
+    """`(model, {S<n>: vector})` from `speaker_embeddings.json`.
 
-    Vetor com componente não finito (NaN ou infinito, de fala curta demais) fica de fora: o
-    pgvector o recusaria e desfaria a ingestão inteira. Worker novo já não o grava; isto cobre
-    worker antigo e JSON já no bucket.
+    A vector with a non-finite component (NaN or infinity, from too-short speech) is left out:
+    pgvector would refuse it and undo the whole ingestion. A new worker no longer writes it; this
+    covers an old worker and JSON already in the bucket.
     """
     if not isinstance(document, dict):
         return "unknown", {}
@@ -113,11 +113,11 @@ def _embeddings(document: Any, mapping: dict[str, str]) -> tuple[str, dict[str, 
             if all(math.isfinite(x) for x in values):
                 result[mapping[original]] = values
             else:
-                log.warning("embedding do locutor %s com valor não finito descartado", original)
+                log.warning("speaker embedding %s with a non-finite value discarded", original)
     return model, result
 
 
-async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão passa explícito
+async def _store_embeddings(  # noqa: PLR0913, PLR0917 — the ingestion state is passed explicitly
     conn: AsyncConnection,
     storage: Storage,
     transcript_id: UUID,
@@ -127,11 +127,12 @@ async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão
     *,
     keep: bool,
 ) -> tuple[str | None, dict[str, list[float]]]:
-    """Grava os `speaker_embeddings` do job; devolve `(modelo, vetores)` gravados.
+    """Write the job's `speaker_embeddings`; return the `(model, vectors)` written.
 
-    A identificação por voz e a preferência da conta valem no momento da ingestão: um job
-    enfileirado antes do desligamento (da plataforma ou da conta) não guarda o vetor. Guardado ou descartado o vetor, o `speaker_embeddings.json` (biometria) entra
-    na fila de exclusão do bucket nesta mesma transação: o vetor vive só no banco.
+    Voice identification and the account preference apply at ingestion time: a job queued before
+    the switch-off (of the platform or the account) does not keep the vector. Whether the vector is
+    kept or discarded, `speaker_embeddings.json` (biometrics) enters the bucket deletion queue in
+    this same transaction: the vector lives only in the database.
     """
     if not embeddings_key:
         return None, {}
@@ -158,17 +159,17 @@ async def _store_embeddings(  # noqa: PLR0913, PLR0917 — o estado da ingestão
 
 @dataclass(frozen=True)
 class Ingested:
-    """O desfecho da ingestão: a linha do log e se a transcrição foi gravada agora.
+    """The ingestion outcome: the log line and whether the transcript was written now.
 
-    Só o que foi gravado segue para a cadeia por agente (e fechou o job); `gone` diz que a
-    gravação foi excluída.
+    Only what was written goes on to the agent chain (and closed the job); `gone` says the
+    recording was deleted.
     """
 
     message: str
     persisted: bool = False
     gone: bool = False
     revision: int | None = None
-    # A etapa `speakers` parou a cadeia: a conta exige nomear os locutores e falta alguém.
+    # The `speakers` step stopped the chain: the account requires naming the speakers and someone is missing.
     waiting: bool = False
 
 
@@ -183,10 +184,10 @@ class Failed:
 async def _lock_open_job(
     conn: AsyncConnection, recording_id: UUID, revision: int | None
 ) -> tuple[Row | None, Row | None]:
-    """Trava a gravação e só então lê o job da revisão (sem revisão, o mais recente).
+    """Lock the recording and only then read the revision's job (without a revision, the most recent).
 
-    Dois comandos: em READ COMMITTED, quem esperou o lock da gravação vê o job já atualizado por
-    quem o segurava. Devolve `(gravação, job)`; o job vem só se estiver em aberto.
+    Two statements: under READ COMMITTED, whoever waited for the recording lock sees the job already
+    updated by whoever held it. Returns `(recording, job)`; the job comes only if it is open.
     """
     recording = (
         (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id).with_for_update()))
@@ -211,7 +212,7 @@ def _obsolete(revision: int | None) -> str:
     return f"mensagem obsoleta: sem job em aberto da revisão {revision or 'mais recente'}"
 
 
-async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`; uma transação em sequência
+async def ingest(  # noqa: PLR0913 — the arguments of the `ingest_transcript` job; one transaction in sequence
     conn: AsyncConnection,
     storage: Storage,
     recording_id: UUID,
@@ -221,11 +222,11 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
     engine_info: dict[str, Any] | None,
     revision: int | None = None,
 ) -> Ingested:
-    """Persiste a transcrição do job da revisão; idempotente por `(recording_id, revision)`.
+    """Persist the transcript of the revision's job; idempotent by `(recording_id, revision)`.
 
-    Roda com o papel de conexão (worker CPU). Sem `revision` (worker antigo), vale o job mais
-    recente. Job já concluído ou falho (pelo reaper, por exemplo), ou de uma revisão que não está
-    mais em aberto, não é gravado: a mensagem é obsoleta.
+    Runs with the connection role (CPU worker). Without `revision` (old worker), the most recent job
+    applies. A job already completed or failed (by the reaper, for example), or from a revision that
+    is no longer open, is not written: the message is stale.
     """
     recording, job = await _lock_open_job(conn, recording_id, revision)
     if recording is None:
@@ -237,7 +238,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
     speakers, segments, mapping = normalize_raw(raw)
     engine_info = engine_info or {}
     options = job["options"] or {}
-    # `auto` é pedido, nunca resultado: vale o detectado e, sem ele, o padrão resolvido.
+    # `auto` is a request, never a result: the detected one applies and, without it, the resolved default.
     requested = None if recording["language"] == AUTO_LANGUAGE else recording["language"]
     language = raw.get("language") or requested or options.get("language") or DEFAULT_LANGUAGE
     duration_ms = (
@@ -290,7 +291,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
     model, vectors = await _store_embeddings(
         conn, storage, transcript_id, owner, embeddings_key, mapping, keep=bool(options.get("embeddings"))
     )
-    # Retranscrever não desfaz o que alguém confirmou: os vínculos voltam pela sobreposição de fala.
+    # Retranscribing does not undo what someone confirmed: the links come back through speech overlap.
     if old_links:
         await restore_links(conn, transcript_id, old_links, segments)
     if vectors:
@@ -310,7 +311,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
         )
     )
     await record_gpu_steps(conn, job, engine_info, now)
-    # Depois dos vínculos restaurados e da atribuição pela voz: falta alguém, a cadeia para aqui.
+    # After the restored links and the voice attribution: someone is missing, the chain stops here.
     waiting = await gate_speakers(conn, {"id": recording_id, "owner_id": owner}, job["revision"], transcript_id)
     await conn.execute(
         update(t.recordings)
@@ -330,7 +331,7 @@ async def ingest(  # noqa: PLR0913 — os argumentos do job `ingest_transcript`;
     )
 
 
-async def fail(  # noqa: PLR0913 — os argumentos do job `transcription_failed` e a revisão
+async def fail(  # noqa: PLR0913 — the arguments of the `transcription_failed` job and the revision
     conn: AsyncConnection,
     recording_id: UUID,
     error_code: str,
@@ -340,18 +341,18 @@ async def fail(  # noqa: PLR0913 — os argumentos do job `transcription_failed`
     revision: int | None = None,
     started_at: str | None = None,
 ) -> Failed:
-    """Marca como falho o job da revisão (sem ela, o mais recente) e a gravação, se em aberto.
+    """Mark the revision's job (without one, the most recent) and the recording as failed, if open.
 
-    Trava a gravação antes do job, na mesma ordem da ingestão. `stage` é a etapa do progresso do
-    worker GPU em que a falha aconteceu: no download ou no pré-processamento, falha o
-    pré-processamento; nas demais (ou sem ela), a transcrição. `started_at` é o início do job no
-    worker GPU (do hash de progresso); sem ele, vale o já gravado ou a entrada na fila.
+    Locks the recording before the job, in the same order as ingestion. `stage` is the GPU worker
+    progress stage where the failure happened: in the download or in preprocessing, preprocessing
+    fails; in the others (or without one), transcription. `started_at` is the job's start on the
+    GPU worker (from the progress hash); without it, the one already written or the queue entry applies.
     """
     now = datetime.now(UTC)
     _, job = await _lock_open_job(conn, recording_id, revision)
     if job is None:
         return Failed(_obsolete(revision))
-    # O relógio do worker pode estar adiantado: o início nunca passa do fim.
+    # The worker's clock may be ahead: the start never goes past the end.
     started = min(gpu_started({"started_at": started_at}, job["started_at"] or job["queued_at"]), now)
     await conn.execute(
         update(t.transcription_jobs)
@@ -385,7 +386,7 @@ async def fail(  # noqa: PLR0913 — os argumentos do job `transcription_failed`
 
 
 def transcript_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
-    """Transcrições do usuário (sob a RLS) com os campos que vêm da gravação e do dono."""
+    """The user's transcripts (under RLS) with the fields that come from the recording and the owner."""
     r = t.recordings.c
     return select(
         t.transcripts,
@@ -409,7 +410,7 @@ def speakers_select() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
 
 
 def speaker_json(row: Row) -> dict[str, Any]:
-    """Schema `Speaker`, de uma linha de `speakers_select` com as `suggestions` de `load_suggestions`."""
+    """Schema `Speaker`, from a `speakers_select` row with the `suggestions` from `load_suggestions`."""
     person = None
     if row["person_id"] is not None:
         person = {"id": str(row["person_id"]), "name": row["person_name"]}
@@ -424,7 +425,7 @@ def speaker_json(row: Row) -> dict[str, Any]:
 
 
 async def load_speakers(conn: AsyncConnection, transcript_ids: list[UUID]) -> dict[UUID, list[Row]]:
-    """Locutores de cada transcrição, na ordem da transcrição, com as sugestões por voz pendentes."""
+    """Speakers of each transcript, in transcript order, with the pending voice suggestions."""
     rows = (
         await conn.execute(
             speakers_select()
@@ -441,7 +442,7 @@ async def load_speakers(conn: AsyncConnection, transcript_ids: list[UUID]) -> di
 
 
 async def load_transcript(conn: AsyncConnection, transcript_id: UUID, *, words: bool) -> dict[str, Any]:
-    """Transcrição do usuário completa (schema v1), ou 404."""
+    """The user's full transcript (schema v1), or 404."""
     row = (await conn.execute(transcript_select().where(t.transcripts.c.id == transcript_id))).mappings().first()
     if row is None:
         raise not_found("Transcrição inexistente ou sem acesso.")
@@ -459,7 +460,7 @@ async def load_transcript(conn: AsyncConnection, transcript_id: UUID, *, words: 
 
 
 def segment_json(row: Row, *, words: bool) -> dict[str, Any]:
-    """Schema `Segment`; `words` só quando pedido."""
+    """Schema `Segment`; `words` only when requested."""
     body: dict[str, Any] = {
         "id": row["segment_id"],
         "speaker_id": row["speaker_id"],
@@ -505,11 +506,11 @@ def transcript_json(row: Row, speakers: list[Row], segments: list[Row], *, words
     return body
 
 
-# --- edição -----------------------------------------------------------------------------------
+# --- editing ----------------------------------------------------------------------------------
 
 
 async def editable_transcript(conn: AsyncConnection, transcript_id: UUID) -> Row:
-    """Transcrição do usuário (sob a RLS, só o dono a vê), ou 404."""
+    """The user's transcript (under RLS, only the owner sees it), or 404."""
     row = (await conn.execute(transcript_select().where(t.transcripts.c.id == transcript_id))).mappings().first()
     if row is None:
         raise not_found("Transcrição inexistente ou sem acesso.")
@@ -517,7 +518,7 @@ async def editable_transcript(conn: AsyncConnection, transcript_id: UUID) -> Row
 
 
 async def bump_revision(conn: AsyncConnection, transcript_id: UUID) -> None:
-    """Toda edição sobe a `revision` e o `updated_at` (o `?since=` dos clientes enxerga)."""
+    """Every edit bumps `revision` and `updated_at` (the clients' `?since=` sees it)."""
     now = datetime.now(UTC)
     recording_id = (
         await conn.execute(
@@ -528,13 +529,13 @@ async def bump_revision(conn: AsyncConnection, transcript_id: UUID) -> None:
         )
     ).scalar_one_or_none()
     if recording_id is not None:
-        # A pasta sincronizada do desktop lista por `recordings.updated_at`: sem isto, corrigir um
-        # segmento ou renomear um locutor nunca chegaria ao `.jsonl`.
+        # The desktop synced folder lists by `recordings.updated_at`: without this, fixing a segment
+        # or renaming a speaker would never reach the `.jsonl`.
         await conn.execute(update(t.recordings).where(t.recordings.c.id == recording_id).values(updated_at=now))
 
 
 async def recompute_talk(conn: AsyncConnection, transcript_id: UUID, speaker_ids: set[str]) -> None:
-    """Recalcula `talk_ms` dos locutores dados a partir dos segmentos."""
+    """Recompute `talk_ms` of the given speakers from the segments."""
     sg = t.segments.c
     talk = (
         select(func.coalesce(func.sum(sg.end_ms - sg.start_ms), 0))
@@ -554,7 +555,7 @@ def _hms(ms: int) -> str:
 
 
 def render_markdown(transcript: dict[str, Any]) -> str:
-    """Export `format=md`: frontmatter YAML e uma linha `**Nome** [HH:MM:SS]: texto` por segmento."""
+    """Export `format=md`: YAML frontmatter and one `**Nome** [HH:MM:SS]: texto` line per segment."""
 
     def q(value: object) -> str:
         return json.dumps(value, ensure_ascii=False)
@@ -583,9 +584,9 @@ def render_markdown(transcript: dict[str, Any]) -> str:
 def transcript_text_window(
     document: dict[str, Any], start_ms: int = 0, end_ms: int | None = None, max_chars: int = 60_000
 ) -> tuple[str, int | None]:
-    """Falas `[mm:ss] Locutor: fala` entre `start_ms` e `end_ms`, até `max_chars` caracteres.
+    """Utterances `[mm:ss] Locutor: fala` between `start_ms` and `end_ms`, up to `max_chars` characters.
 
-    Devolve o texto e o `start_ms` da primeira fala que ficou de fora pelo teto (`None` sem sobra).
+    Returns the text and the `start_ms` of the first utterance left out by the ceiling (`None` when none is left).
     """
     names = {s["id"]: s["person"]["name"] if s["person"] else s["label"] for s in document["speakers"]}
     lines: list[str] = []
