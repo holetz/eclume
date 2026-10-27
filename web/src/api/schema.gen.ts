@@ -1453,10 +1453,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Testar a regra de um campo
-         * @description Roda a regra de um campo em rascunho em até 3 gravações transcritas (as indicadas, ou as 3
-         *     mais recentes) com o provider de `fields`, sem gravar nada. Desde a 2.15.0, o pedido
-         *     conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
+         * Test a field's rule
+         * @description Runs a draft field's rule on up to 3 transcribed recordings (the given ones, or the 3
+         *     most recent) with the `fields` provider, without saving anything. Since 2.15.0, the request
+         *     counts toward the 24 h quota of Agent requests (exceeded, 403 `quota_exceeded`).
          */
         post: operations["previewField"];
         delete?: never;
@@ -1474,20 +1474,20 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Um campo */
+        /** One field */
         get: operations["getField"];
         put?: never;
         post?: never;
         /**
-         * Excluir um campo
-         * @description Os embutidos não saem: 409 `builtin_field`.
+         * Delete a field
+         * @description Built-in fields cannot be removed: 409 `builtin_field`.
          */
         delete: operations["deleteField"];
         options?: never;
         head?: never;
         /**
-         * Editar um campo
-         * @description Mudar o `kind` descarta os valores já preenchidos; um embutido não muda de `kind` (422).
+         * Edit a field
+         * @description Changing the `kind` discards the values already filled in; a built-in field does not change `kind` (422).
          */
         patch: operations["updateField"];
         trace?: never;
@@ -1502,8 +1502,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma pré-visualização
-         * @description Vive 1 h. A de outra conta, a expirada e a inexistente são 404.
+         * One preview
+         * @description Lives 1 h. One from another account, an expired one and a nonexistent one are 404.
          */
         get: operations["getPreview"];
         put?: never;
@@ -1524,15 +1524,15 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Perguntar sobre a base de gravações
+         * Ask about the recordings base
          * @deprecated
-         * @description Guarda a pergunta e a enfileira; o cliente consulta `GET /api/v1/base-chat/{chat_id}` até
-         *     `done` ou `failed`. O agente do `chat` do backend prioriza os resumos e só lê a transcrição
-         *     quando o resumo não basta; `history` são as últimas mensagens da conversa (até 10), que o
-         *     cliente guarda. Cada conta tem no máximo 2 perguntas em aberto; além disso, 429. Desde a
-         *     2.14.0, um PAT sem `transcripts:read` não busca nem lê transcrições: o agente responde só
-         *     pelos resumos (sessão e credencial de aparelho leem as duas). Desde a 2.15.0, a pergunta
-         *     conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
+         * @description Stores the question and queues it; the client polls `GET /api/v1/base-chat/{chat_id}` until
+         *     `done` or `failed`. The backend's `chat` agent favours the summaries and only reads the transcript
+         *     when the summary is not enough; `history` is the last messages of the conversation (up to 10), which the
+         *     client keeps. Each account has at most 2 open questions; beyond that, 429. Since
+         *     2.14.0, a PAT without `transcripts:read` neither searches nor reads transcripts: the agent answers only
+         *     from the summaries (a session and a device credential read both). Since 2.15.0, the question
+         *     counts toward the 24 h quota of Agent requests (exceeded, 403 `quota_exceeded`).
          */
         post: operations["askBaseChat"];
         delete?: never;
@@ -1551,10 +1551,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma pergunta e a resposta
+         * One question and its answer
          * @deprecated
-         * @description Vive 1 h. A de outra conta, a expirada e a inexistente são 404. `sources` são as gravações
-         *     que o agente de fato consultou e em que a resposta se apoia.
+         * @description Lives 1 h. One from another account, an expired one and a nonexistent one are 404. `sources` are the recordings
+         *     the agent actually consulted and on which the answer rests.
          */
         get: operations["getBaseChat"];
         put?: never;
@@ -1573,14 +1573,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * As conversas do Agente
-         * @description Da última atividade (`updated_at`) para trás, paginadas por cursor.
+         * The Agent conversations
+         * @description From the latest activity (`updated_at`) backwards, paginated by cursor.
          */
         get: operations["listAgentSessions"];
         put?: never;
         /**
-         * Abrir uma conversa
-         * @description Sem título, a primeira pergunta dá o título (o começo dela, até 120 caracteres).
+         * Open a conversation
+         * @description Without a title, the first question gives the title (its beginning, up to 120 characters).
          */
         post: operations["createAgentSession"];
         delete?: never;
@@ -1599,22 +1599,22 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma conversa com as mensagens e os arquivos
-         * @description As mensagens em ordem, cada uma com os arquivos dela (os anexos da pergunta, os gerados
-         *     pela resposta), e os anexos ainda não enviados (`pending_files`). Uma resposta em aberto há
-         *     mais de 15 minutos vira `failed` com `agent_expired`.
+         * One conversation with its messages and files
+         * @description The messages in order, each with its files (the question's attachments, those generated
+         *     by the answer), and the attachments not yet sent (`pending_files`). An answer left open for
+         *     more than 15 minutes becomes `failed` with `agent_expired`.
          */
         get: operations["getAgentSession"];
         put?: never;
         post?: never;
         /**
-         * Excluir a conversa
-         * @description Leva as mensagens e os arquivos; o bucket é limpo pela fila de exclusão.
+         * Delete the conversation
+         * @description Takes the messages and the files with it; the bucket is cleaned by the deletion queue.
          */
         delete: operations["deleteAgentSession"];
         options?: never;
         head?: never;
-        /** Renomear a conversa */
+        /** Rename the conversation */
         patch: operations["renameAgentSession"];
         trace?: never;
     };
@@ -1630,11 +1630,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Anexar um arquivo à conversa
-         * @description Aceita .txt, .md, .csv, .pdf e .docx até 10 MB; o tipo vem da extensão e é conferido pelo
-         *     conteúdo (415 `unsupported_media_type` fora disso). O server guarda o original e extrai o
-         *     texto (até 200 mil caracteres), que o agente lê. O anexo vai com a próxima pergunta que o
-         *     citar em `attachments`; a conversa tem até 20 anexos (409 `too_many_files`).
+         * Attach a file to the conversation
+         * @description Accepts .txt, .md, .csv, .pdf and .docx up to 10 MB; the type comes from the extension and is checked against the
+         *     content (415 `unsupported_media_type` otherwise). The server keeps the original and extracts the
+         *     text (up to 200 thousand characters), which the agent reads. The attachment goes with the next question that
+         *     cites it in `attachments`; the conversation has up to 20 attachments (409 `too_many_files`).
          */
         post: operations["attachAgentFile"];
         delete?: never;
@@ -1657,8 +1657,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Tirar um anexo ainda não enviado
-         * @description O anexo que já foi com uma pergunta fica no histórico (409).
+         * Remove an attachment not yet sent
+         * @description An attachment already sent with a question stays in the history (409).
          */
         delete: operations["deleteAgentFile"];
         options?: never;
@@ -1678,16 +1678,16 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Perguntar ao Agente
-         * @description Grava a pergunta com os anexos e a resposta em `queued`, e enfileira a resposta; o cliente
-         *     consulta `GET .../messages/{message_id}` até `done` ou `failed`. O histórico é o da conversa,
-         *     guardado no server. O agente consulta a base (os resumos primeiro; transcrições só com
-         *     sessão, credencial de aparelho ou PAT com `transcripts:read`), lê os anexos e pode gerar
-         *     arquivos (.md, .txt, .csv, .docx). Uma resposta em aberto por conversa (409), duas por conta
-         *     (429); cada pergunta conta na cota de pedidos ao agente em 24 h (403 `quota_exceeded`).
-         *     Desde a 2.24.0, `skill` ou `/nome` no começo da mensagem escolhem uma habilidade (422 se
-         *     inexistente ou desligada; o prefixo sai do texto guardado), e a resposta pode trazer
-         *     propostas de ação em `actions`, que só rodam depois de `POST /agent/actions/{id}/confirm`.
+         * Ask the Agent
+         * @description Stores the question with its attachments and the answer as `queued`, and queues the answer; the client
+         *     polls `GET .../messages/{message_id}` until `done` or `failed`. The history is the conversation's,
+         *     kept on the server. The agent consults the base (summaries first; transcripts only with a
+         *     session, a device credential or a PAT with `transcripts:read`), reads the attachments and may generate
+         *     files (.md, .txt, .csv, .docx). One open answer per conversation (409), two per account
+         *     (429); each question counts toward the 24 h quota of Agent requests (403 `quota_exceeded`).
+         *     Since 2.24.0, `skill` or `/name` at the start of the message picks a skill (422 if
+         *     nonexistent or disabled; the prefix is removed from the stored text), and the answer may carry
+         *     action proposals in `actions`, which only run after `POST /agent/actions/{id}/confirm`.
          */
         post: operations["askAgent"];
         delete?: never;
@@ -1707,8 +1707,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma mensagem da conversa
-         * @description A resposta até `done` ou `failed`, com as fontes e os arquivos gerados.
+         * One message of the conversation
+         * @description The answer until `done` or `failed`, with the sources and the generated files.
          */
         get: operations["getAgentMessage"];
         put?: never;
@@ -1728,7 +1728,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Baixar um anexo ou um arquivo gerado */
+        /** Download an attachment or a generated file */
         get: operations["downloadAgentFile"];
         put?: never;
         post?: never;
@@ -1746,10 +1746,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * O catálogo de ferramentas do Agente
-         * @description Desde a 2.24.0. Cada ferramenta com a natureza (`read` consulta, `produce` gera arquivo,
-         *     `action` propõe uma mudança que a pessoa confirma) e uma descrição curta; é a lista de que
-         *     uma habilidade escolhe as ferramentas permitidas.
+         * The Agent's tool catalogue
+         * @description Since 2.24.0. Each tool with its nature (`read` consults, `produce` generates a file,
+         *     `action` proposes a change the person confirms) and a short description; it is the list from which
+         *     a skill picks its allowed tools.
          */
         get: operations["listAgentTools"];
         put?: never;
@@ -1768,16 +1768,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * As habilidades da conta
-         * @description Desde a 2.24.0. Todas (até 50), por nome.
+         * The account's skills
+         * @description Since 2.24.0. All of them (up to 50), by name.
          */
         get: operations["listAgentSkills"];
         put?: never;
         /**
-         * Cadastrar uma habilidade
-         * @description Desde a 2.24.0. O nome (a barra inicial é ignorada) tem de 2 a 40 letras minúsculas, números
-         *     e hífens; repetido na conta é 409 `skill_exists`. Ferramenta fora do catálogo ou mais de 50
-         *     habilidades na conta: 422.
+         * Register a skill
+         * @description Since 2.24.0. The name (the leading slash is ignored) has 2 to 40 lowercase letters, digits
+         *     and hyphens; a duplicate in the account is 409 `skill_exists`. A tool outside the catalogue or more than 50
+         *     skills in the account: 422.
          */
         post: operations["createAgentSkill"];
         delete?: never;
@@ -1796,22 +1796,22 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma habilidade
-         * @description Desde a 2.24.0.
+         * One skill
+         * @description Since 2.24.0.
          */
         get: operations["getAgentSkill"];
         put?: never;
         post?: never;
         /**
-         * Excluir a habilidade
-         * @description Desde a 2.24.0. As perguntas que a usaram guardam o nome.
+         * Delete the skill
+         * @description Since 2.24.0. The questions that used it keep its name.
          */
         delete: operations["deleteAgentSkill"];
         options?: never;
         head?: never;
         /**
-         * Editar a habilidade
-         * @description Desde a 2.24.0. Os campos enviados mudam; `allowed_tools` nulo libera todas as ferramentas.
+         * Edit the skill
+         * @description Since 2.24.0. The fields sent change; a null `allowed_tools` allows every tool.
          */
         patch: operations["updateAgentSkill"];
         trace?: never;
@@ -7324,7 +7324,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`. */
+            /** @description Preview queued; poll `GET /api/v1/previews/{preview_id}`. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -7350,7 +7350,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Campo. */
+            /** @description Field. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7378,7 +7378,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído, com os valores dele. */
+            /** @description Deleted, with its values. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7409,7 +7409,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Campo atualizado. */
+            /** @description Field updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7435,7 +7435,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description O estado e, pronta, os resultados. */
+            /** @description The state and, once ready, the results. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7465,7 +7465,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pergunta na fila. */
+            /** @description Question queued. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -7491,7 +7491,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description O estado e, pronta, a resposta com as fontes. */
+            /** @description The state and, once ready, the answer with its sources. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7519,7 +7519,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Uma página de conversas. */
+            /** @description A page of conversations. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7551,7 +7551,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A conversa criada. */
+            /** @description The created conversation. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7575,7 +7575,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A conversa. */
+            /** @description The conversation. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7603,7 +7603,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7633,7 +7633,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A conversa renomeada. */
+            /** @description The renamed conversation. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7668,7 +7668,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description O anexo, ainda sem pergunta (`message_id` nulo). */
+            /** @description The attachment, not yet tied to a question (`message_id` null). */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7700,7 +7700,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tirado. */
+            /** @description Removed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7731,7 +7731,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A pergunta gravada e a resposta na fila. */
+            /** @description The question stored and the answer queued. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -7760,7 +7760,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A mensagem. */
+            /** @description The message. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7785,7 +7785,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description O arquivo, como anexo. */
+            /** @description The file, as an attachment. */
             200: {
                 headers: {
                     "Content-Disposition"?: string;
@@ -7813,7 +7813,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description O catálogo. */
+            /** @description The catalogue. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7837,7 +7837,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description As habilidades. */
+            /** @description The skills. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7868,7 +7868,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A habilidade cadastrada. */
+            /** @description The registered skill. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7894,7 +7894,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A habilidade. */
+            /** @description The skill. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7922,7 +7922,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7952,7 +7952,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A habilidade editada. */
+            /** @description The edited skill. */
             200: {
                 headers: {
                     [name: string]: unknown;

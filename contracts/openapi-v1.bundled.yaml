@@ -3100,13 +3100,13 @@ paths:
       tags:
       - fields
       operationId: previewField
-      summary: Testar a regra de um campo
-      description: 'Roda a regra de um campo em rascunho em até 3 gravações transcritas (as indicadas,
-        ou as 3
+      summary: Test a field's rule
+      description: 'Runs a draft field''s rule on up to 3 transcribed recordings (the given ones, or the
+        3
 
-        mais recentes) com o provider de `fields`, sem gravar nada. Desde a 2.15.0, o pedido
+        most recent) with the `fields` provider, without saving anything. Since 2.15.0, the request
 
-        conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
+        counts toward the 24 h quota of Agent requests (exceeded, 403 `quota_exceeded`).
 
         '
       security:
@@ -3126,7 +3126,7 @@ paths:
                 $ref: '#/components/examples/FieldPreviewRequest'
       responses:
         '202':
-          description: Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`.
+          description: Preview queued; poll `GET /api/v1/previews/{preview_id}`.
           content:
             application/json:
               schema:
@@ -3146,14 +3146,14 @@ paths:
       tags:
       - fields
       operationId: getField
-      summary: Um campo
+      summary: One field
       security:
       - sessionCookie: []
       - pat:
         - recordings:read
       responses:
         '200':
-          description: Campo.
+          description: Field.
           content:
             application/json:
               schema:
@@ -3168,9 +3168,9 @@ paths:
       tags:
       - fields
       operationId: updateField
-      summary: Editar um campo
-      description: 'Mudar o `kind` descarta os valores já preenchidos; um embutido não muda de `kind`
-        (422).
+      summary: Edit a field
+      description: 'Changing the `kind` discards the values already filled in; a built-in field does not
+        change `kind` (422).
 
         '
       security:
@@ -3187,7 +3187,7 @@ paths:
               $ref: '#/components/schemas/FieldPatch'
       responses:
         '200':
-          description: Campo atualizado.
+          description: Field updated.
           content:
             application/json:
               schema:
@@ -3204,8 +3204,8 @@ paths:
       tags:
       - fields
       operationId: deleteField
-      summary: Excluir um campo
-      description: 'Os embutidos não saem: 409 `builtin_field`.
+      summary: Delete a field
+      description: 'Built-in fields cannot be removed: 409 `builtin_field`.
 
         '
       security:
@@ -3216,7 +3216,7 @@ paths:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Excluído, com os valores dele.
+          description: Deleted, with its values.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -3232,8 +3232,8 @@ paths:
       tags:
       - previews
       operationId: getPreview
-      summary: Uma pré-visualização
-      description: 'Vive 1 h. A de outra conta, a expirada e a inexistente são 404.
+      summary: One preview
+      description: 'Lives 1 h. One from another account, an expired one and a nonexistent one are 404.
 
         '
       security:
@@ -3242,7 +3242,7 @@ paths:
         - recordings:read
       responses:
         '200':
-          description: O estado e, pronta, os resultados.
+          description: The state and, once ready, the results.
           content:
             application/json:
               schema:
@@ -3263,22 +3263,24 @@ paths:
       tags:
       - base-chat
       operationId: askBaseChat
-      summary: Perguntar sobre a base de gravações
+      summary: Ask about the recordings base
       deprecated: true
-      description: 'Guarda a pergunta e a enfileira; o cliente consulta `GET /api/v1/base-chat/{chat_id}`
-        até
+      description: 'Stores the question and queues it; the client polls `GET /api/v1/base-chat/{chat_id}`
+        until
 
-        `done` ou `failed`. O agente do `chat` do backend prioriza os resumos e só lê a transcrição
+        `done` or `failed`. The backend''s `chat` agent favours the summaries and only reads the transcript
 
-        quando o resumo não basta; `history` são as últimas mensagens da conversa (até 10), que o
+        when the summary is not enough; `history` is the last messages of the conversation (up to 10),
+        which the
 
-        cliente guarda. Cada conta tem no máximo 2 perguntas em aberto; além disso, 429. Desde a
+        client keeps. Each account has at most 2 open questions; beyond that, 429. Since
 
-        2.14.0, um PAT sem `transcripts:read` não busca nem lê transcrições: o agente responde só
+        2.14.0, a PAT without `transcripts:read` neither searches nor reads transcripts: the agent answers
+        only
 
-        pelos resumos (sessão e credencial de aparelho leem as duas). Desde a 2.15.0, a pergunta
+        from the summaries (a session and a device credential read both). Since 2.15.0, the question
 
-        conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
+        counts toward the 24 h quota of Agent requests (exceeded, 403 `quota_exceeded`).
 
         '
       security:
@@ -3298,7 +3300,7 @@ paths:
                 $ref: '#/components/examples/BaseChatRequest'
       responses:
         '202':
-          description: Pergunta na fila.
+          description: Question queued.
           content:
             application/json:
               schema:
@@ -3321,11 +3323,12 @@ paths:
       tags:
       - base-chat
       operationId: getBaseChat
-      summary: Uma pergunta e a resposta
+      summary: One question and its answer
       deprecated: true
-      description: 'Vive 1 h. A de outra conta, a expirada e a inexistente são 404. `sources` são as gravações
+      description: 'Lives 1 h. One from another account, an expired one and a nonexistent one are 404.
+        `sources` are the recordings
 
-        que o agente de fato consultou e em que a resposta se apoia.
+        the agent actually consulted and on which the answer rests.
 
         '
       security:
@@ -3334,7 +3337,7 @@ paths:
         - summaries:read
       responses:
         '200':
-          description: O estado e, pronta, a resposta com as fontes.
+          description: The state and, once ready, the answer with its sources.
           content:
             application/json:
               schema:
@@ -3355,8 +3358,8 @@ paths:
       tags:
       - agent
       operationId: listAgentSessions
-      summary: As conversas do Agente
-      description: Da última atividade (`updated_at`) para trás, paginadas por cursor.
+      summary: The Agent conversations
+      description: From the latest activity (`updated_at`) backwards, paginated by cursor.
       security:
       - sessionCookie: []
       - pat:
@@ -3366,7 +3369,7 @@ paths:
       - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: Uma página de conversas.
+          description: A page of conversations.
           content:
             application/json:
               schema:
@@ -3389,8 +3392,8 @@ paths:
       tags:
       - agent
       operationId: createAgentSession
-      summary: Abrir uma conversa
-      description: Sem título, a primeira pergunta dá o título (o começo dela, até 120 caracteres).
+      summary: Open a conversation
+      description: Without a title, the first question gives the title (its beginning, up to 120 characters).
       security:
       - sessionCookie: []
       - pat:
@@ -3405,7 +3408,7 @@ paths:
               $ref: '#/components/schemas/AgentSessionCreate'
       responses:
         '201':
-          description: A conversa criada.
+          description: The created conversation.
           content:
             application/json:
               schema:
@@ -3424,12 +3427,12 @@ paths:
       tags:
       - agent
       operationId: getAgentSession
-      summary: Uma conversa com as mensagens e os arquivos
-      description: 'As mensagens em ordem, cada uma com os arquivos dela (os anexos da pergunta, os gerados
+      summary: One conversation with its messages and files
+      description: 'The messages in order, each with its files (the question''s attachments, those generated
 
-        pela resposta), e os anexos ainda não enviados (`pending_files`). Uma resposta em aberto há
+        by the answer), and the attachments not yet sent (`pending_files`). An answer left open for
 
-        mais de 15 minutos vira `failed` com `agent_expired`.
+        more than 15 minutes becomes `failed` with `agent_expired`.
 
         '
       security:
@@ -3438,7 +3441,7 @@ paths:
         - summaries:read
       responses:
         '200':
-          description: A conversa.
+          description: The conversation.
           content:
             application/json:
               schema:
@@ -3456,7 +3459,7 @@ paths:
       tags:
       - agent
       operationId: renameAgentSession
-      summary: Renomear a conversa
+      summary: Rename the conversation
       security:
       - sessionCookie: []
       - pat:
@@ -3471,7 +3474,7 @@ paths:
               $ref: '#/components/schemas/AgentSessionUpdate'
       responses:
         '200':
-          description: A conversa renomeada.
+          description: The renamed conversation.
           content:
             application/json:
               schema:
@@ -3488,8 +3491,8 @@ paths:
       tags:
       - agent
       operationId: deleteAgentSession
-      summary: Excluir a conversa
-      description: Leva as mensagens e os arquivos; o bucket é limpo pela fila de exclusão.
+      summary: Delete the conversation
+      description: Takes the messages and the files with it; the bucket is cleaned by the deletion queue.
       security:
       - sessionCookie: []
       - pat:
@@ -3498,7 +3501,7 @@ paths:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Excluída.
+          description: Deleted.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -3512,15 +3515,16 @@ paths:
       tags:
       - agent
       operationId: attachAgentFile
-      summary: Anexar um arquivo à conversa
-      description: 'Aceita .txt, .md, .csv, .pdf e .docx até 10 MB; o tipo vem da extensão e é conferido
-        pelo
+      summary: Attach a file to the conversation
+      description: 'Accepts .txt, .md, .csv, .pdf and .docx up to 10 MB; the type comes from the extension
+        and is checked against the
 
-        conteúdo (415 `unsupported_media_type` fora disso). O server guarda o original e extrai o
+        content (415 `unsupported_media_type` otherwise). The server keeps the original and extracts the
 
-        texto (até 200 mil caracteres), que o agente lê. O anexo vai com a próxima pergunta que o
+        text (up to 200 thousand characters), which the agent reads. The attachment goes with the next
+        question that
 
-        citar em `attachments`; a conversa tem até 20 anexos (409 `too_many_files`).
+        cites it in `attachments`; the conversation has up to 20 attachments (409 `too_many_files`).
 
         '
       security:
@@ -3543,7 +3547,7 @@ paths:
                   contentMediaType: application/octet-stream
       responses:
         '201':
-          description: O anexo, ainda sem pergunta (`message_id` nulo).
+          description: The attachment, not yet tied to a question (`message_id` null).
           content:
             application/json:
               schema:
@@ -3571,8 +3575,8 @@ paths:
       tags:
       - agent
       operationId: deleteAgentFile
-      summary: Tirar um anexo ainda não enviado
-      description: O anexo que já foi com uma pergunta fica no histórico (409).
+      summary: Remove an attachment not yet sent
+      description: An attachment already sent with a question stays in the history (409).
       security:
       - sessionCookie: []
       - pat:
@@ -3581,7 +3585,7 @@ paths:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Tirado.
+          description: Removed.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -3597,25 +3601,26 @@ paths:
       tags:
       - agent
       operationId: askAgent
-      summary: Perguntar ao Agente
-      description: 'Grava a pergunta com os anexos e a resposta em `queued`, e enfileira a resposta; o
-        cliente
+      summary: Ask the Agent
+      description: 'Stores the question with its attachments and the answer as `queued`, and queues the
+        answer; the client
 
-        consulta `GET .../messages/{message_id}` até `done` ou `failed`. O histórico é o da conversa,
+        polls `GET .../messages/{message_id}` until `done` or `failed`. The history is the conversation''s,
 
-        guardado no server. O agente consulta a base (os resumos primeiro; transcrições só com
+        kept on the server. The agent consults the base (summaries first; transcripts only with a
 
-        sessão, credencial de aparelho ou PAT com `transcripts:read`), lê os anexos e pode gerar
+        session, a device credential or a PAT with `transcripts:read`), reads the attachments and may
+        generate
 
-        arquivos (.md, .txt, .csv, .docx). Uma resposta em aberto por conversa (409), duas por conta
+        files (.md, .txt, .csv, .docx). One open answer per conversation (409), two per account
 
-        (429); cada pergunta conta na cota de pedidos ao agente em 24 h (403 `quota_exceeded`).
+        (429); each question counts toward the 24 h quota of Agent requests (403 `quota_exceeded`).
 
-        Desde a 2.24.0, `skill` ou `/nome` no começo da mensagem escolhem uma habilidade (422 se
+        Since 2.24.0, `skill` or `/name` at the start of the message picks a skill (422 if
 
-        inexistente ou desligada; o prefixo sai do texto guardado), e a resposta pode trazer
+        nonexistent or disabled; the prefix is removed from the stored text), and the answer may carry
 
-        propostas de ação em `actions`, que só rodam depois de `POST /agent/actions/{id}/confirm`.
+        action proposals in `actions`, which only run after `POST /agent/actions/{id}/confirm`.
 
         '
       security:
@@ -3632,7 +3637,7 @@ paths:
               $ref: '#/components/schemas/AgentMessageCreate'
       responses:
         '202':
-          description: A pergunta gravada e a resposta na fila.
+          description: The question stored and the answer queued.
           content:
             application/json:
               schema:
@@ -3660,15 +3665,15 @@ paths:
       tags:
       - agent
       operationId: getAgentMessage
-      summary: Uma mensagem da conversa
-      description: A resposta até `done` ou `failed`, com as fontes e os arquivos gerados.
+      summary: One message of the conversation
+      description: The answer until `done` or `failed`, with the sources and the generated files.
       security:
       - sessionCookie: []
       - pat:
         - summaries:read
       responses:
         '200':
-          description: A mensagem.
+          description: The message.
           content:
             application/json:
               schema:
@@ -3689,14 +3694,14 @@ paths:
       tags:
       - agent
       operationId: downloadAgentFile
-      summary: Baixar um anexo ou um arquivo gerado
+      summary: Download an attachment or a generated file
       security:
       - sessionCookie: []
       - pat:
         - summaries:read
       responses:
         '200':
-          description: O arquivo, como anexo.
+          description: The file, as an attachment.
           headers:
             Content-Disposition:
               schema:
@@ -3732,12 +3737,12 @@ paths:
       tags:
       - agent
       operationId: listAgentTools
-      summary: O catálogo de ferramentas do Agente
-      description: 'Desde a 2.24.0. Cada ferramenta com a natureza (`read` consulta, `produce` gera arquivo,
+      summary: The Agent's tool catalogue
+      description: 'Since 2.24.0. Each tool with its nature (`read` consults, `produce` generates a file,
 
-        `action` propõe uma mudança que a pessoa confirma) e uma descrição curta; é a lista de que
+        `action` proposes a change the person confirms) and a short description; it is the list from which
 
-        uma habilidade escolhe as ferramentas permitidas.
+        a skill picks its allowed tools.
 
         '
       security:
@@ -3746,7 +3751,7 @@ paths:
         - summaries:read
       responses:
         '200':
-          description: O catálogo.
+          description: The catalogue.
           content:
             application/json:
               schema:
@@ -3767,15 +3772,15 @@ paths:
       tags:
       - agent
       operationId: listAgentSkills
-      summary: As habilidades da conta
-      description: Desde a 2.24.0. Todas (até 50), por nome.
+      summary: The account's skills
+      description: Since 2.24.0. All of them (up to 50), by name.
       security:
       - sessionCookie: []
       - pat:
         - summaries:read
       responses:
         '200':
-          description: As habilidades.
+          description: The skills.
           content:
             application/json:
               schema:
@@ -3795,13 +3800,14 @@ paths:
       tags:
       - agent
       operationId: createAgentSkill
-      summary: Cadastrar uma habilidade
-      description: 'Desde a 2.24.0. O nome (a barra inicial é ignorada) tem de 2 a 40 letras minúsculas,
-        números
+      summary: Register a skill
+      description: 'Since 2.24.0. The name (the leading slash is ignored) has 2 to 40 lowercase letters,
+        digits
 
-        e hífens; repetido na conta é 409 `skill_exists`. Ferramenta fora do catálogo ou mais de 50
+        and hyphens; a duplicate in the account is 409 `skill_exists`. A tool outside the catalogue or
+        more than 50
 
-        habilidades na conta: 422.
+        skills in the account: 422.
 
         '
       security:
@@ -3818,7 +3824,7 @@ paths:
               $ref: '#/components/schemas/AgentSkillCreate'
       responses:
         '201':
-          description: A habilidade cadastrada.
+          description: The registered skill.
           content:
             application/json:
               schema:
@@ -3838,15 +3844,15 @@ paths:
       tags:
       - agent
       operationId: getAgentSkill
-      summary: Uma habilidade
-      description: Desde a 2.24.0.
+      summary: One skill
+      description: Since 2.24.0.
       security:
       - sessionCookie: []
       - pat:
         - summaries:read
       responses:
         '200':
-          description: A habilidade.
+          description: The skill.
           content:
             application/json:
               schema:
@@ -3861,8 +3867,8 @@ paths:
       tags:
       - agent
       operationId: updateAgentSkill
-      summary: Editar a habilidade
-      description: Desde a 2.24.0. Os campos enviados mudam; `allowed_tools` nulo libera todas as ferramentas.
+      summary: Edit the skill
+      description: Since 2.24.0. The fields sent change; a null `allowed_tools` allows every tool.
       security:
       - sessionCookie: []
       - pat:
@@ -3877,7 +3883,7 @@ paths:
               $ref: '#/components/schemas/AgentSkillPatch'
       responses:
         '200':
-          description: A habilidade editada.
+          description: The edited skill.
           content:
             application/json:
               schema:
@@ -3896,8 +3902,8 @@ paths:
       tags:
       - agent
       operationId: deleteAgentSkill
-      summary: Excluir a habilidade
-      description: Desde a 2.24.0. As perguntas que a usaram guardam o nome.
+      summary: Delete the skill
+      description: Since 2.24.0. The questions that used it keep its name.
       security:
       - sessionCookie: []
       - pat:
@@ -3906,7 +3912,7 @@ paths:
       - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Excluída.
+          description: Deleted.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
