@@ -28,7 +28,7 @@ _DETAIL_LIMIT = 300
 
 
 def http_error(response: httpx.Response, who: str) -> ProviderError:
-    """Erro tipado de uma resposta HTTP não 2xx."""
+    """Typed error of a non-2xx HTTP response."""
     detail = response.text[:_DETAIL_LIMIT]
     message = f"{who} respondeu {response.status_code}: {detail}"
     if response.status_code in _UNAUTHORIZED:
@@ -42,7 +42,7 @@ def http_error(response: httpx.Response, who: str) -> ProviderError:
     return ProviderError(PROVIDER_BAD_REQUEST, message)
 
 
-async def post_json(  # noqa: PLR0913 — URL, corpo e o contexto da chamada, todos nomeados
+async def post_json(  # noqa: PLR0913 — URL, body and the call's context, all keyword
     config: ProviderConfig,
     url: str,
     body: dict[str, Any],
@@ -51,7 +51,7 @@ async def post_json(  # noqa: PLR0913 — URL, corpo e o contexto da chamada, to
     headers: dict[str, str] | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> dict[str, Any]:
-    """POST JSON com o timeout do provider; falhas de rede e HTTP viram `ProviderError`."""
+    """POST JSON with the provider's timeout; network and HTTP failures become `ProviderError`."""
     try:
         async with httpx.AsyncClient(timeout=config.timeout_s, transport=transport) as client:
             response = await client.post(url, json=body, headers=headers)
@@ -71,15 +71,15 @@ async def post_json(  # noqa: PLR0913 — URL, corpo e o contexto da chamada, to
 
 
 class OpenAICompatibleProvider:
-    """Chat Completions de qualquer API compatível com a da OpenAI."""
+    """Chat Completions of any API compatible with OpenAI's."""
 
     def __init__(self, config: ProviderConfig, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
-        """Provider para `config`; `transport` troca a rede (testes)."""
+        """Provider for `config`; `transport` swaps the network (tests)."""
         self.config = config
         self.transport = transport
 
     async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
-        """Uma conversa de duas mensagens (sistema e usuário)."""
+        """A two-message conversation (system and user)."""
         if not self.config.base_url:
             raise ProviderError(PROVIDER_NOT_CONFIGURED, "O provider openai-compatible precisa de base_url.")
         body: dict[str, Any] = {

@@ -1,9 +1,9 @@
-"""Provider `ollama`: `POST {base_url}/api/chat`, não residente e só com a fila da GPU vazia.
+"""Provider `ollama`: `POST {base_url}/api/chat`, not resident and only with an empty GPU queue.
 
-A GTX 1660 (6 GB) não comporta o ASR e um LLM ao mesmo tempo. Antes de cada chamada o provider
-pergunta se `eclume:gpu` está vazia — o arq mantém o job na fila até ele terminar, então vazia quer
-dizer nada enfileirado e nada rodando — e pede `keep_alive: 0`, para o Ollama descarregar o modelo
-assim que responder. Fila ocupada vira `gpu_busy`, que o job de resumo adia sem gastar tentativa.
+The GTX 1660 (6 GB) cannot hold the ASR and an LLM at the same time. Before each call the provider
+asks whether `eclume:gpu` is empty — arq keeps the job in the queue until it finishes, so empty means
+nothing queued and nothing running — and asks for `keep_alive: 0`, so Ollama unloads the model as
+soon as it answers. A busy queue becomes `gpu_busy`, which the summary job postpones without spending an attempt.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 
 class OllamaProvider:
-    """API nativa do Ollama, que aceita `keep_alive` e `num_ctx`."""
+    """Ollama's native API, which accepts `keep_alive` and `num_ctx`."""
 
     def __init__(
         self,
@@ -37,13 +37,13 @@ class OllamaProvider:
         gpu_idle: Callable[[], Awaitable[bool]],
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        """Provider para `config`; `gpu_idle` diz se a fila da GPU está vazia."""
+        """Provider for `config`; `gpu_idle` says whether the GPU queue is empty."""
         self.config = config
         self.gpu_idle = gpu_idle
         self.transport = transport
 
     async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
-        """Uma conversa, com o modelo descarregado logo depois."""
+        """One conversation, with the model unloaded right after."""
         if not self.config.base_url:
             raise ProviderError(PROVIDER_NOT_CONFIGURED, "O provider ollama precisa de base_url.")
         if not await self.gpu_idle():
