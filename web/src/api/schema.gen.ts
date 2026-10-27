@@ -2518,7 +2518,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Erro RFC 9457. O cliente decide por `code`, nunca por `title`. */
+        /** @description RFC 9457 error. The client decides by `code`, never by `title`. */
         Problem: {
             /** Format: uri-reference */
             type: string;
@@ -2527,54 +2527,54 @@ export interface components {
             detail?: string;
             instance?: string;
             /**
-             * @description Código estável. Valores v1: `unauthorized`, `insufficient_scope`, `forbidden`,
+             * @description Stable code. v1 values: `unauthorized`, `insufficient_scope`, `forbidden`,
              *     `not_found`, `validation_failed`, `conflict`, `hash_mismatch`, `upload_expired`,
-             *     `rate_limited`; desde a 1.4.0, `session_required` (PAT numa operação só de sessão);
-             *     desde a 2.0.0, `email_taken` (cadastro com e-mail existente) e `signup_closed`;
-             *     desde a 2.2.0, `summary_changed` (o resumo mudou desde a versão aberta),
-             *     `summary_missing`, `transcript_missing` e `chat_busy` (já há um pedido de ajuste em
-             *     aberto); desde a 2.3.0, `invalid_pairing_code` (código de pareamento inexistente,
-             *     vencido ou usado) e `notice_required` (sessão de conta que ainda não aceitou o aviso em
-             *     vigor); desde a 2.14.0, `payload_too_large`, `upload_completing` e `internal_error`;
-             *     desde a 2.15.0, `quota_exceeded` (cota da conta estourada); desde a 2.18.0,
-             *     `invalid_reset_link` (link de redefinição de senha inexistente, vencido ou usado).
-             *     Códigos novos entram de forma aditiva.
+             *     `rate_limited`; since 1.4.0, `session_required` (a PAT on a session-only operation);
+             *     since 2.0.0, `email_taken` (signup with an existing e-mail) and `signup_closed`;
+             *     since 2.2.0, `summary_changed` (the summary changed since the opened version),
+             *     `summary_missing`, `transcript_missing` and `chat_busy` (an adjustment request is already
+             *     open); since 2.3.0, `invalid_pairing_code` (pairing code nonexistent,
+             *     expired or used) and `notice_required` (session of an account that has not yet accepted the notice in
+             *     force); since 2.14.0, `payload_too_large`, `upload_completing` and `internal_error`;
+             *     since 2.15.0, `quota_exceeded` (the account's quota exceeded); since 2.18.0,
+             *     `invalid_reset_link` (password reset link nonexistent, expired or used).
+             *     New codes are added additively.
              */
             code: string;
-            /** @description Com `payload_too_large`, o teto do corpo da rota em bytes (desde a 2.14.0); com `quota_exceeded`, o limite da cota (desde a 2.15.0). */
+            /** @description With `payload_too_large`, the route's body ceiling in bytes (since 2.14.0); with `quota_exceeded`, the quota's limit (since 2.15.0). */
             limit?: number;
             /**
-             * @description Com `quota_exceeded`, a cota estourada (desde a 2.15.0).
+             * @description With `quota_exceeded`, the exceeded quota (since 2.15.0).
              * @enum {string}
              */
             quota?: "storage_bytes" | "file_bytes" | "open_uploads" | "agent_requests_24h";
-            /** @description Com `quota_exceeded`, o uso a que o pedido levaria (bytes, uploads abertos ou pedidos em 24 h; em `file_bytes`, o tamanho do arquivo) (desde a 2.15.0). */
+            /** @description With `quota_exceeded`, the usage the request would lead to (bytes, open uploads or requests in 24 h; for `file_bytes`, the file size) (since 2.15.0). */
             used?: number;
             /**
-             * @description Com `insufficient_scope`, os escopos que faltaram; numa operação com requisitos `pat`
-             *     alternativos, as alternativas (basta um deles).
+             * @description With `insufficient_scope`, the missing scopes; on an operation with alternative `pat`
+             *     requirements, the alternatives (one of them is enough).
              */
             required_scopes?: components["schemas"]["Scope"][];
-            /** @description Com `validation_failed`, um item por campo inválido. */
+            /** @description With `validation_failed`, one item per invalid field. */
             errors?: {
-                /** @description Caminho do campo (`size_bytes`, `parts[3].etag`). */
+                /** @description Field path (`size_bytes`, `parts[3].etag`). */
                 field: string;
                 message: string;
             }[];
         };
         /**
-         * @description Escopo de PAT. `recordings:delete` (2.3.0) exclui gravações. A tela "Conexão MCP" agrupa os escopos em "Buscar e ler gravações" (`recordings:read`, `transcripts:read`), "Ler e editar resumos" (`summaries:read`, `summaries:write`), "Editar campos e tags" (`recordings:write`) e "Excluir gravações" (`recordings:delete`).
+         * @description PAT scope. `recordings:delete` (2.3.0) deletes recordings. The "Conexão MCP" screen groups the scopes into "Buscar e ler gravações" (`recordings:read`, `transcripts:read`), "Ler e editar resumos" (`summaries:read`, `summaries:write`), "Editar campos e tags" (`recordings:write`) and "Excluir gravações" (`recordings:delete`).
          * @enum {string}
          */
         Scope: "recordings:read" | "recordings:write" | "recordings:delete" | "transcripts:read" | "transcripts:write" | "people:read" | "people:write" | "summaries:read" | "summaries:write";
         Health: {
             /** @enum {string} */
             status: "ok" | "degraded";
-            /** @description Versão do servidor. */
+            /** @description Server version. */
             version: string;
-            /** @description Versão deste contrato que o servidor implementa (`info.version`). */
+            /** @description Version of this contract that the server implements (`info.version`). */
             contract_version: string;
-            /** @description Desde a 2.12.0: o SHA do git de que a imagem do servidor foi construída (o deploy o grava). Ausente fora de uma imagem de produção. */
+            /** @description Since 2.12.0: the git SHA the server image was built from (the deploy writes it). Absent outside a production image. */
             commit?: string;
         };
         HealthReady: {
@@ -2588,30 +2588,30 @@ export interface components {
             }[];
         };
         PasswordResetCheck: {
-            /** @description O segredo do link, lido do fragmento de `/redefinir-senha#<token>`. */
+            /** @description The link's secret, read from the fragment of `/redefinir-senha#<token>`. */
             token: string;
         };
         PasswordReset: {
-            /** @description O segredo do link, como em `PasswordResetCheck`. */
+            /** @description The link's secret, as in `PasswordResetCheck`. */
             token: string;
             /**
              * Format: password
-             * @description Ao menos 12 caracteres, como no cadastro.
+             * @description At least 12 characters, as at signup.
              */
             new_password: string;
         };
-        /** @description Desde a 2.18.0. O que a página de redefinição mostra de um link válido. */
+        /** @description Since 2.18.0. What the reset page shows of a valid link. */
         PasswordResetInfo: {
             /** Format: email */
             email: string;
             /** Format: date-time */
             expires_at: string;
         };
-        /** @description Desde a 2.18.0. O link de redefinição recém-gerado; `url` só volta na criação. */
+        /** @description Since 2.18.0. The freshly generated reset link; `url` is returned only on creation. */
         PasswordResetLink: {
             /**
              * Format: uri
-             * @description `<url pública>/redefinir-senha#<segredo>`.
+             * @description `<public url>/redefinir-senha#<secret>`.
              */
             url: string;
             /** Format: date-time */
@@ -2622,13 +2622,13 @@ export interface components {
             email: string;
             password: string;
         };
-        /** @description Aviso que a conta aceita ao nascer ("Sou responsável por pedir o consentimento das pessoas que gravo"). */
+        /** @description Notice the account accepts at creation ("I am responsible for asking the people I record for their consent"). */
         Notice: {
             version: string;
             text: string;
         };
         SignupInfo: {
-            /** @description `false` com `ECLUME_SIGNUP_OPEN=false`: o cadastro responde 403 `signup_closed`. */
+            /** @description `false` with `ECLUME_SIGNUP_OPEN=false`: signup responds 403 `signup_closed`. */
             open: boolean;
             notice: components["schemas"]["Notice"];
         };
@@ -2637,7 +2637,7 @@ export interface components {
             /** Format: email */
             email: string;
             password: string;
-            /** @description Versão do aviso aceito; tem de ser a em vigor. */
+            /** @description Version of the accepted notice; it must be the one in force. */
             notice_version: string;
         };
         NoticeAccept: {
@@ -2654,12 +2654,12 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             last_login_at: string | null;
-            /** @description Versão do aviso aceito, ou `null` numa conta que ainda não aceitou. */
+            /** @description Version of the accepted notice, or `null` on an account that has not yet accepted it. */
             notice_version: string | null;
             /** Format: date-time */
             notice_accepted_at: string | null;
         };
-        /** @description Conta de usuário vista pelo admin (o `User` mais a contagem de gravações e, desde a 2.15.0, o uso e a sobreposição das cotas). */
+        /** @description User account as seen by the admin (the `User` plus the recording count and, since 2.15.0, the usage and the quota override). */
         AdminUser: {
             /** Format: uuid */
             id: string;
@@ -2675,11 +2675,11 @@ export interface components {
             /** Format: date-time */
             notice_accepted_at: string | null;
             recording_count: number;
-            /** @description Só os campos que esta conta sobrepõe ao padrão da plataforma (`null` num campo é sem limite); `null` quando a conta segue o padrão inteiro. */
+            /** @description Only the fields this account overrides from the platform default (`null` in a field means no limit); `null` when the account follows the whole default. */
             quotas: components["schemas"]["QuotasOverride"] | null;
             usage: components["schemas"]["UsageNow"];
         };
-        /** @description Cotas parciais (desde a 2.15.0): só os campos presentes valem; `null` num campo é sem limite. */
+        /** @description Partial quotas (since 2.15.0): only the fields present apply; `null` in a field means no limit. */
         QuotasOverride: {
             storage_bytes?: number | null;
             file_bytes?: number | null;
@@ -2687,18 +2687,18 @@ export interface components {
             gpu_minutes_24h?: number | null;
             agent_requests_24h?: number | null;
         };
-        /** @description Ao menos um campo; desde a 2.15.0, `active` é opcional e entra `quotas`. */
+        /** @description At least one field; since 2.15.0, `active` is optional and `quotas` is added. */
         UserPatch: {
-            /** @description `false` desativa a conta, encerra as sessões e revoga os PATs. */
+            /** @description `false` deactivates the account, ends its sessions and revokes its PATs. */
             active?: boolean;
-            /** @description Troca a sobreposição inteira das cotas da conta pelos campos enviados (`null` num campo é sem limite); `quotas: null` volta a conta ao padrão da plataforma. */
+            /** @description Replaces the account's whole quota override with the fields sent (`null` in a field means no limit); `quotas: null` returns the account to the platform default. */
             quotas?: components["schemas"]["QuotasOverride"] | null;
         };
         AdminUserPage: {
             items: components["schemas"]["AdminUser"][];
             next_cursor: components["schemas"]["NextCursor"];
         };
-        /** @description Conta de admin, separada das contas de usuário. */
+        /** @description Admin account, separate from the user accounts. */
         AdminAccount: {
             /** Format: uuid */
             id: string;
@@ -2715,79 +2715,79 @@ export interface components {
             id: string;
             name: string;
         };
-        /** @description Cotas de uma conta (desde a 2.15.0); `null` é sem limite. Minutos de áudio transcritos e pedidos ao agente contam numa janela móvel de 24 h. */
+        /** @description Quotas of an account (since 2.15.0); `null` means no limit. Transcribed audio minutes and agent requests count over a rolling 24 h window. */
         Quotas: {
-            /** @description Armazenamento total (áudio das gravações mais uploads abertos), em bytes. */
+            /** @description Total storage (recording audio plus open uploads), in bytes. */
             storage_bytes: number | null;
-            /** @description Tamanho máximo de um arquivo, em bytes. */
+            /** @description Maximum size of one file, in bytes. */
             file_bytes: number | null;
-            /** @description Uploads abertos ao mesmo tempo. */
+            /** @description Uploads open at the same time. */
             open_uploads: number | null;
-            /** @description Minutos de áudio enviados à transcrição em 24 h. Passado o limite nada é recusado: a gravação espera na fila até a janela abrir. */
+            /** @description Audio minutes sent to transcription in 24 h. Past the limit nothing is refused: the recording waits in the queue until the window opens. */
             gpu_minutes_24h: number | null;
-            /** @description Pedidos da pessoa ao agente (resumos, chats, pré-visualizações) em 24 h. */
+            /** @description The person's requests to the agent (summaries, chats, previews) in 24 h. */
             agent_requests_24h: number | null;
         };
-        /** @description Uso corrente de uma conta (desde a 2.15.0). */
+        /** @description Current usage of an account (since 2.15.0). */
         UsageNow: {
             storage_bytes: number;
             open_uploads: number;
             gpu_minutes_24h: number;
             agent_requests_24h: number;
         };
-        /** @description Uso e cota efetiva da conta (desde a 2.15.0). */
+        /** @description Usage and effective quota of the account (since 2.15.0). */
         Usage: {
             usage: components["schemas"]["UsageNow"];
             quotas: components["schemas"]["Quotas"];
         };
         Me: {
             user: components["schemas"]["User"];
-            /** @description A conta ainda não aceitou o aviso em vigor (`POST /api/v1/me/notice`). */
+            /** @description The account has not yet accepted the notice in force (`POST /api/v1/me/notice`). */
             notice_required: boolean;
             auth: {
                 /** @enum {string} */
                 method: "session" | "pat";
-                /** @description Com sessão, todos os escopos. */
+                /** @description With a session, every scope. */
                 scopes: components["schemas"]["Scope"][];
                 /**
                  * Format: uuid
-                 * @description Id do PAT em uso, ou `null` com sessão.
+                 * @description Id of the PAT in use, or `null` with a session.
                  */
                 token_id: string | null;
             };
         };
-        /** @description Atribuição automática de locutores da conta: com ela ligada e a identificação por voz ligada na plataforma, o locutor cuja voz passa do limiar é ligado à pessoa na ingestão, antes do resumo, e sai com `auto_score` no `Speaker`. */
+        /** @description The account's automatic speaker assignment: with it on and voice identification on on the platform, the speaker whose voice passes the threshold is linked to the person at ingestion, before the summary, and comes out with `auto_score` on the `Speaker`. */
         VoiceAssignment: {
             enabled: boolean;
-            /** @description Pontuação mínima (cosseno normalizado) para ligar sozinho, de 0,50 a 0,99. */
+            /** @description Minimum score (normalized cosine) to link on its own, from 0.50 to 0.99. */
             threshold: number;
-            /** @description A identificação por voz está ligada na plataforma; desligada, nada é atribuído. */
+            /** @description Voice identification is on on the platform; when off, nothing is assigned. */
             platform_enabled: boolean;
-            /** @description Desde a 2.19.0. A conta guarda amostras e impressões de voz (padrão `true`). Desligada, nada de voz da conta é calculado, comparado ou guardado; o desligamento apaga na hora as amostras, os vetores por gravação e as sugestões pendentes da conta. */
+            /** @description Since 2.19.0. The account keeps voice samples and voiceprints (default `true`). When off, nothing of the account's voice is computed, compared or stored; turning it off immediately deletes the account's samples, per-recording vectors and pending suggestions. */
             keep_samples: boolean;
-            /** @description Desde a 2.19.0. Quantas amostras de voz a conta guarda. */
+            /** @description Since 2.19.0. How many voice samples the account keeps. */
             sample_count: number;
-            /** @description Desde a 2.19.0. Quantas pessoas da conta têm impressão de voz (ao menos uma amostra). */
+            /** @description Since 2.19.0. How many people of the account have a voiceprint (at least one sample). */
             voiceprint_people: number;
         };
-        /** @description Desde a 2.22.0. Se a conta exige nomear os locutores antes da cadeia por agente e quantas gravações esperam por isso. */
+        /** @description Since 2.22.0. Whether the account requires naming the speakers before the agent chain, and how many recordings are waiting for it. */
         SpeakerNamingPreference: {
             required: boolean;
-            /** @description Gravações cuja revisão atual está com a etapa `speakers` em `waiting`. */
+            /** @description Recordings whose current revision has the `speakers` stage in `waiting`. */
             waiting_count: number;
         };
         SpeakerNamingPatch: {
             required: boolean;
         };
-        /** @description Desde a 2.20.0. Idioma de transcrição preferido da conta e o padrão do servidor que vale quando a conta não escolhe. */
+        /** @description Since 2.20.0. The account's preferred transcription language and the server default that applies when the account does not choose one. */
         TranscriptionPreference: {
-            /** @description Idioma (BCP 47), `auto` (detectar) ou `null` (padrão do servidor). */
+            /** @description Language (BCP 47), `auto` (detect) or `null` (server default). */
             language: string | null;
-            /** @description O `asr.default_language` da plataforma (`pt` sem configuração); pode ser `auto`. */
+            /** @description The platform's `asr.default_language` (`pt` when unconfigured); it may be `auto`. */
             platform_default: string;
         };
         TranscriptionPreferencePatch: {
-            /** @description Idioma (BCP 47), `auto` ou `null` para voltar ao padrão do servidor. */
+            /** @description Language (BCP 47), `auto` or `null` to return to the server default. */
             language: string | null;
         };
         /** @description Since 2.29.0. How long the audio of the account's recordings stays on the server, the platform ceiling and the window in force. */
@@ -2806,21 +2806,21 @@ export interface components {
         VoiceAssignmentPatch: {
             enabled?: boolean;
             threshold?: number;
-            /** @description Desde a 2.19.0. `false` apaga na hora as amostras, os vetores por gravação e as sugestões pendentes da conta; os arquivos de voz do armazenamento saem logo depois. `true` volta a guardar a partir das próximas transcrições, sem recuperar o que saiu. */
+            /** @description Since 2.19.0. `false` immediately deletes the account's samples, per-recording vectors and pending suggestions; the voice files in storage go shortly after. `true` resumes keeping from the next transcriptions on, without recovering what was removed. */
             keep_samples?: boolean;
         };
-        /** @description Cursor da próxima página, ou `null` na última. */
+        /** @description Cursor of the next page, or `null` on the last one. */
         NextCursor: string | null;
         Token: {
             /** Format: uuid */
             id: string;
-            /** @description Com `kind: device`, o nome do aparelho. */
+            /** @description With `kind: device`, the device name. */
             name: string;
             kind: components["schemas"]["TokenKind"];
-            /** @description Com `kind: device`, a plataforma do aparelho; `null` num PAT pessoal. */
+            /** @description With `kind: device`, the device platform; `null` on a personal PAT. */
             platform: components["schemas"]["DevicePlatform"] | null;
             scopes: components["schemas"]["Scope"][];
-            /** @description Começo do segredo, para reconhecer o token (`eclp_7Hq2`). */
+            /** @description Start of the secret, to recognize the token (`eclp_7Hq2`). */
             prefix: string;
             /** Format: date-time */
             created_at: string;
@@ -2832,37 +2832,37 @@ export interface components {
             revoked_at: string | null;
         };
         /**
-         * @description `personal`, o PAT criado em "Tokens de acesso" ou "Conexão MCP"; `device`, a credencial de um aparelho, emitida pelo login ou pelo pareamento.
+         * @description `personal`, the PAT created in "Tokens de acesso" or "Conexão MCP"; `device`, the credential of a device, issued by login or by pairing.
          * @enum {string}
          */
         TokenKind: "personal" | "device";
         /** @enum {string} */
         DevicePlatform: "windows" | "macos" | "linux" | "ios" | "android";
         ServerInfo: {
-            /** @description Nome do servidor (`ECLUME_SERVER_NAME`), também a instância no mDNS. */
+            /** @description Server name (`ECLUME_SERVER_NAME`), also the instance on mDNS. */
             name: string;
             /**
              * Format: uri
-             * @description Endereço público (`ECLUME_PUBLIC_URL`).
+             * @description Public address (`ECLUME_PUBLIC_URL`).
              */
             url: string;
             /**
              * Format: uri
-             * @description Endereço do servidor MCP, que o assistente recebe.
+             * @description Address of the MCP server, which the assistant receives.
              */
             mcp_url: string;
-            /** @description SHA-256, em hex minúsculo, do DER do certificado raiz servido em `/downloads/eclume-root.crt`; `null` enquanto a raiz não foi publicada. */
+            /** @description SHA-256, in lowercase hex, of the DER of the root certificate served at `/downloads/eclume-root.crt`; `null` while the root has not been published. */
             ca_sha256: string | null;
-            /** @description Desde a 2.21.0. SHA-256, em hex minúsculo, do DER da próxima raiz durante a rotação, servida em `/downloads/eclume-root-proxima.crt`; ausente ou `null` fora dela. O app com a raiz atual fixada baixa a próxima por essa mesma conexão, confere a impressão e a guarda para trocar sozinho quando o servidor passar a servi-la. */
+            /** @description Since 2.21.0. SHA-256, in lowercase hex, of the DER of the next root during rotation, served at `/downloads/eclume-root-proxima.crt`; absent or `null` outside it. The app with the current root pinned downloads the next one over that same connection, checks its fingerprint and keeps it, to switch on its own when the server starts serving it. */
             ca_next_sha256?: string | null;
-            /** @description Versão do servidor. */
+            /** @description Server version. */
             version: string;
-            /** @description Versão deste contrato que o servidor implementa. */
+            /** @description Version of this contract that the server implements. */
             contract_version: string;
         };
-        /** @description Desde a 2.19.0. Para onde vai cada dado, conforme a configuração em vigor. */
+        /** @description Since 2.19.0. Where each piece of data goes, under the configuration in force. */
         PrivacyInfo: {
-            /** @description Um item por finalidade, na ordem de `DataPurpose`. */
+            /** @description One item per purpose, in the order of `DataPurpose`. */
             destinations: components["schemas"]["DataDestination"][];
         };
         /**
@@ -4840,7 +4840,7 @@ export interface components {
         };
     };
     responses: {
-        /** @description Sem credencial, ou credencial inválida, expirada ou revogada. */
+        /** @description No credential, or an invalid, expired or revoked credential. */
         Unauthorized: {
             headers: {
                 "WWW-Authenticate"?: string;
@@ -4850,7 +4850,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só sessão (`code: session_required`), cadastro fechado (`code: signup_closed`) ou sessão de conta que ainda não aceitou o aviso em vigor (`code: notice_required`; antes do aceite, só `GET /me`, `POST /me/notice` e `/auth/*` respondem, e `POST /devices/login` não emite credencial). Desde a 2.15.0, cota da conta estourada (`code: quota_exceeded`, com `quota`, `limit` e `used`). */
+        /** @description Valid credential without permission (scope or owner), a PAT on an operation that accepts only a session (`code: session_required`), signup closed (`code: signup_closed`) or a session of an account that has not yet accepted the notice in force (`code: notice_required`; before acceptance, only `GET /me`, `POST /me/notice` and `/auth/*` respond, and `POST /devices/login` issues no credential). Since 2.15.0, the account's quota exceeded (`code: quota_exceeded`, with `quota`, `limit` and `used`). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -4859,7 +4859,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Não existe ou não é do usuário (o eclume não distingue os dois). */
+        /** @description Does not exist or does not belong to the user (eclume does not tell the two apart). */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -4868,7 +4868,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Corpo ou parâmetros inválidos. */
+        /** @description Invalid body or parameters. */
         ValidationFailed: {
             headers: {
                 [name: string]: unknown;
@@ -4877,7 +4877,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento, resumo mudado desde a versão aberta, chat com pedido em aberto). */
+        /** @description The current state prevents the operation (upload already completed, duplicate name, job in progress, summary changed since the opened version, chat with a request open). */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -4895,7 +4895,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description O arquivo não é de um tipo que a rota aceita (`code: unsupported_media_type`, desde a 2.23.0), ou o conteúdo não bate com a extensão. */
+        /** @description The file is not of a type the route accepts (`code: unsupported_media_type`, since 2.23.0), or the content does not match the extension. */
         UnsupportedMediaType: {
             headers: {
                 [name: string]: unknown;
@@ -4904,7 +4904,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Corpo acima do teto da rota (`code: payload_too_large`, desde a 2.14.0); `limit` diz o teto em bytes. */
+        /** @description Body above the route's ceiling (`code: payload_too_large`, since 2.14.0); `limit` gives the ceiling in bytes. */
         PayloadTooLarge: {
             headers: {
                 [name: string]: unknown;
@@ -4913,7 +4913,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Falha inesperada do servidor (`code: internal_error`, desde a 2.14.0); o detalhe fica no log do servidor, com o `X-Request-ID` da resposta. */
+        /** @description Unexpected server failure (`code: internal_error`, since 2.14.0); the detail stays in the server log, with the response's `X-Request-ID`. */
         InternalError: {
             headers: {
                 [name: string]: unknown;
@@ -4922,10 +4922,10 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Limite atingido (`code: rate_limited`): pedidos em aberto, como as 3 pré-visualizações em andamento por conta (tente de novo quando algum terminar), ou tentativas por minuto nas rotas de credencial (login, cadastro, login de admin e `/devices/*`, por IP), com `Retry-After`. Nos logins por senha, desde a 2.14.0, contam só as falhas: por par (conta, IP), e um teto da conta que não barra IP que já entrou nela com sucesso; o sucesso zera o par. */
+        /** @description Limit reached (`code: rate_limited`): open requests, such as the 3 previews in progress per account (try again when one finishes), or attempts per minute on the credential routes (login, signup, admin login and `/devices/*`, per IP), with `Retry-After`. On password logins, since 2.14.0, only failures count: per (account, IP) pair, plus an account ceiling that does not block an IP that has already signed in to it successfully; success resets the pair. */
         TooManyRequests: {
             headers: {
-                /** @description Segundos até a janela de tentativas reabrir. */
+                /** @description Seconds until the attempts window reopens. */
                 "Retry-After"?: number;
                 [name: string]: unknown;
             };
@@ -4935,24 +4935,24 @@ export interface components {
         };
     };
     parameters: {
-        /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+        /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
         CsrfToken: string;
-        /** @description Cursor opaco devolvido em `next_cursor`. */
+        /** @description Opaque cursor returned in `next_cursor`. */
         Cursor: string;
-        /** @description Itens por página. */
+        /** @description Items per page. */
         Limit: number;
         /**
-         * @description Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
-         *     editado também move o `updated_at` da gravação e da transcrição a que pertence. Desde a
-         *     2.17.0, a etapa `summary` que termina `failed` ou `skipped` move o `updated_at` só da
-         *     gravação, para os clientes avisarem o fim do processamento (holetz/eclume#118).
+         * @description Only items with `updated_at >= since` (inclusive). Since 2.8.0, a summary that finishes or is
+         *     edited also moves the `updated_at` of the recording and of the transcript it belongs to. Since
+         *     2.17.0, a `summary` stage that ends `failed` or `skipped` moves the `updated_at` of the
+         *     recording only, so that clients report the end of processing (holetz/eclume#118).
          */
         Since: string;
-        /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
+        /** @description Person id; only transcripts (or excerpts) in which a speaker is linked to that person. */
         PersonFilter: string;
-        /** @description Só gravações com esta tag. */
+        /** @description Only recordings with this tag. */
         TagFilter: string;
-        /** @description Só gravações desta coleção. */
+        /** @description Only recordings in this collection. */
         CollectionFilter: string;
         PairingCodeId: string;
         TokenId: string;
@@ -5062,7 +5062,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5176,7 +5176,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5205,7 +5205,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5234,7 +5234,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5284,7 +5284,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5336,7 +5336,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5388,7 +5388,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5440,7 +5440,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5492,7 +5492,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5521,9 +5521,9 @@ export interface operations {
     listTokens: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
                 /** @description Only the tokens of this kind. */
                 kind?: components["schemas"]["TokenKind"];
@@ -5551,7 +5551,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5581,7 +5581,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -5730,7 +5730,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5808,7 +5808,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5872,7 +5872,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -5898,7 +5898,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -5964,7 +5964,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6007,15 +6007,15 @@ export interface operations {
     listRecordings: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
                 /**
-                 * @description Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
-                 *     editado também move o `updated_at` da gravação e da transcrição a que pertence. Desde a
-                 *     2.17.0, a etapa `summary` que termina `failed` ou `skipped` move o `updated_at` só da
-                 *     gravação, para os clientes avisarem o fim do processamento (holetz/eclume#118).
+                 * @description Only items with `updated_at >= since` (inclusive). Since 2.8.0, a summary that finishes or is
+                 *     edited also moves the `updated_at` of the recording and of the transcript it belongs to. Since
+                 *     2.17.0, a `summary` stage that ends `failed` or `skipped` moves the `updated_at` of the
+                 *     recording only, so that clients report the end of processing (holetz/eclume#118).
                  */
                 since?: components["parameters"]["Since"];
                 /** @description `recorded_at >= from`. */
@@ -6093,7 +6093,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6119,7 +6119,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6177,7 +6177,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6210,7 +6210,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6239,7 +6239,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6294,7 +6294,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6328,7 +6328,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6355,7 +6355,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6383,9 +6383,9 @@ export interface operations {
     listSummaryChat: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -6415,7 +6415,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6474,7 +6474,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6566,7 +6566,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6594,7 +6594,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6628,7 +6628,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6657,18 +6657,18 @@ export interface operations {
     listTranscripts: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
                 /**
-                 * @description Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
-                 *     editado também move o `updated_at` da gravação e da transcrição a que pertence. Desde a
-                 *     2.17.0, a etapa `summary` que termina `failed` ou `skipped` move o `updated_at` só da
-                 *     gravação, para os clientes avisarem o fim do processamento (holetz/eclume#118).
+                 * @description Only items with `updated_at >= since` (inclusive). Since 2.8.0, a summary that finishes or is
+                 *     edited also moves the `updated_at` of the recording and of the transcript it belongs to. Since
+                 *     2.17.0, a `summary` stage that ends `failed` or `skipped` moves the `updated_at` of the
+                 *     recording only, so that clients report the end of processing (holetz/eclume#118).
                  */
                 since?: components["parameters"]["Since"];
-                /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
+                /** @description Person id; only transcripts (or excerpts) in which a speaker is linked to that person. */
                 person?: components["parameters"]["PersonFilter"];
                 /** @description The transcript of one specific recording. */
                 recording_id?: string;
@@ -6754,7 +6754,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6788,7 +6788,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6818,7 +6818,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6851,7 +6851,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6884,9 +6884,9 @@ export interface operations {
     listSummaries: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -6916,7 +6916,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6975,7 +6975,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7026,7 +7026,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7052,7 +7052,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7084,9 +7084,9 @@ export interface operations {
     listAgendaTypes: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -7113,7 +7113,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7144,7 +7144,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7200,7 +7200,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7227,7 +7227,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7283,7 +7283,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7313,7 +7313,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7369,7 +7369,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7396,7 +7396,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7454,7 +7454,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7509,9 +7509,9 @@ export interface operations {
     listAgentSessions: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -7540,7 +7540,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7594,7 +7594,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7620,7 +7620,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7653,7 +7653,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7690,7 +7690,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7718,7 +7718,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7857,7 +7857,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7913,7 +7913,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7939,7 +7939,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7972,9 +7972,9 @@ export interface operations {
     listAgentActions: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -8028,7 +8028,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8057,7 +8057,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8085,9 +8085,9 @@ export interface operations {
     listPeople: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
                 /** @description Search by name or e-mail (prefix, accent-insensitive). */
                 q?: string;
@@ -8115,7 +8115,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8193,7 +8193,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8219,7 +8219,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8251,9 +8251,9 @@ export interface operations {
     listPersonTranscripts: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -8307,7 +8307,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8333,7 +8333,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8362,21 +8362,21 @@ export interface operations {
             query?: {
                 /** @description Search terms (`websearch_to_tsquery` syntax, accepts "exact phrase" and -exclusion). */
                 q?: string;
-                /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
+                /** @description Person id; only transcripts (or excerpts) in which a speaker is linked to that person. */
                 person?: components["parameters"]["PersonFilter"];
                 /** @description `recorded_at >= from`. */
                 from?: string;
                 /** @description `recorded_at < to`. */
                 to?: string;
-                /** @description Só gravações com esta tag. */
+                /** @description Only recordings with this tag. */
                 tag?: components["parameters"]["TagFilter"];
-                /** @description Só gravações desta coleção. */
+                /** @description Only recordings in this collection. */
                 collection?: components["parameters"]["CollectionFilter"];
                 /** @description Value of a user field, `<field_id>:<value>`; repeatable, as in `GET /api/v1/recordings`: values of the same field combine with OR, different fields with AND. On a list field, the value need only be one of the items; title and tags work like the built-in ones. */
                 field?: string[];
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -8402,9 +8402,9 @@ export interface operations {
     listCollections: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -8430,7 +8430,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8460,7 +8460,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8486,7 +8486,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8519,7 +8519,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8574,7 +8574,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8605,7 +8605,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8631,7 +8631,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8665,7 +8665,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8726,7 +8726,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8792,7 +8792,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8844,7 +8844,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8874,7 +8874,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8901,7 +8901,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8957,7 +8957,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8988,7 +8988,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -9014,7 +9014,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -9069,7 +9069,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -9100,7 +9100,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -9126,9 +9126,9 @@ export interface operations {
     listUsers: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -9154,7 +9154,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -9180,7 +9180,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -9213,7 +9213,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -9242,7 +9242,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
