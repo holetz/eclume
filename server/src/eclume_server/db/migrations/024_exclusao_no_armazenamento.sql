@@ -1,14 +1,14 @@
--- 024_exclusao_no_armazenamento — fila de exclusão no bucket, gravada com o DELETE (holetz/eclume#97).
+-- 024_exclusao_no_armazenamento — bucket deletion queue, written with the DELETE (holetz/eclume#97).
 --
--- Excluir gravação ou conta nunca deixa objeto para trás: gatilhos `AFTER DELETE` enfileiram, na
--- mesma transação do `DELETE` (e da cascata), o áudio, o prefixo dos artefatos do worker GPU e o
--- multipart em andamento. O cron `drain_storage_deletions` do worker CPU esvazia a fila com
--- retentativa e nunca desiste. Sem RLS e sem GRANT para `eclume_app`: só o papel de conexão e as
--- funções `SECURITY DEFINER` a alcançam. Padrões em docs/standards/code/server-nucleo.md.
+-- Deleting a recording or an account never leaves an object behind: `AFTER DELETE` triggers enqueue, in the
+-- same transaction as the `DELETE` (and the cascade), the audio, the GPU worker's artefact prefix and the
+-- in-progress multipart. The CPU worker's `drain_storage_deletions` cron empties the queue with
+-- retries and never gives up. No RLS and no GRANT to `eclume_app`: only the connection role and the
+-- `SECURITY DEFINER` functions reach it. Patterns in docs/standards/code/server-nucleo.md.
 
 CREATE TABLE storage_deletions (
     id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    -- Exatamente um: uma chave, um prefixo (tudo sob ele) ou o multipart `(key, s3_upload_id)`.
+    -- Exactly one: a key, a prefix (everything under it) or the multipart `(key, s3_upload_id)`.
     key              text,
     prefix           text,
     s3_upload_id     text,
@@ -20,11 +20,11 @@ CREATE TABLE storage_deletions (
     CHECK (s3_upload_id IS NULL OR key IS NOT NULL)
 );
 CREATE INDEX storage_deletions_due_idx ON storage_deletions (next_attempt_at);
--- Já coberto pelo ALTER DEFAULT PRIVILEGES da 006 (mesmo migrador); repetido por clareza.
+-- Already covered by the ALTER DEFAULT PRIVILEGES of 006 (same migrator); repeated for clarity.
 GRANT SELECT, INSERT, UPDATE, DELETE ON storage_deletions TO eclume_server;
 
--- A gravação que sai leva o áudio e `recordings/{id}/` (todas as revisões). SECURITY DEFINER: quem
--- exclui é o dono, sob a RLS, sem acesso à fila.
+-- The recording that goes takes the audio and `recordings/{id}/` (every revision). SECURITY DEFINER: the
+-- deleter is the owner, under RLS, with no access to the queue.
 CREATE FUNCTION eclume_recording_storage_deleted() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path = public, pg_temp
@@ -41,7 +41,7 @@ CREATE TRIGGER recordings_storage_delete
     AFTER DELETE ON recordings
     FOR EACH ROW EXECUTE FUNCTION eclume_recording_storage_deleted();
 
--- O upload em andamento que sai (exclusão da conta) aborta o multipart dele.
+-- The in-progress upload that goes (account deletion) aborts its multipart.
 CREATE FUNCTION eclume_upload_storage_deleted() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path = public, pg_temp

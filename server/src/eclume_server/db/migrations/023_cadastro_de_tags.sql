@@ -1,11 +1,11 @@
--- 023_cadastro_de_tags — as tags ganham cadastro por conta, fixo por padrão (holetz/eclume#78).
+-- 023_cadastro_de_tags — tags gain a per-account registry, fixed by default (holetz/eclume#78).
 --
--- `tags` é o cadastro do usuário: nome, descrição ("quando usar") e origem (`user`, ou `auto` quando
--- o agente criou). No modo padrão (`users.tag_mode = 'fixed'`), o agente só escolhe entre as tags
--- cadastradas; no autogerenciado (`auto`), pode criar até `tag_new_limit` por gravação, sempre
--- preferindo reusar, até o teto de tags do cadastro. `recordings.tags` continua sendo o valor que a
--- busca, a biblioteca e a exportação leem: o cadastro fica ao lado, e renomear, mesclar e excluir
--- mexem nos dois. Padrões em docs/standards/code/processamento-automatico.md.
+-- `tags` is the user's registry: name, description ("quando usar") and source (`user`, or `auto` when
+-- the agent created it). In the default mode (`users.tag_mode = 'fixed'`), the agent only chooses among the registered
+-- tags; in the self-managed one (`auto`), it can create up to `tag_new_limit` per recording, always
+-- preferring reuse, up to the registry's tag ceiling. `recordings.tags` is still the value that
+-- search, the library and export read: the registry sits beside it, and rename, merge and delete
+-- touch both. Patterns in docs/standards/code/processamento-automatico.md.
 
 CREATE TABLE tags (
     id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -16,15 +16,15 @@ CREATE TABLE tags (
     created_at   timestamptz NOT NULL DEFAULT now(),
     updated_at   timestamptz NOT NULL DEFAULT now()
 );
--- Uma tag por nome, sem acento e sem caixa.
+-- One tag per name, accent- and case-insensitive.
 CREATE UNIQUE INDEX tags_owner_name_idx ON tags (owner_id, lower(eclume_unaccent(name)));
 
 ALTER TABLE users
     ADD COLUMN tag_mode       text NOT NULL DEFAULT 'fixed' CHECK (tag_mode IN ('fixed', 'auto')),
     ADD COLUMN tag_new_limit  integer NOT NULL DEFAULT 1 CHECK (tag_new_limit BETWEEN 0 AND 5);
 
--- Cadastra as tags já usadas nas gravações e nas tags padrão dos tipos, com a grafia mais usada de
--- cada nome (sem acento e sem caixa).
+-- Registers the tags already used in the recordings and in the types' default tags, with the most used spelling of
+-- each name (accent- and case-insensitive).
 INSERT INTO tags (owner_id, name)
 SELECT owner_id, mode() WITHIN GROUP (ORDER BY tag)
 FROM (
@@ -35,7 +35,7 @@ FROM (
 WHERE btrim(tag) <> '' AND char_length(tag) <= 64
 GROUP BY owner_id, lower(eclume_unaccent(tag));
 
--- As gravações passam a usar a grafia do cadastro, sem repetir a mesma tag escrita de dois jeitos.
+-- The recordings now use the registry's spelling, without repeating the same tag written two ways.
 UPDATE recordings r
 SET tags = coalesce(
     (
@@ -51,7 +51,7 @@ SET tags = coalesce(
 )
 WHERE cardinality(r.tags) > 0;
 
--- A conta nova recebe no cadastro as tags padrão dos tipos que ganha.
+-- A new account receives in the registry the default tags of the types it gets.
 CREATE OR REPLACE FUNCTION eclume_seed_user_defaults(target uuid) RETURNS void
     LANGUAGE plpgsql
     AS $$
@@ -79,5 +79,5 @@ ALTER TABLE tags FORCE ROW LEVEL SECURITY;
 CREATE POLICY tags_own ON tags
     USING (owner_id = eclume_user()) WITH CHECK (owner_id = eclume_user());
 GRANT SELECT, INSERT, UPDATE, DELETE ON tags TO eclume_app;
--- Já coberto pelo ALTER DEFAULT PRIVILEGES da 006 (mesmo migrador); repetido por clareza.
+-- Already covered by the ALTER DEFAULT PRIVILEGES of 006 (same migrator); repeated for clarity.
 GRANT SELECT, INSERT, UPDATE, DELETE ON tags TO eclume_server;
