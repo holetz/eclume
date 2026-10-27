@@ -1,4 +1,4 @@
-"""`/admin/health`: filas, heartbeat do worker GPU, jobs, etapas do pipeline, serviços e falhas."""
+"""`/admin/health`: queues, GPU worker heartbeat, jobs, pipeline steps, services and failures."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def cache(services: Services) -> Iterator[redis.Redis]:
     client.close()
 
 
-def test_sem_worker_e_sem_jobs(
+def test_no_worker_and_no_jobs(
     admin: Api, cache: redis.Redis, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     cache.delete(GPU_HEALTH_KEY)
@@ -71,7 +71,7 @@ def test_sem_worker_e_sem_jobs(
     assert user.pat("recordings:read").get(URL).status_code == 401
 
 
-def test_heartbeat_fila_e_progresso(
+def test_heartbeat_queue_and_progress(
     admin: Api,
     cache: redis.Redis,
     as_user: Callable[[Account], Api],
@@ -82,7 +82,7 @@ def test_heartbeat_fila_e_progresso(
     alice, bob = as_user(make_user()), as_user(make_user())
     own = upload_file(alice, audio_bytes(1200), title="Reunião da Alice")
     private = upload_file(bob, audio_bytes(1300), title="Entrevista sigilosa")
-    # O primeiro job está rodando no worker: arq marca `in-progress` e o worker grava o progresso.
+    # The first job is running on the worker: arq marks `in-progress` and the worker writes the progress.
     running_job = transcribe_job_id(own["id"], 1)
     cache.set(f"arq:in-progress:{running_job}", b"1")
     cache.hset(
@@ -123,7 +123,7 @@ def test_heartbeat_fila_e_progresso(
     assert jobs[own["id"]]["updated_at"] == "2026-09-25T12:00:01Z"
     assert jobs[private["id"]]["state"] == "queued"
     assert jobs[private["id"]]["progress"] is None
-    # O admin vê os jobs de todos, mas nunca o conteúdo: nenhum título de gravação.
+    # The admin sees everyone's jobs, but never the content: no recording title.
     assert {job["recording_title"] for job in jobs.values()} == {"Gravação de usuário"}
     assert "Entrevista sigilosa" not in admin.get(URL).text
 
@@ -133,7 +133,7 @@ def test_heartbeat_fila_e_progresso(
     assert admin.get(URL).json()["running_jobs"] == []
 
 
-def test_saude_ignora_progresso_de_outra_revisao(
+def test_health_ignores_progress_of_another_revision(
     admin: Api,
     cache: redis.Redis,
     as_user: Callable[[Account], Api],
@@ -154,7 +154,7 @@ def test_saude_ignora_progresso_de_outra_revisao(
         run_cpu(services.settings)
 
 
-def test_falhas_recentes_da_plataforma(
+def test_recent_platform_failures(
     admin: Api,
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
@@ -175,7 +175,7 @@ def test_falhas_recentes_da_plataforma(
     assert "Vai falhar" not in admin.get(URL).text
 
 
-def test_admin_retenta_o_job_que_falhou_de_qualquer_usuario(
+def test_admin_retries_the_failed_job_of_any_user(
     admin: Api,
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
@@ -201,7 +201,7 @@ def test_admin_retenta_o_job_que_falhou_de_qualquer_usuario(
     after = member.get(f"/api/v1/recordings/{recording['id']}").json()
     assert after["status"] == "queued"
     assert after["job"]["id"] == body["job_id"]
-    # O job antigo não é mais o mais recente, e o novo ainda não falhou.
+    # The old job is no longer the latest, and the new one has not failed yet.
     assert admin.post(retry).status_code == 409
     assert admin.post(f"/api/v1/admin/jobs/{body['job_id']}/retry").status_code == 409
 
@@ -210,7 +210,7 @@ def test_admin_retenta_o_job_que_falhou_de_qualquer_usuario(
     assert member.get(f"/api/v1/recordings/{recording['id']}").json()["status"] == "transcribed"
 
 
-def test_etapas_das_ultimas_24h(
+def test_steps_of_the_last_24h(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     before = {step["step"]: step for step in admin.get(URL).json()["steps"]}
@@ -222,16 +222,16 @@ def test_etapas_das_ultimas_24h(
     after = {step["step"]: step for step in admin.get(URL).json()["steps"]}
     assert after["transcription"]["runs"] == before["transcription"]["runs"] + 1
     assert after["transcription"]["median_ms"] is not None
-    # Sem provider, campos, tipo e resumo saem pulados: não contam como execução.
+    # Without a provider, fields, type and summary come out skipped: they do not count as runs.
     assert after["fields"]["runs"] == before["fields"]["runs"]
 
-    # Uma etapa por agente que falhou aparece sem job (não há o que o admin retente).
+    # A failed agent step shows up without a job (there is nothing for the admin to retry).
     admin.post("/api/v1/admin/agent-providers", json={"name": "Claude", "kind": "claude-cli", "model": "sonnet"})
     upload_file(user, audio_bytes(1500))
     run_gpu(services.settings)
     run_cpu(services.settings, FakeAgents(errors=[ProviderError("provider_auth", "Not logged in")]))
     body = admin.get(URL).json()
-    # A cadeia começa pelo tipo de agenda: é a primeira etapa por agente a falhar.
+    # The chain starts with the agenda type: it is the first agent step to fail.
     type_failure = next(f for f in body["recent_failures"] if f["step"] == "agenda_type")
     assert (type_failure["job_id"], type_failure["retryable"], type_failure["code"]) == (
         None,
@@ -241,7 +241,7 @@ def test_etapas_das_ultimas_24h(
     assert {s["step"]: s for s in body["steps"]}["agenda_type"]["failures"] >= 1
 
 
-def test_servicos(admin: Api, cache: redis.Redis):
+def test_services(admin: Api, cache: redis.Redis):
     cache.delete(GPU_HEALTH_KEY, CPU_HEALTH_KEY, AGENT_HEALTH_KEY)
     services = {item["name"]: item for item in admin.get(URL).json()["services"]}
     assert list(services) == ["api", "postgres", "redis", "storage", "gpu_worker", "cpu_worker", "mcp"]
@@ -263,7 +263,7 @@ def test_servicos(admin: Api, cache: redis.Redis):
     cache.set(CPU_HEALTH_KEY, b"Oct-01 12:00:00 j_complete=1")
     services = {item["name"]: item for item in admin.get(URL).json()["services"]}
     assert (services["gpu_worker"]["status"], services["gpu_worker"]["detail"]) == ("healthy", "whisperx-local")
-    # Só o worker da ingestão de pé: o de agentes falta.
+    # Only the ingestion worker is up: the agents one is missing.
     assert (services["cpu_worker"]["status"], services["cpu_worker"]["detail"]) == (
         "down",
         "sem worker em eclume:agents",
@@ -274,7 +274,7 @@ def test_servicos(admin: Api, cache: redis.Redis):
     cache.delete(CPU_HEALTH_KEY, AGENT_HEALTH_KEY)
 
 
-def test_servidor_mcp_conta_os_assistentes_das_ultimas_24h(
+def test_mcp_server_counts_the_assistants_of_the_last_24h(
     admin: Api, client: TestClient, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     def connected() -> int:
@@ -287,8 +287,8 @@ def test_servidor_mcp_conta_os_assistentes_das_ultimas_24h(
     before = connected()
     session = as_user(make_user())
     token = session.pat("recordings:read").token
-    session.pat("recordings:read").get("/api/v1/recordings")  # uso pela API não conta
-    for _ in range(2):  # o mesmo assistente duas vezes conta uma
+    session.pat("recordings:read").get("/api/v1/recordings")  # use through the API does not count
+    for _ in range(2):  # the same assistant twice counts once
         client.cookies.clear()
         response = client.post(
             "/mcp",
@@ -301,7 +301,7 @@ def test_servidor_mcp_conta_os_assistentes_das_ultimas_24h(
     assert connected_assistants(2) == "2 assistentes conectados nas últimas 24 h"
 
 
-def test_retentar_em_corrida_responde_409(
+def test_racing_retry_answers_409(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     member = as_user(make_user())
@@ -309,7 +309,7 @@ def test_retentar_em_corrida_responde_409(
     run_gpu(services.settings, fail=True)
     run_cpu(services.settings)
     failed_job = member.get(f"/api/v1/recordings/{recording['id']}").json()["job"]
-    # O primeiro pedido segura a gravação e cria a revisão 2; o segundo, à espera do lock, recebe 409.
+    # The first request holds the recording and creates revision 2; the second, waiting on the lock, gets 409.
     second = run(
         while_recording_locked(
             services,
@@ -332,7 +332,7 @@ def test_retentar_em_corrida_responde_409(
     run(services.sql(close))
 
 
-def test_jobs_retidos_por_vez_da_conta_e_por_janela(
+def test_jobs_held_by_account_turn_and_by_window(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     before = admin.get(URL).json()["held_jobs"]
@@ -341,7 +341,7 @@ def test_jobs_retidos_por_vez_da_conta_e_por_janela(
     upload_file(busy, audio_bytes(1500, seed="vez-2"))
     body = admin.get(URL).json()
     assert body["held_jobs"]["account_turn"] == before["account_turn"] + 1
-    # O retido não aparece como job em andamento: só o despachado.
+    # The held one does not show up as a running job: only the dispatched one.
     listed = {job["recording_id"] for job in body["running_jobs"]}
     assert first["id"] in listed
 
@@ -356,7 +356,7 @@ def test_jobs_retidos_por_vez_da_conta_e_por_janela(
     run(services.sql(exhaust))
     upload_file(out_of_minutes, audio_bytes(1500, seed="janela"))
     assert admin.get(URL).json()["held_jobs"]["gpu_minutes"] == before["gpu_minutes"] + 1
-    # Drena a vez da conta ocupada: a fila da GPU não fica com job para outro teste.
+    # Drain the busy account's turn: the GPU queue keeps no job for another test.
     run_gpu(services.settings)
     run_cpu(services.settings)
     run_gpu(services.settings)
