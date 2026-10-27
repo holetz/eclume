@@ -5,7 +5,7 @@ import { qrMatrix, qrRowPaths, QUIET_ZONE } from './qr'
 const PAIR_URL =
   'https://192.168.15.199:8443/parear?codigo=K7Q4MX&ca=3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d'
 
-/** Rasteriza os caminhos do SVG (só retângulos `M x y h n v1 h-n z`) em RGBA, como o navegador faria. */
+/** Rasterizes the SVG paths (only `M x y h n v1 h-n z` rectangles) into RGBA, as the browser would. */
 function rasterize(rows: string[], size: number, scale = 4) {
   const width = size * scale
   const pixels = new Uint8ClampedArray(width * width * 4).fill(255)
@@ -22,14 +22,14 @@ function rasterize(rows: string[], size: number, scale = 4) {
   return { pixels, width }
 }
 
-describe('QR do pareamento', () => {
-  it('ida e volta: o que o SVG desenha o leitor devolve igual', () => {
+describe('pairing QR', () => {
+  it('round trip: what the SVG draws the reader returns unchanged', () => {
     const matrix = qrMatrix(PAIR_URL)
     const { pixels, width } = rasterize(qrRowPaths(matrix), matrix.size + 2 * QUIET_ZONE)
     expect(jsQR(pixels, width, width)?.data).toBe(PAIR_URL)
   })
 
-  it('deixa a zona de silêncio de 4 módulos em volta', () => {
+  it('leaves the 4-module quiet zone around it', () => {
     const matrix = qrMatrix('https://exemplo/parear?codigo=ABCDEF')
     const rows = qrRowPaths(matrix)
     const coords = rows.flatMap((d) => [...d.matchAll(/M(\d+) (\d+)/g)].map(([, x, y]) => [+x, +y]))
