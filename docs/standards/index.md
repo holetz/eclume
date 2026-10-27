@@ -56,6 +56,6 @@ standard per file; subfolders by **subject**. Each doc has `type: standard` and 
 ### design/
 | Doc | Covers |
 | --- | --- |
-| [brand.md](design/brand.md) | A identidade visual do eclume — linho e nogueira, Archivo com IBM Plex Mono, raio zero, fios de 2px e terracota só para gravação e falha — com os papéis dos tokens, o vocabulário de componentes e os compromissos projetados no DESIGN.md. |
-| [production.md](design/production.md) | O portão para produzir um artefato com a marca do eclume a partir de uma fonte única de tokens, em web, Typst e PDF. |
+| [brand.md](design/brand.md) | The eclume visual identity — linen and walnut, Archivo with IBM Plex Mono, zero radius, 2px rules and terracotta only for recording and failure — with the token roles, the component vocabulary and the commitments projected into DESIGN.md. |
+| [production.md](design/production.md) | The gate for producing an artifact with the eclume brand from a single token source, across web, Typst and PDF. |
 <!-- END GENERATED -->
