@@ -13,7 +13,7 @@ interface SegmentEditorProps {
   onClose: () => void
 }
 
-/** Correção do texto de uma fala. Salva com Ctrl+Enter e cancela com Esc. */
+/** Correction of a segment's text. Saves with Ctrl+Enter and cancels with Esc. */
 export function SegmentEditor({ transcriptId, segment, label, onClose }: SegmentEditorProps) {
   const queryClient = useQueryClient()
   const [text, setText] = useState(segment.text)
