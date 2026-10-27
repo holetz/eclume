@@ -7147,12 +7147,12 @@ components:
           type: [string, "null"]
         instructions:
           description: |
-            "Quando incluir": a regra que o agente segue para pôr a gravação na coleção. Pode falar
-            do assunto, do tipo de agenda e dos participantes (empresa, área, cargo, tags de pessoa).
+            "Quando incluir": the rule the agent follows to put the recording in the collection. It may
+            speak of the subject, the agenda type and the participants (company, area, role, person tags).
           type: string
           maxLength: 4000
         auto_assign:
-          description: Com regra, o agente inclui as gravações depois da transcrição.
+          description: With a rule, the agent adds the recordings after transcription.
           type: boolean
         recording_count:
           type: integer
@@ -7203,7 +7203,7 @@ components:
       required: [into]
       properties:
         into:
-          description: A coleção que recebe as gravações; outra que não a mesclada.
+          description: The collection that receives the recordings; one other than the merged one.
           type: string
           format: uuid
 
@@ -7230,15 +7230,15 @@ components:
           minLength: 1
           maxLength: 64
         description:
-          description: '"Quando usar": vai ao agente junto com o nome.'
+          description: '"Quando usar": goes to the agent together with the name.'
           type: string
           maxLength: 4000
         origin:
-          description: "`user` (cadastrada pelo usuário) ou `auto` (criada pelo agente no modo autogerenciado)."
+          description: "`user` (registered by the user) or `auto` (created by the agent in self-managed mode)."
           type: string
           enum: [user, auto]
         count:
-          description: Gravações com a tag.
+          description: Recordings with the tag.
           type: integer
           minimum: 0
         created_at:
@@ -7286,7 +7286,7 @@ components:
       required: [into]
       properties:
         into:
-          description: A tag que fica; outra que não a mesclada.
+          description: The tag that stays; one other than the merged one.
           type: string
           format: uuid
 
@@ -7295,27 +7295,27 @@ components:
       required: [auto_fill, instructions, mode, new_limit, catalog_count, catalog_limit]
       properties:
         auto_fill:
-          description: O agente atribui tags depois da transcrição.
+          description: The agent assigns tags after transcription.
           type: boolean
         instructions:
-          description: A regra geral das tags (a do campo embutido Tags).
+          description: The general rule of the tags (that of the built-in Tags field).
           type: string
           maxLength: 4000
         mode:
-          description: "`fixed`: só as tags cadastradas; `auto`: o agente pode criar tags novas."
+          description: "`fixed`: only the registered tags; `auto`: the agent may create new tags."
           type: string
           enum: [fixed, auto]
         new_limit:
-          description: No modo `auto`, quantas tags novas o agente pode criar por gravação.
+          description: In `auto` mode, how many new tags the agent may create per recording.
           type: integer
           minimum: 1
           maximum: 5
         catalog_count:
-          description: Tags no cadastro.
+          description: Tags in the catalog.
           type: integer
           minimum: 0
         catalog_limit:
-          description: Acima deste tamanho do cadastro, o agente não cria mais tags.
+          description: Above this catalog size, the agent creates no more tags.
           type: integer
           minimum: 1
 
@@ -7328,14 +7328,14 @@ components:
           minLength: 1
           format: password
         new_password:
-          description: Ao menos 12 caracteres, como no cadastro.
+          description: At least 12 characters, as at sign-up.
           type: string
           minLength: 1
           format: password
         revoke_tokens:
           description: |
-            Desde a 2.14.0. `true` revoga também as credenciais de aparelho e os PATs da conta (os
-            aparelhos pedem login de novo); ausente vale `false`.
+            Since 2.14.0. `true` also revokes the account's device credentials and PATs (the
+            devices ask for a login again); absent means `false`.
           type: boolean
           default: false
 
@@ -7344,7 +7344,7 @@ components:
       required: [password]
       properties:
         password:
-          description: A senha da conta, que confirma a exclusão.
+          description: The account's password, which confirms the deletion.
           type: string
           minLength: 1
           format: password
@@ -7380,22 +7380,22 @@ components:
           maxLength: 120
         title_pattern:
           description: |
-            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-            título automático fica como está.
+            Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+            `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+            pattern, the automatic title stays as it is.
           type: [string, "null"]
           maxLength: 300
         title_instructions:
           description: |
-            Como escrever o `{assunto}` do título (a regra que o agente segue). Vazia, vale a do tipo
-            padrão da conta.
+            How to write the title's `{assunto}` (the rule the agent follows). Empty, the account's
+            fallback agenda type's rule applies.
           type: string
           maxLength: 4000
         identify:
-          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          description: How to recognise a recording of this type; the detection agent reads this text.
           type: string
         default_tags:
-          description: Tags somadas às automáticas quando o tipo é aplicado.
+          description: Tags added to the automatic ones when the type is applied.
           type: array
           maxItems: 20
           items:
@@ -7403,21 +7403,21 @@ components:
             minLength: 1
             maxLength: 64
         summary_instructions:
-          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          description: Instructions of the summary, in Markdown; the server appends the transcript.
           type: string
           minLength: 1
         position:
-          description: Ordem na lista do usuário.
+          description: Order in the user's list.
           type: integer
           minimum: 0
         fallback:
           description: |
-            O tipo padrão da conta: aplicado quando nenhum outro tipo se encaixa com confiança, sem
-            outros tipos, sem agente de detecção ou com a detecção falha. Não pode ser excluído.
+            The account's fallback agenda type: applied when no other type fits with confidence, with
+            no other types, with no detection agent or when detection fails. It cannot be deleted.
           type: boolean
 
     AgendaTypeDraft:
-      description: O conteúdo de um tipo de agenda, salvo ou em rascunho.
+      description: The content of an agenda type, saved or in draft.
       type: object
       additionalProperties: false
       required: [name, summary_instructions]
@@ -7428,21 +7428,21 @@ components:
           maxLength: 120
         title_pattern:
           description: |
-            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-            título automático fica como está.
+            Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+            `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+            pattern, the automatic title stays as it is.
           type: [string, "null"]
           maxLength: 300
         title_instructions:
-          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          description: How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies.
           type: string
           maxLength: 4000
         identify:
-          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          description: How to recognise a recording of this type; the detection agent reads this text.
           type: string
           maxLength: 4000
         default_tags:
-          description: Tags somadas às automáticas quando o tipo é aplicado.
+          description: Tags added to the automatic ones when the type is applied.
           type: array
           maxItems: 20
           items:
@@ -7450,7 +7450,7 @@ components:
             minLength: 1
             maxLength: 64
         summary_instructions:
-          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          description: Instructions of the summary, in Markdown; the server appends the transcript.
           type: string
           minLength: 1
           maxLength: 4000
@@ -7466,21 +7466,21 @@ components:
           maxLength: 120
         title_pattern:
           description: |
-            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-            título automático fica como está.
+            Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+            `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+            pattern, the automatic title stays as it is.
           type: [string, "null"]
           maxLength: 300
         title_instructions:
-          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          description: How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies.
           type: string
           maxLength: 4000
         identify:
-          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          description: How to recognise a recording of this type; the detection agent reads this text.
           type: string
           maxLength: 4000
         default_tags:
-          description: Tags somadas às automáticas quando o tipo é aplicado.
+          description: Tags added to the automatic ones when the type is applied.
           type: array
           maxItems: 20
           items:
@@ -7488,12 +7488,12 @@ components:
             minLength: 1
             maxLength: 64
         summary_instructions:
-          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          description: Instructions of the summary, in Markdown; the server appends the transcript.
           type: string
           minLength: 1
           maxLength: 4000
         position:
-          description: Sem valor, o fim da lista.
+          description: Without a value, the end of the list.
           type: integer
           minimum: 0
 
@@ -7508,21 +7508,21 @@ components:
           maxLength: 120
         title_pattern:
           description: |
-            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-            título automático fica como está.
+            Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+            `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+            pattern, the automatic title stays as it is.
           type: [string, "null"]
           maxLength: 300
         title_instructions:
-          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          description: How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies.
           type: string
           maxLength: 4000
         identify:
-          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          description: How to recognise a recording of this type; the detection agent reads this text.
           type: string
           maxLength: 4000
         default_tags:
-          description: Tags somadas às automáticas quando o tipo é aplicado.
+          description: Tags added to the automatic ones when the type is applied.
           type: array
           maxItems: 20
           items:
@@ -7530,7 +7530,7 @@ components:
             minLength: 1
             maxLength: 64
         summary_instructions:
-          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          description: Instructions of the summary, in Markdown; the server appends the transcript.
           type: string
           minLength: 1
           maxLength: 4000
@@ -7562,22 +7562,22 @@ components:
           maxLength: 120
         title_pattern:
           description: |
-            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-            título automático fica como está.
+            Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+            `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+            pattern, the automatic title stays as it is.
           type: [string, "null"]
           maxLength: 300
         title_instructions:
           description: |
-            Como escrever o `{assunto}` do título (a regra que o agente segue). Vazia, vale a do tipo
-            padrão da conta.
+            How to write the title's `{assunto}` (the rule the agent follows). Empty, the account's
+            fallback agenda type's rule applies.
           type: string
           maxLength: 4000
         identify:
-          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          description: How to recognise a recording of this type; the detection agent reads this text.
           type: string
         default_tags:
-          description: Tags somadas às automáticas quando o tipo é aplicado.
+          description: Tags added to the automatic ones when the type is applied.
           type: array
           maxItems: 20
           items:
@@ -7585,15 +7585,15 @@ components:
             minLength: 1
             maxLength: 64
         summary_instructions:
-          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          description: Instructions of the summary, in Markdown; the server appends the transcript.
           type: string
           minLength: 1
         position:
-          description: Ordem na lista do usuário.
+          description: Order in the user's list.
           type: integer
           minimum: 0
         include_for_new_users:
-          description: Copiado para cada conta criada depois.
+          description: Copied to each account created afterwards.
           type: boolean
 
     DefaultAgendaTypeCreate:
@@ -7607,21 +7607,21 @@ components:
           maxLength: 120
         title_pattern:
           description: |
-            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-            título automático fica como está.
+            Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+            `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+            pattern, the automatic title stays as it is.
           type: [string, "null"]
           maxLength: 300
         title_instructions:
-          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          description: How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies.
           type: string
           maxLength: 4000
         identify:
-          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          description: How to recognise a recording of this type; the detection agent reads this text.
           type: string
           maxLength: 4000
         default_tags:
-          description: Tags somadas às automáticas quando o tipo é aplicado.
+          description: Tags added to the automatic ones when the type is applied.
           type: array
           maxItems: 20
           items:
@@ -7629,16 +7629,16 @@ components:
             minLength: 1
             maxLength: 64
         summary_instructions:
-          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          description: Instructions of the summary, in Markdown; the server appends the transcript.
           type: string
           minLength: 1
           maxLength: 4000
         position:
-          description: Sem valor, o fim da lista.
+          description: Without a value, the end of the list.
           type: integer
           minimum: 0
         include_for_new_users:
-          description: Sem valor, `true`.
+          description: Without a value, `true`.
           type: boolean
 
     DefaultAgendaTypePatch:
@@ -7652,21 +7652,21 @@ components:
           maxLength: 120
         title_pattern:
           description: |
-            Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-            `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-            título automático fica como está.
+            Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+            `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+            pattern, the automatic title stays as it is.
           type: [string, "null"]
           maxLength: 300
         title_instructions:
-          description: Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta.
+          description: How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies.
           type: string
           maxLength: 4000
         identify:
-          description: Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto.
+          description: How to recognise a recording of this type; the detection agent reads this text.
           type: string
           maxLength: 4000
         default_tags:
-          description: Tags somadas às automáticas quando o tipo é aplicado.
+          description: Tags added to the automatic ones when the type is applied.
           type: array
           maxItems: 20
           items:
@@ -7674,7 +7674,7 @@ components:
             minLength: 1
             maxLength: 64
         summary_instructions:
-          description: Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor.
+          description: Instructions of the summary, in Markdown; the server appends the transcript.
           type: string
           minLength: 1
           maxLength: 4000
@@ -7682,7 +7682,7 @@ components:
           type: integer
           minimum: 0
         include_for_new_users:
-          description: Copiado para cada conta criada depois.
+          description: Copied to each account created afterwards.
           type: boolean
 
     DefaultAgendaTypePage:
@@ -7697,7 +7697,7 @@ components:
           $ref: "#/components/schemas/NextCursor"
 
     FieldKind:
-      description: "`text` e `choice` guardam uma string; `list`, um array de strings."
+      description: "`text` and `choice` hold a string; `list`, an array of strings."
       type: string
       enum: [text, list, choice]
 
@@ -7709,11 +7709,11 @@ components:
           type: string
           format: uuid
         key:
-          description: Slug do nome, único na conta; o marcador `{key}` do padrão de título.
+          description: Slug of the name, unique in the account; the `{key}` placeholder of the title pattern.
           type: string
           pattern: "^[a-z0-9_]{1,64}$"
         builtin:
-          description: Campo embutido (não sai nem muda de `kind`); `null` nos do usuário.
+          description: Built-in field (it is neither removed nor changes `kind`); `null` in the user's own.
           type: [string, "null"]
           enum: [title, tags, null]
         name:
@@ -7723,7 +7723,7 @@ components:
         kind:
           $ref: "#/components/schemas/FieldKind"
         options:
-          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          description: The options of a `choice` field (at least one); empty in the other kinds.
           type: array
           maxItems: 50
           items:
@@ -7731,17 +7731,17 @@ components:
             minLength: 1
             maxLength: 120
         instructions:
-          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          description: The rule ("como identificar") the agent follows when filling the field.
           type: string
         auto_fill:
-          description: Preencher automaticamente depois da transcrição.
+          description: Fill automatically after transcription.
           type: boolean
         position:
           type: integer
           minimum: 0
 
     FieldDraft:
-      description: O conteúdo de um campo, salvo ou em rascunho.
+      description: The content of a field, saved or in draft.
       type: object
       additionalProperties: false
       required: [name, kind]
@@ -7753,7 +7753,7 @@ components:
         kind:
           $ref: "#/components/schemas/FieldKind"
         options:
-          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          description: The options of a `choice` field (at least one); empty in the other kinds.
           type: array
           maxItems: 50
           items:
@@ -7761,11 +7761,11 @@ components:
             minLength: 1
             maxLength: 120
         instructions:
-          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          description: The rule ("como identificar") the agent follows when filling the field.
           type: string
           maxLength: 4000
         auto_fill:
-          description: Preencher automaticamente depois da transcrição.
+          description: Fill automatically after transcription.
           type: boolean
 
     FieldCreate:
@@ -7780,7 +7780,7 @@ components:
         kind:
           $ref: "#/components/schemas/FieldKind"
         options:
-          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          description: The options of a `choice` field (at least one); empty in the other kinds.
           type: array
           maxItems: 50
           items:
@@ -7788,14 +7788,14 @@ components:
             minLength: 1
             maxLength: 120
         instructions:
-          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          description: The rule ("como identificar") the agent follows when filling the field.
           type: string
           maxLength: 4000
         auto_fill:
-          description: Preencher automaticamente depois da transcrição.
+          description: Fill automatically after transcription.
           type: boolean
         position:
-          description: Sem valor, o fim da lista.
+          description: Without a value, the end of the list.
           type: integer
           minimum: 0
 
@@ -7811,7 +7811,7 @@ components:
         kind:
           $ref: "#/components/schemas/FieldKind"
         options:
-          description: As opções de um campo `choice` (ao menos uma); vazia nos outros tipos.
+          description: The options of a `choice` field (at least one); empty in the other kinds.
           type: array
           maxItems: 50
           items:
@@ -7819,11 +7819,11 @@ components:
             minLength: 1
             maxLength: 120
         instructions:
-          description: A regra ("como identificar") que o agente segue ao preencher o campo.
+          description: The rule ("como identificar") the agent follows when filling the field.
           type: string
           maxLength: 4000
         auto_fill:
-          description: Preencher automaticamente depois da transcrição.
+          description: Fill automatically after transcription.
           type: boolean
         position:
           type: integer
@@ -7841,7 +7841,7 @@ components:
           $ref: "#/components/schemas/NextCursor"
 
     FieldValue:
-      description: "`text`/`choice` → string; `list` → array de strings; `null` = sem valor."
+      description: "`text`/`choice` → string; `list` → array of strings; `null` = no value."
       oneOf:
         - type: string
         - type: array
@@ -7851,8 +7851,8 @@ components:
 
     FieldValueOrigin:
       description: |
-        `auto`: o agente preencheu; `edited`: o usuário escreveu; `accepted`: o usuário aceitou o
-        automático. `edited` e `accepted` nunca são sobrescritos por um preenchimento automático.
+        `auto`: the agent filled it; `edited`: the user wrote it; `accepted`: the user accepted the
+        automatic value. `edited` and `accepted` are never overwritten by an automatic fill.
       type: string
       enum: [auto, edited, accepted]
 
@@ -7888,8 +7888,8 @@ components:
       properties:
         value:
           description: |
-            `text`/`choice` → até 300 caracteres; `list` → até 50 itens de até 300 caracteres (64
-            nas tags); `null` limpa (menos o título).
+            `text`/`choice` → up to 300 characters; `list` → up to 50 items of up to 300 characters (64
+            for tags); `null` clears (except the title).
           oneOf:
             - type: string
               maxLength: 300
@@ -7908,7 +7908,7 @@ components:
         field:
           $ref: "#/components/schemas/FieldDraft"
         recording_ids:
-          description: Gravações transcritas do usuário; sem elas, as 3 mais recentes.
+          description: Transcribed recordings of the user; without them, the 3 most recent.
           type: array
           maxItems: 3
           items:
@@ -7923,13 +7923,14 @@ components:
         agenda_type:
           $ref: "#/components/schemas/AgendaTypeDraft"
         recording_id:
-          description: Uma gravação transcrita do usuário.
+          description: A transcribed recording of the user.
           type: string
           format: uuid
         agenda_type_id:
           description: >-
-            O tipo salvo que o rascunho edita, que sai da concorrência no lugar dele; sem ele, sai o de
-            mesmo nome. Rascunho do tipo padrão não concorre: fica quando nenhum outro serve.
+            The saved type the draft edits, which leaves the competition in its place; without it, the
+            one with the same name leaves. A draft of the fallback agenda type does not compete: it
+            stays for when no other fits.
           type: [string, "null"]
           format: uuid
 
@@ -7955,29 +7956,30 @@ components:
         recording_title:
           type: string
         detected:
-          description: A detecção escolheu o rascunho.
+          description: Detection chose the draft.
           type: boolean
         detected_type_name:
-          description: O tipo que a gravação teria (o rascunho, um dos salvos ou o tipo padrão).
+          description: The type the recording would get (the draft, one of the saved ones or the fallback agenda type).
           type: string
         fallback:
           description: >-
-            Nenhum tipo serviu, ou a confiança ficou abaixo de 0,6: a gravação teria o tipo padrão.
+            No type fitted, or the confidence fell below 0.6: the recording would get the fallback
+            agenda type.
           type: boolean
         confidence:
           type: [number, "null"]
           minimum: 0
           maximum: 1
         title:
-          description: O título que o rascunho aplicaria.
+          description: The title the draft would apply.
           type: string
         tags:
-          description: As tags da gravação com as tags padrão do rascunho.
+          description: The recording's tags with the draft's default tags.
           type: array
           items:
             type: string
         summary_md:
-          description: O resumo com as instruções do rascunho.
+          description: The summary with the draft's instructions.
           type: string
 
     Preview:
@@ -7994,14 +7996,14 @@ components:
           type: string
           enum: [queued, running, done, failed]
         items:
-          description: "Com `status: done`: um item por gravação testada."
+          description: "With `status: done`: one item per tested recording."
           type: array
           items:
             oneOf:
               - $ref: "#/components/schemas/FieldPreviewItem"
               - $ref: "#/components/schemas/AgendaTypePreviewItem"
         error:
-          description: "Com `status: failed`; `no_provider` quando a finalidade não tem provider."
+          description: "With `status: failed`; `no_provider` when the purpose has no provider."
           oneOf:
             - type: object
               required: [code, message]
@@ -8021,7 +8023,7 @@ components:
           minLength: 1
           maxLength: 4000
         history:
-          description: As últimas mensagens da conversa, em ordem; o server não guarda o histórico.
+          description: The last messages of the conversation, in order; the server does not keep the history.
           type: array
           maxItems: 10
           items:
@@ -8060,21 +8062,21 @@ components:
           type: string
           enum: [queued, running, done, failed]
         answer:
-          description: "Com `status: done`: a resposta em Markdown."
+          description: "With `status: done`: the answer in Markdown."
           type: [string, "null"]
         sources:
-          description: As gravações consultadas em que a resposta se apoia.
+          description: The consulted recordings the answer rests on.
           type: array
           items:
             $ref: "#/components/schemas/BaseChatSource"
         queries:
-          description: Quantas consultas à base o agente fez.
+          description: How many queries to the base the agent made.
           type: integer
           minimum: 0
         model:
           type: [string, "null"]
         error:
-          description: "Com `status: failed`; `no_provider` quando a finalidade `chat` não tem provider."
+          description: "With `status: failed`; `no_provider` when the `chat` purpose has no provider."
           oneOf:
             - type: object
               required: [code, message]
@@ -8093,14 +8095,14 @@ components:
           type: string
           format: uuid
         title:
-          description: Vazio até a primeira pergunta, que dá o título.
+          description: Empty until the first question, which gives the title.
           type: string
           maxLength: 120
         created_at:
           type: string
           format: date-time
         updated_at:
-          description: A última atividade (pergunta ou resposta).
+          description: The last activity (question or answer).
           type: string
           format: date-time
 
@@ -8121,7 +8123,7 @@ components:
           maxLength: 120
 
     AgentSessionDetail:
-      description: Uma `AgentSession` com as mensagens e os anexos ainda não enviados.
+      description: An `AgentSession` with the messages and the attachments not yet sent.
       type: object
       required: [id, title, created_at, updated_at, messages, pending_files]
       properties:
@@ -8142,7 +8144,7 @@ components:
           items:
             $ref: "#/components/schemas/AgentMessage"
         pending_files:
-          description: Os anexos ainda não enviados com uma pergunta.
+          description: The attachments not yet sent with a question.
           type: array
           items:
             $ref: "#/components/schemas/AgentFile"
@@ -8158,11 +8160,11 @@ components:
           type: string
           format: uuid
         message_id:
-          description: A pergunta que levou o anexo ou a resposta que gerou o arquivo; nulo no anexo não enviado.
+          description: The question that carried the attachment or the answer that produced the file; null on an attachment not yet sent.
           type: [string, "null"]
           format: uuid
         direction:
-          description: "`input` é anexo da pessoa; `output`, arquivo gerado pelo agente."
+          description: "`input` is an attachment of the person; `output`, a file produced by the agent."
           type: string
           enum: [input, output]
         name:
@@ -8173,7 +8175,7 @@ components:
           type: integer
           minimum: 0
         text_chars:
-          description: Caracteres do texto extraído do anexo (0 é anexo sem texto legível); nulo no gerado.
+          description: Characters of the text extracted from the attachment (0 is an attachment with no readable text); null on a produced file.
           type: [integer, "null"]
           minimum: 0
         created_at:
@@ -8194,27 +8196,27 @@ components:
           type: string
           enum: [user, assistant]
         content:
-          description: A pergunta, ou a resposta em Markdown (vazia até `done`).
+          description: The question, or the answer in Markdown (empty until `done`).
           type: string
         status:
-          description: A pergunta é sempre `done`; a resposta vai de `queued` a `done` ou `failed`.
+          description: The question is always `done`; the answer goes from `queued` to `done` or `failed`.
           type: string
           enum: [queued, running, done, failed]
         sources:
-          description: As gravações consultadas em que a resposta se apoia.
+          description: The consulted recordings the answer rests on.
           type: array
           items:
             $ref: "#/components/schemas/BaseChatSource"
         queries:
-          description: Quantas ferramentas o agente chamou.
+          description: How many tools the agent called.
           type: integer
           minimum: 0
         model:
           type: [string, "null"]
         error:
           description: >-
-            Com `status: failed`; `no_provider` sem provider para o `chat`, `agent_expired` quando a
-            resposta passou de 15 minutos em aberto.
+            With `status: failed`; `no_provider` with no provider for `chat`, `agent_expired` when the
+            answer stayed open for more than 15 minutes.
           oneOf:
             - type: object
               required: [code, message]
@@ -8225,15 +8227,15 @@ components:
                   type: string
             - type: "null"
         files:
-          description: Os anexos da pergunta ou os arquivos gerados pela resposta.
+          description: The question's attachments or the files the answer produced.
           type: array
           items:
             $ref: "#/components/schemas/AgentFile"
         skill:
-          description: Desde a 2.24.0. O nome da habilidade escolhida na pergunta (o nome na hora).
+          description: Since 2.24.0. The name of the skill chosen in the question (the name at that time).
           type: [string, "null"]
         actions:
-          description: Desde a 2.24.0. As propostas de ação da resposta, que a pessoa confirma ou descarta.
+          description: Since 2.24.0. The answer's action proposals, which the person confirms or discards.
           type: array
           items:
             $ref: "#/components/schemas/AgentAction"
@@ -8250,7 +8252,7 @@ components:
           minLength: 1
           maxLength: 4000
         attachments:
-          description: Ids de anexos desta conversa ainda não enviados (até 5).
+          description: Ids of attachments of this conversation not yet sent (up to 5).
           type: array
           maxItems: 5
           items:
@@ -8258,8 +8260,8 @@ components:
             format: uuid
         skill:
           description: >-
-            Desde a 2.24.0. O nome de uma habilidade ligada da conta; `/nome` no começo da mensagem
-            vale o mesmo.
+            Since 2.24.0. The name of an enabled skill of the account; `/nome` at the start of the
+            message is the same.
           type: string
           maxLength: 41
 
@@ -8283,19 +8285,19 @@ components:
           type: string
           format: uuid
         name:
-          description: O `/nome` da conversa.
+          description: The conversation's `/nome`.
           type: string
           pattern: "^[a-z0-9][a-z0-9-]{1,39}$"
         description:
-          description: O que a habilidade faz; o agente a lê para escolher.
+          description: What the skill does; the agent reads it to choose.
           type: string
           maxLength: 300
         instructions:
-          description: As instruções em Markdown.
+          description: The instructions in Markdown.
           type: string
           maxLength: 8000
         allowed_tools:
-          description: As ferramentas que a habilidade permite (nomes do catálogo); nulo libera todas.
+          description: The tools the skill allows (catalog names); null allows them all.
           type: [array, "null"]
           items:
             type: string

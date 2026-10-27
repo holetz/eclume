@@ -3493,11 +3493,11 @@ export interface components {
             name: string;
             description: string | null;
             /**
-             * @description "Quando incluir": a regra que o agente segue para pôr a gravação na coleção. Pode falar
-             *     do assunto, do tipo de agenda e dos participantes (empresa, área, cargo, tags de pessoa).
+             * @description "Quando incluir": the rule the agent follows to put the recording in the collection. It may
+             *     speak of the subject, the agenda type and the participants (company, area, role, person tags).
              */
             instructions: string;
-            /** @description Com regra, o agente inclui as gravações depois da transcrição. */
+            /** @description With a rule, the agent adds the recordings after transcription. */
             auto_assign: boolean;
             recording_count: number;
             /** Format: date-time */
@@ -3520,7 +3520,7 @@ export interface components {
         CollectionMerge: {
             /**
              * Format: uuid
-             * @description A coleção que recebe as gravações; outra que não a mesclada.
+             * @description The collection that receives the recordings; one other than the merged one.
              */
             into: string;
         };
@@ -3532,14 +3532,14 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
-            /** @description "Quando usar": vai ao agente junto com o nome. */
+            /** @description "Quando usar": goes to the agent together with the name. */
             description: string;
             /**
-             * @description `user` (cadastrada pelo usuário) ou `auto` (criada pelo agente no modo autogerenciado).
+             * @description `user` (registered by the user) or `auto` (created by the agent in self-managed mode).
              * @enum {string}
              */
             origin: "user" | "auto";
-            /** @description Gravações com a tag. */
+            /** @description Recordings with the tag. */
             count: number;
             /** Format: date-time */
             created_at: string;
@@ -3558,25 +3558,25 @@ export interface components {
         TagMerge: {
             /**
              * Format: uuid
-             * @description A tag que fica; outra que não a mesclada.
+             * @description The tag that stays; one other than the merged one.
              */
             into: string;
         };
         TagAssignment: {
-            /** @description O agente atribui tags depois da transcrição. */
+            /** @description The agent assigns tags after transcription. */
             auto_fill: boolean;
-            /** @description A regra geral das tags (a do campo embutido Tags). */
+            /** @description The general rule of the tags (that of the built-in Tags field). */
             instructions: string;
             /**
-             * @description `fixed`: só as tags cadastradas; `auto`: o agente pode criar tags novas.
+             * @description `fixed`: only the registered tags; `auto`: the agent may create new tags.
              * @enum {string}
              */
             mode: "fixed" | "auto";
-            /** @description No modo `auto`, quantas tags novas o agente pode criar por gravação. */
+            /** @description In `auto` mode, how many new tags the agent may create per recording. */
             new_limit: number;
-            /** @description Tags no cadastro. */
+            /** @description Tags in the catalog. */
             catalog_count: number;
-            /** @description Acima deste tamanho do cadastro, o agente não cria mais tags. */
+            /** @description Above this catalog size, the agent creates no more tags. */
             catalog_limit: number;
         };
         PasswordChange: {
@@ -3584,12 +3584,12 @@ export interface components {
             current_password: string;
             /**
              * Format: password
-             * @description Ao menos 12 caracteres, como no cadastro.
+             * @description At least 12 characters, as at sign-up.
              */
             new_password: string;
             /**
-             * @description Desde a 2.14.0. `true` revoga também as credenciais de aparelho e os PATs da conta (os
-             *     aparelhos pedem login de novo); ausente vale `false`.
+             * @description Since 2.14.0. `true` also revokes the account's device credentials and PATs (the
+             *     devices ask for a login again); absent means `false`.
              * @default false
              */
             revoke_tokens: boolean;
@@ -3597,7 +3597,7 @@ export interface components {
         AccountDeletion: {
             /**
              * Format: password
-             * @description A senha da conta, que confirma a exclusão.
+             * @description The account's password, which confirms the deletion.
              */
             password: string;
         };
@@ -3613,82 +3613,82 @@ export interface components {
             id: string;
             name: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern: string | null;
             /**
-             * @description Como escrever o `{assunto}` do título (a regra que o agente segue). Vazia, vale a do tipo
-             *     padrão da conta.
+             * @description How to write the title's `{assunto}` (the rule the agent follows). Empty, the account's
+             *     fallback agenda type's rule applies.
              */
             title_instructions: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions: string;
-            /** @description Ordem na lista do usuário. */
+            /** @description Order in the user's list. */
             position: number;
             /**
-             * @description O tipo padrão da conta: aplicado quando nenhum outro tipo se encaixa com confiança, sem
-             *     outros tipos, sem agente de detecção ou com a detecção falha. Não pode ser excluído.
+             * @description The account's fallback agenda type: applied when no other type fits with confidence, with
+             *     no other types, with no detection agent or when detection fails. It cannot be deleted.
              */
             fallback: boolean;
         };
-        /** @description O conteúdo de um tipo de agenda, salvo ou em rascunho. */
+        /** @description The content of an agenda type, saved or in draft. */
         AgendaTypeDraft: {
             name: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern?: string | null;
-            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            /** @description How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies. */
             title_instructions?: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify?: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags?: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions: string;
         };
         AgendaTypeCreate: {
             name: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern?: string | null;
-            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            /** @description How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies. */
             title_instructions?: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify?: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags?: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions: string;
-            /** @description Sem valor, o fim da lista. */
+            /** @description Without a value, the end of the list. */
             position?: number;
         };
         AgendaTypePatch: {
             name?: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern?: string | null;
-            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            /** @description How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies. */
             title_instructions?: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify?: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags?: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions?: string;
             position?: number;
         };
@@ -3701,66 +3701,66 @@ export interface components {
             id: string;
             name: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern: string | null;
             /**
-             * @description Como escrever o `{assunto}` do título (a regra que o agente segue). Vazia, vale a do tipo
-             *     padrão da conta.
+             * @description How to write the title's `{assunto}` (the rule the agent follows). Empty, the account's
+             *     fallback agenda type's rule applies.
              */
             title_instructions: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions: string;
-            /** @description Ordem na lista do usuário. */
+            /** @description Order in the user's list. */
             position: number;
-            /** @description Copiado para cada conta criada depois. */
+            /** @description Copied to each account created afterwards. */
             include_for_new_users: boolean;
         };
         DefaultAgendaTypeCreate: {
             name: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern?: string | null;
-            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            /** @description How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies. */
             title_instructions?: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify?: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags?: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions: string;
-            /** @description Sem valor, o fim da lista. */
+            /** @description Without a value, the end of the list. */
             position?: number;
-            /** @description Sem valor, `true`. */
+            /** @description Without a value, `true`. */
             include_for_new_users?: boolean;
         };
         DefaultAgendaTypePatch: {
             name?: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern?: string | null;
-            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            /** @description How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies. */
             title_instructions?: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify?: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags?: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions?: string;
             position?: number;
-            /** @description Copiado para cada conta criada depois. */
+            /** @description Copied to each account created afterwards. */
             include_for_new_users?: boolean;
         };
         DefaultAgendaTypePage: {
@@ -3768,61 +3768,61 @@ export interface components {
             next_cursor: components["schemas"]["NextCursor"];
         };
         /**
-         * @description `text` e `choice` guardam uma string; `list`, um array de strings.
+         * @description `text` and `choice` hold a string; `list`, an array of strings.
          * @enum {string}
          */
         FieldKind: "text" | "list" | "choice";
         Field: {
             /** Format: uuid */
             id: string;
-            /** @description Slug do nome, único na conta; o marcador `{key}` do padrão de título. */
+            /** @description Slug of the name, unique in the account; the `{key}` placeholder of the title pattern. */
             key: string;
             /**
-             * @description Campo embutido (não sai nem muda de `kind`); `null` nos do usuário.
+             * @description Built-in field (it is neither removed nor changes `kind`); `null` in the user's own.
              * @enum {string|null}
              */
             builtin: "title" | "tags" | null;
             name: string;
             kind: components["schemas"]["FieldKind"];
-            /** @description As opções de um campo `choice` (ao menos uma); vazia nos outros tipos. */
+            /** @description The options of a `choice` field (at least one); empty in the other kinds. */
             options: string[];
-            /** @description A regra ("como identificar") que o agente segue ao preencher o campo. */
+            /** @description The rule ("como identificar") the agent follows when filling the field. */
             instructions: string;
-            /** @description Preencher automaticamente depois da transcrição. */
+            /** @description Fill automatically after transcription. */
             auto_fill: boolean;
             position: number;
         };
-        /** @description O conteúdo de um campo, salvo ou em rascunho. */
+        /** @description The content of a field, saved or in draft. */
         FieldDraft: {
             name: string;
             kind: components["schemas"]["FieldKind"];
-            /** @description As opções de um campo `choice` (ao menos uma); vazia nos outros tipos. */
+            /** @description The options of a `choice` field (at least one); empty in the other kinds. */
             options?: string[];
-            /** @description A regra ("como identificar") que o agente segue ao preencher o campo. */
+            /** @description The rule ("como identificar") the agent follows when filling the field. */
             instructions?: string;
-            /** @description Preencher automaticamente depois da transcrição. */
+            /** @description Fill automatically after transcription. */
             auto_fill?: boolean;
         };
         FieldCreate: {
             name: string;
             kind: components["schemas"]["FieldKind"];
-            /** @description As opções de um campo `choice` (ao menos uma); vazia nos outros tipos. */
+            /** @description The options of a `choice` field (at least one); empty in the other kinds. */
             options?: string[];
-            /** @description A regra ("como identificar") que o agente segue ao preencher o campo. */
+            /** @description The rule ("como identificar") the agent follows when filling the field. */
             instructions?: string;
-            /** @description Preencher automaticamente depois da transcrição. */
+            /** @description Fill automatically after transcription. */
             auto_fill?: boolean;
-            /** @description Sem valor, o fim da lista. */
+            /** @description Without a value, the end of the list. */
             position?: number;
         };
         FieldPatch: {
             name?: string;
             kind?: components["schemas"]["FieldKind"];
-            /** @description As opções de um campo `choice` (ao menos uma); vazia nos outros tipos. */
+            /** @description The options of a `choice` field (at least one); empty in the other kinds. */
             options?: string[];
-            /** @description A regra ("como identificar") que o agente segue ao preencher o campo. */
+            /** @description The rule ("como identificar") the agent follows when filling the field. */
             instructions?: string;
-            /** @description Preencher automaticamente depois da transcrição. */
+            /** @description Fill automatically after transcription. */
             auto_fill?: boolean;
             position?: number;
         };
@@ -3830,11 +3830,11 @@ export interface components {
             items: components["schemas"]["Field"][];
             next_cursor: components["schemas"]["NextCursor"];
         };
-        /** @description `text`/`choice` → string; `list` → array de strings; `null` = sem valor. */
+        /** @description `text`/`choice` → string; `list` → array of strings; `null` = no value. */
         FieldValue: string | string[] | null;
         /**
-         * @description `auto`: o agente preencheu; `edited`: o usuário escreveu; `accepted`: o usuário aceitou o
-         *     automático. `edited` e `accepted` nunca são sobrescritos por um preenchimento automático.
+         * @description `auto`: the agent filled it; `edited`: the user wrote it; `accepted`: the user accepted the
+         *     automatic value. `edited` and `accepted` are never overwritten by an automatic fill.
          * @enum {string}
          */
         FieldValueOrigin: "auto" | "edited" | "accepted";
@@ -3850,26 +3850,26 @@ export interface components {
         };
         FieldValuePut: {
             /**
-             * @description `text`/`choice` → até 300 caracteres; `list` → até 50 itens de até 300 caracteres (64
-             *     nas tags); `null` limpa (menos o título).
+             * @description `text`/`choice` → up to 300 characters; `list` → up to 50 items of up to 300 characters (64
+             *     for tags); `null` clears (except the title).
              */
             value: string | string[] | null;
         };
         FieldPreviewRequest: {
             field: components["schemas"]["FieldDraft"];
-            /** @description Gravações transcritas do usuário; sem elas, as 3 mais recentes. */
+            /** @description Transcribed recordings of the user; without them, the 3 most recent. */
             recording_ids?: string[];
         };
         AgendaTypePreviewRequest: {
             agenda_type: components["schemas"]["AgendaTypeDraft"];
             /**
              * Format: uuid
-             * @description Uma gravação transcrita do usuário.
+             * @description A transcribed recording of the user.
              */
             recording_id: string;
             /**
              * Format: uuid
-             * @description O tipo salvo que o rascunho edita, que sai da concorrência no lugar dele; sem ele, sai o de mesmo nome. Rascunho do tipo padrão não concorre: fica quando nenhum outro serve.
+             * @description The saved type the draft edits, which leaves the competition in its place; without it, the one with the same name leaves. A draft of the fallback agenda type does not compete: it stays for when no other fits.
              */
             agenda_type_id?: string | null;
         };
@@ -3883,18 +3883,18 @@ export interface components {
             /** Format: uuid */
             recording_id: string;
             recording_title: string;
-            /** @description A detecção escolheu o rascunho. */
+            /** @description Detection chose the draft. */
             detected: boolean;
-            /** @description O tipo que a gravação teria (o rascunho, um dos salvos ou o tipo padrão). */
+            /** @description The type the recording would get (the draft, one of the saved ones or the fallback agenda type). */
             detected_type_name: string;
-            /** @description Nenhum tipo serviu, ou a confiança ficou abaixo de 0,6: a gravação teria o tipo padrão. */
+            /** @description No type fitted, or the confidence fell below 0.6: the recording would get the fallback agenda type. */
             fallback: boolean;
             confidence: number | null;
-            /** @description O título que o rascunho aplicaria. */
+            /** @description The title the draft would apply. */
             title: string;
-            /** @description As tags da gravação com as tags padrão do rascunho. */
+            /** @description The recording's tags with the draft's default tags. */
             tags: string[];
-            /** @description O resumo com as instruções do rascunho. */
+            /** @description The summary with the draft's instructions. */
             summary_md: string;
         };
         Preview: {
@@ -3904,9 +3904,9 @@ export interface components {
             kind: "field_rule" | "agenda_type";
             /** @enum {string} */
             status: "queued" | "running" | "done" | "failed";
-            /** @description Com `status: done`: um item por gravação testada. */
+            /** @description With `status: done`: one item per tested recording. */
             items: (components["schemas"]["FieldPreviewItem"] | components["schemas"]["AgendaTypePreviewItem"])[];
-            /** @description Com `status: failed`; `no_provider` quando a finalidade não tem provider. */
+            /** @description With `status: failed`; `no_provider` when the purpose has no provider. */
             error: {
                 code: string;
                 message: string;
@@ -3914,7 +3914,7 @@ export interface components {
         };
         BaseChatRequest: {
             message: string;
-            /** @description As últimas mensagens da conversa, em ordem; o server não guarda o histórico. */
+            /** @description The last messages of the conversation, in order; the server does not keep the history. */
             history?: components["schemas"]["BaseChatTurn"][];
         };
         BaseChatTurn: {
@@ -3932,14 +3932,14 @@ export interface components {
             id: string;
             /** @enum {string} */
             status: "queued" | "running" | "done" | "failed";
-            /** @description Com `status: done`: a resposta em Markdown. */
+            /** @description With `status: done`: the answer in Markdown. */
             answer: string | null;
-            /** @description As gravações consultadas em que a resposta se apoia. */
+            /** @description The consulted recordings the answer rests on. */
             sources: components["schemas"]["BaseChatSource"][];
-            /** @description Quantas consultas à base o agente fez. */
+            /** @description How many queries to the base the agent made. */
             queries: number;
             model: string | null;
-            /** @description Com `status: failed`; `no_provider` quando a finalidade `chat` não tem provider. */
+            /** @description With `status: failed`; `no_provider` when the `chat` purpose has no provider. */
             error: {
                 code: string;
                 message: string;
@@ -3948,13 +3948,13 @@ export interface components {
         AgentSession: {
             /** Format: uuid */
             id: string;
-            /** @description Vazio até a primeira pergunta, que dá o título. */
+            /** @description Empty until the first question, which gives the title. */
             title: string;
             /** Format: date-time */
             created_at: string;
             /**
              * Format: date-time
-             * @description A última atividade (pergunta ou resposta).
+             * @description The last activity (question or answer).
              */
             updated_at: string;
         };
@@ -3964,7 +3964,7 @@ export interface components {
         AgentSessionUpdate: {
             title: string;
         };
-        /** @description Uma `AgentSession` com as mensagens e os anexos ainda não enviados. */
+        /** @description An `AgentSession` with the messages and the attachments not yet sent. */
         AgentSessionDetail: {
             /** Format: uuid */
             id: string;
@@ -3974,7 +3974,7 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             messages: components["schemas"]["AgentMessage"][];
-            /** @description Os anexos ainda não enviados com uma pergunta. */
+            /** @description The attachments not yet sent with a question. */
             pending_files: components["schemas"]["AgentFile"][];
         };
         AgentFile: {
@@ -3984,18 +3984,18 @@ export interface components {
             session_id: string;
             /**
              * Format: uuid
-             * @description A pergunta que levou o anexo ou a resposta que gerou o arquivo; nulo no anexo não enviado.
+             * @description The question that carried the attachment or the answer that produced the file; null on an attachment not yet sent.
              */
             message_id: string | null;
             /**
-             * @description `input` é anexo da pessoa; `output`, arquivo gerado pelo agente.
+             * @description `input` is an attachment of the person; `output`, a file produced by the agent.
              * @enum {string}
              */
             direction: "input" | "output";
             name: string;
             media_type: string;
             size_bytes: number;
-            /** @description Caracteres do texto extraído do anexo (0 é anexo sem texto legível); nulo no gerado. */
+            /** @description Characters of the text extracted from the attachment (0 is an attachment with no readable text); null on a produced file. */
             text_chars: number | null;
             /** Format: date-time */
             created_at: string;
@@ -4007,37 +4007,37 @@ export interface components {
             session_id: string;
             /** @enum {string} */
             role: "user" | "assistant";
-            /** @description A pergunta, ou a resposta em Markdown (vazia até `done`). */
+            /** @description The question, or the answer in Markdown (empty until `done`). */
             content: string;
             /**
-             * @description A pergunta é sempre `done`; a resposta vai de `queued` a `done` ou `failed`.
+             * @description The question is always `done`; the answer goes from `queued` to `done` or `failed`.
              * @enum {string}
              */
             status: "queued" | "running" | "done" | "failed";
-            /** @description As gravações consultadas em que a resposta se apoia. */
+            /** @description The consulted recordings the answer rests on. */
             sources: components["schemas"]["BaseChatSource"][];
-            /** @description Quantas ferramentas o agente chamou. */
+            /** @description How many tools the agent called. */
             queries: number;
             model: string | null;
-            /** @description Com `status: failed`; `no_provider` sem provider para o `chat`, `agent_expired` quando a resposta passou de 15 minutos em aberto. */
+            /** @description With `status: failed`; `no_provider` with no provider for `chat`, `agent_expired` when the answer stayed open for more than 15 minutes. */
             error: {
                 code: string;
                 message: string;
             } | null;
-            /** @description Os anexos da pergunta ou os arquivos gerados pela resposta. */
+            /** @description The question's attachments or the files the answer produced. */
             files: components["schemas"]["AgentFile"][];
-            /** @description Desde a 2.24.0. O nome da habilidade escolhida na pergunta (o nome na hora). */
+            /** @description Since 2.24.0. The name of the skill chosen in the question (the name at that time). */
             skill: string | null;
-            /** @description Desde a 2.24.0. As propostas de ação da resposta, que a pessoa confirma ou descarta. */
+            /** @description Since 2.24.0. The answer's action proposals, which the person confirms or discards. */
             actions: components["schemas"]["AgentAction"][];
             /** Format: date-time */
             created_at: string;
         };
         AgentMessageCreate: {
             message: string;
-            /** @description Ids de anexos desta conversa ainda não enviados (até 5). */
+            /** @description Ids of attachments of this conversation not yet sent (up to 5). */
             attachments?: string[];
-            /** @description Desde a 2.24.0. O nome de uma habilidade ligada da conta; `/nome` no começo da mensagem vale o mesmo. */
+            /** @description Since 2.24.0. The name of an enabled skill of the account; `/nome` at the start of the message is the same. */
             skill?: string;
         };
         AgentTool: {
@@ -4049,13 +4049,13 @@ export interface components {
         AgentSkill: {
             /** Format: uuid */
             id: string;
-            /** @description O `/nome` da conversa. */
+            /** @description The conversation's `/nome`. */
             name: string;
-            /** @description O que a habilidade faz; o agente a lê para escolher. */
+            /** @description What the skill does; the agent reads it to choose. */
             description: string;
-            /** @description As instruções em Markdown. */
+            /** @description The instructions in Markdown. */
             instructions: string;
-            /** @description As ferramentas que a habilidade permite (nomes do catálogo); nulo libera todas. */
+            /** @description The tools the skill allows (catalog names); null allows them all. */
             allowed_tools: string[] | null;
             enabled: boolean;
             /** Format: date-time */
