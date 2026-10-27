@@ -2866,37 +2866,37 @@ export interface components {
             destinations: components["schemas"]["DataDestination"][];
         };
         /**
-         * @description `transcription` é o áudio virando texto; as demais são as finalidades de agente (resumos, campos, chat e detecção do tipo de agenda).
+         * @description `transcription` is audio becoming text; the others are the agent purposes (summaries, fields, chat and agenda type detection).
          * @enum {string}
          */
         DataPurpose: "transcription" | "summaries" | "fields" | "chat" | "agenda_detection";
         DataDestination: {
             purpose: components["schemas"]["DataPurpose"];
             /**
-             * @description `server`: neste servidor; `local_network`: em outra máquina da rede local; `external`: fora do servidor e da rede; `disabled`: nenhum provider habilitado para a finalidade, e nada é enviado. Na dúvida, o servidor responde `external`.
+             * @description `server`: on this server; `local_network`: on another machine of the local network; `external`: outside the server and the network; `disabled`: no provider enabled for the purpose, and nothing is sent. When in doubt, the server answers `external`.
              * @enum {string}
              */
             location: "server" | "local_network" | "external" | "disabled";
-            /** @description Com `external`, quem processa: o fornecedor (por exemplo `Anthropic`) ou só o host do endereço (por exemplo `api.deepseek.com`); `null` nos demais. */
+            /** @description With `external`, who processes it: the vendor (for example `Anthropic`) or only the host of the address (for example `api.deepseek.com`); `null` in the others. */
             processor: string | null;
         };
         DeviceLogin: {
             /** Format: email */
             email: string;
             password: string;
-            /** @description Nome do aparelho, que vira o nome do token ("iPhone da Mariana"). */
+            /** @description Device name, which becomes the token name ("iPhone da Mariana"). */
             device_name: string;
             platform: components["schemas"]["DevicePlatform"];
         };
         DevicePair: {
-            /** @description O código de pareamento (`K7Q-4MX` ou `k7q4mx`). */
+            /** @description The pairing code (`K7Q-4MX` or `k7q4mx`). */
             code: string;
             device_name: string;
             platform: components["schemas"]["DevicePlatform"];
         };
         DeviceCredential: {
             token: components["schemas"]["Token"];
-            /** @description O token completo, que o app guarda. Não é mostrado de novo. */
+            /** @description The full token, which the app stores. It is not shown again. */
             secret: string;
             server: components["schemas"]["ServerInfo"];
         };
@@ -2904,7 +2904,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description `expired` vale também para o código vencido por um código mais novo.
+             * @description `expired` also applies to a code superseded by a newer code.
              * @enum {string}
              */
             status: "pending" | "used" | "expired";
@@ -2912,16 +2912,16 @@ export interface components {
             expires_at: string;
             /**
              * Format: uuid
-             * @description Com `used`, a credencial de dispositivo que o código emitiu.
+             * @description With `used`, the device credential the code issued.
              */
             token_id: string | null;
-            /** @description Só na criação. 6 caracteres de `23456789ABCDEFGHJKMNPQRSTVWXYZ`. */
+            /** @description Only at creation. 6 characters of `23456789ABCDEFGHJKMNPQRSTVWXYZ`. */
             code?: string;
-            /** @description Só na criação. O código como a tela mostra (`K7Q-4MX`). */
+            /** @description Only at creation. The code as the screen shows it (`K7Q-4MX`). */
             display?: string;
             /**
              * Format: uri
-             * @description Só na criação. Conteúdo do QR: `<url>/parear?codigo=<code>&ca=<ca_sha256>` (sem `ca` enquanto a raiz não foi publicada).
+             * @description Only at creation. QR content: `<url>/parear?codigo=<code>&ca=<ca_sha256>` (without `ca` while the root has not been published).
              */
             pair_url?: string;
         };
@@ -2930,13 +2930,13 @@ export interface components {
             scopes: components["schemas"]["Scope"][];
             /**
              * Format: date-time
-             * @description Sem valor, o PAT não expira.
+             * @description With no value, the PAT does not expire.
              */
             expires_at?: string | null;
         };
         TokenCreated: {
             token: components["schemas"]["Token"];
-            /** @description O PAT completo. Não é mostrado de novo. */
+            /** @description The full PAT. It is not shown again. */
             secret: string;
         };
         TokenPage: {
@@ -2944,59 +2944,59 @@ export interface components {
             next_cursor: components["schemas"]["NextCursor"];
         };
         /**
-         * @description Origem do áudio. `desktop` e `mobile` são os apps que gravam.
+         * @description Audio origin. `desktop` and `mobile` are the apps that record.
          * @enum {string}
          */
         Source: "desktop" | "mobile" | "upload" | "api";
-        /** @description Contexto da captura, preenchido pelo app que gravou (desktop ou celular). */
+        /** @description Capture context, filled in by the app that recorded (desktop or phone). */
         Capture: {
             /**
-             * @description App de reunião detectado.
+             * @description Detected meeting app.
              * @enum {string|null}
              */
             meeting_app?: "teams" | "meet" | "zoom" | "other" | null;
             device_name?: string | null;
-            /** @description Versão do app que gravou (`eclume-desktop/0.3.0`, `eclume-android/0.1.0`). */
+            /** @description Version of the app that recorded (`eclume-desktop/0.3.0`, `eclume-android/0.1.0`). */
             client_version?: string | null;
         };
-        /** @description Metadados livres de organização (tipo de reunião, cliente, projeto). */
+        /** @description Free organization metadata (meeting type, client, project). */
         RecordingMetadata: {
             [key: string]: string;
         };
         UploadCreate: {
             filename: string;
-            /** @description Tipo do arquivo, com parâmetros opcionais (`audio/ogg; codecs=opus`, a saída do navegador; `audio/webm`; `video/mp4`). */
+            /** @description File type, with optional parameters (`audio/ogg; codecs=opus`, the browser output; `audio/webm`; `video/mp4`). */
             content_type: string;
             size_bytes: number;
-            /** @description SHA-256 do arquivo inteiro, em hex minúsculo. */
+            /** @description SHA-256 of the whole file, in lowercase hex. */
             sha256: string;
-            /** @description Sem valor, deriva do nome do arquivo. */
+            /** @description With no value, derived from the file name. */
             title?: string;
             /**
              * Format: date-time
-             * @description Início da gravação. Sem valor, vale a hora do envio (`recorded_at_source` `upload`).
+             * @description Start of the recording. With no value, the upload time applies (`recorded_at_source` `upload`).
              */
             recorded_at?: string;
             /**
-             * @description De onde veio `recorded_at`. Sem valor, o servidor decide: com `recorded_at` e
-             *     `source` `desktop` ou `mobile`, `capture`; com `recorded_at` e outra origem, `user`;
-             *     sem `recorded_at`, `upload`.
+             * @description Where `recorded_at` came from. With no value, the server decides: with `recorded_at` and
+             *     `source` `desktop` or `mobile`, `capture`; with `recorded_at` and another origin, `user`;
+             *     without `recorded_at`, `upload`.
              */
             recorded_at_source?: components["schemas"]["RecordedAtSource"];
             kind?: components["schemas"]["RecordingKind"];
             /**
              * Format: uuid
-             * @description Tipo de agenda escolhido ao parar a gravação no celular: vira o tipo escolhido pelo
-             *     usuário (origem `edited`) e dispensa a detecção.
+             * @description Agenda type chosen when stopping the recording on the phone: it becomes the type chosen by the
+             *     user (origin `edited`) and skips the detection.
              */
             agenda_type_id?: string;
             /**
-             * @description Marcadores feitos durante a gravação, com o `device_name` da captura. Idempotentes por
-             *     `client_id`: num upload deduplicado, entram na gravação existente.
+             * @description Markers made during the recording, with the capture's `device_name`. Idempotent by
+             *     `client_id`: in a deduplicated upload, they go into the existing recording.
              */
             markers?: components["schemas"]["MarkerInput"][];
             duration_ms?: number;
-            /** @description Idioma esperado (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta e a gravação guarda o detectado). Sem valor, vale o idioma preferido da conta, depois o padrão do servidor. */
+            /** @description Expected language (BCP 47) or, since 2.20.0, `auto` (the engine detects it and the recording stores the detected one). With no value, the account's preferred language applies, then the server default. */
             language?: string;
             source?: components["schemas"]["Source"];
             capture?: components["schemas"]["Capture"];
@@ -3012,10 +3012,10 @@ export interface components {
             method: "PUT";
             /**
              * Format: uri
-             * @description URL opaca da parte.
+             * @description Opaque URL of the part.
              */
             url: string;
-            /** @description Headers que o `PUT` deve levar. */
+            /** @description Headers the `PUT` must carry. */
             headers: {
                 [key: string]: string;
             };
@@ -3035,20 +3035,20 @@ export interface components {
             content_type: string;
             size_bytes: number;
             sha256: string;
-            /** @description Tamanho de toda parte menos a última, em bytes (mínimo 5 MiB). */
+            /** @description Size of every part but the last, in bytes (minimum 5 MiB). */
             part_size: number;
             part_count: number;
             parts_received: components["schemas"]["ReceivedPart"][];
-            /** @description URLs já emitidas para partes pendentes; pode vir parcial ou vazio. */
+            /** @description URLs already issued for pending parts; may come partial or empty. */
             parts: components["schemas"]["PartUrl"][];
             /**
              * Format: uuid
-             * @description Gravação criada pelo `complete`, ou a existente num `deduplicated`.
+             * @description Recording created by `complete`, or the existing one in a `deduplicated`.
              */
             recording_id: string | null;
             /**
              * Format: date-time
-             * @description Depois disso o upload inacabado é descartado (`upload_expired`).
+             * @description After this the unfinished upload is discarded (`upload_expired`).
              */
             expires_at: string;
             /** Format: date-time */
@@ -3071,25 +3071,25 @@ export interface components {
          * @enum {string}
          */
         RecordingStatus: "uploading" | "queued" | "processing" | "transcribed" | "failed";
-        /** @description Job de transcrição mais recente da gravação. */
+        /** @description Most recent transcription job of the recording. */
         Job: {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
             state: "queued" | "running" | "succeeded" | "failed" | "cancelled";
             /**
-             * @description Etapa em curso, ou `null` fora de execução. `preprocessing` é o tratamento do áudio
-             *     antes do ASR (holetz/eclume#33).
+             * @description Current stage, or `null` outside execution. `preprocessing` is the audio treatment
+             *     before the ASR (holetz/eclume#33).
              * @enum {string|null}
              */
             stage: "preprocessing" | "asr" | "alignment" | "diarization" | "embeddings" | "finalizing" | null;
             progress: number;
             attempts: number;
             error: {
-                /** @description `hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`... e, desde a 1.4.0, `worker_lost` (o worker GPU parou no meio do job), `job_lost` (o job sumiu da fila sem resposta) e `job_stalled` (progresso parado além do teto), detectados pelo server. Desde a 2.5.0, `ingest_failed`: a transcrição ficou pronta no worker GPU, mas o server não conseguiu gravá-la (a ingestão falhou ou nunca chegou); recuperável. Desde a 2.10.0, `cancelled`: o dono cancelou a transcrição (ou excluiu a gravação); recuperável, com `state` `cancelled`. */
+                /** @description `hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`... and, since 1.4.0, `worker_lost` (the GPU worker stopped in the middle of the job), `job_lost` (the job vanished from the queue without an answer) and `job_stalled` (progress stalled beyond the ceiling), detected by the server. Since 2.5.0, `ingest_failed`: the transcription finished in the GPU worker, but the server could not store it (the ingestion failed or never arrived); recoverable. Since 2.10.0, `cancelled`: the owner cancelled the transcription (or deleted the recording); recoverable, with `state` `cancelled`. */
                 code: string;
                 message: string;
-                /** @description A falha é passageira (worker perdido, job sumido ou parado, ingestão falha, falta de VRAM): retranscrever ou `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver. Ausente em servidores anteriores à 1.4.0. */
+                /** @description The failure is transient (lost worker, vanished or stalled job, failed ingestion, lack of VRAM): retranscribing or `POST /api/v1/admin/jobs/{job_id}/retry` tends to solve it. Absent on servers older than 1.4.0. */
                 retryable?: boolean;
             } | null;
             /** Format: date-time */
@@ -3099,63 +3099,63 @@ export interface components {
             /** Format: date-time */
             finished_at: string | null;
             /**
-             * @description Por que o job espera, enquanto `state` é `queued`; `null` em qualquer outro estado.
-             *     Ausente em servidores anteriores à 2.16.0 (holetz/eclume#117).
+             * @description Why the job waits, while `state` is `queued`; `null` in any other state.
+             *     Absent on servers older than 2.16.0 (holetz/eclume#117).
              */
             queue?: components["schemas"]["JobQueue"] | null;
         };
         /**
-         * @description A espera de um job `queued`, calculada na leitura. Só contagens e horários: nada de outra
-         *     conta. Esperar nunca vira falha; o job segue `queued`.
+         * @description The wait of a `queued` job, computed at read time. Only counts and times: nothing about another
+         *     account. Waiting never becomes a failure; the job stays `queued`.
          */
         JobQueue: {
             /**
-             * @description `processor_queue` (na fila do processador de transcrição), `account_turn` (atrás de
-             *     outras gravações da própria conta, pela fila justa) ou `quota_window` (a conta passou
-             *     dos minutos de transcrição de 24 h). Enum aberto: clientes toleram valor novo.
+             * @description `processor_queue` (in the transcription processor's queue), `account_turn` (behind
+             *     other recordings of the account itself, through the fair queue) or `quota_window` (the account went
+             *     over its 24 h transcription minutes). Open enum: clients tolerate a new value.
              * @enum {string}
              */
             reason: "processor_queue" | "account_turn" | "quota_window";
             /**
-             * @description Em `processor_queue`, quantos jobs começam antes deste, contando o que está rodando;
-             *     `null` nos outros motivos ou se o job não está na fila do processador.
+             * @description In `processor_queue`, how many jobs start before this one, counting the running one;
+             *     `null` for the other reasons or if the job is not in the processor's queue.
              */
             ahead: number | null;
-            /** @description Em `account_turn`, quantas gravações da própria conta vêm antes; `null` nos outros. */
+            /** @description In `account_turn`, how many recordings of the account itself come before; `null` in the others. */
             account_ahead: number | null;
             /**
              * Format: date-time
-             * @description Previsão de início, pela duração real das últimas transcrições; é estimativa, e os
-             *     clientes a rotulam assim. `null` sem histórico suficiente, com o processador fora do
-             *     ar ou fora de `processor_queue`.
+             * @description Start forecast, from the real duration of the latest transcriptions; it is an estimate, and
+             *     clients label it as such. `null` without enough history, with the processor
+             *     down or outside `processor_queue`.
              */
             estimated_start_at: string | null;
             /**
              * Format: date-time
-             * @description Em `quota_window`, quando a janela de 24 h volta a ter minutos; `null` nos outros.
+             * @description In `quota_window`, when the 24 h window has minutes again; `null` in the others.
              */
             resumes_at: string | null;
             processor: components["schemas"]["ProcessorStatus"];
         };
-        /** @description Se o processador de transcrição está no ar, pelo heartbeat do worker GPU. */
+        /** @description Whether the transcription processor is up, by the GPU worker's heartbeat. */
         ProcessorStatus: {
             online: boolean;
             /**
              * Format: date-time
-             * @description Fora do ar, o último heartbeat visto (precisão de 1 min); `null` no ar ou se nunca
-             *     houve heartbeat.
+             * @description When down, the last heartbeat seen (1 min precision); `null` when up or if there was
+             *     never a heartbeat.
              */
             offline_since: string | null;
         };
         /**
-         * @description `meeting` (reunião, o padrão) ou `note` (nota por voz).
+         * @description `meeting` (meeting, the default) or `note` (voice note).
          * @enum {string}
          */
         RecordingKind: "meeting" | "note";
         /**
-         * @description Origem de `recorded_at`: `capture` (relógio do app que gravou), `file_metadata` (lida do
-         *     arquivo e confirmada na importação), `user` (digitada ou corrigida) ou `upload` (sem data;
-         *     vale a hora do envio).
+         * @description Origin of `recorded_at`: `capture` (clock of the app that recorded), `file_metadata` (read from the
+         *     file and confirmed at import), `user` (typed or corrected) or `upload` (no date;
+         *     the upload time applies).
          * @enum {string}
          */
         RecordedAtSource: "capture" | "file_metadata" | "user" | "upload";
@@ -3168,36 +3168,36 @@ export interface components {
             source: components["schemas"]["Source"];
             /**
              * Format: date-time
-             * @description Início da gravação; o fim é `recorded_at + duration_ms`.
+             * @description Start of the recording; the end is `recorded_at + duration_ms`.
              */
             recorded_at: string;
             recorded_at_source: components["schemas"]["RecordedAtSource"];
-            /** @description `null` até o áudio ser lido. */
+            /** @description `null` until the audio is read. */
             duration_ms: number | null;
-            /** @description Idioma pedido ou detectado; `auto` só enquanto a detecção não roda. */
+            /** @description Requested or detected language; `auto` only while the detection has not run. */
             language: string | null;
             size_bytes: number;
             content_type: string;
             content_hash: string;
             /**
              * @deprecated
-             * @description Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             * @description Deprecated since 2.11.0: always the user themself (each account is isolated); removed in `/api/v2`.
              */
             owner: components["schemas"]["UserRef"];
             tags: string[];
             collection_ids: string[];
             /**
-             * @description De quem é a lista de coleções: `auto` (o agente, pelas coleções automáticas), `edited` (o
-             *     usuário mudou; o agente não mexe mais) ou `null` (vinda do envio, ou ainda sem escolha: o
-             *     agente só soma).
+             * @description Who owns the collection list: `auto` (the agent, through the auto collections), `edited` (the
+             *     user changed it; the agent no longer touches it) or `null` (from the upload, or not yet chosen: the
+             *     agent only adds).
              * @enum {string|null}
              */
             collections_origin: "auto" | "edited" | null;
             metadata: components["schemas"]["RecordingMetadata"];
             capture: components["schemas"]["Capture"] | null;
             /**
-             * @description Tipo de agenda da gravação: detectado pelo agente (`auto`) ou escolhido pelo usuário
-             *     (`edited`), que a detecção nunca troca.
+             * @description Agenda type of the recording: detected by the agent (`auto`) or chosen by the user
+             *     (`edited`), which the detection never replaces.
              */
             agenda_type: {
                 /** Format: uuid */
@@ -3208,24 +3208,24 @@ export interface components {
             } | null;
             job: components["schemas"]["Job"] | null;
             /**
-             * @description As sete etapas do processamento da revisão atual, em ordem; a que ainda não rodou sai
-             *     `pending`. Enquanto o worker GPU reporta progresso, o pré-processamento ou a transcrição
-             *     sai `active`. A etapa `speakers` entrou na 2.22.0 (eram seis).
+             * @description The seven processing steps of the current revision, in order; one that has not run yet comes out
+             *     `pending`. While the GPU worker reports progress, preprocessing or transcription
+             *     comes out `active`. The `speakers` step arrived in 2.22.0 (there were six).
              */
             pipeline: components["schemas"]["PipelineStep"][];
             /**
-             * @description Desde a 2.22.0. O que a gravação espera do dono para seguir: `speakers` quando a etapa
-             *     `speakers` está `waiting` (a conta exige nomear os locutores e falta alguém); `null`
-             *     nas outras.
+             * @description Since 2.22.0. What the recording expects from the owner to proceed: `speakers` when the
+             *     `speakers` step is `waiting` (the account requires naming the speakers and someone is missing); `null`
+             *     in the others.
              * @enum {string|null}
              */
             awaiting: "speakers" | null;
             /**
              * Format: uuid
-             * @description Transcrição, depois do primeiro job concluído.
+             * @description Transcript, after the first completed job.
              */
             transcript_id: string | null;
-            /** @description Marcadores da gravação. */
+            /** @description Markers of the recording. */
             marker_count: number;
             /**
              * Format: date-time
@@ -3239,12 +3239,12 @@ export interface components {
         };
         PipelineStep: {
             /**
-             * @description Na ordem da cadeia; o tipo de agenda vem antes dos campos. `speakers` (desde a 2.22.0) fica entre a transcrição e o tipo de agenda.
+             * @description In chain order; the agenda type comes before the fields. `speakers` (since 2.22.0) sits between the transcription and the agenda type.
              * @enum {string}
              */
             step: "received" | "preprocessing" | "transcription" | "speakers" | "agenda_type" | "fields" | "summary";
             /**
-             * @description `waiting` (desde a 2.22.0) é só da etapa `speakers`: parada à espera de o dono nomear os locutores, com `reason` `unnamed_speakers`.
+             * @description `waiting` (since 2.22.0) belongs only to the `speakers` step: stopped waiting for the owner to name the speakers, with `reason` `unnamed_speakers`.
              * @enum {string}
              */
             state: "pending" | "active" | "done" | "failed" | "skipped" | "waiting";
@@ -3253,17 +3253,17 @@ export interface components {
             /** Format: date-time */
             finished_at: string | null;
             duration_ms: number | null;
-            /** @description Com `state` `failed`. */
+            /** @description With `state` `failed`. */
             error: {
                 code: string;
                 message: string;
             } | null;
             /**
-             * @description Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
-             *     `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), `cancelled` (a
-             *     transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros. Desde a 2.22.0,
-             *     na etapa `speakers`: `unnamed_speakers` (em `waiting`), `continued_by_user` e
-             *     `naming_not_required` (soltas sem os nomes).
+             * @description Why the step was skipped: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
+             *     `no_agenda_type`, `before_pipeline` (recording older than the pipeline), `cancelled` (the
+             *     transcription was cancelled at this step, since 2.10.0), among others. Since 2.22.0,
+             *     at the `speakers` step: `unnamed_speakers` (in `waiting`), `continued_by_user` and
+             *     `naming_not_required` (released without the names).
              */
             reason: string | null;
         };
@@ -3271,24 +3271,24 @@ export interface components {
             title?: string;
             /**
              * Format: date-time
-             * @description Corrigir a data passa `recorded_at_source` a `user`.
+             * @description Correcting the date sets `recorded_at_source` to `user`.
              */
             recorded_at?: string;
             kind?: components["schemas"]["RecordingKind"];
-            /** @description Idioma (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta). */
+            /** @description Language (BCP 47) or, since 2.20.0, `auto` (the engine detects it). */
             language?: string;
-            /** @description Substitui a lista inteira. */
+            /** @description Replaces the whole list. */
             tags?: string[];
-            /** @description Substitui a lista inteira. */
+            /** @description Replaces the whole list. */
             collection_ids?: string[];
-            /** @description Substitui o objeto inteiro (até 50 entradas). */
+            /** @description Replaces the whole object (up to 50 entries). */
             metadata?: {
                 [key: string]: string;
             };
             /**
              * Format: uuid
-             * @description Tipo de agenda escolhido pelo usuário (origem `edited`, que a detecção não troca);
-             *     `null` tira o tipo e devolve a escolha à detecção.
+             * @description Agenda type chosen by the user (origin `edited`, which the detection does not replace);
+             *     `null` removes the type and hands the choice back to the detection.
              */
             agenda_type_id?: string | null;
         };
@@ -3297,20 +3297,20 @@ export interface components {
             next_cursor: components["schemas"]["NextCursor"];
         };
         RetranscribeRequest: {
-            /** @description Idioma (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta). */
+            /** @description Language (BCP 47) or, since 2.20.0, `auto` (the engine detects it). */
             language?: string;
             /**
-             * @description Desde a 2.25.0. Mínimo de locutores a esperar nesta revisão; vence os limites do admin
-             *     e a regra da nota de voz (um locutor). Não persiste: vale só para a revisão pedida.
+             * @description Since 2.25.0. Minimum number of speakers to expect in this revision; overrides the admin limits
+             *     and the voice note rule (one speaker). Not persisted: it applies only to the requested revision.
              */
             min_speakers?: number;
             /**
-             * @description Desde a 2.25.0. Máximo de locutores a esperar nesta revisão (422 se menor que
-             *     `min_speakers`). Uma nota de voz (`kind: note`) sem este campo usa 1 locutor.
+             * @description Since 2.25.0. Maximum number of speakers to expect in this revision (422 if lower than
+             *     `min_speakers`). A voice note (`kind: note`) without this field uses 1 speaker.
              */
             max_speakers?: number;
         };
-        /** @description Resumo de listagem de uma transcrição (sem segmentos). */
+        /** @description Listing summary of a transcript (without segments). */
         TranscriptSummary: {
             /** Format: uuid */
             id: string;
@@ -3330,7 +3330,7 @@ export interface components {
             updated_at: string;
             /**
              * @deprecated
-             * @description Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             * @description Deprecated since 2.11.0: always the user themself (each account is isolated); removed in `/api/v2`.
              */
             owner: components["schemas"]["UserRef"];
             speakers: components["schemas"]["Speaker"][];
@@ -3346,7 +3346,7 @@ export interface components {
             label?: string;
             /**
              * Format: uuid
-             * @description Pessoa a ligar, ou `null` para desfazer.
+             * @description Person to link, or `null` to undo.
              */
             person_id?: string | null;
         };
@@ -3358,24 +3358,24 @@ export interface components {
             text?: string;
             speaker_id?: string;
         };
-        /** @description Uma amostra da impressão de voz — um locutor confirmado como a pessoa. */
+        /** @description A voiceprint sample — a speaker confirmed as the person. */
         VoiceSample: {
             /** Format: uuid */
             transcript_id: string;
             /**
              * Format: uuid
-             * @description Gravação da amostra, ou `null` se ela não existe mais.
+             * @description Recording of the sample, or `null` if it no longer exists.
              */
             recording_id: string | null;
-            /** @description Título da gravação, ou `null` se ela não existe mais. */
+            /** @description Title of the recording, or `null` if it no longer exists. */
             recording_title: string | null;
             speaker_id: string;
-            /** @description Modelo de embedding da amostra. */
+            /** @description Embedding model of the sample. */
             model: string;
             talk_ms: number;
             /**
-             * @description A fala mais longa do locutor, para ouvir a amostra no áudio da gravação
-             *     (`GET /api/v1/recordings/{recording_id}/audio`); `null` sem gravação ou sem fala.
+             * @description The speaker's longest utterance, to listen to the sample in the recording's audio
+             *     (`GET /api/v1/recordings/{recording_id}/audio`); `null` without a recording or without an utterance.
              */
             excerpt: {
                 start_ms: number;
@@ -3383,7 +3383,7 @@ export interface components {
             } | null;
             /**
              * @deprecated
-             * @description Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             * @description Deprecated since 2.11.0: always the user themself (each account is isolated); removed in `/api/v2`.
              */
             created_by: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
@@ -3392,7 +3392,7 @@ export interface components {
         Voiceprint: {
             /** Format: uuid */
             person_id: string;
-            /** @description Identificação por voz ligada na plataforma. Desligada, nada é comparado nem vira amostra. */
+            /** @description Voice identification turned on in the platform. When off, nothing is compared or becomes a sample. */
             enabled: boolean;
             sample_count: number;
             samples: components["schemas"]["VoiceSample"][];
@@ -3404,25 +3404,25 @@ export interface components {
             /** Format: email */
             email: string | null;
             notes: string | null;
-            /** @description Empresa (empresa, cooperativa, órgão) da pessoa. */
+            /** @description Company (company, cooperative, agency) of the person. */
             company: string | null;
-            /** @description Área ou departamento da pessoa na empresa. */
+            /** @description Area or department of the person in the company. */
             department: string | null;
-            /** @description Cargo ou função. */
+            /** @description Job title or role. */
             job_title: string | null;
             phone: string | null;
-            /** @description Tags de pessoa, rótulos livres da pessoa (separados das tags das gravações). */
+            /** @description Person tags, free labels of the person (separate from the recording tags). */
             tags: string[];
-            /** @description Transcrições do usuário em que a pessoa fala. */
+            /** @description The user's transcripts in which the person speaks. */
             transcript_count: number;
             /**
              * Format: date-time
-             * @description `recorded_at` da transcrição mais recente em que a pessoa fala.
+             * @description `recorded_at` of the most recent transcript in which the person speaks.
              */
             last_seen_at: string | null;
-            /** @description Amostras da impressão de voz da pessoa. */
+            /** @description Voiceprint samples of the person. */
             voice_sample_count: number;
-            /** @description Soma das falas dos locutores ligados à pessoa, em todas as transcrições. */
+            /** @description Sum of the utterances of the speakers linked to the person, across all transcripts. */
             speaking_time_ms: number;
             /** Format: date-time */
             created_at: string;
@@ -3438,7 +3438,7 @@ export interface components {
             department?: string | null;
             job_title?: string | null;
             phone?: string | null;
-            /** @description Sem repetição (ignorando a caixa); vazias e espaços nas pontas saem. */
+            /** @description No repetition (ignoring case); empty ones and surrounding spaces are removed. */
             tags?: string[];
         };
         PersonPatch: {
@@ -3450,12 +3450,12 @@ export interface components {
             department?: string | null;
             job_title?: string | null;
             phone?: string | null;
-            /** @description Substitui a lista inteira; sem repetição (ignorando a caixa); vazias e espaços nas pontas saem. */
+            /** @description Replaces the whole list; no repetition (ignoring case); empty ones and surrounding spaces are removed. */
             tags?: string[];
         };
         PersonFacetValue: {
             value: string;
-            /** @description Pessoas com esse valor. */
+            /** @description People with that value. */
             count: number;
         };
         PersonFacets: {
@@ -3479,7 +3479,7 @@ export interface components {
             };
             speaker: components["schemas"]["Speaker"];
             segment: components["schemas"]["Segment"];
-            /** @description Texto do segmento com os termos entre `<mark>` e `</mark>`; nenhum outro HTML. */
+            /** @description Segment text with the terms between `<mark>` and `</mark>`; no other HTML. */
             highlight: string;
             rank: number;
         };
