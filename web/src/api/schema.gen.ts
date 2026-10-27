@@ -2170,16 +2170,16 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Excluir uma tag
-         * @description A tag sai do cadastro, das gravações e das tags padrão dos tipos.
+         * Delete a tag
+         * @description The tag leaves the registry, the recordings and the agenda types' default tags.
          */
         delete: operations["deleteTag"];
         options?: never;
         head?: never;
         /**
-         * Renomear ou descrever uma tag
-         * @description Renomear troca o nome também nas gravações e nas tags padrão dos tipos; um nome já
-         *     cadastrado é 409 `tag_exists` (para juntar as duas, mescle).
+         * Rename or describe a tag
+         * @description Renaming also changes the name in the recordings and in the agenda types' default tags; a
+         *     name already registered is 409 `tag_exists` (to join the two, merge them).
          */
         patch: operations["updateTag"];
         trace?: never;
@@ -2196,9 +2196,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Mesclar uma tag em outra
-         * @description Onde havia a tag, fica `into` (sem repetir), nas gravações e nas tags padrão dos tipos; a
-         *     tag sai do cadastro. `into` igual à tag, ou inexistente, é 422.
+         * Merge a tag into another
+         * @description Wherever the tag was, `into` takes its place (without repeating), in the recordings and in
+         *     the agenda types' default tags; the tag leaves the registry. `into` equal to the tag, or
+         *     nonexistent, is 422.
          */
         post: operations["mergeTag"];
         delete?: never;
@@ -2217,11 +2218,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Abrir a sessão de admin
-         * @description Conta de admin, separada das contas de usuário (o mesmo e-mail pode existir nas duas).
-         *     Define os cookies `eclume_admin_session` (HttpOnly, Secure, SameSite=Strict,
-         *     `Path=/api/v1/admin`) e `eclume_admin_csrf` (legível pelo JavaScript). Toda requisição
-         *     mutável em `/api/v1/admin/*` ecoa `eclume_admin_csrf` no header `X-CSRF-Token`.
+         * Open the admin session
+         * @description Admin account, separate from the user accounts (the same e-mail may exist in both). Sets
+         *     the cookies `eclume_admin_session` (HttpOnly, Secure, SameSite=Strict,
+         *     `Path=/api/v1/admin`) and `eclume_admin_csrf` (readable by JavaScript). Every mutating
+         *     request under `/api/v1/admin/*` echoes `eclume_admin_csrf` in the `X-CSRF-Token` header.
          */
         post: operations["adminLogin"];
         delete?: never;
@@ -2239,7 +2240,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Encerrar a sessão de admin */
+        /** Close the admin session */
         post: operations["adminLogout"];
         delete?: never;
         options?: never;
@@ -2254,7 +2255,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Conta de admin corrente */
+        /** Current admin account */
         get: operations["getAdminMe"];
         put?: never;
         post?: never;
@@ -2271,7 +2272,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Configuração em runtime da plataforma */
+        /** Runtime configuration of the platform */
         get: operations["getAdminSettings"];
         put?: never;
         post?: never;
@@ -2279,8 +2280,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Alterar a configuração
-         * @description Merge por bloco; só os campos enviados mudam. Vale para os próximos jobs. Desligar `voice_identification.enabled` apaga as impressões de voz e as sugestões pendentes de toda a plataforma.
+         * Change the configuration
+         * @description Merge per block; only the fields sent change. Applies to the next jobs. Turning off `voice_identification.enabled` erases the voiceprints and the pending suggestions of the whole platform.
          */
         patch: operations["updateAdminSettings"];
         trace?: never;
@@ -2292,10 +2293,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Providers de agente de sumarização */
+        /** Summarization agent providers */
         get: operations["listAgentProviders"];
         put?: never;
-        /** Cadastrar um provider */
+        /** Register a provider */
         post: operations["createAgentProvider"];
         delete?: never;
         options?: never;
@@ -2315,13 +2316,13 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Remover um provider */
+        /** Remove a provider */
         delete: operations["deleteAgentProvider"];
         options?: never;
         head?: never;
         /**
-         * Editar um provider
-         * @description `api_key: null` apaga a chave guardada; ausente, mantém.
+         * Edit a provider
+         * @description `api_key: null` erases the stored key; absent, keeps it.
          */
         patch: operations["updateAgentProvider"];
         trace?: never;
@@ -2334,12 +2335,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Tipos de agenda padrão da plataforma
-         * @description Os marcados com `include_for_new_users` são copiados para cada conta criada depois.
+         * Default agenda types of the platform
+         * @description Those marked with `include_for_new_users` are copied into every account created afterwards.
          */
         get: operations["listDefaultAgendaTypes"];
         put?: never;
-        /** Criar um tipo de agenda padrão */
+        /** Create a default agenda type */
         post: operations["createDefaultAgendaType"];
         delete?: never;
         options?: never;
@@ -2359,13 +2360,13 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Excluir um tipo de agenda padrão */
+        /** Delete a default agenda type */
         delete: operations["deleteDefaultAgendaType"];
         options?: never;
         head?: never;
         /**
-         * Editar um tipo de agenda padrão
-         * @description Vale para as contas criadas depois; as cópias que as contas já têm ficam como estão.
+         * Edit a default agenda type
+         * @description Applies to the accounts created afterwards; the copies the accounts already hold stay as they are.
          */
         patch: operations["updateDefaultAgendaType"];
         trace?: never;
@@ -2377,7 +2378,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Segredos da plataforma (sem valor) */
+        /** Platform secrets (without value) */
         get: operations["listSecrets"];
         put?: never;
         post?: never;
@@ -2392,16 +2393,16 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description Nome do segredo: `hf_token` (diarização no worker GPU) ou `anthropic_api_key` (provider `anthropic` sem chave própria). Outro nome → 422. */
+                /** @description Secret name: `hf_token` (diarization in the GPU worker) or `anthropic_api_key` (`anthropic` provider without its own key). Any other name → 422. */
                 secret_name: string;
             };
             cookie?: never;
         };
         get?: never;
-        /** Gravar um segredo (cifrado) */
+        /** Store a secret (encrypted) */
         put: operations["putSecret"];
         post?: never;
-        /** Apagar um segredo */
+        /** Erase a secret */
         delete: operations["deleteSecret"];
         options?: never;
         head?: never;
@@ -2416,8 +2417,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Contas de usuário
-         * @description Dados da conta e a contagem de gravações; nunca o conteúdo do usuário.
+         * User accounts
+         * @description Account data and the recording count; never the user's content.
          */
         get: operations["listUsers"];
         put?: never;
@@ -2441,15 +2442,15 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Excluir um usuário e todos os dados dele
-         * @description Desde a 2.15.0. Exclui a conta como a exclusão pela própria pessoa (`POST /me/delete`), sem a senha: gravações, transcrições, resumos e tudo o mais saem do banco, os objetos saem do armazenamento pela fila de exclusão, a transcrição em curso é cancelada e o e-mail fica livre para um cadastro novo.
+         * Delete a user and all their data
+         * @description Since 2.15.0. Deletes the account like the deletion by the person themselves (`POST /me/delete`), without the password: recordings, transcripts, summaries and everything else leave the database, the objects leave storage through the deletion queue, the transcription in progress is cancelled and the e-mail becomes free for a new sign-up.
          */
         delete: operations["deleteUser"];
         options?: never;
         head?: never;
         /**
-         * Desativar ou reativar um usuário, ou sobrepor as cotas dele
-         * @description Desativar encerra as sessões e revoga os PATs do usuário (desde a 2.18.0, também vence o link de redefinição de senha pendente). Desde a 2.15.0, `quotas` troca a sobreposição das cotas da conta.
+         * Deactivate or reactivate a user, or override their quotas
+         * @description Deactivating closes the user's sessions and revokes their PATs (since 2.18.0, it also expires the pending password reset link). Since 2.15.0, `quotas` replaces the override of the account's quotas.
          */
         patch: operations["updateUser"];
         trace?: never;
@@ -2466,8 +2467,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Gerar um link de redefinição de senha para um usuário
-         * @description Desde a 2.18.0. Link único, válido por 24 horas, que o admin entrega por fora a quem pediu: `<url pública>/redefinir-senha#<segredo>`, com o segredo no fragmento (não chega a logs nem ao `Referer`). O servidor guarda só o hash, e `url` só volta aqui. Um link novo vence os anteriores ainda não usados da conta; desativar a conta anula o link pendente. Conta desativada, 409 `conflict`. O admin nunca vê nem define a senha.
+         * Generate a password reset link for a user
+         * @description Since 2.18.0. Single-use link, valid for 24 hours, that the admin hands over out of band to whoever asked: `<public url>/redefinir-senha#<secret>`, with the secret in the fragment (it reaches neither logs nor the `Referer`). The server stores only the hash, and `url` comes back only here. A new link expires the account's earlier unused ones; deactivating the account voids the pending link. Deactivated account, 409 `conflict`. The admin never sees nor sets the password.
          */
         post: operations["createPasswordReset"];
         delete?: never;
@@ -2486,8 +2487,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Retentar um job de transcrição que falhou
-         * @description Cria o job da revisão seguinte da gravação, com a configuração atual da plataforma, e o enfileira. Vale para a gravação de qualquer usuário, mas só para o job mais recente da gravação e em estado `failed`.
+         * Retry a transcription job that failed
+         * @description Creates the job of the recording's next revision, with the platform's current configuration, and enqueues it. Applies to any user's recording, but only to the recording's most recent job and in state `failed`.
          */
         post: operations["retryTranscriptionJob"];
         delete?: never;
@@ -2503,7 +2504,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Saúde da fila, da GPU e dos modelos */
+        /** Health of the queue, the GPU and the models */
         get: operations["getAdminHealth"];
         put?: never;
         post?: never;
@@ -8614,7 +8615,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8644,7 +8645,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tag atualizada. */
+            /** @description Tag updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8678,7 +8679,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A tag que ficou. */
+            /** @description The tag that remained. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8706,10 +8707,10 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Sessão de admin aberta. */
+            /** @description Admin session opened. */
             204: {
                 headers: {
-                    /** @description `eclume_admin_session` e `eclume_admin_csrf`. */
+                    /** @description `eclume_admin_session` and `eclume_admin_csrf`. */
                     "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
@@ -8733,7 +8734,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Sessão encerrada e cookies removidos. */
+            /** @description Session closed and cookies removed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8753,7 +8754,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Conta de admin. */
+            /** @description Admin account. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8774,7 +8775,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Configuração. */
+            /** @description Configuration. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8803,7 +8804,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Configuração resultante. */
+            /** @description Resulting configuration. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8826,7 +8827,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Providers. A chave de API nunca volta; só `api_key_set`. */
+            /** @description Providers. The API key never comes back; only `api_key_set`. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8855,7 +8856,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Provider cadastrado. */
+            /** @description Provider registered. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -8883,7 +8884,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Removido. */
+            /** @description Removed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8914,7 +8915,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Provider atualizado. */
+            /** @description Provider updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8938,7 +8939,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tipos padrão, na ordem da lista. */
+            /** @description Default types, in list order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8968,7 +8969,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tipo padrão criado. */
+            /** @description Default type created. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -8997,7 +8998,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído. As cópias das contas ficam. */
+            /** @description Deleted. The accounts' copies remain. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -9027,7 +9028,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tipo padrão atualizado. */
+            /** @description Default type updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9051,7 +9052,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Nomes e estado; o valor nunca volta. */
+            /** @description Names and state; the value never comes back. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9072,7 +9073,7 @@ export interface operations {
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
-                /** @description Nome do segredo: `hf_token` (diarização no worker GPU) ou `anthropic_api_key` (provider `anthropic` sem chave própria). Outro nome → 422. */
+                /** @description Secret name: `hf_token` (diarization in the GPU worker) or `anthropic_api_key` (`anthropic` provider without its own key). Any other name → 422. */
                 secret_name: string;
             };
             cookie?: never;
@@ -9083,7 +9084,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Gravado. */
+            /** @description Stored. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -9103,14 +9104,14 @@ export interface operations {
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
-                /** @description Nome do segredo: `hf_token` (diarização no worker GPU) ou `anthropic_api_key` (provider `anthropic` sem chave própria). Outro nome → 422. */
+                /** @description Secret name: `hf_token` (diarization in the GPU worker) or `anthropic_api_key` (`anthropic` provider without its own key). Any other name → 422. */
                 secret_name: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Apagado. */
+            /** @description Erased. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -9136,7 +9137,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Usuários. */
+            /** @description Users. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9163,7 +9164,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Conta excluída. */
+            /** @description Account deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -9193,7 +9194,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Usuário atualizado. */
+            /** @description User updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9222,7 +9223,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Link gerado. */
+            /** @description Link generated. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -9251,7 +9252,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Novo job na fila. */
+            /** @description New job in the queue. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -9275,7 +9276,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Estado atual. */
+            /** @description Current state. */
             200: {
                 headers: {
                     [name: string]: unknown;
