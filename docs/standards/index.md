@@ -1,19 +1,19 @@
-# `standards/` — contratos atuais do eclume
+# `standards/` — eclume's current contracts
 
-O **padrão/contrato** atual — "como deve ser e por quê", a fonte da verdade compartilhada. Um
-padrão por arquivo; subpastas por **assunto**. Cada doc tem `type: standard` e um `resource:`
-derivado (o escopo do repositório que ele governa).
+The current **standard/contract** — "how it should be and why", the shared source of truth. One
+standard per file; subfolders by **subject**. Each doc has `type: standard` and a derived
+`resource:` (the scope of the repository it governs).
 
-**Fronteira:** `standards/` = "como **NÓS** fazemos (atual)". Direção vive em
-[vision/](../vision/index.md). Uma regra **acordada mas não provada** fica aqui como
-`authority: background` e passa a `current` quando provada.
+**Boundary:** `standards/` = "how **WE** do it (current)". Direction lives in
+[vision/](../vision/index.md). A rule that is **agreed but not proven** stays here as
+`authority: background` and becomes `current` once proven.
 
 ## Subtopics
 
-* [agents/](agents/index.md) — o idioma declarado e o contrato de conduta dos agentes
-* [api/](api/index.md) — o contrato de API v1, suas convenções e a regra de evolução só aditiva
-* [code/](code/index.md) — layout do monorepo, toolchains e comandos de cada pilar
-* [design/](design/index.md) — a marca do eclume e o portão de produção de artefatos
+* [agents/](agents/index.md) — the declared language and the agents' conduct contract
+* [api/](api/index.md) — the v1 API contract, its conventions and the additive-only evolution rule
+* [code/](code/index.md) — monorepo layout, toolchains and the commands of each pillar
+* [design/](design/index.md) — the eclume brand and the artifact production gate
 
 ## Current docs
 
