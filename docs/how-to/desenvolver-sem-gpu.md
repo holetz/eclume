@@ -1,7 +1,7 @@
 ---
 type: how-to
-title: Desenvolver o eclume sem GPU
-description: Do clone a uma gravação transcrita e resumida numa máquina Linux ou Windows sem GPU e sem o host de build — serviços do compose de dev, migrate, admin, API em HTTP, workers, worker de transcrição na engine cpu, web apontando para a API, e o equivalente local de cada remote-run (testes de navegador, E2E e build Android).
+title: Develop eclume without a GPU
+description: From clone to a transcribed and summarized recording on a Linux or Windows machine without a GPU and without the build host — dev compose services, migrate, admin, API over HTTP, workers, transcription worker on the cpu engine, web pointing at the API, and the local equivalent of each remote-run (browser tests, E2E and Android build).
 resource: deploy/docker-compose.dev.yml, deploy/.env.example, deploy/docker-compose.mock.yml, server/src/eclume_server/config.py, worker-gpu/src/eclume_worker/config.py, web/vite.config.ts
 tags: [desenvolvimento, cpu, sem-gpu, dev]
 timestamp: 2026-10-01
@@ -10,26 +10,26 @@ source: holetz/eclume#126
 maintainer: holetz
 ---
 
-# Desenvolver o eclume sem GPU
+# Develop eclume without a GPU
 
-O loop de desenvolvimento roda inteiro numa máquina comum: o worker de transcrição usa a engine
-`cpu` (faster-whisper `small` int8, sem diarização), e o host de build do projeto
-(`remote-run`, em [monorepo.md](../standards/code/monorepo.md)) é uma comodidade, não um
-requisito. Os comandos de lint e teste de cada pilar estão em
-[monorepo.md](../standards/code/monorepo.md); este guia leva do clone a uma gravação transcrita e
-resumida.
+The development loop runs entirely on an ordinary machine: the transcription worker uses the `cpu`
+engine (faster-whisper `small` int8, no diarization), and the project's build host
+(`remote-run`, in [monorepo.md](../standards/code/monorepo.md)) is a convenience, not a
+requirement. The lint and test commands of each pillar are in
+[monorepo.md](../standards/code/monorepo.md); this guide goes from the clone to a transcribed and
+summarized recording.
 
-## Pré-requisitos
+## Prerequisites
 
-- Git, Docker com o plugin Compose, [`uv`](https://docs.astral.sh/uv/), Node.js 22 e `ffmpeg` no
-  `PATH` (o pré-processamento do worker o chama).
-- **Windows:** Docker Desktop com WSL 2. O mais simples é rodar tudo dentro de uma distribuição
-  WSL (Ubuntu), com os comandos abaixo sem mudança; no PowerShell nativo, troque `VAR=valor cmd`
-  por `$env:VAR="valor"; cmd`.
-- O desktop e o celular (Rust, Tauri, Android) só são necessários para mexer neles; as
-  dependências de sistema estão em [monorepo.md](../standards/code/monorepo.md).
+- Git, Docker with the Compose plugin, [`uv`](https://docs.astral.sh/uv/), Node.js 22 and `ffmpeg` on the
+  `PATH` (the worker's preprocessing calls it).
+- **Windows:** Docker Desktop with WSL 2. The simplest is to run everything inside a WSL
+  distribution (Ubuntu), with the commands below unchanged; in native PowerShell, replace `VAR=value cmd`
+  with `$env:VAR="value"; cmd`.
+- The desktop and the phone (Rust, Tauri, Android) are only needed to work on them; the
+  system dependencies are in [monorepo.md](../standards/code/monorepo.md).
 
-## 1. Clone e dependências
+## 1. Clone and dependencies
 
 ```bash
 git clone https://github.com/holetz/eclume.git && cd eclume
@@ -37,10 +37,10 @@ uv sync --all-packages
 npm --prefix web ci
 ```
 
-## 2. Serviços
+## 2. Services
 
-O compose de dev sobe Postgres (com pgvector), Redis e MinIO em `127.0.0.1`, com as senhas de dev
-que o server já usa por padrão. O bucket nasce uma vez:
+The dev compose brings up Postgres (with pgvector), Redis and MinIO on `127.0.0.1`, with the dev passwords
+the server already uses by default. The bucket is created once:
 
 ```bash
 docker compose -f deploy/docker-compose.dev.yml up -d
@@ -48,30 +48,30 @@ docker compose -f deploy/docker-compose.dev.yml exec minio \
   sh -c 'mc alias set local http://127.0.0.1:9000 eclume eclume-dev-secret && mc mb --ignore-existing local/eclume'
 ```
 
-Portas ocupadas mudam por `deploy/.env` (copie de `deploy/.env.example`); mudando uma, passe a
-URL correspondente ao server e aos workers (`ECLUME_DATABASE_URL`, `ECLUME_REDIS_URL`,
+Occupied ports are changed through `deploy/.env` (copy from `deploy/.env.example`); when you change one, pass the
+matching URL to the server and the workers (`ECLUME_DATABASE_URL`, `ECLUME_REDIS_URL`,
 `ECLUME_S3_ENDPOINT`).
 
-## 3. Banco e admin
+## 3. Database and admin
 
 ```bash
 uv run eclume-server migrate
-printf '%s' 'senha-do-admin-local' \
-  | uv run eclume-server admin create --email admin@exemplo.com.br --name Admin --password-stdin
+printf '%s' 'local-admin-password' \
+  | uv run eclume-server admin create --email admin@example.com --name Admin --password-stdin
 ```
 
-## 4. API e workers
+## 4. API and workers
 
-Cada um num terminal. A API em HTTP puro precisa de `ECLUME_COOKIE_SECURE=false`, ou o cookie de
-sessão não volta ao navegador:
+Each in its own terminal. The API over plain HTTP needs `ECLUME_COOKIE_SECURE=false`, or the session
+cookie does not return to the browser:
 
 ```bash
 ECLUME_COOKIE_SECURE=false uv run uvicorn eclume_server.app:create_app --factory
-uv run arq eclume_server.worker.WorkerSettings          # fila eclume:default (ingestão, retomada)
-uv run arq eclume_server.worker.AgentWorkerSettings     # fila eclume:agents (resumos)
+uv run arq eclume_server.worker.WorkerSettings          # queue eclume:default (ingestion, resume)
+uv run arq eclume_server.worker.AgentWorkerSettings     # queue eclume:agents (summaries)
 ```
 
-O worker de transcrição, na engine `cpu`, com o extra `cpu` (faster-whisper; sem torch):
+The transcription worker, on the `cpu` engine, with the `cpu` extra (faster-whisper; no torch):
 
 ```bash
 ECLUME_ENGINE=cpu ECLUME_DEVICE=cpu \
@@ -79,8 +79,8 @@ ECLUME_S3_ENDPOINT_URL=http://127.0.0.1:9000 ECLUME_S3_ACCESS_KEY=eclume ECLUME_
   uv run --package eclume-worker --extra cpu arq eclume_worker.worker.WorkerSettings
 ```
 
-O primeiro job baixa o modelo `small` (~0,5 GB) para o cache do Hugging Face do usuário. A
-transcrição sai com um locutor só: a engine `cpu` não diariza
+The first job downloads the `small` model (~0.5 GB) into the user's Hugging Face cache. The
+transcription comes out with a single speaker: the `cpu` engine does not diarize
 ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#how-the-worker-does-its-part)).
 
 ## 5. Web
@@ -89,29 +89,29 @@ transcrição sai com um locutor só: a engine `cpu` não diariza
 ECLUME_API_URL=http://127.0.0.1:8000 npm --prefix web run dev
 ```
 
-Abra `http://localhost:5173`, crie uma conta em **Criar conta** e envie uma gravação curta: ela
-passa por `processing` até `done` com a transcrição. O microfone do navegador só funciona em
-`localhost` ou HTTPS.
+Open `http://localhost:5173`, create an account at **Criar conta** and upload a short recording: it
+goes through `processing` until `done` with the transcription. The browser microphone only works on
+`localhost` or HTTPS.
 
-## 6. Resumo
+## 6. Summary
 
-Entre no painel em `http://localhost:5173/admin/entrar` com o admin do passo 3 e cadastre um
-provider em **Admin → Agentes**: uma chave de API, ou um servidor compatível com a API da OpenAI na
-sua rede (ex.: um modelo local). A matriz do que cada tipo exige está em
-[server-agentes.md](../standards/code/server-agentes.md#what-each-provider-requires). Com ele
-cadastrado, a gravação transcrita ganha o resumo.
+Sign in to the panel at `http://localhost:5173/admin/entrar` with the admin from step 3 and register a
+provider in **Admin → Agentes**: an API key, or an OpenAI-API-compatible server on your
+network (e.g. a local model). The matrix of what each type requires is in
+[server-agentes.md](../standards/code/server-agentes.md#what-each-provider-requires). With it
+registered, the transcribed recording gets its summary.
 
-## Sem o host de build: o equivalente local de cada `remote-run`
+## Without the build host: the local equivalent of each `remote-run`
 
-Os `remote-run` de [monorepo.md](../standards/code/monorepo.md) sincronizam o checkout para o host
-de build e rodam lá; localmente, o mesmo comando roda na raiz do checkout:
+The `remote-run`s of [monorepo.md](../standards/code/monorepo.md) sync the checkout to the build host
+and run there; locally, the same command runs at the checkout root:
 
 | `remote-run` | Local |
 |---|---|
 | `remote-run web '… npm run test:browser'` | `cd web && npx playwright install webkit firefox && npm run fixtures && npm run test:browser` |
 | `remote-run . '… docker-compose.mock.yml … npm run test:e2e'` | `docker compose -p eclume-mock-web -f deploy/docker-compose.mock.yml up -d --wait && cd web && npx playwright install chromium && npm run test:e2e` |
-| `remote-run . 'source ~/.config/eclume/android-env.sh && … android build …'` | instale o SDK uma vez com `bash mobile/scripts/android-sdk.sh` e rode `source ~/.config/eclume/android-env.sh && npm --prefix mobile ci && npm --prefix mobile run tauri -- android build --debug --apk --target x86_64` |
-| `cargo …` dos pilares desktop e mobile | os mesmos comandos, com as dependências de sistema do Tauri instaladas |
+| `remote-run . 'source ~/.config/eclume/android-env.sh && … android build …'` | install the SDK once with `bash mobile/scripts/android-sdk.sh` and run `source ~/.config/eclume/android-env.sh && npm --prefix mobile ci && npm --prefix mobile run tauri -- android build --debug --apk --target x86_64` |
+| `cargo …` of the desktop and mobile pillars | the same commands, with the Tauri system dependencies installed |
 
-Os testes de navegador precisam do Google Chrome instalado; o E2E usa a porta 4010 do mock (outra
-por `ECLUME_MOCK_PORT` e `ECLUME_MOCK_URL`). O build Android ocupa ~8 GB de SDK, JDK e NDK em `~/`.
+The browser tests need Google Chrome installed; the E2E uses the mock's port 4010 (another one
+through `ECLUME_MOCK_PORT` and `ECLUME_MOCK_URL`). The Android build takes ~8 GB of SDK, JDK and NDK in `~/`.

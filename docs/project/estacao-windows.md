@@ -1,9 +1,9 @@
 ---
 type: project
-title: Estação de desenvolvimento e teste no Windows
-description: Como preparar uma máquina Windows para operar o host GPU e testar o app desktop do eclume — chave SSH, contexto Docker gpu-host, remote-run sem rsync, instalar e entrar no app sem PAT, depuração e captura da janela pelo CDP do WebView2 (cdp.mjs), a prova da nota de voz, log do app e build cruzado de binários Windows no host com cargo xwin.
+title: Windows development and test station
+description: How to prepare a Windows machine to operate the GPU host and test the eclume desktop app — SSH key, the gpu-host Docker context, remote-run without rsync, installing and signing into the app without a PAT, debugging and capturing the window over the WebView2 CDP (cdp.mjs), the voice-note proof, the app log and cross-building Windows binaries on the host with cargo xwin.
 resource: desktop/**, deploy/**
-tags: [windows, estacao, desktop, runbook, cross-build]
+tags: [windows, station, desktop, runbook, cross-build]
 timestamp: 2026-10-01
 audience: both
 authority: current
@@ -11,13 +11,13 @@ source: holetz/eclume#28, holetz/eclume#34, holetz/eclume#40
 maintainer: holetz
 ---
 
-# Estação de desenvolvimento e teste no Windows
+# Windows development and test station
 
-A estação Windows opera o host `192.168.15.199` ([host-setup.md](host-setup.md)) e testa o app
-desktop instalado de verdade. Ela **não tem Rust nem MSVC**: cargo, npm e as imagens rodam no
-host. Os comandos abaixo rodam no Git Bash, salvo quando indicado.
+The Windows station operates the host `192.168.15.199` ([host-setup.md](host-setup.md)) and tests the
+really installed desktop app. It **has neither Rust nor MSVC**: cargo, npm and the images run on the
+host. The commands below run in Git Bash, unless indicated.
 
-## 1. SSH e contexto Docker
+## 1. SSH and the Docker context
 
 ```bash
 ssh-keygen -t ed25519 -N "" -C "<estacao>" -f ~/.ssh/id_ed25519
@@ -31,20 +31,20 @@ EOF
 docker context create gpu-host --docker "host=ssh://holetz@192.168.15.199"
 ```
 
-Autorizar a chave pede a senha do `holetz`, uma vez só. No PowerShell, porque o Windows não tem
+Authorizing the key asks for the `holetz` password, just once. In PowerShell, because Windows has no
 `ssh-copy-id`:
 
 ```powershell
 type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh holetz@192.168.15.199 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
 ```
 
-Confira com `docker --context gpu-host ps --filter label=com.docker.compose.project=eclume`.
+Check with `docker --context gpu-host ps --filter label=com.docker.compose.project=eclume`.
 
-## 2. `remote-run` sem rsync
+## 2. `remote-run` without rsync
 
-O Git Bash não traz `rsync`. A versão da estação, em `~/.local/bin/remote-run`, empacota o
-diretório com `tar` (sem `.git`, `target/`, `node_modules/`, `.venv/` e `dist/`), extrai por cima
-de `~/build/<nome>` no host, que preserva esses caches, e roda o comando com `nice`:
+Git Bash does not ship `rsync`. The station's version, in `~/.local/bin/remote-run`, packs the
+directory with `tar` (without `.git`, `target/`, `node_modules/`, `.venv/` and `dist/`), extracts over
+`~/build/<name>` on the host, which preserves those caches, and runs the command with `nice`:
 
 ```bash
 #!/usr/bin/env bash
@@ -56,47 +56,47 @@ tar -C "$abs" --exclude=.git --exclude=target --exclude=node_modules --exclude=.
 ssh "$host" "export PATH=\$HOME/.cargo/bin:\$HOME/.local/bin:\$PATH; cd ~/build/$name && nice -n 10 bash -lc $(printf '%q' "$cmd")"
 ```
 
-Um arquivo apagado na estação continua na cópia do host até um `rm` explícito. Arquivos gerados
-lá (um `Cargo.lock`, um `cargo fmt`) voltam por `scp gpu-host:build/<nome>/<arquivo> <local>`.
-Exemplos: `remote-run desktop 'cargo test --workspace'`, `remote-run . 'uv run pytest server/tests'`.
+A file deleted on the station stays in the host copy until an explicit `rm`. Files generated
+there (a `Cargo.lock`, a `cargo fmt`) come back through `scp gpu-host:build/<name>/<file> <local>`.
+Examples: `remote-run desktop 'cargo test --workspace'`, `remote-run . 'uv run pytest server/tests'`.
 
-A cópia do host não tem `.git`: um `git diff` dentro do `remote-run` sai com 129. Checagens que
-dependem do git, como a do cliente gerado (`npm --prefix web run gen:api` seguido de
-`git diff --exit-code web/src/api/schema.gen.ts`), rodam na estação. Os testes do web (Vitest com
-jsdom) também rodam no host: na estação alguns `findBy` de 1 s estouram o tempo por lentidão do
-jsdom no Windows, sem ser regressão.
+The host copy has no `.git`: a `git diff` inside `remote-run` exits with 129. Checks that
+depend on git, such as the generated client check (`npm --prefix web run gen:api` followed by
+`git diff --exit-code web/src/api/schema.gen.ts`), run on the station. The web tests (Vitest with
+jsdom) also run on the host: on the station some 1 s `findBy` calls time out because of jsdom
+slowness on Windows, which is not a regression.
 
-## 3. App instalado: entrar e log
+## 3. Installed app: signing in and the log
 
-- **Instalar.** Baixe o NSIS de `https://192.168.15.199:8443/downloads/` (o `instaladores.json`
-  diz qual) e rode `eclume_<versão>_x64-setup.exe /S`, que instala em silêncio, por usuário, em
-  `%LOCALAPPDATA%\eclume`. Config, fila e gravações ficam em
-  `%APPDATA%\io.github.holetz.eclume`. O `curl.exe` do Windows exige `-k` (ou a CA no
-  sistema) e `--ssl-no-revoke`, porque a CA interna não publica CRL.
-- **Entrar, sem PAT e sem CA no sistema (0.2.0+).** O instalador do `/downloads` traz o endereço
-  do servidor e a impressão digital da CA raiz embutidos: a primeira execução mostra "eclume em
-  192.168.15.199 · Veio com este instalador", baixa o `eclume-root.crt`, confere a impressão
-  digital e o guarda em `%APPDATA%\io.github.holetz.eclume\servidor-ca.pem`. Basta o e-mail e a
-  senha da conta (ou o código de pareamento da web, em "Avançado"). A credencial de dispositivo
-  fica no Gerenciador de Credenciais (alvo `pat.eclume-desktop`, o mesmo do PAT antigo).
+- **Install.** Download the NSIS from `https://192.168.15.199:8443/downloads/` (`instaladores.json`
+  says which one) and run `eclume_<version>_x64-setup.exe /S`, which installs silently, per user, in
+  `%LOCALAPPDATA%\eclume`. Config, queue and recordings live in
+  `%APPDATA%\io.github.holetz.eclume`. Windows' `curl.exe` requires `-k` (or the CA in the
+  system) and `--ssl-no-revoke`, because the internal CA does not publish a CRL.
+- **Signing in, with no PAT and no CA in the system (0.2.0+).** The installer from `/downloads` carries the server address
+  and the root CA fingerprint embedded: the first run shows "eclume em
+  192.168.15.199 · Veio com este instalador", downloads `eclume-root.crt`, checks the fingerprint
+  and stores it in `%APPDATA%\io.github.holetz.eclume\servidor-ca.pem`. All that is needed is the account's e-mail and
+  password (or the pairing code from the web, under "Avançado"). The device credential
+  is kept in the Credential Manager (target `pat.eclume-desktop`, the same as the old PAT).
   ([desktop-deteccao-e-sync.md](../standards/code/desktop-deteccao-e-sync.md#account-and-credential)).
-- **Versões 0.1.x** pediam a CA no sistema (`certutil -addstore -f Root eclume-root.crt`, como
-  administrador) ou a CA extra nas configurações, e um PAT colado. Quem atualiza de uma delas
-  continua com o PAT e pode trocar pela conta em Configurações · Servidor.
+- **Versions 0.1.x** required the CA in the system (`certutil -addstore -f Root eclume-root.crt`, as
+  administrator) or the extra CA in the settings, and a pasted PAT. Whoever upgrades from one of them
+  keeps the PAT and can switch to the account in Configurações · Servidor.
 - **Log.** `%LOCALAPPDATA%\io.github.holetz.eclume\logs\eclume.log`
   ([desktop-gravacao.md](../standards/code/desktop-gravacao.md#app-and-tray)).
 
-## 4. Dirigir o app sem clicar
+## 4. Driving the app without clicking
 
-O WebView2 abre a porta de depuração quando a variável está no ambiente de quem lança o app:
+WebView2 opens the debugging port when the variable is in the environment of whoever launches the app:
 
 ```powershell
 $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9229"
 Start-Process "$env:LOCALAPPDATA\eclume\eclume-desktop.exe"
 ```
 
-`http://127.0.0.1:9229/json` lista a janela. O `desktop/scripts/cdp.mjs` (Node 22, sem
-dependência) avalia na janela com `awaitPromise` e captura o que ela mostra:
+`http://127.0.0.1:9229/json` lists the window. `desktop/scripts/cdp.mjs` (Node 22, no
+dependency) evaluates in the window with `awaitPromise` and captures what it shows:
 
 ```bash
 node desktop/scripts/cdp.mjs eval "window.__TAURI__.core.invoke('status')"
@@ -104,62 +104,61 @@ node desktop/scripts/cdp.mjs eval "document.querySelector('[data-vista]:not([hid
 node desktop/scripts/cdp.mjs screenshot janela.png
 ```
 
-A expressão chama os mesmos comandos que a janela: `'status'`, `'recordings'`,
+The expression calls the same commands as the window: `'status'`, `'recordings'`,
 `'toggle_recording'`, `'new_note'`, `'add_marker'`, `'save_settings'`, `'answer_meeting'`,
-`'sync_now'`, e na primeira execução `'discover_servers'`, `'prepare_server'` e `'sign_in'`.
-`CDP_PORT` troca a porta. Para ter áudio do
-sistema numa gravação de teste, toque um WAV com
-`(New-Object System.Media.SoundPlayer x.wav).PlaySync()`. A detecção ignora qualquer
-executável cujo **nome** contenha "eclume": rode o simulador de reunião com outro nome.
+`'sync_now'`, and on the first run `'discover_servers'`, `'prepare_server'` and `'sign_in'`.
+`CDP_PORT` changes the port. To get system audio in a test recording, play a WAV with
+`(New-Object System.Media.SoundPlayer x.wav).PlaySync()`. Detection ignores any
+executable whose **name** contains "eclume": run the meeting simulator under another name.
 
-## 5. Prova da nota de voz
+## 5. Voice-note proof
 
-`powershell -NoProfile -File desktop/scripts/prova-windows.ps1` faz a prova de ponta a ponta nesta
-estação: baixa e instala o NSIS de `/downloads`, abre o app com a porta 9229, captura a primeira
-execução (com o servidor embutido), entra com a conta de teste (`ECLUME_PROVA_EMAIL` e
-`ECLUME_PROVA_SENHA`), grava uma nota pelo atalho `Ctrl+Alt+N` falando um texto pela voz do
-Windows nos alto-falantes, e confere pela API (`desktop/scripts/prova_nota.py`) que a nota chegou à
-biblioteca com `kind=note`, `eclume-desktop/<versão>` e `transcribed`. A nota só para sozinha
-com voz no microfone: com o microfone mudo, ela é descartada ("não ouvimos voz") e a prova fica
-pendente de uma pessoa falar. O atalho sintetizado (`keybd_event`) só chega ao app com a sessão
-**desbloqueada**: com a tela bloqueada, a entrada vai para a tela de logon e o atalho não dispara.
-A prova troca a credencial do app instalado pela da conta de teste; depois dela, "Sair" e entre
-de novo com a conta de uso.
+`powershell -NoProfile -File desktop/scripts/prova-windows.ps1` runs the end-to-end proof on this
+station: it downloads and installs the NSIS from `/downloads`, opens the app with port 9229, captures the first
+run (with the embedded server), signs in with the test account (`ECLUME_PROVA_EMAIL` and
+`ECLUME_PROVA_SENHA`), records a note through the `Ctrl+Alt+N` shortcut speaking a text through the Windows
+voice on the speakers, and checks through the API (`desktop/scripts/prova_nota.py`) that the note reached the
+library with `kind=note`, `eclume-desktop/<version>` and `transcribed`. The note only stops by itself
+with voice on the microphone: with a muted microphone, it is discarded ("não ouvimos voz") and the proof stays
+pending for a person to speak. The synthesized shortcut (`keybd_event`) only reaches the app with the session
+**unlocked**: with the screen locked, the input goes to the logon screen and the shortcut does not fire.
+The proof swaps the installed app's credential for the test account's; after it, "Sair" and sign in
+again with the everyday account.
 
-## 6. Binários Windows cruzados no host
+## 6. Windows binaries cross-built on the host
 
-Para diagnosticar a captura (WASAPI) sem MSVC na estação, compile no host para
-`x86_64-pc-windows-msvc` com o `cargo xwin` e traga o `.exe`:
+To diagnose capture (WASAPI) without MSVC on the station, build on the host for
+`x86_64-pc-windows-msvc` with `cargo xwin` and bring back the `.exe`:
 
 ```bash
 remote-run desktop 'cargo xwin build --release --target x86_64-pc-windows-msvc -p eclume-desktop --example gravar'
 scp gpu-host:build/desktop/target/x86_64-pc-windows-msvc/release/examples/gravar.exe .
-./gravar.exe 12 ./saida    # grava 12 s de mic + sistema e imprime o .ogg
+./gravar.exe 12 ./saida    # records 12 s of mic + system and prints the .ogg
 ```
 
-Um `target/` semeado de outra pasta do host (`~/build/desktop`, por exemplo) guarda nos build
-scripts o caminho antigo: quando entra um plugin novo do Tauri, o build falha lendo
-`~/build/desktop/target/.../permissions`. Resolve com `cargo clean -p tauri` (e o mesmo com
+A `target/` seeded from another folder on the host (`~/build/desktop`, for example) keeps the old path
+in the build scripts: when a new Tauri plugin enters, the build fails reading
+`~/build/desktop/target/.../permissions`. Fix it with `cargo clean -p tauri` (and the same with
 `--target x86_64-pc-windows-msvc`).
 
-O host tem a toolchain instalada no espaço do `holetz`, sem apt: o target `x86_64-pc-windows-msvc`
-(`rustup target add`), o `cargo-xwin` (`cargo install --locked cargo-xwin`), o `ninja` e o
-`cmake` pelo `uv tool`, e links em `~/.local/bin`: `clang-cl` → `clang-18`, `lld-link` → o
-`rust-lld` da toolchain, `llvm-rc` → `llvm-rc-18`, `llvm-mt` → `llvm-mt-18` e `llvm-lib` →
-`llvm-lib-18`. O primeiro build baixa o CRT e o SDK da Microsoft para `~/.cache/cargo-xwin`.
-Os instaladores oficiais saem do `deploy/release-desktop.sh`, que compila o NSIS com o mesmo
-`cargo-xwin` num contêiner (o Windows é padrão; `--sem-windows` o omite), ou do `desktop-release`
+The host has the toolchain installed in `holetz`'s space, without apt: the `x86_64-pc-windows-msvc` target
+(`rustup target add`), `cargo-xwin` (`cargo install --locked cargo-xwin`), `ninja` and
+`cmake` through `uv tool`, and links in `~/.local/bin`: `clang-cl` → `clang-18`, `lld-link` → the
+toolchain's `rust-lld`, `llvm-rc` → `llvm-rc-18`, `llvm-mt` → `llvm-mt-18` and `llvm-lib` →
+`llvm-lib-18`. The first build downloads Microsoft's CRT and SDK to `~/.cache/cargo-xwin`.
+The official installers come out of `deploy/release-desktop.sh`, which builds the NSIS with the same
+`cargo-xwin` in a container (Windows is the default; `--sem-windows` omits it), or from `desktop-release`
 ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md)).
 
-## Validação de 2026-09-25 (holetz/eclume#28)
+## Validation of 2026-09-25 (holetz/eclume#28)
 
-Windows 11, Realtek e grupo de microfones Intel Smart Sound, com o 0.1.1 publicado. Funcionaram:
-instalação silenciosa, PAT no chaveiro, sync, detecção de um app no mic com a pergunta, gravação
-automática que para 15 s depois de o mic soltar, e o updater de 0.1.0 para 0.1.1 com o app
-reaberto. O áudio do sistema chegava mudo ao servidor por um defeito na dívida da mixagem, já
-corrigido. O grupo de microfones dessa máquina entrega silêncio digital, e isso é do driver.
+Windows 11, Realtek and an Intel Smart Sound microphone array, with 0.1.1 published. These worked:
+silent install, PAT in the keychain, sync, detection of an app on the mic with the prompt, automatic
+recording that stops 15 s after the mic is released, and the updater from 0.1.0 to 0.1.1 with the app
+reopened. The system audio reached the server muted because of a defect in the mixing debt, already
+fixed. This machine's microphone array delivers digital silence, and that is the driver's doing.
 
-Depois da correção (0.1.2, publicada pelo `desktop-release`), o updater levou o app de 0.1.1 para
-0.1.2 e o reabriu. Uma gravação manual de 35 s com `duas-vozes.ogg` tocando nos alto-falantes saiu
-com 86 KB (antes, 18 KB mudos) e chegou ao servidor transcrita com 13 segmentos e 2 locutores, o
-mesmo resultado da fixture enviada direto. O `eclume.log` registrou a abertura, a gravação e o sync.
+After the fix (0.1.2, published by `desktop-release`), the updater took the app from 0.1.1 to
+0.1.2 and reopened it. A 35 s manual recording with `duas-vozes.ogg` playing on the speakers came out
+at 86 KB (before, 18 KB muted) and reached the server transcribed with 13 segments and 2 speakers, the
+same result as the fixture uploaded directly. `eclume.log` recorded the opening, the recording and the sync.

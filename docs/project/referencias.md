@@ -1,7 +1,7 @@
 ---
 type: project
-title: Referências de mercado
-description: Soluções de mercado avaliadas (WhisperX, speaches, Anarlog, Meetily, OpenTranscribe, Scriberr) e como o eclume usa cada uma na estratégia compor.
+title: Market references
+description: Market solutions evaluated (WhisperX, speaches, Anarlog, Meetily, OpenTranscribe, Scriberr) and how eclume uses each one in the compose strategy.
 resource: "**"
 tags: [references, market, asr, desktop]
 timestamp: 2026-09-24
@@ -11,33 +11,33 @@ source: holetz/eclume#1
 maintainer: holetz
 ---
 
-# Referências de mercado
+# Market references
 
-Estratégia: **compor**. O eclume tem servidor próprio e enxuto. O motor de ASR é o WhisperX,
-usado como biblioteca num worker GPU próprio. O desktop reaproveita crates MIT do Anarlog. O resto
-se inspira em soluções existentes, sem forks. Pesquisa feita em 2026-09-24.
+Strategy: **compose**. eclume has its own lean server. The ASR engine is WhisperX,
+used as a library in its own GPU worker. The desktop reuses MIT crates from Anarlog. The rest
+is inspired by existing solutions, with no forks. Research done on 2026-09-24.
 
-| Solução | Licença | Uso no eclume |
+| Solution | License | Use in eclume |
 |---|---|---|
-| [WhisperX](https://github.com/m-bain/whisperX) (24k★, v3.8.6) | BSD-2 | **Motor**, como biblioteca, no worker GPU: faster-whisper em lote, alinhamento por palavra (pt via wav2vec2 comunitário), pyannote `community-1` e embeddings de locutor. |
-| [whisperx-asr-service](https://github.com/murtaza-nasir/whisperx-asr-service) | MIT | **Referência** de Dockerfile CUDA, fila de GPU e descarga de modelos. Não entra como sidecar (motivo abaixo). |
-| [speaches](https://github.com/speaches-ai/speaches) (3.7k★) | MIT | Engine alternativa OpenAI-compatível (faster-whisper, sem diarização), plugável pela interface de engine. |
-| [Anarlog](https://github.com/fastrepl/anarlog), ex-Hyprnote (9.4k★, Tauri 2) | MIT | **Crates Rust** reaproveitados no desktop: `detect` (mic em uso e app de reunião, com Windows, Linux e macOS), `audio-*`, `meeting-capture`, `vad`, `resampler`. |
-| [Meetily](https://github.com/Zackriya-Solutions/meeting-minutes) | MIT | Referência de UX desktop e de mixagem de mic com áudio do sistema. |
-| [OpenTranscribe](https://github.com/attevon-llc/OpenTranscribe) | AGPL-3.0 | **Só referência de UX**: biblioteca, busca, perfis de locutor e prompts por usuário. Nenhum código é copiado, por causa da AGPL. |
-| [Scriberr](https://github.com/rishikanthc/Scriberr) | MIT | Referência de API keys, watcher de pasta e chat sobre a transcrição. |
+| [WhisperX](https://github.com/m-bain/whisperX) (24k★, v3.8.6) | BSD-2 | **Engine**, as a library, in the GPU worker: batched faster-whisper, word-level alignment (pt via community wav2vec2), pyannote `community-1` and speaker embeddings. |
+| [whisperx-asr-service](https://github.com/murtaza-nasir/whisperx-asr-service) | MIT | **Reference** for the CUDA Dockerfile, GPU queue and model unloading. Not used as a sidecar (reason below). |
+| [speaches](https://github.com/speaches-ai/speaches) (3.7k★) | MIT | Alternative OpenAI-compatible engine (faster-whisper, no diarization), pluggable through the engine interface. |
+| [Anarlog](https://github.com/fastrepl/anarlog), formerly Hyprnote (9.4k★, Tauri 2) | MIT | **Rust crates** reused in the desktop: `detect` (mic in use and meeting app, on Windows, Linux and macOS), `audio-*`, `meeting-capture`, `vad`, `resampler`. |
+| [Meetily](https://github.com/Zackriya-Solutions/meeting-minutes) | MIT | Desktop UX reference and for mixing the mic with system audio. |
+| [OpenTranscribe](https://github.com/attevon-llc/OpenTranscribe) | AGPL-3.0 | **UX reference only**: library, search, speaker profiles and per-user prompts. No code is copied, because of the AGPL. |
+| [Scriberr](https://github.com/rishikanthc/Scriberr) | MIT | Reference for API keys, folder watcher and chat over the transcript. |
 
-## Por que WhisperX como biblioteca, e não o container pronto
+## Why WhisperX as a library, and not the ready-made container
 
-O servidor tem uma GTX 1660 Super com 6 GB de VRAM, arquitetura Turing TU116 e sem tensor cores.
+The server has a GTX 1660 Super with 6 GB of VRAM, Turing TU116 architecture and no tensor cores.
 
-- **Um processo só.** O worker roda ASR, alinhamento, diarização e embeddings de locutor
-  (`return_embeddings=True`) em sequência e carrega o pyannote uma única vez. Com o
-  whisperx-asr-service como sidecar, o pyannote seria carregado duas vezes em 6 GB, e a impressão
-  de voz viria de um modelo diferente do usado na diarização.
-- **Configuração para a placa.** `large-v3-turbo` com `compute_type=int8_float16` (~2–3 GB) e
-  pyannote `community-1` (~1 GB). O `fp16` puro fica evitado por causa do histórico de NaN na série
-  GTX 16xx. Roda um job de GPU por vez, com descarga de modelos ociosos.
-- **Sem Ollama residente.** Um LLM local não cabe junto do ASR. Esta produção resume com o
-  `claude -p` (imagem com `ECLUME_CLAUDE_CLI=1`); o produto não exige a CLI, e uma API ou o Ollama,
-  que só roda com a fila de ASR vazia, servem igual.
+- **A single process.** The worker runs ASR, alignment, diarization and speaker embeddings
+  (`return_embeddings=True`) in sequence and loads pyannote only once. With
+  whisperx-asr-service as a sidecar, pyannote would be loaded twice in 6 GB, and the voice
+  fingerprint would come from a different model than the one used in diarization.
+- **Configuration for the card.** `large-v3-turbo` with `compute_type=int8_float16` (~2–3 GB) and
+  pyannote `community-1` (~1 GB). Plain `fp16` is avoided because of the history of NaN on the
+  GTX 16xx series. One GPU job runs at a time, with idle models unloaded.
+- **No resident Ollama.** A local LLM does not fit next to the ASR. This production summarizes with
+  `claude -p` (image with `ECLUME_CLAUDE_CLI=1`); the product does not require the CLI, and an API or Ollama,
+  which only runs with the ASR queue empty, serve just as well.

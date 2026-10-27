@@ -340,7 +340,7 @@ on a host without an NVIDIA GPU: `deploy/deploy.sh --sem-gpu` adds
 `deploy/docker-compose.cpu.yml`, which sets `ECLUME_ENGINE=cpu` and `ECLUME_DEVICE=cpu` on
 `worker-gpu` and zeroes its GPU reservation (`deploy: !reset {}`, Compose 2.24+), with the same
 image. The queue, the job contract and the raw are the same; the heartbeat comes out without the
-NVML fields ([auto-hospedar.md](../../how-to/auto-hospedar.md#sem-gpu)). The server tests use a
+NVML fields ([auto-hospedar.md](../../how-to/auto-hospedar.md#without-a-gpu)). The server tests use a
 fake worker that publishes a fixture `transcript.raw.json` from `contracts/fixtures/`.
 
 ## How the server does its part

@@ -1,7 +1,7 @@
 ---
 type: project
-title: Runbook do host GPU
-description: "Como preparar o servidor 192.168.15.199 (Ubuntu 26.04, GTX 1660 Super) para receber os containers do eclume e do lumea: IP fixo, driver NVIDIA, Docker, NVIDIA Container Toolkit, firewall e docker context."
+title: GPU host runbook
+description: "How to prepare the server 192.168.15.199 (Ubuntu 26.04, GTX 1660 Super) to receive the eclume and lumea containers: fixed IP, NVIDIA driver, Docker, NVIDIA Container Toolkit, firewall and docker context."
 resource: deploy/**
 tags: [host, deploy, gpu, runbook]
 timestamp: 2026-10-08
@@ -11,85 +11,85 @@ source: holetz/eclume#1, holetz/eclume#28, holetz/eclume#41
 maintainer: holetz
 ---
 
-# Preparar o host 192.168.15.199
+# Preparing the host 192.168.15.199
 
-Este é o runbook **deste** host: deixa o servidor da instituição pronto para receber os
-containers do eclume e do lumea. Os requisitos e passos para qualquer servidor, com ou sem GPU,
-estão em [auto-hospedar.md](../how-to/auto-hospedar.md); desenvolver sem GPU e sem este host, em
-[desenvolver-sem-gpu.md](../how-to/desenvolver-sem-gpu.md). O servidor
-roda Ubuntu 26.04 LTS (atualizado do 24.04 em 2026-10-08) com uma NVIDIA GTX 1660 Super (6 GB). Os passos 1 a 8 rodam **no
-servidor**; o passo 9 roda **na máquina de desenvolvimento**.
+This is the runbook for **this** host: it gets the institution's server ready to receive the
+eclume and lumea containers. The requirements and steps for any server, with or without a GPU,
+are in [auto-hospedar.md](../how-to/auto-hospedar.md); developing without a GPU and without this host, in
+[desenvolver-sem-gpu.md](../how-to/desenvolver-sem-gpu.md). The server
+runs Ubuntu 26.04 LTS (upgraded from 24.04 on 2026-10-08) with an NVIDIA GTX 1660 Super (6 GB). Steps 1 to 8 run **on the
+server**; step 9 runs **on the development machine**.
 
-Portas:
+Ports:
 
-| Serviço | Endereço |
+| Service | Address |
 |---|---|
 | lumea | `https://192.168.15.199` (443) |
 | eclume | `https://192.168.15.199:8443` |
 
-## Estado real do host (provisionado em 2026-09-24, spec holetz/eclume#4)
+## Actual state of the host (provisioned on 2026-09-24, spec holetz/eclume#4)
 
-| Item | Estado |
+| Item | State |
 |---|---|
-| Máquina | `holetz-pc`, usuário `holetz` (sudo pede senha desde o upgrade para o 26.04), 4 CPUs, 15 GB RAM, ~56 GB livres em `/` |
-| GPU | GTX 1660 SUPER 6 GB, driver 595.99.02 (`nvidia-driver-595-open` e `linux-modules-nvidia-595-open-generic`), runtime `nvidia` já configurado no Docker |
-| Docker | 29.1.3 do repositório do Ubuntu, mantido no lugar do Docker CE (passo 3 dispensado). `docker.io`, `containerd` e `runc` marcados como manuais (`apt-mark manual`), e os plugins compose e buildx em `~/.docker/cli-plugins` |
-| Coexistência | O host é o servidor doméstico do usuário, com Jellyfin, *arr, qBittorrent, homepage, Sunshine e Samba. Esses serviços **não são tocados**. O Jellyfin pode disputar a GPU. |
-| Firewall | ufw já ativo, com regras 443 (lumea) e 8443 (eclume) só para `192.168.15.0/24` |
-| SSH | chave `ed25519` da máquina de dev autorizada. **O login por senha foi mantido** (passo 1.4 não aplicado), para não trancar o usuário fora de outros dispositivos. |
-| Claude | `~/.local/bin/claude` (2.1.282) já logado |
-| Builds | uv e Rust stable em `~/.local/bin` e `~/.cargo/bin`, com as deps de build do Tauri instaladas |
-| eclume em produção | projeto `eclume` na 8443 desde 2026-09-25 (holetz/eclume#14), dados em `/srv/eclume`, backup no cron do `holetz` às 03:30; runbook em [deploy-producao.md](deploy-producao.md) |
+| Machine | `holetz-pc`, user `holetz` (sudo asks for a password since the upgrade to 26.04), 4 CPUs, 15 GB RAM, ~56 GB free on `/` |
+| GPU | GTX 1660 SUPER 6 GB, driver 595.99.02 (`nvidia-driver-595-open` and `linux-modules-nvidia-595-open-generic`), `nvidia` runtime already configured in Docker |
+| Docker | 29.1.3 from the Ubuntu repository, kept in place of Docker CE (step 3 skipped). `docker.io`, `containerd` and `runc` marked as manual (`apt-mark manual`), and the compose and buildx plugins in `~/.docker/cli-plugins` |
+| Coexistence | The host is the user's home server, with Jellyfin, *arr, qBittorrent, homepage, Sunshine and Samba. Those services are **not touched**. Jellyfin may compete for the GPU. |
+| Firewall | ufw already active, with rules for 443 (lumea) and 8443 (eclume) only for `192.168.15.0/24` |
+| SSH | the dev machine's `ed25519` key authorized. **Password login was kept** (step 1.4 not applied), so as not to lock the user out of other devices. |
+| Claude | `~/.local/bin/claude` (2.1.282) already logged in |
+| Builds | uv and Rust stable in `~/.local/bin` and `~/.cargo/bin`, with the Tauri build deps installed |
+| eclume in production | project `eclume` on 8443 since 2026-09-25 (holetz/eclume#14), data in `/srv/eclume`, backup in `holetz`'s cron at 03:30; runbook in [deploy-producao.md](deploy-producao.md) |
 
-**Builds pesados rodam no host, não na máquina de dev** (ela trava durante reuniões). Uma estação
-Windows se prepara por [estacao-windows.md](estacao-windows.md):
+**Heavy builds run on the host, not on the dev machine** (it freezes during meetings). A Windows
+station is prepared by [estacao-windows.md](estacao-windows.md):
 
-- Imagens: `docker --context gpu-host compose ... build`, direto no daemon do host, sem registry.
-- Cargo, npm e uv: `remote-run <dir> '<comando>'` (`~/.local/bin/remote-run` na máquina de dev).
-  O helper sincroniza o diretório por rsync (sem `.git`, preservando `target/`, `node_modules/`,
-  `.venv/` e `dist/` no host) e executa em `~/build/<caminho>` com `nice`.
-- Arquivos gerados no host (um `Cargo.lock` atualizado, por exemplo) não voltam sozinhos: traga-os
-  com `rsync holetz@192.168.15.199:build/<nome>/<arquivo> <local>` **logo depois** do comando que
-  os gerou, porque o próximo `remote-run` sobrescreve a cópia do host com a local.
-- O `cmake` (exigido pela libopus embutida do desktop) está em `~/.local/bin`, instalado por
-  `uv tool install cmake`, sem apt.
-- **O rsync preserva a data de modificação.** Um arquivo editado aqui **antes** de o host terminar
-  um build anterior chega ao host com data mais velha que o artefato dele, e o cargo o considera
-  atualizado: o teste roda contra o código antigo, e o erro aparece longe da causa (uma função
-  "não encontrada" que existe). Dê `touch` nos arquivos alterados (`touch crates/*/src/*.rs`)
-  antes do `remote-run`.
-- **O release do desktop compila do commit, não da árvore** (`git archive`): o que não foi
-  commitado não entra. O ensaio (sem `--publicar`) não exige push nem versão nova e deixa os
-  instaladores em `~/eclume-build/release/dist-<versão>`; o script recusa começar com o disco do
-  host em 90% ou mais.
-- Disco: pode com `docker builder prune -f --filter until=720h` quando apertar.
+- Images: `docker --context gpu-host compose ... build`, straight on the host's daemon, with no registry.
+- Cargo, npm and uv: `remote-run <dir> '<command>'` (`~/.local/bin/remote-run` on the dev machine).
+  The helper syncs the directory through rsync (without `.git`, preserving `target/`, `node_modules/`,
+  `.venv/` and `dist/` on the host) and runs in `~/build/<path>` with `nice`.
+- Files generated on the host (an updated `Cargo.lock`, for example) do not come back on their own: bring them
+  with `rsync holetz@192.168.15.199:build/<name>/<file> <local>` **right after** the command that
+  generated them, because the next `remote-run` overwrites the host copy with the local one.
+- `cmake` (required by the desktop's embedded libopus) is in `~/.local/bin`, installed by
+  `uv tool install cmake`, without apt.
+- **rsync preserves the modification time.** A file edited here **before** the host finished a
+  previous build arrives on the host with a date older than its artifact, and cargo considers it
+  up to date: the test runs against the old code, and the error shows up far from the cause (a function
+  "not found" that exists). `touch` the changed files (`touch crates/*/src/*.rs`)
+  before `remote-run`.
+- **The desktop release builds from the commit, not from the tree** (`git archive`): whatever was not
+  committed does not go in. The rehearsal (without `--publicar`) requires neither a push nor a new version and leaves the
+  installers in `~/eclume-build/release/dist-<version>`; the script refuses to start with the host's
+  disk at 90% or more.
+- Disk: `docker builder prune -f --filter until=720h` is fine when space gets tight.
 
-## 1. IP fixo e SSH
+## 1. Fixed IP and SSH
 
-1. No roteador, reserve o IP `192.168.15.199` (reserva DHCP) para a placa de rede do servidor.
-2. No servidor:
+1. In the router, reserve the IP `192.168.15.199` (DHCP reservation) for the server's network card.
+2. On the server:
    ```bash
    sudo apt-get update && sudo apt-get install -y openssh-server
    ```
-3. Na máquina de desenvolvimento:
+3. On the development machine:
    ```bash
    ssh-copy-id usuario@192.168.15.199
    ```
-4. Depois de confirmar que o login por chave funciona, desligue o login por senha:
+4. After confirming that key login works, turn off password login:
    ```bash
    echo 'PasswordAuthentication no' | sudo tee /etc/ssh/sshd_config.d/10-hardening.conf
    sudo systemctl restart ssh
    ```
 
-## 2. Driver NVIDIA
+## 2. NVIDIA driver
 
 ```bash
 sudo ubuntu-drivers install
 sudo reboot
-nvidia-smi   # a GTX 1660 SUPER deve aparecer com 6144 MiB
+nvidia-smi   # the GTX 1660 SUPER should show up with 6144 MiB
 ```
 
-## 3. Docker Engine e compose plugin (repositório oficial)
+## 3. Docker Engine and compose plugin (official repository)
 
 ```bash
 sudo apt-get install -y ca-certificates curl
@@ -100,7 +100,7 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
   | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo usermod -aG docker "$USER"   # saia e entre de novo na sessão
+sudo usermod -aG docker "$USER"   # log out and back in
 ```
 
 ## 4. NVIDIA Container Toolkit
@@ -117,12 +117,12 @@ sudo systemctl restart docker
 docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu24.04 nvidia-smi
 ```
 
-## 5. Diretórios de dados
+## 5. Data directories
 
 ```bash
 sudo mkdir -p /srv/eclume /srv/lumea
 sudo chown "$USER":"$USER" /srv/eclume /srv/lumea
-df -h /srv   # reserve pelo menos 50 GB para modelos e áudio
+df -h /srv   # reserve at least 50 GB for models and audio
 ```
 
 ## 6. Firewall
@@ -132,237 +132,235 @@ sudo ufw default deny incoming
 sudo ufw allow from 192.168.15.0/24 to any port 22 proto tcp
 sudo ufw allow from 192.168.15.0/24 to any port 443 proto tcp
 sudo ufw allow from 192.168.15.0/24 to any port 8443 proto tcp
-# Anúncio mDNS do eclume (serviço `mdns`, rede do host; holetz/eclume#35).
+# eclume mDNS announcement (`mdns` service, host network; holetz/eclume#35).
 sudo ufw allow from 192.168.15.0/24 to any port 5353 proto udp
 sudo ufw enable
 ```
 
-O `mdns` roda com `network_mode: host`, então o 5353/udp passa **pelo** ufw (só as portas
-publicadas pelo Docker passam por fora). O `before.rules` padrão do Ubuntu já aceita o mDNS
-multicast (`224.0.0.251:5353`), e a descoberta funcionou sem a regra; ela deixa explícito o que o
-eclume precisa, inclusive para consultas unicast. O deploy não tem sudo: é um passo manual, feito
-uma vez.
+`mdns` runs with `network_mode: host`, so 5353/udp goes **through** ufw (only the ports
+published by Docker bypass it). Ubuntu's default `before.rules` already accepts multicast mDNS
+(`224.0.0.251:5353`), and discovery worked without the rule; it makes explicit what
+eclume needs, including for unicast queries. The deploy has no sudo: it is a manual step, done
+once.
 
-> **Atenção:** portas publicadas pelo Docker (`ports:` no compose) **passam por fora do ufw**.
-> Postgres, Redis e MinIO não podem ter `ports:` publicadas, ou devem ser ligados a
-> `127.0.0.1:`. Só o Caddy de cada stack publica porta.
+> **Warning:** ports published by Docker (`ports:` in the compose) **bypass ufw**.
+> Postgres, Redis and MinIO must not have published `ports:`, or must be bound to
+> `127.0.0.1:`. Only each stack's Caddy publishes a port.
 
-## 7. `claude -p` no servidor
+## 7. `claude -p` on the server
 
-Os agentes de sumarização desta produção usam o provider `claude-cli`, escolha deste host (a
-matriz dos quatro providers está em [server-agentes.md](../standards/code/server-agentes.md#what-each-provider-requires)).
-A CLI que roda no worker vem da imagem construída com `ECLUME_CLAUDE_CLI=1` no `.env.prod` do deploy;
-a do host só serve para gerar o token.
+This production's summarization agents use the `claude-cli` provider, this host's choice (the
+matrix of the four providers is in [server-agentes.md](../standards/code/server-agentes.md#what-each-provider-requires)).
+The CLI that runs in the worker comes from the image built with `ECLUME_CLAUDE_CLI=1` in the deploy's `.env.prod`;
+the host's one only serves to generate the token.
 
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash
-claude setup-token   # token de longa duração (1 ano) para o eclume
+claude setup-token   # long-lived token (1 year) for eclume
 ```
 
-O worker de agentes do eclume recebe o token pelo painel (Admin → Agentes → Token do Claude) ou por
-`ECLUME_CLAUDE_OAUTH_TOKEN` ([deploy-producao.md](deploy-producao.md#segredos)), sem montar a
-sessão do host: o bind mount de `~/.claude/.credentials.json` diverge quando o `claude` do host
-renova o OAuth. Se os termos permitem esse uso do token de assinatura é decisão pendente da dona
-(holetz/eclume#129).
+The eclume agent worker receives the token through the panel (Admin → Agentes → Token do Claude) or through
+`ECLUME_CLAUDE_OAUTH_TOKEN` ([deploy-producao.md](deploy-producao.md#secrets)), without mounting the
+host's session: the bind mount of `~/.claude/.credentials.json` diverges when the host's `claude`
+renews the OAuth. Whether the terms allow this use of the subscription token is a pending decision of the
+owner (holetz/eclume#129).
 
-## 8. Token do Hugging Face (diarização)
+## 8. Hugging Face token (diarization)
 
-1. Crie um token de leitura em <https://huggingface.co/settings/tokens>.
-2. Aceite os termos de `pyannote/speaker-diarization-community-1`, e também dos demais modelos
-   gated indicados em `holetz/eclume#8`, com a mesma conta.
-3. O token vai em `/srv/eclume/secrets/hf_token` ou no painel de administração (veja
-   [worker-gpu.md](worker-gpu.md)). Ele nunca é versionado.
+1. Create a read token at <https://huggingface.co/settings/tokens>.
+2. Accept the terms of `pyannote/speaker-diarization-community-1`, and also of the other
+   gated models listed in `holetz/eclume#8`, with the same account.
+3. The token goes in `/srv/eclume/secrets/hf_token` or in the admin panel (see
+   [worker-gpu.md](worker-gpu.md)). It is never versioned.
 
-## 9. Na máquina de desenvolvimento: contexto Docker
+## 9. On the development machine: Docker context
 
 ```bash
 docker context create gpu-host --docker "host=ssh://usuario@192.168.15.199"
-docker --context gpu-host info | grep -i runtimes   # deve listar nvidia
+docker --context gpu-host info | grep -i runtimes   # should list nvidia
 docker --context gpu-host run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu24.04 nvidia-smi
 ```
 
-Os builds e deploys usam `--context gpu-host`. O loop de desenvolvimento continua local.
+Builds and deploys use `--context gpu-host`. The development loop stays local.
 
-## 10. Certificado do Caddy (depois do primeiro deploy)
+## 10. Caddy certificate (after the first deploy)
 
-Cada stack usa Caddy com `tls internal`, e cada uma tem a sua CA. HTTPS é obrigatório para a
-conversão de mídia no navegador (WebCodecs) e para o microfone. O deploy do eclume publica a raiz
-em `https://192.168.15.199:8443/downloads/eclume-root.crt` (`/srv/eclume/downloads/`):
+Each stack uses Caddy with `tls internal`, and each has its own CA. HTTPS is mandatory for
+media conversion in the browser (WebCodecs) and for the microphone. The eclume deploy publishes the root
+at `https://192.168.15.199:8443/downloads/eclume-root.crt` (`/srv/eclume/downloads/`):
 
 ```bash
 scp holetz@192.168.15.199:/srv/eclume/downloads/eclume-root.crt .
 ```
 
-- **Linux:** copie para `/usr/local/share/ca-certificates/eclume-root.crt` e rode
+- **Linux:** copy to `/usr/local/share/ca-certificates/eclume-root.crt` and run
   `sudo update-ca-certificates`.
-- **Windows:** rode `certutil -addstore -f Root eclume-root.crt` como administrador.
-- **macOS:** rode
+- **Windows:** run `certutil -addstore -f Root eclume-root.crt` as administrator.
+- **macOS:** run
   `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain eclume-root.crt`.
-- **Firefox:** importe em Configurações → Certificados, porque ele usa repositório próprio.
+- **Firefox:** import it in Settings → Certificates, because it uses its own store.
 
-A conferência da impressão digital e o uso pelo lumea (`LUMEA_ECLUME_CA_BUNDLE`) estão em
-[deploy-producao.md](deploy-producao.md#ca-raiz-nos-clientes).
+Checking the fingerprint and use by lumea (`LUMEA_ECLUME_CA_BUNDLE`) are in
+[deploy-producao.md](deploy-producao.md#root-ca-on-the-clients).
 
-## Upgrade de versão do Ubuntu
+## Ubuntu version upgrade
 
-O upgrade do 24.04 para o 26.04 (2026-10-08) derrubou o host inteiro. O `do-release-upgrade`
-removeu o `docker-compose` v1, e o `apt autoremove` seguinte levou `docker.io`, `containerd` e
-`runc`, que tinham sido instalados como dependência dele. Os dados em `/var/lib/docker` sobrevivem,
-porque o pacote é removido sem purge. No próximo upgrade:
+The upgrade from 24.04 to 26.04 (2026-10-08) took down the whole host. `do-release-upgrade`
+removed `docker-compose` v1, and the following `apt autoremove` took `docker.io`, `containerd` and
+`runc`, which had been installed as its dependency. The data in `/var/lib/docker` survives,
+because the package is removed without purge. On the next upgrade:
 
-- **Antes do `autoremove`:** `apt-mark showmanual | grep -E '^(docker.io|containerd|runc)$'` deve
-  listar os três. Se faltar algum, rode `sudo apt-get install -y docker.io` e
+- **Before `autoremove`:** `apt-mark showmanual | grep -E '^(docker.io|containerd|runc)$'` must
+  list the three. If any is missing, run `sudo apt-get install -y docker.io` and
   `sudo apt-mark manual docker.io containerd runc`.
-- **Repositórios de terceiros:** o upgrade desativa as listas de fora do Ubuntu. Reative a do NVIDIA
-  Container Toolkit no formato deb822, em `/etc/apt/sources.list.d/nvidia-container-toolkit.sources`:
+- **Third-party repositories:** the upgrade disables the lists from outside Ubuntu. Re-enable the NVIDIA
+  Container Toolkit one in deb822 format, in `/etc/apt/sources.list.d/nvidia-container-toolkit.sources`:
   ```
   Types: deb
   URIs: https://nvidia.github.io/libnvidia-container/stable/deb/amd64/
   Suites: /
   Signed-By: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
   ```
-- **Driver do kernel novo:** `sudo apt-get install -y linux-modules-nvidia-595-open-generic`, e
-  depois confira com `nvidia-smi`.
-- **GPU nos contêineres:** um `systemctl daemon-reload` (que `systemctl enable` e a instalação de
-  pacotes também disparam) com contêineres GPU já de pé corta o acesso deles aos `/dev/nvidia*`.
-  No `eclume-worker-gpu-1`, o `nvidia-smi` falha com `Failed to initialize NVML: Unknown Error`; no
-  `jellyfin`, `: < /dev/nvidia-uvm` dá `Operation not permitted`. O host continua normal e o
-  vigia não percebe, porque testa o `nvidia-smi` do host e o heartbeat do worker. Para corrigir,
-  basta `docker restart` nos dois.
-- **Contêineres sem política de restart** não voltam depois de um boot. O lumea ficou parado de
-  2026-10-02 a 2026-10-08 assim. Ele foi corrigido com
-  `docker update --restart unless-stopped` nos serviços longos, que é o que o
-  `docker-compose.remote.yml` dele declara.
-- **Prova:** o smoke só leitura do eclume ([deploy-producao.md](deploy-producao.md)) e
-  `curl -k https://192.168.15.199/api/health` (200) do lumea.
+- **New kernel driver:** `sudo apt-get install -y linux-modules-nvidia-595-open-generic`, and
+  then check with `nvidia-smi`.
+- **GPU in containers:** a `systemctl daemon-reload` (which `systemctl enable` and package installation
+  also trigger) with GPU containers already up cuts their access to `/dev/nvidia*`.
+  In `eclume-worker-gpu-1`, `nvidia-smi` fails with `Failed to initialize NVML: Unknown Error`; in
+  `jellyfin`, `: < /dev/nvidia-uvm` gives `Operation not permitted`. The host stays normal and the
+  watchdog does not notice, because it tests the host's `nvidia-smi` and the worker's heartbeat. To fix it,
+  `docker restart` on both is enough.
+- **Containers without a restart policy** do not come back after a boot. lumea stayed down from
+  2026-10-02 to 2026-10-08 this way. It was fixed with
+  `docker update --restart unless-stopped` on the long-running services, which is what its
+  `docker-compose.remote.yml` declares.
+- **Proof:** eclume's read-only smoke ([deploy-producao.md](deploy-producao.md)) and
+  lumea's `curl -k https://192.168.15.199/api/health` (200).
 
-## Gate de qualidade (`~/eclume-gate`)
+## Quality gate (`~/eclume-gate`)
 
-O gate (`bash deploy/gate.sh` na estação; norma em
-[monorepo.md](../standards/code/monorepo.md)) roda no host, no usuário `holetz`:
+The gate (`bash deploy/gate.sh` on the station; standard in
+[monorepo.md](../standards/code/monorepo.md)) runs on the host, as user `holetz`:
 
-- `~/eclume-gate/src-<sha>-<época>`: a árvore extraída do `git archive`, apagada ao fim;
-  `~/eclume-gate/logs/<sha>.log`: o log de cada execução completa; `~/eclume-gate/.trava-<n>`:
+- `~/eclume-gate/src-<sha>-<epoch>`: the tree extracted from `git archive`, deleted at the end;
+  `~/eclume-gate/logs/<sha>.log`: the log of each full run; `~/eclume-gate/.trava-<n>`:
   the slot locks. Up to `ECLUME_GATE_SLOTS` (2) gates run at once, one per slot; a third waits for
   a free slot. Inside a gate, up to `ECLUME_GATE_JOBS` (2) pillars run at once, each from its own
-  copy of the tree (`src-<sha>-<época>.p-<pilar>`), and `gpu-e2e` runs last, alone, under
+  copy of the tree (`src-<sha>-<epoch>.p-<pillar>`), and `gpu-e2e` runs last, alone, under
   `~/eclume-gate/.trava-gpu`.
   Each pillar container gets `ECLUME_E2E_WORKERS` set to its CPU share (`ECLUME_GATE_CPUS`, 3), and
   both Playwright suites use it as `--workers`: a container sees every host CPU, and Playwright's
   default of half of them put six browsers in a 4 GB container, which the kernel OOM-killed.
-- `~/eclume-gate/cache`: target do cargo por pilar, registry do cargo, caches do uv, do npm, dos
-  navegadores do Playwright e do `cargo-xwin` (~15 GB depois de duas execuções; acima de
-  `ECLUME_GATE_CACHE_GB`, 25 GB, os target/ recomeçam). Para liberar disco, apague a pasta inteira:
-  a próxima execução reconstrói.
-- Imagens: `eclume-gate:<Rust>` (`deploy/gate.Dockerfile`), sobre `eclume-desktop-build-windows:<Rust>`
-  e `eclume-desktop-build:<Rust>` (a versão de `desktop/rust-toolchain.toml`), que o gate constrói
-  se faltarem; as de tag `24.04` são da época anterior à fixação e podem ser apagadas. O primeiro build da imagem do
-  gate levou ~20 minutos.
+- `~/eclume-gate/cache`: cargo target per pillar, cargo registry, uv, npm, Playwright browser and
+  `cargo-xwin` caches (~15 GB after two runs; above
+  `ECLUME_GATE_CACHE_GB`, 25 GB, the target/ restart). To free disk, delete the whole folder:
+  the next run rebuilds.
+- Images: `eclume-gate:<Rust>` (`deploy/gate.Dockerfile`), on top of `eclume-desktop-build-windows:<Rust>`
+  and `eclume-desktop-build:<Rust>` (the version in `desktop/rust-toolchain.toml`), which the gate builds
+  if they are missing; those tagged `24.04` are from the era before pinning and can be deleted. The first build of the
+  gate image took ~20 minutes.
 - Compose project `eclume-gate-<slot>` (Postgres, Redis, MinIO and the mock on `127.0.0.1:55633`,
   `56580`, `59201` and `4211`, plus the slot number), brought down with `down -v` at the end; it
   never touches the `eclume` project.
-- Pilar `gpu-e2e`: roda no host (não no contêiner), sobe o projeto compose `eclume-gpu-test` (Redis
-  em `127.0.0.1:16379`, MinIO em `19000`, o worker-gpu com a GPU) e o derruba com `down -v` ao fim;
-  usa os modelos e o token do Hugging Face de `/srv/eclume`, divide a VRAM de 6 GB com a produção e
-  espera o `busy` e a VRAM livre antes de subir (sai 75, inconclusivo, se a GPU não liberar).
-  Linha de base com o host parado (2026-10-07, holetz/eclume#159): 887 MiB ocupados pela sessão
-  gráfica (Xorg, gnome-shell, Firefox, Discord, Steam), nenhum processo CUDA do eclume (o worker-gpu
-  descarrega os modelos e recicla o processo na ociosidade) e ~400 MiB retidos pelo driver; sobram
-  ~4,8 GB livres, acima do mínimo de 4096 MiB. Conferir com
-  `nvidia-smi --query-compute-apps=pid,used_memory --format=csv` (vazio com o host parado).
-  Norma em [monorepo.md](../standards/code/monorepo.md).
-- Limites por pilar: `--cpus` `ECLUME_GATE_CPUS` (3; the host has had 12 CPUs since October 2026), `--cpu-shares 256` (também nos serviços de teste e no mock, por um
-  `~/eclume-gate/cpu-shares-<slot>.yml` gerado a cada execução: a produção vence a CPU quando disputam),
-  `nice`, teto de memória `ECLUME_GATE_MEMORY` (4g; o pico medido foi ~2,6 GiB no link do desktop e
-  do windows). O pilar android, medido em 08/10/2026 (holetz/eclume#188) com `memory.peak` do cgroup do
-  contêiner: pico no teto de 4 GiB, `anon` de 4056 MiB e `oom_kill` 1, com o Gradle (2403 MiB), o daemon
-  do Kotlin (972 MiB) e o build-tools do Kotlin (507 MiB) vivos ao mesmo tempo; o cargo não estava no
-  pico. A causa era o `./gradlew --stop` que faltava: o Gradle que o `tauri android build` deixa de pé
-  (2 GiB) convivia com o `gradlew --no-daemon` seguinte, e o Kotlin compilava num segundo JVM. Com
-  `kotlin.compiler.execution.strategy=in-process`, `-Xmx1536m`, `org.gradle.workers.max=2` e o `--stop`
-  em `deploy/pilares.sh`, duas execuções seguidas passaram com `anon` de 2658 e 2870 MiB, pico do
-  cgroup de 3581 MiB (o resto é cache de página) e `oom_kill` 0, sem subir o teto. Uma execução completa levou 16 a 21 minutos com a produção de pé, e recusa com o
-  disco em 90%.
-- Proporcional: o host roda só os pilares que o diff desde o último SHA verde exige (`--todos` na
-  estação força os dez) e abandona o SHA que o pre-push disparou e que o `main` já ultrapassou
-  (`eclume/gate` = `error` "superado por <sha>"); `bash deploy/gate.sh --estado <sha>` mostra a
-  descrição com os pilares rodados e os dispensados. O deploy sem status do SHA da ponta se resolve
-  com `bash deploy/gate.sh <sha>`, que nunca é abandonado.
-- Poda a cada execução: logs com mais de 30 dias, imagens de build de outra versão do Rust (as
-  `eclume-gate`, `eclume-desktop-build`, `-windows` e `eclume-mobile-build` sem a tag atual) e
-  `src-*` com mais de um dia. Os `dist-*` do release (`~/eclume-build/release` e `/movel`) ficam nos
-  3 mais recentes, podados a cada `release-desktop.sh` e `release-movel.sh`.
-- O `gh` do host (conta `holetz`, escopo `repo`) publica o status `eclume/gate`; os contêineres dos
-  pilares não recebem o token. O NDK de `~/android-sdk/ndk/28.2.13676358` entra só leitura no
-  pilar `mobile`.
+- Pillar `gpu-e2e`: runs on the host (not in the container), brings up the compose project `eclume-gpu-test` (Redis
+  on `127.0.0.1:16379`, MinIO on `19000`, the worker-gpu with the GPU) and takes it down with `down -v` at the end;
+  it uses the models and the Hugging Face token from `/srv/eclume`, shares the 6 GB of VRAM with production and
+  waits for `busy` and for free VRAM before coming up (exits 75, inconclusive, if the GPU does not free up).
+  Baseline with the host idle (2026-10-07, holetz/eclume#159): 887 MiB occupied by the graphical
+  session (Xorg, gnome-shell, Firefox, Discord, Steam), no eclume CUDA process (the worker-gpu
+  unloads the models and recycles the process when idle) and ~400 MiB held by the driver; ~4.8 GB
+  remain free, above the minimum of 4096 MiB. Check with
+  `nvidia-smi --query-compute-apps=pid,used_memory --format=csv` (empty with the host idle).
+  Standard in [monorepo.md](../standards/code/monorepo.md).
+- Limits per pillar: `--cpus` `ECLUME_GATE_CPUS` (3; the host has had 12 CPUs since October 2026), `--cpu-shares 256` (also on the test services and the mock, through a
+  `~/eclume-gate/cpu-shares-<slot>.yml` generated on each run: production wins the CPU when they compete),
+  `nice`, memory ceiling `ECLUME_GATE_MEMORY` (4g; the measured peak was ~2.6 GiB in the desktop and
+  windows link). The android pillar, measured on 08/10/2026 (holetz/eclume#188) with the container cgroup's
+  `memory.peak`: peak at the 4 GiB ceiling, `anon` of 4056 MiB and `oom_kill` 1, with Gradle (2403 MiB), the Kotlin
+  daemon (972 MiB) and the Kotlin build-tools (507 MiB) alive at the same time; cargo was not at the
+  peak. The cause was the missing `./gradlew --stop`: the Gradle that `tauri android build` leaves up
+  (2 GiB) coexisted with the following `gradlew --no-daemon`, and Kotlin compiled in a second JVM. With
+  `kotlin.compiler.execution.strategy=in-process`, `-Xmx1536m`, `org.gradle.workers.max=2` and the `--stop`
+  in `deploy/pilares.sh`, two consecutive runs passed with `anon` of 2658 and 2870 MiB, cgroup peak of
+  3581 MiB (the rest is page cache) and `oom_kill` 0, without raising the ceiling. A full run took 16 to 21 minutes with production up, and refuses with the
+  disk at 90%.
+- Proportional: the host runs only the pillars that the diff since the last green SHA requires (`--todos` on the
+  station forces all ten) and abandons the SHA that the pre-push fired and that `main` has already passed
+  (`eclume/gate` = `error` "superado por <sha>"); `bash deploy/gate.sh --estado <sha>` shows the
+  description with the pillars run and the ones skipped. A deploy with no status for the tip SHA is resolved
+  with `bash deploy/gate.sh <sha>`, which is never abandoned.
+- Pruning on every run: logs older than 30 days, build images of another Rust version (the
+  `eclume-gate`, `eclume-desktop-build`, `-windows` and `eclume-mobile-build` without the current tag) and
+  `src-*` older than a day. The release `dist-*` (`~/eclume-build/release` and `/movel`) stay at the
+  3 most recent, pruned on every `release-desktop.sh` and `release-movel.sh`.
+- The host's `gh` (account `holetz`, scope `repo`) publishes the `eclume/gate` status; the pillar containers
+  do not receive the token. The NDK at `~/android-sdk/ndk/28.2.13676358` goes in read-only on the
+  `mobile` pillar.
 
-## Instaladores do desktop (sem assinatura de código)
+## Desktop installers (without code signing)
 
-Os instaladores saem de `deploy/release-desktop.sh` (compila no host e cria a tag
-`desktop-v<versão>` como um GitHub Release privado; o workflow `desktop-release` é só a
-alternativa manual); o contrato está em
-[desktop-distribuicao.md](../standards/code/desktop-distribuicao.md). Como o repo é privado, os
-clientes baixam do próprio servidor eclume:
+The installers come out of `deploy/release-desktop.sh` (it builds on the host and creates the tag
+`desktop-v<version>` as a private GitHub Release; the `desktop-release` workflow is just the manual
+alternative); the contract is in
+[desktop-distribuicao.md](../standards/code/desktop-distribuicao.md). Since the repo is private, the
+clients download from the eclume server itself:
 
-- **Pasta servida:** `/srv/eclume/downloads/`, publicada em `https://192.168.15.199:8443/downloads/`
-  pelo Caddy do eclume ([deploy-producao.md](deploy-producao.md)). Na raiz ficam `latest.json`
-  (manifesto do
-  updater), `instaladores.json` (lista para a página de download) e `INSTALACAO.md`; cada versão
-  fica em `/srv/eclume/downloads/<versão>/`, com as três mais recentes mantidas.
-- **Publicar um release** (no host, onde o `gh` está autenticado):
+- **Served folder:** `/srv/eclume/downloads/`, published at `https://192.168.15.199:8443/downloads/`
+  by eclume's Caddy ([deploy-producao.md](deploy-producao.md)). At the root are `latest.json`
+  (the updater's manifest), `instaladores.json` (list for the download page) and `INSTALACAO.md`; each version
+  lives in `/srv/eclume/downloads/<version>/`, with the three most recent kept.
+- **Publish a release** (on the host, where `gh` is authenticated):
   ```bash
   deploy/publicar-desktop.sh desktop-v0.1.0
-  # da máquina de dev, sem clonar nada no host:
+  # from the dev machine, without cloning anything on the host:
   ssh holetz@192.168.15.199 'bash -s -- desktop-v0.1.0' < deploy/publicar-desktop.sh
   ```
-  O script confere o `SHA256SUMS` antes de trocar os manifestos da raiz.
-- **Chave do updater (minisign):** a privada e a senha ficam em
-  `/srv/eclume/secrets/tauri-updater.key` e `tauri-updater.key.password` (`chmod 600`), que o
-  release no host lê; os mesmos valores estão nos secrets do GitHub `TAURI_SIGNING_PRIVATE_KEY` e
-  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` para o workflow manual — mas um secret do GitHub não se lê de
-  volta e não é cópia recuperável: a cópia é o snapshot restic cifrado de `secrets/` que o
-  `backup.sh` leva para fora do host ([deploy-producao.md](deploy-producao.md#backup-e-restauração)).
-  Nunca no repo. A pública está em `desktop/src-tauri/tauri.conf.json`. Perder a privada obriga a
-  reinstalar o app à mão em todos os clientes.
+  The script checks `SHA256SUMS` before swapping the root manifests.
+- **Updater key (minisign):** the private key and the password live in
+  `/srv/eclume/secrets/tauri-updater.key` and `tauri-updater.key.password` (`chmod 600`), which the
+  release on the host reads; the same values are in the GitHub secrets `TAURI_SIGNING_PRIVATE_KEY` and
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for the manual workflow — but a GitHub secret cannot be read
+  back and is not a recoverable copy: the copy is the encrypted restic snapshot of `secrets/` that
+  `backup.sh` takes off the host ([deploy-producao.md](deploy-producao.md#backup-and-restore)).
+  Never in the repo. The public one is in `desktop/src-tauri/tauri.conf.json`. Losing the private key forces
+  reinstalling the app by hand on every client.
 
-Avisos da primeira instalação, detalhados para o usuário em
+First-install warnings, detailed for the user in
 [desktop/INSTALACAO.md](../../desktop/INSTALACAO.md):
 
-- **Windows:** o SmartScreen avisa na primeira execução. Clique em "Mais informações" e depois em
-  "Executar assim mesmo".
-- **macOS:** o Gatekeeper recusa o app não notarizado. Rode
-  `xattr -dr com.apple.quarantine /Applications/eclume.app`, ou tente abrir e libere em Ajustes do
-  Sistema → Privacidade e Segurança → "Abrir Mesmo Assim".
-- **Linux:** o AppImage precisa de `chmod +x` (e, em algumas distros, do FUSE 2); o `.deb` instala
-  com `sudo apt install ./eclume_<versão>_amd64.deb`.
-- **Todos:** o updater e o sync só confiam no servidor depois que a CA raiz do Caddy é instalada
-  no cliente (passo 10).
+- **Windows:** SmartScreen warns on the first run. Click "Mais informações" and then "Executar assim mesmo".
+- **macOS:** Gatekeeper refuses the non-notarized app. Run
+  `xattr -dr com.apple.quarantine /Applications/eclume.app`, or try to open it and allow it in System
+  Settings → Privacy & Security → "Abrir Mesmo Assim".
+- **Linux:** the AppImage needs `chmod +x` (and, on some distros, FUSE 2); the `.deb` installs
+  with `sudo apt install ./eclume_<version>_amd64.deb`.
+- **All:** the updater and the sync only trust the server after Caddy's root CA is installed
+  on the client (step 10).
 
-## Ambiente Android (build e emulador do app móvel)
+## Android environment (build and emulator for the mobile app)
 
-O app móvel ([mobile/](../../mobile/README.md)) compila e roda o emulador no host, que tem KVM.
-Tudo fica em `~/`, sem sudo, pelo script idempotente
+The mobile app ([mobile/](../../mobile/README.md)) builds and runs the emulator on the host, which has KVM.
+Everything lives in `~/`, without sudo, through the idempotent script
 [mobile/scripts/android-sdk.sh](../../mobile/scripts/android-sdk.sh):
 
 ```bash
 ssh holetz@192.168.15.199 'bash -s' < mobile/scripts/android-sdk.sh
 ```
 
-- **O que instala:** as command-line tools 22.0 do Android em `~/android-sdk` (SHA-256 conferido), um
-  JDK 21 portátil em `~/jdk-21` (o OpenJDK do Ubuntu no host só tem o runtime, sem `javac`), os
-  pacotes `platform-tools`, `platforms;android-36`, `build-tools;36.0.0`, `ndk;28.2.13676358`,
-  `emulator` e `system-images;android-35;google_apis;x86_64`, os quatro alvos `rustup` Android e o
-  AVD `eclume-35` (Pixel 6, 2 GB de RAM).
-- **Ambiente:** `~/.config/eclume/android-env.sh` exporta `JAVA_HOME`, `ANDROID_HOME`, `NDK_HOME` e
-  o `PATH`. Todo comando de build Android começa com
-  `source ~/.config/eclume/android-env.sh`, também pelo `remote-run`.
-- **Disco:** o script recusa instalar se o disco passar de 88 % (o deploy recusa acima de 90 %). O
-  SDK ocupa ~7 GB, o JDK ~350 MB e o AVD ~250 MB (cresce com o uso). Para liberar espaço, use
-  `docker builder prune -af` e apague os `~/build/*/target` do eclume já mesclados; nunca apague
-  imagens de outros projetos.
-- **Segunda execução:** só confere e imprime "nada a fazer".
-- **KVM:** o `/dev/kvm` dá leitura e escrita ao `holetz` por ACL; sem isso, o script avisa e o
-  emulador fica sem aceleração.
-- **Command-line tools fixadas na 22.0:** a 23 troca o `sdkmanager` pelo `android sdk` e muda a
-  saída do `--list_installed` (`ndk/28…` no lugar de `ndk;28…`). A 22 ainda avisa que o
-  `sdkmanager` está obsoleto; o aviso é esperado.
+- **What it installs:** Android command-line tools 22.0 in `~/android-sdk` (SHA-256 checked), a
+  portable JDK 21 in `~/jdk-21` (Ubuntu's OpenJDK on the host only has the runtime, without `javac`), the
+  packages `platform-tools`, `platforms;android-36`, `build-tools;36.0.0`, `ndk;28.2.13676358`,
+  `emulator` and `system-images;android-35;google_apis;x86_64`, the four Android `rustup` targets and the
+  AVD `eclume-35` (Pixel 6, 2 GB of RAM).
+- **Environment:** `~/.config/eclume/android-env.sh` exports `JAVA_HOME`, `ANDROID_HOME`, `NDK_HOME` and
+  the `PATH`. Every Android build command starts with
+  `source ~/.config/eclume/android-env.sh`, also through `remote-run`.
+- **Disk:** the script refuses to install if the disk exceeds 88 % (the deploy refuses above 90 %). The
+  SDK takes ~7 GB, the JDK ~350 MB and the AVD ~250 MB (it grows with use). To free space, use
+  `docker builder prune -af` and delete eclume's already-merged `~/build/*/target`; never delete
+  other projects' images.
+- **Second run:** it only checks and prints "nada a fazer".
+- **KVM:** `/dev/kvm` gives read and write to `holetz` through an ACL; without it, the script warns and the
+  emulator runs without acceleration.
+- **Command-line tools pinned at 22.0:** 23 swaps `sdkmanager` for `android sdk` and changes the
+  output of `--list_installed` (`ndk/28…` in place of `ndk;28…`). 22 still warns that
+  `sdkmanager` is obsolete; the warning is expected.

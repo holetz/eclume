@@ -1,7 +1,7 @@
 ---
 type: project
-title: Worker GPU na GTX 1660 SUPER
-description: Como o worker GPU do eclume (WhisperX large-v3-turbo, alinhamento wav2vec2 pt, diarização pyannote community-1) roda no host 192.168.15.199 — compute type, benchmark medido, imagem, pré-processamento com o modelo do RNNoise, cache de modelos, token do Hugging Face e operação.
+title: GPU worker on the GTX 1660 SUPER
+description: How the eclume GPU worker (WhisperX large-v3-turbo, pt wav2vec2 alignment, pyannote community-1 diarization) runs on the host 192.168.15.199 — compute type, measured benchmark, image, preprocessing with the RNNoise model, model cache, Hugging Face token and operation.
 resource: worker-gpu/**, engines/src/eclume_engines/**, deploy/docker-compose.gpu-test.yml
 tags: [worker-gpu, whisperx, gpu, benchmark, runbook]
 timestamp: 2026-10-01
@@ -11,36 +11,36 @@ source: holetz/eclume#8, holetz/eclume#12, holetz/eclume#26, holetz/eclume#33
 maintainer: holetz
 ---
 
-# Worker GPU na GTX 1660 SUPER
+# GPU worker on the GTX 1660 SUPER
 
-O worker GPU (`worker-gpu/`, pacote `eclume_worker`) consome a fila `eclume:gpu` e roda a engine
-`whisperx-local` (`engines/`). O contrato de jobs com o server está em
-[jobs-transcricao.md](/docs/standards/api/jobs-transcricao.md). As medidas abaixo são do host
-`192.168.15.199`: GTX 1660 SUPER, 6 GB, Turing TU116 sem tensor cores, driver 595.91.07, 4 CPUs.
+The GPU worker (`worker-gpu/`, package `eclume_worker`) consumes the `eclume:gpu` queue and runs the
+`whisperx-local` engine (`engines/`). The job contract with the server is in
+[jobs-transcricao.md](/docs/standards/api/jobs-transcricao.md). The measurements below are from the host
+`192.168.15.199`: GTX 1660 SUPER, 6 GB, Turing TU116 without tensor cores, driver 595.91.07, 4 CPUs.
 
-## Compute type no TU116
+## Compute type on the TU116
 
-A decisão do épico é `large-v3-turbo` com `compute_type=int8_float16`, e ela se confirmou no
-TU116. O `fp16` puro fica proibido pelo histórico de NaN na série GTX 16xx; a engine o recusa e
-usa `int8_float16`, com o aviso `compute_type_float16_rejected`.
+The epic's decision is `large-v3-turbo` with `compute_type=int8_float16`, and it was confirmed on the
+TU116. Plain `fp16` is forbidden because of the history of NaN on the GTX 16xx series; the engine refuses it and
+uses `int8_float16`, with the warning `compute_type_float16_rejected`.
 
-- O CTranslate2 4.8.2 da imagem lista, para a GPU, os tipos `int8_float16`, `float16`,
-  `float32`, `int8_float32` e `int8`.
-- Com `int8_float16`, 1 h de fala em português saiu legível e completa: 670 segmentos, 7.904
-  palavras e todas as palavras com tempo do alinhamento. Não houve NaN nem segmento vazio.
-- Como o `int8_float16` não falhou, `int8` e `float32` não foram medidos. Eles ficam como recuo
-  automático, nessa ordem, se o CTranslate2 recusar o tipo pedido.
+- The image's CTranslate2 4.8.2 lists, for the GPU, the types `int8_float16`, `float16`,
+  `float32`, `int8_float32` and `int8`.
+- With `int8_float16`, 1 h of Portuguese speech came out readable and complete: 670 segments, 7,904
+  words and every word timed by the alignment. There was no NaN and no empty segment.
+- Since `int8_float16` did not fail, `int8` and `float32` were not measured. They remain as an automatic
+  fallback, in that order, if CTranslate2 refuses the requested type.
 
 ## Benchmark
 
-**Áudio:** 1 h de fala real em português — contos de Artur Azevedo lidos por voluntários do
-LibriVox (domínio público), convertidos para o formato do upload (Opus mono 16 kHz, 32 kbps,
-14,1 MB). O script `worker-gpu/scripts/make-test-audio.sh bench` o reproduz.
+**Audio:** 1 h of real Portuguese speech — short stories by Artur Azevedo read by volunteers of
+LibriVox (public domain), converted to the upload format (mono Opus 16 kHz, 32 kbps,
+14.1 MB). The script `worker-gpu/scripts/make-test-audio.sh bench` reproduces it.
 
-**Como medir:** `python -m eclume_worker.bench` dentro da imagem, com o worker do compose parado
-e os modelos já no cache. A GPU tinha 349 MiB em uso antes (Xorg e Jellyfin ocioso), com 5.396 MiB
-livres. A VRAM de pico é o uso do dispositivo inteiro menos essa linha de base, amostrado pela
-NVML a cada 0,2 s. O tempo é o do pipeline inteiro, com o carregamento dos modelos.
+**How to measure:** `python -m eclume_worker.bench` inside the image, with the compose worker stopped
+and the models already in the cache. The GPU had 349 MiB in use beforehand (Xorg and an idle Jellyfin), with 5,396 MiB
+free. The peak VRAM is the whole device's usage minus that baseline, sampled by
+NVML every 0.2 s. The time is that of the whole pipeline, including model loading.
 
 ```bash
 docker --context gpu-host run --rm --gpus all -v /srv/eclume/models:/models \
@@ -48,169 +48,169 @@ docker --context gpu-host run --rm --gpus all -v /srv/eclume/models:/models \
   eclume-worker-gpu:dev python -m eclume_worker.bench /bench/bench-1h.ogg --no-diarize
 ```
 
-### Sem diarização (ASR `large-v3-turbo` `int8_float16` + alinhamento wav2vec2 pt)
+### Without diarization (ASR `large-v3-turbo` `int8_float16` + pt wav2vec2 alignment)
 
-| Lote do ASR | Processamento de 1 h | Fator de tempo real | Min por hora de áudio | VRAM de pico |
+| ASR batch | Processing of 1 h | Real-time factor | Min per hour of audio | Peak VRAM |
 |---|---|---|---|---|
-| 4 | 357 s | 0,099 | 5,95 | 2.999 MiB |
-| 8 | 381 s | 0,106 | 6,35 | 2.997 MiB |
-| 16 | 370 s | 0,103 | 6,16 | 3.873 MiB |
+| 4 | 357 s | 0.099 | 5.95 | 2,999 MiB |
+| 8 | 381 s | 0.106 | 6.35 | 2,997 MiB |
+| 16 | 370 s | 0.103 | 6.16 | 3,873 MiB |
 
-- **O lote não muda o tempo:** a 1660 SUPER já satura com 4. O 16 só sobe o pico em ~0,9 GB.
-  Por isso o lote inicial é 4 com pelo menos 3,5 GB livres e 2 abaixo disso
-  (`initial_batch_size`), e `ECLUME_BATCH_SIZE` fixa outro valor se preciso.
-- **O pico de ~3 GB com lote 4 e 8 é do alinhamento.** O wav2vec2 large roda em fp32, e o
-  modelo do ASR já foi descarregado antes dele.
-- **Com memória disputada,** um processo alheio segurando 2,9 GB, o lote caiu sozinho para 4 e
-  1 h levou 355 s, com pico de 2,1 GB.
-- **Um job curto paga o carregamento dos modelos.** Os 30 s do diálogo de teste levam ~26 s com
-  diarização, quase tudo carregando ASR, alinhador e pyannote, porque há um modelo residente
-  por vez. Numa hora de áudio, isso é ~5% do tempo.
+- **The batch does not change the time:** the 1660 SUPER already saturates at 4. 16 only raises the peak by ~0.9 GB.
+  That is why the initial batch is 4 with at least 3.5 GB free and 2 below that
+  (`initial_batch_size`), and `ECLUME_BATCH_SIZE` fixes another value if needed.
+- **The ~3 GB peak with batch 4 and 8 is from alignment.** The wav2vec2 large runs in fp32, and the
+  ASR model was already unloaded before it.
+- **With contended memory,** a foreign process holding 2.9 GB, the batch dropped to 4 on its own and
+  1 h took 355 s, with a 2.1 GB peak.
+- **A short job pays for loading the models.** The 30 s of the test dialogue take ~26 s with
+  diarization, almost all of it loading ASR, aligner and pyannote, because there is one resident model
+  at a time. Over an hour of audio, that is ~5% of the time.
 
-### Com diarização e embeddings (pyannote `community-1`, `return_embeddings=True`)
+### With diarization and embeddings (pyannote `community-1`, `return_embeddings=True`)
 
-| Lote do ASR | Processamento de 1 h | Fator de tempo real | Min por hora de áudio | VRAM de pico |
+| ASR batch | Processing of 1 h | Real-time factor | Min per hour of audio | Peak VRAM |
 |---|---|---|---|---|
-| 4 | 517 s | 0,144 | 8,61 | 3.003 MiB |
-| 16 | 542 s | 0,151 | 9,03 | 3.873 MiB |
+| 4 | 517 s | 0.144 | 8.61 | 3,003 MiB |
+| 16 | 542 s | 0.151 | 9.03 | 3,873 MiB |
 
-- **A diarização custa ~3 min por hora de áudio.** Com lote 4, ASR e alinhamento levaram
-  ~330 s e a diarização com embeddings ~180 s. Ela não sobe o pico, porque roda depois de o
-  alinhador sair da GPU.
-- **Os locutores batem com os leitores.** A 1 h junta cinco contos, e o pyannote achou 3
-  locutores. As trocas caíram nas fronteiras dos contos (24:10, 36:50, 46:39, 56:09), com dois
-  trechos de menos de 1 s atribuídos ao locutor vizinho.
-- **Os embeddings são do `pyannote/wespeaker-voxceleb-resnet34-LM`,** com 256 dimensões, um
-  vetor por locutor em `speaker_embeddings.json`.
-- **No diálogo sintético de 30 s** (duas vozes do Piper, `min_speakers=max_speakers=2`), o teste
-  de integração separou os 2 locutores e alternou as falas certo, exceto a primeira frase ("Bom
-  dia, pessoal."), atribuída ao outro locutor.
+- **Diarization costs ~3 min per hour of audio.** With batch 4, ASR and alignment took
+  ~330 s and diarization with embeddings ~180 s. It does not raise the peak, because it runs after the
+  aligner leaves the GPU.
+- **The speakers match the readers.** The 1 h joins five stories, and pyannote found 3
+  speakers. The switches fell on the story boundaries (24:10, 36:50, 46:39, 56:09), with two
+  stretches of under 1 s assigned to the neighboring speaker.
+- **The embeddings are from `pyannote/wespeaker-voxceleb-resnet34-LM`,** with 256 dimensions, one
+  vector per speaker in `speaker_embeddings.json`.
+- **On the 30 s synthetic dialogue** (two Piper voices, `min_speakers=max_speakers=2`), the integration
+  test separated the 2 speakers and alternated the lines correctly, except the first sentence ("Bom
+  dia, pessoal."), assigned to the other speaker.
 
-### ASR residente entre jobs (holetz/eclume#26)
+### ASR resident between jobs (holetz/eclume#26)
 
-Medido em 2026-09-25 com a imagem de produção, o worker do stack ocioso (sem modelo carregado) e
-5.396 MiB livres: a fixture `duas-vozes.ogg` (30,4 s), três jobs seguidos na mesma engine
-(`python -m eclume_worker.bench a.ogg --repeat 3`, com e sem `--single-slot`). Sem token do
-Hugging Face no host, a diarização não roda; o pyannote seria recarregado a cada job nos dois modos,
-então a diferença abaixo é a carga do ASR.
+Measured on 2026-09-25 with the production image, the stack's worker idle (no model loaded) and
+5,396 MiB free: the fixture `duas-vozes.ogg` (30.4 s), three consecutive jobs on the same engine
+(`python -m eclume_worker.bench a.ogg --repeat 3`, with and without `--single-slot`). Without a Hugging Face
+token on the host, diarization does not run; pyannote would be reloaded on every job in both modes,
+so the difference below is the ASR load.
 
-| Modo | Job 1 (frio) | Job 2 | Job 3 |
+| Mode | Job 1 (cold) | Job 2 | Job 3 |
 |---|---|---|---|
-| um modelo por vez (`--single-slot`, o de antes) | 23,2 s | 10,4 s | 10,5 s |
-| ASR residente (padrão) | 20,6 s | 6,1 s | 5,8 s |
+| one model at a time (`--single-slot`, the previous one) | 23.2 s | 10.4 s | 10.5 s |
+| resident ASR (default) | 20.6 s | 6.1 s | 5.8 s |
 
-Do segundo job em diante, o job curto cai ~43% (≈4,5 s a menos por job): o alinhador ainda é
-recarregado, o ASR não. O pico acima da linha de base com o ASR residente foi 1.746 MiB, longe do
-limiar de 2.500 MiB livres que faria o ASR sair.
+From the second job on, the short job drops ~43% (≈4.5 s less per job): the aligner is still
+reloaded, the ASR is not. The peak above the baseline with the resident ASR was 1,746 MiB, far from the
+2,500 MiB free threshold that would make the ASR leave.
 
-### Qualidade do texto (WER e CER)
+### Text quality (WER and CER)
 
-`--reference texto.txt` (UTF-8) acrescenta ao JSON o bloco `quality`, com a taxa, o tamanho da
-referência e as substituições, remoções e inserções de `wer` (palavras) e `cer` (caracteres). O
-texto reconhecido é a junção dos segmentos. A conta é própria, em `eclume_worker.wer`, sem
-dependência. Não está ligada ao gate nem a `deploy/`.
+`--reference text.txt` (UTF-8) adds to the JSON the `quality` block, with the rate, the length of the
+reference and the substitutions, deletions and insertions of `wer` (words) and `cer` (characters). The
+recognized text is the join of the segments. The computation is its own, in `eclume_worker.wer`, with no
+dependency. It is not wired to the gate nor to `deploy/`.
 
 ```bash
 python -m eclume_worker.bench /bench/bench-1h.ogg --no-diarize --reference /bench/bench-1h.txt
 ```
 
-**Normalização pt-BR**, igual para referência e hipótese: Unicode NFC, minúsculas, pontuação
-(inclusive aspas e travessões tipográficos) vira espaço, o hífen e o apóstrofo entre letras ficam
-dentro da palavra e os espaços repetidos colapsam. Os acentos são preservados, porque "é" e "e"
-são palavras diferentes; números e símbolos não são expandidos ("10" e "dez" contam como erro).
-No CER, o espaço entre palavras é um caractere. Referência vazia com hipótese não vazia dá taxa
-nula (`null`), sem divisão por zero.
+**pt-BR normalization**, the same for reference and hypothesis: Unicode NFC, lowercase, punctuation
+(including typographic quotes and dashes) becomes space, the hyphen and the apostrophe between letters stay
+inside the word and repeated spaces collapse. Accents are preserved, because "é" and "e"
+are different words; numbers and symbols are not expanded ("10" and "dez" count as an error).
+In CER, the space between words is one character. An empty reference with a non-empty hypothesis gives a null
+rate (`null`), with no division by zero.
 
-**Memória e tempo do CER.** A distância de edição usa o algoritmo de Hirschberg: memória linear e
-tempo quadrático. A matriz completa anterior gastava ~37 bytes por célula e não cabia no host de
-15 GB com a referência de 1 h. Medido com `/usr/bin/time -v` em `char_counts`, texto aleatório de
-11 símbolos com 15% de troca (pior caso, sem prefixo comum), nesta estação:
+**CER memory and time.** The edit distance uses the Hirschberg algorithm: linear memory and
+quadratic time. The previous full matrix spent ~37 bytes per cell and did not fit in the 15 GB host
+with the 1 h reference. Measured with `/usr/bin/time -v` on `char_counts`, random text of
+11 symbols with 15% swaps (worst case, no common prefix), on this station:
 
-| Caracteres | Antes: pico / tempo | Depois: pico / tempo |
+| Characters | Before: peak / time | After: peak / time |
 | --- | --- | --- |
-| 6000 | 1,39 GB / 7,4 s | 46,9 MB / 13,3 s |
-| 50000 | não executado (estimado em ~93 GB) | 46,5 MB / 16 min 07 s (967 s) |
+| 6000 | 1.39 GB / 7.4 s | 46.9 MB / 13.3 s |
+| 50000 | not run (estimated at ~93 GB) | 46.5 MB / 16 min 07 s (967 s) |
 
-O pico "depois" é praticamente o do interpretador. O tempo dobra, e 50 mil caracteres levam uns 16
-minutos, uma vez por medição e depois da hora de ASR. Num empate o alinhamento ótimo não é único: a
-divisão entre substituições, remoções e inserções pode diferir da versão anterior (no caso de 6000,
-798/13/20 antes e 778/23/30 depois), mas o total de erros e a taxa são idênticos (831).
+The "after" peak is practically the interpreter's. The time doubles, and 50 thousand characters take about 16
+minutes, once per measurement and after the ASR hour. In a tie the optimal alignment is not unique: the
+split between substitutions, deletions and insertions can differ from the previous version (in the 6000 case,
+798/13/20 before and 778/23/30 after), but the total of errors and the rate are identical (831).
 
-O texto de referência do LibriVox não está no repositório; quem mede o entrega por caminho. Leitores
-omitem ou acrescentam trechos, o que infla o WER: o número serve para comparar configurações
-(`compute_type`, modelo reserva, versão do WhisperX) no mesmo par áudio/texto, não como valor
-absoluto. Ainda não há WER base medido no host.
+The LibriVox reference text is not in the repository; whoever measures supplies it by path. Readers
+omit or add passages, which inflates the WER: the number serves to compare configurations
+(`compute_type`, fallback model, WhisperX version) on the same audio/text pair, not as an
+absolute value. There is not yet a baseline WER measured on the host.
 
-## Imagem
+## Image
 
-`worker-gpu/Dockerfile` é construído no host, a partir da raiz do repositório:
+`worker-gpu/Dockerfile` is built on the host, from the repository root:
 
 ```bash
 docker --context gpu-host build -t eclume-worker-gpu:dev -f worker-gpu/Dockerfile .
 ```
 
-- **Sem base `nvidia/cuda`.** A base é `python:3.12-slim-bookworm` com `ffmpeg`, como no
-  whisperx-asr-service: as wheels de torch 2.8 (cu128) e do CTranslate2 trazem o runtime
-  CUDA/cuDNN, e o NVIDIA Container Toolkit injeta o driver. O Turing (sm_75) está entre as
-  arquiteturas das wheels cu128.
-- **As dependências saem do `uv.lock`,** com `uv sync --package eclume-worker --extra gpu`. A
-  imagem roda a mesma versão que a CI resolveu.
-- **Estágio único e sem triton:** ~8 GB. Num multi-stage, o `.venv` de ~7 GB existiria duas
-  vezes no disco do host (cache do builder e camada final). O triton só serve ao
-  `torch.compile`, que o worker não usa, e sai na mesma camada em que é instalado.
-- **O contexto do build é filtrado** por `worker-gpu/Dockerfile.dockerignore`, que o BuildKit lê
-  por estar ao lado do Dockerfile. Só os manifestos do workspace e o código de `engines/` e
-  `worker-gpu/` entram.
-- **Sem modelos na imagem.** Ela roda como uid 1000, o dono de `/srv/eclume`, com `HOME=/tmp`.
+- **No `nvidia/cuda` base.** The base is `python:3.12-slim-bookworm` with `ffmpeg`, as in
+  whisperx-asr-service: the torch 2.8 (cu128) and CTranslate2 wheels bring the CUDA/cuDNN
+  runtime, and the NVIDIA Container Toolkit injects the driver. Turing (sm_75) is among the
+  architectures of the cu128 wheels.
+- **The dependencies come from `uv.lock`,** with `uv sync --package eclume-worker --extra gpu`. The
+  image runs the same version that CI resolved.
+- **Single stage and no triton:** ~8 GB. In a multi-stage build, the ~7 GB `.venv` would exist twice
+  on the host's disk (builder cache and final layer). triton only serves
+  `torch.compile`, which the worker does not use, and is removed in the same layer where it is installed.
+- **The build context is filtered** by `worker-gpu/Dockerfile.dockerignore`, which BuildKit reads
+  because it sits next to the Dockerfile. Only the workspace manifests and the code of `engines/` and
+  `worker-gpu/` go in.
+- **No models in the image.** It runs as uid 1000, the owner of `/srv/eclume`, with `HOME=/tmp`.
 
-## Pré-processamento
+## Preprocessing
 
-Antes do ASR, o job trata o áudio com o `ffmpeg` da imagem (Debian bookworm, 5.1, com `arnndn`,
-`afftdn`, `loudnorm`, `silencedetect`, `atrim` e `pan`), pela configuração que o admin define em
-Pré-processamento e que chega em `options.preprocess`. A ordem e as regras estão no
-[contrato de jobs](../standards/api/jobs-transcricao.md#preprocessing).
+Before the ASR, the job treats the audio with the image's `ffmpeg` (Debian bookworm, 5.1, with `arnndn`,
+`afftdn`, `loudnorm`, `silencedetect`, `atrim` and `pan`), per the configuration the admin defines in
+Pré-processamento and that arrives in `options.preprocess`. The order and the rules are in the
+[jobs contract](../standards/api/jobs-transcricao.md#preprocessing).
 
-- **Modelo do RNNoise:** o `cb.rnnn` (conjoined-burgers, de GregorR/rnnoise-models, treinado em
-  fala geral com ruído de ambiente) entra na imagem por `ADD --checksum`, em
-  `/opt/eclume/rnnoise/cb.rnnn`, com `ECLUME_RNNOISE_MODEL` apontando para ele. Sem o arquivo (dev
-  fora da imagem), a redução de ruído usa `afftdn` e avisa `rnnoise_model_missing`.
-- **Conferir a imagem:**
+- **RNNoise model:** `cb.rnnn` (conjoined-burgers, from GregorR/rnnoise-models, trained on general
+  speech with ambient noise) enters the image through `ADD --checksum`, at
+  `/opt/eclume/rnnoise/cb.rnnn`, with `ECLUME_RNNOISE_MODEL` pointing to it. Without the file (dev
+  outside the image), noise reduction uses `afftdn` and warns `rnnoise_model_missing`.
+- **Check the image:**
 
   ```bash
   docker --context gpu-host run --rm --entrypoint sh eclume-worker-gpu:dev \
     -c 'test -s "$ECLUME_RNNOISE_MODEL" && ffmpeg -hide_banner -filters | grep -E "arnndn|loudnorm|silencedetect"'
   ```
 
-- O áudio tratado fica só em `ECLUME_WORK_DIR` e sai com o job; o bucket guarda o original.
-- Os testes (`worker-gpu/tests/test_preprocess.py`) usam áudios sintéticos do `lavfi` e rodam onde
-  há `ffmpeg` (o host, `remote-run`); sem ele, pulam.
+- The treated audio stays only in `ECLUME_WORK_DIR` and leaves with the job; the bucket keeps the original.
+- The tests (`worker-gpu/tests/test_preprocess.py`) use synthetic `lavfi` audio and run where
+  `ffmpeg` exists (the host, `remote-run`); without it, they skip.
 
-## Modelos e token
+## Models and token
 
-- **Cache de modelos:** `/srv/eclume/models`, montado em `/models` (`HF_HOME=/models/huggingface`,
-  `TORCH_HOME=/models/torch`). O primeiro job baixa ~3,9 GB: `large-v3-turbo` (CTranslate2), o
-  wav2vec2 pt `jonatasgrosman/wav2vec2-large-xlsr-53-portuguese` e o pyannote `community-1`. O
-  `punkt_tab` do NLTK, que o alinhamento usa, vem embutido na imagem.
-- **Token do Hugging Face:** `/srv/eclume/secrets/hf_token` (chmod 600, dono holetz), montado
-  em `/run/secrets/hf_token`, ou a variável `HF_TOKEN`. Ele é relido a cada job, então criar ou
-  trocar o token não exige reiniciar o worker. A conta do token precisa ter aceitado os termos
-  de `pyannote/speaker-diarization-community-1`; a segmentação e o embedding estão no mesmo
-  repositório.
-- **Conferir o acesso:**
+- **Model cache:** `/srv/eclume/models`, mounted at `/models` (`HF_HOME=/models/huggingface`,
+  `TORCH_HOME=/models/torch`). The first job downloads ~3.9 GB: `large-v3-turbo` (CTranslate2), the
+  pt wav2vec2 `jonatasgrosman/wav2vec2-large-xlsr-53-portuguese` and pyannote `community-1`. NLTK's
+  `punkt_tab`, which alignment uses, comes embedded in the image.
+- **Hugging Face token:** `/srv/eclume/secrets/hf_token` (chmod 600, owner holetz), mounted
+  at `/run/secrets/hf_token`, or the `HF_TOKEN` variable. It is reread on every job, so creating or
+  changing the token does not require restarting the worker. The token's account must have accepted the terms
+  of `pyannote/speaker-diarization-community-1`; segmentation and embedding are in the same
+  repository.
+- **Check access:**
 
   ```bash
   curl -s -o /dev/null -w "%{http_code}\n" -L -H "Authorization: Bearer $(cat /srv/eclume/secrets/hf_token)" \
     https://huggingface.co/pyannote/speaker-diarization-community-1/resolve/main/config.yaml   # 200
   ```
 
-- **Token da plataforma:** o admin grava o token em Administração → Locutores, e ele chega a
-  cada job cifrado nas `options` (`hf_token_encrypted`), com precedência sobre `HF_TOKEN` e o
-  arquivo. Para abri-lo, o worker precisa de `ECLUME_ENCRYPTION_KEY` (ou `ECLUME_SECRET_KEY`)
-  **igual à do server**; sem ela, o job avisa `hf_token_undecryptable` e usa o token do ambiente.
-- **Sem token ou sem acesso,** o worker transcreve e alinha com um locutor só e avisa em
+- **Platform token:** the admin stores the token in Administração → Locutores, and it reaches
+  each job encrypted in the `options` (`hf_token_encrypted`), taking precedence over `HF_TOKEN` and the
+  file. To open it, the worker needs `ECLUME_ENCRYPTION_KEY` (or `ECLUME_SECRET_KEY`)
+  **equal to the server's**; without it, the job warns `hf_token_undecryptable` and uses the environment's token.
+- **Without a token or without access,** the worker transcribes and aligns with a single speaker and warns in
   `engine_info.warnings`.
 
-## Operação
+## Operation
 
 ```bash
 docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml up -d --build --wait
@@ -218,50 +218,50 @@ remote-run . 'ECLUME_GPU_E2E=1 uv run pytest worker-gpu/tests/test_gpu_e2e.py -v
 docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml down -v
 ```
 
-| Variável | Padrão | O que faz |
+| Variable | Default | What it does |
 |---|---|---|
-| `ECLUME_REDIS_URL` | `redis://localhost:6379/0` | Redis das filas e do progresso |
-| `ECLUME_S3_BUCKET`, `ECLUME_S3_ENDPOINT_URL`, `ECLUME_S3_ACCESS_KEY`, `ECLUME_S3_SECRET_KEY`, `ECLUME_S3_REGION` | `eclume`, —, —, —, `us-east-1` | bucket do áudio e dos artefatos (MinIO) |
-| `ECLUME_ENGINE` | vazio | força a engine do processo (`cpu` em dev e no E2E); vazio, vale `options.engine`. Forçada, ignora modelo, compute type e lote do admin |
-| `ECLUME_DEVICE` | `cuda` | dispositivo do torch e do CTranslate2 |
-| `ECLUME_BATCH_SIZE` | vazio | lote inicial fixo do ASR; vazio, vem da VRAM livre |
-| `ECLUME_MODEL_IDLE_SECONDS` | `300` | descarrega os modelos após esse tempo sem job |
-| `ECLUME_RECYCLE_ON_IDLE` | `1` | após a descarga ociosa, encerra o processo se o torch foi importado (o contêiner sobe de novo sem ele); `0` mantém o processo |
-| `ECLUME_KEEP_ASR_RESIDENT` | `1` | mantém o ASR carregado entre as etapas e entre jobs; `0` volta a um modelo por vez |
-| `ECLUME_RESIDENT_MIN_FREE_MB` | `2500` | VRAM livre mínima, com o ASR carregado, para ele ficar ao carregar o alinhador ou o pyannote |
-| `ECLUME_JOB_TIMEOUT_SECONDS` | `21600` | limite de um job (6 h) |
-| `ECLUME_WORK_DIR` | `/tmp/eclume-work` | onde o áudio é baixado; limpo ao fim do job |
-| `HF_TOKEN`, `ECLUME_HF_TOKEN_FILE` | —, `/run/secrets/hf_token` | token do Hugging Face (o da plataforma, vindo no job, vence) |
-| `ECLUME_ENCRYPTION_KEY`, `ECLUME_SECRET_KEY` | — | as mesmas do server: abrem o token do HF que chega cifrado no job |
-| `ECLUME_REMOTE_BASE_URL`, `ECLUME_REMOTE_API_KEY`, `ECLUME_REMOTE_MODEL` | — | engine `openai-compatible` (speaches) |
+| `ECLUME_REDIS_URL` | `redis://localhost:6379/0` | Redis for the queues and progress |
+| `ECLUME_S3_BUCKET`, `ECLUME_S3_ENDPOINT_URL`, `ECLUME_S3_ACCESS_KEY`, `ECLUME_S3_SECRET_KEY`, `ECLUME_S3_REGION` | `eclume`, —, —, —, `us-east-1` | bucket for audio and artifacts (MinIO) |
+| `ECLUME_ENGINE` | empty | forces the process's engine (`cpu` in dev and E2E); empty, `options.engine` applies. Forced, it ignores the admin's model, compute type and batch |
+| `ECLUME_DEVICE` | `cuda` | torch and CTranslate2 device |
+| `ECLUME_BATCH_SIZE` | empty | fixed initial ASR batch; empty, it comes from the free VRAM |
+| `ECLUME_MODEL_IDLE_SECONDS` | `300` | unloads the models after this time without a job |
+| `ECLUME_RECYCLE_ON_IDLE` | `1` | after the idle unload, exits the process if torch was imported (the container comes back up without it); `0` keeps the process |
+| `ECLUME_KEEP_ASR_RESIDENT` | `1` | keeps the ASR loaded between steps and between jobs; `0` goes back to one model at a time |
+| `ECLUME_RESIDENT_MIN_FREE_MB` | `2500` | minimum free VRAM, with the ASR loaded, for it to stay when loading the aligner or pyannote |
+| `ECLUME_JOB_TIMEOUT_SECONDS` | `21600` | limit of a job (6 h) |
+| `ECLUME_WORK_DIR` | `/tmp/eclume-work` | where the audio is downloaded; cleaned at the end of the job |
+| `HF_TOKEN`, `ECLUME_HF_TOKEN_FILE` | —, `/run/secrets/hf_token` | Hugging Face token (the platform's, arriving in the job, wins) |
+| `ECLUME_ENCRYPTION_KEY`, `ECLUME_SECRET_KEY` | — | the same as the server's: open the HF token that arrives encrypted in the job |
+| `ECLUME_REMOTE_BASE_URL`, `ECLUME_REMOTE_API_KEY`, `ECLUME_REMOTE_MODEL` | — | `openai-compatible` engine (speaches) |
 
-- **Heartbeat.** A cada 15 s o worker grava `eclume:gpu:health` (TTL 45 s) com a GPU pela NVML,
-  o modelo residente e se há job rodando; é o que Administração → Saúde mostra. Para conferir no
-  host: `redis-cli HGETALL eclume:gpu:health` no Redis do stack. Medido na GTX 1660 SUPER em
-  2026-09-25: nome, 6.144 MiB de total e a VRAM do stack de produção (3.659 MiB) lidos certo; o
-  hash some em até 45 s depois de um `kill` e na hora num `docker stop`.
-- **VRAM compartilhada com o Jellyfin.** Há no máximo dois modelos na GPU: o ASR, residente entre
-  jobs, e o da etapa em curso (alinhador ou pyannote), que sai no fim do job, também quando uma
-  etapa falha. Antes de carregar o
-  da etapa com menos de `ECLUME_RESIDENT_MIN_FREE_MB` livres — o Jellyfin transcodificando, por
-  exemplo —, o ASR sai; um OOM numa etapa com ele residente o descarrega e repete a etapa. Depois
-  de `ECLUME_MODEL_IDLE_SECONDS` sem job, o worker descarrega tudo e fica só com o contexto CUDA
-  (~120 MiB). `python -m eclume_worker.bench <áudio> --repeat 3` mede jobs seguidos na mesma
-  engine (`runs_s`), e `--single-slot` o comportamento de um modelo por vez.
-- **Reciclo do processo na ociosidade.** Descarregar os modelos devolve a VRAM, mas o processo
-  seguia com ~4,4 GB de memória anônima (torch, CTranslate2, pyannote e as arenas do glibc) e com
-  ~150 MiB de VRAM do contexto CUDA (medido em 2026-10-06). Por isso, logo após a descarga
-  ociosa, se `torch` está em `sys.modules` e não há job em curso, o worker loga "reciclando o
-  processo para devolver a memória" com a RSS do momento e envia `SIGTERM` a si mesmo: o arq para
-  de pegar jobs, roda o `shutdown` (retira o heartbeat) e sai; o `restart: unless-stopped` sobe um
-  processo novo que não importa torch até o próximo job (o `healthcheck.start_period` cobre a
-  volta). Um processo leve, que nunca importou torch, não reinicia. O custo é recarregar os
-  modelos no job seguinte à ociosidade, que já era o caso depois da descarga. Complementam
-  `MALLOC_ARENA_MAX=2` na imagem e `poll_delay` de 2 s no arq. O `vigia.sh` não alerta esse
-  reinício: o contêiner só conta como ruim em duas rodadas seguidas, e o heartbeat ausente
-  também.
-- **Falta de memória.** Um OOM no ASR corta o lote pela metade até 1. Se ainda faltar, o modelo
-  cai para `medium` (aviso `fallback_medium`). A cada recuo, o modelo anterior sai da VRAM antes
-  da nova tentativa. Esgotado isso, o job falha com `out_of_memory`.
-- **Disco.** O host tem pouco espaço livre. Confira `df -h /` antes de um build, e, depois de
-  testar, derrube o compose com `down -v` e apague as imagens `eclume-worker-gpu` antigas.
+- **Heartbeat.** Every 15 s the worker writes `eclume:gpu:health` (TTL 45 s) with the GPU through NVML,
+  the resident model and whether a job is running; it is what Administração → Saúde shows. To check on the
+  host: `redis-cli HGETALL eclume:gpu:health` in the stack's Redis. Measured on the GTX 1660 SUPER on
+  2026-09-25: name, 6,144 MiB total and the production stack's VRAM (3,659 MiB) read correctly; the
+  hash disappears within 45 s after a `kill` and immediately on a `docker stop`.
+- **VRAM shared with Jellyfin.** There are at most two models on the GPU: the ASR, resident between
+  jobs, and the one of the current step (aligner or pyannote), which leaves at the end of the job, also when a
+  step fails. Before loading the
+  step's one with fewer than `ECLUME_RESIDENT_MIN_FREE_MB` free — Jellyfin transcoding, for
+  example —, the ASR leaves; an OOM in a step with it resident unloads it and repeats the step. After
+  `ECLUME_MODEL_IDLE_SECONDS` without a job, the worker unloads everything and keeps only the CUDA context
+  (~120 MiB). `python -m eclume_worker.bench <audio> --repeat 3` measures consecutive jobs on the same
+  engine (`runs_s`), and `--single-slot` the one-model-at-a-time behavior.
+- **Process recycling when idle.** Unloading the models returns the VRAM, but the process
+  kept ~4.4 GB of anonymous memory (torch, CTranslate2, pyannote and the glibc arenas) and
+  ~150 MiB of CUDA-context VRAM (measured on 2026-10-06). Therefore, right after the idle
+  unload, if `torch` is in `sys.modules` and no job is running, the worker logs "reciclando o
+  processo para devolver a memória" with the current RSS and sends `SIGTERM` to itself: arq stops
+  taking jobs, runs the `shutdown` (removes the heartbeat) and exits; `restart: unless-stopped` brings up a new
+  process that does not import torch until the next job (`healthcheck.start_period` covers the
+  return). A light process, which never imported torch, does not restart. The cost is reloading the
+  models on the job after the idle period, which was already the case after the unload. `MALLOC_ARENA_MAX=2` in the image and
+  a 2 s `poll_delay` in arq complement it. `vigia.sh` does not alert on this
+  restart: the container only counts as bad in two consecutive rounds, and the absent heartbeat
+  likewise.
+- **Out of memory.** An OOM in the ASR halves the batch down to 1. If it still falls short, the model
+  falls to `medium` (warning `fallback_medium`). On each step back, the previous model leaves the VRAM before
+  the new attempt. When that is exhausted, the job fails with `out_of_memory`.
+- **Disk.** The host has little free space. Check `df -h /` before a build, and, after
+  testing, take the compose down with `down -v` and delete the old `eclume-worker-gpu` images.

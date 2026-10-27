@@ -1,20 +1,20 @@
 ---
 type: vision
-title: Visão do produto
-description: A visão do produto eclume — o registro confirmado (plataforma, usuários, propósito, posicionamento, contexto de uso, compromissos de marca e princípios), projetado no PRODUCT.md para quem desenha, e a direção (estado-alvo, pilares que já são realidade ou ainda direção, e não-objetivos com o motivo).
+title: Product vision
+description: The eclume product vision — the confirmed record (platform, users, purpose, positioning, operating context, brand commitments and principles), projected into PRODUCT.md for whoever designs, and the direction (target state, pillars that are already reality or still direction, and non-goals with the reason).
 resource: PRODUCT.md
 tags: [product, design]
 timestamp: 2026-10-05
 audience: both
 authority: background
-source: entrevista de produto confirmada em /quenching:design:align (2026-09-28) e decisão de produto de 2026-09-26
+source: product interview confirmed in /quenching:design:align (2026-09-28) and product decision of 2026-09-26
 maintainer: holetz
 ---
 
-# Visão do produto
+# Product vision
 
-Os cabeçalhos do registro (de `Platform` a `Product Principles`) são projetados no `PRODUCT.md`
-pela `cq design build`; `Target state`, `Pillars` e `Non-goals` são a direção, fora da projeção.
+The record headings (from `Platform` to `Product Principles`) are projected into `PRODUCT.md`
+by `cq design build`; `Target state`, `Pillars` and `Non-goals` are the direction, outside the projection.
 
 ## Platform
 
@@ -22,96 +22,96 @@ web
 
 ## Users
 
-Quem grava reuniões de trabalho e precisa reencontrá-las (cada usuário com espaço próprio, cadastro aberto) e o admin da plataforma, que configura agentes de resumo e opera o host.
+People who record work meetings and need to find them again (each user with their own space, open sign-up) and the platform admin, who configures the summary agents and operates the host.
 
 ## Product Purpose
 
-Gravar reuniões, transcrever na GPU do próprio servidor, separar e reconhecer locutores, organizar por pessoa, localizar pela busca e resumir pelo tipo de agenda, com os agentes que o admin configura.
+Record meetings, transcribe them on the server's own GPU, separate and recognize speakers, organize by person, find through search and summarize by agenda type, with the agents the admin configures.
 
 ## Positioning
 
-Transcrição institucional auto-hospedada (open source no futuro), focada em organizar, localizar e reconhecer pessoas; integra-se ao lumea só por contrato de API versionado.
+Self-hosted institutional transcription (open source in the future), focused on organizing, finding and recognizing people; it integrates with lumea only through a versioned API contract.
 
 ## Operating Context
 
-Ferramenta de trabalho em desktop, na LAN, com sessões longas de leitura e revisão de transcrições; tema claro e escuro.
+A desktop work tool, on the LAN, with long sessions of reading and reviewing transcripts; light and dark theme.
 
 ## Brand Commitments
 
-Paleta linho e nogueira, Archivo + IBM Plex Mono, raio zero, fios de 2px, terracota só para gravação e falha; produto em pt-BR.
+Linen and walnut palette, Archivo + IBM Plex Mono, zero radius, 2px hairlines, terracotta only for recording and failure; product in pt-BR.
 
 ## Product Principles
 
-Regras que valem para qualquer tela; uma proposta que as contrarie está desenhando outro produto.
+Rules that hold for any screen; a proposal that goes against them is designing a different product.
 
-- **Conta isolada.** Cada conta vê só o que é dela; não há compartilhamento entre contas.
-- **Sem transcrição ao vivo.** O eclume trabalha sobre a gravação terminada.
-- **Nunca grava sem mostrar.** Toda gravação, em qualquer aparelho, tem indicação visível.
-- **O admin não vê conteúdo.** Quem administra cuida da configuração e da saúde da plataforma, sem
-  acesso às gravações, transcrições e resumos das contas.
-- **Quem grava responde pelo consentimento** de quem é gravado, pelo aceite do aviso no cadastro.
-- **O aparelho grava, o servidor processa.** O aparelho grava e envia; transcrever, classificar e
-  resumir é trabalho do servidor.
+- **Isolated account.** Each account sees only what is its own; there is no sharing between accounts.
+- **No live transcription.** eclume works on the finished recording.
+- **Never records without showing it.** Every recording, on any device, has a visible indication.
+- **The admin does not see content.** Whoever administers handles the platform's configuration and
+  health, with no access to the accounts' recordings, transcripts and summaries.
+- **Whoever records answers for the consent** of the people recorded, through accepting the notice at sign-up.
+- **The device records, the server processes.** The device records and uploads; transcribing,
+  classifying and summarizing is the server's work.
 
 ## Target state
 
-Cada pessoa grava o trabalho em qualquer aparelho que tem à mão, e o servidor da casa transforma a
-gravação em algo que se lê e se reencontra: transcrição com locutores reconhecidos, tipo de agenda,
-campos e resumo, organizados no tempo, por pessoa, coleção e tag, e consultáveis por busca e por
-pergunta. A conta é de cada um, o admin opera a plataforma sem ver conteúdo, e o mesmo servidor
-serve a web, o desktop, o celular e as integrações. Adiante, o eclume é software aberto que
-qualquer instituição instala e opera no próprio host.
+Each person records their work on whatever device is at hand, and the house server turns the
+recording into something that can be read and found again: a transcript with recognized speakers,
+agenda type, fields and summary, organized by time, person, collection and tag, and queryable by
+search and by question. The account belongs to each person, the admin operates the platform without
+seeing content, and the same server serves the web, the desktop, the phone and the integrations.
+Further ahead, eclume is open software that any institution installs and operates on its own host.
 
 ## Pillars
 
-Cada pilar é **realidade**, com a norma que o governa, ou **direção**, sem norma ainda.
+Each pillar is **reality**, with the standard that governs it, or **direction**, with no standard yet.
 
-- **Conta por usuário** — realidade: cadastro aberto, sem convite e sem confirmação de e-mail,
-  aceite do aviso e exclusão pela própria pessoa ([server-nucleo.md](../standards/code/server-nucleo.md),
+- **Account per user** — reality: open sign-up, with no invitation and no e-mail confirmation,
+  acceptance of the notice and deletion by the person themself ([server-nucleo.md](../standards/code/server-nucleo.md),
   [contrato-v1.md](../standards/api/contrato-v1.md)).
-- **Admin com login próprio** — realidade: agentes, tipos de agenda padrão, pré-processamento e
-  saúde ([server-admin.md](../standards/code/server-admin.md), [frontend-web.md](../standards/code/frontend-web.md)).
-- **Captura em qualquer aparelho** — realidade: o desktop detecta reuniões com políticas por app,
-  grava a nota de voz pelo botão, pela bandeja ou pelo atalho (com parada por silêncio) e importa
-  com a data do arquivo e marcadores; o celular é gravador portátil; a web importa pelo modal
+- **Admin with its own login** — reality: agents, default agenda types, preprocessing and
+  health ([server-admin.md](../standards/code/server-admin.md), [frontend-web.md](../standards/code/frontend-web.md)).
+- **Capture on any device** — reality: the desktop detects meetings with per-app policies,
+  records the voice note through the button, the tray or the shortcut (with stop on silence) and imports
+  with the file's date and markers; the phone is a portable recorder; the web imports through the modal
   ([desktop-deteccao-e-sync.md](../standards/code/desktop-deteccao-e-sync.md),
   [desktop-gravacao.md](../standards/code/desktop-gravacao.md),
   [desktop-importacao.md](../standards/code/desktop-importacao.md), [mobile-app.md](../standards/code/mobile-app.md),
   [formato-audio-upload.md](../standards/code/formato-audio-upload.md)).
-- **Aparelho que acha o servidor sozinho** — realidade: instalador com o endereço, mDNS, código de
-  pareamento e CA fixada ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md),
+- **Device that finds the server by itself** — reality: installer with the address, mDNS, pairing
+  code and pinned CA ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md),
   [desktop-deteccao-e-sync.md](../standards/code/desktop-deteccao-e-sync.md)).
-- **Processamento automático** — realidade: pré-processamento, transcrição, tipo de agenda, campos
-  e resumo ([processamento-automatico.md](../standards/code/processamento-automatico.md),
+- **Automatic processing** — reality: preprocessing, transcription, agenda type, fields
+  and summary ([processamento-automatico.md](../standards/code/processamento-automatico.md),
   [jobs-transcricao.md](../standards/api/jobs-transcricao.md)).
-- **Gravação centrada no resumo** — realidade: resumo editável à mão ou pelo chat, e o Agente
-  sobre a base, com conversas guardadas e arquivos de entrada e saída ([server-agentes.md](../standards/code/server-agentes.md),
+- **Summary-centered recording** — reality: summary editable by hand or through the chat, and the Agent
+  over the base, with stored conversations and input and output files ([server-agentes.md](../standards/code/server-agentes.md),
   [frontend-web.md](../standards/code/frontend-web.md)).
-- **Biblioteca no tempo** — realidade: semana, mês, lista e filtros, busca, pessoas, coleções e
+- **Library over time** — reality: week, month, list and filters, search, people, collections and
   tags ([frontend-web.md](../standards/code/frontend-web.md), [server-nucleo.md](../standards/code/server-nucleo.md),
   [processamento-automatico.md](../standards/code/processamento-automatico.md)).
-- **Reconhecer pessoas pela voz** — realidade
+- **Recognizing people by voice** — reality
   ([identificacao-por-voz.md](../standards/code/identificacao-por-voz.md)).
-- **Integrações** — realidade: PAT (o lumea), servidor MCP e pasta sincronizada no desktop
+- **Integrations** — reality: PAT (lumea), MCP server and synced folder on the desktop
   ([contrato-v1.md](../standards/api/contrato-v1.md),
   [server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md),
   [desktop-pasta-sincronizada.md](../standards/code/desktop-pasta-sincronizada.md)).
-- **Ajuda dentro do produto** — realidade
+- **Help inside the product** — reality
   ([web-central-de-ajuda.md](../standards/code/web-central-de-ajuda.md)).
-- **Nota de voz também por comando de voz** (palavra de ativação) — direção. Só entra com um modelo
-  pt-BR que rode offline, leve e de licença permissiva, sem microfone aberto escondido (respeita
-  "nunca grava sem mostrar") e sem disparar a cada menção ao produto numa reunião.
-- **Código aberto e auto-hospedável por terceiros** — direção: qualquer instituição instala e
-  opera o eclume no próprio host.
+- **Voice note also by voice command** (wake word) — direction. It only enters with a pt-BR model
+  that runs offline, is light and has a permissive license, with no hidden open microphone (respecting
+  "never records without showing it") and without triggering on every mention of the product in a meeting.
+- **Open source and self-hostable by third parties** — direction: any institution installs and
+  operates eclume on its own host.
 
 ## Non-goals
 
-- **Organização, tenant, grupos e convites** — a conta por usuário os substituiu.
-- **Compartilhamento entre contas** — cada conta guarda o próprio trabalho; o que é de outra
-  pessoa chega por ela.
-- **Transcrição ao vivo e bots que entram na chamada** — o produto trabalha sobre a gravação
-  terminada, e um bot na chamada seria gravar sem o aparelho mostrar.
-- **Confirmação de e-mail no cadastro** — o cadastro é aberto e o host é da casa; a confirmação só
-  adiaria o uso.
-- **Consentimento de voz por pessoa** — o aceite do aviso no cadastro o substituiu.
-- **"Cliente" como entidade** — coleção e tag cobrem o agrupamento por cliente.
+- **Organization, tenant, groups and invitations** — the account per user replaced them.
+- **Sharing between accounts** — each account keeps its own work; what belongs to someone else
+  arrives through them.
+- **Live transcription and bots that join the call** — the product works on the finished
+  recording, and a bot in the call would be recording without the device showing it.
+- **E-mail confirmation at sign-up** — sign-up is open and the host belongs to the house; confirmation would only
+  delay use.
+- **Per-person voice consent** — acceptance of the notice at sign-up replaced it.
+- **"Client" as an entity** — collection and tag cover grouping by client.

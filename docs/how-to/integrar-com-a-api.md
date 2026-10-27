@@ -1,7 +1,7 @@
 ---
 type: how-to
-title: Integrar um programa com a API do eclume
-description: Como um programa usa a API v1 do eclume em nome de uma conta — confiar na CA do servidor, criar um token de acesso, escolher escopos e grupos de escopo, autenticar com Bearer, paginar por cursor, sincronizar por since deduplicando por id + revision, ler erros problem+json e o limite de tentativas, e conectar um assistente de IA pelo MCP —, com a referência navegável em /referencia-api.html.
+title: Integrate a program with the eclume API
+description: How a program uses eclume's v1 API on behalf of an account — trusting the server's CA, creating an access token, choosing scopes and scope groups, authenticating with Bearer, paging by cursor, syncing by since while deduplicating by id + revision, reading problem+json errors and the retry limit, and connecting an AI assistant through MCP —, with the browsable reference at /referencia-api.html.
 resource: contracts/openapi-v1.yaml, contracts/openapi-v1.bundled.yaml, web/src/features/tokens/scopes.ts, server/src/eclume_server/auth.py
 tags: [api, integracao, pat, escopos, paginacao, mcp]
 timestamp: 2026-10-01
@@ -10,128 +10,128 @@ source: holetz/eclume#127
 maintainer: holetz
 ---
 
-# Integrar um programa com a API do eclume
+# Integrate a program with the eclume API
 
-Este guia leva um programa seu (um script, um importador, outro sistema) a ler e mudar dados de
-uma conta do eclume pela API v1. Vale para qualquer servidor eclume. Os nomes exatos de rotas,
-parâmetros e campos estão na **referência da API**, que todo servidor serve na versão que roda:
-`https://<servidor>/referencia-api.html`. As regras por trás do contrato estão em
+This guide takes a program of yours (a script, an importer, another system) to reading and changing data of
+an eclume account through the v1 API. It holds for any eclume server. The exact names of routes,
+parameters and fields are in the **API reference**, which every server serves in the version it runs:
+`https://<server>/referencia-api.html`. The rules behind the contract are in
 [contrato-v1.md](../standards/api/contrato-v1.md).
 
-Nos exemplos, `https://eclume.exemplo:8443` é o endereço do seu servidor.
+In the examples, `https://eclume.example:8443` is the address of your server.
 
-## 1. Confie no certificado do servidor
+## 1. Trust the server's certificate
 
-O eclume usa uma CA própria, que o sistema não conhece. Baixe a raiz e confira a impressão digital
-com a que o descritor público publica:
+eclume uses its own CA, which the system does not know. Download the root and check the fingerprint
+against the one the public descriptor publishes:
 
 ```bash
-curl -k -o eclume-root.crt https://eclume.exemplo:8443/downloads/eclume-root.crt
+curl -k -o eclume-root.crt https://eclume.example:8443/downloads/eclume-root.crt
 openssl x509 -in eclume-root.crt -outform der | sha256sum
-curl --cacert eclume-root.crt https://eclume.exemplo:8443/api/v1/server
+curl --cacert eclume-root.crt https://eclume.example:8443/api/v1/server
 ```
 
-O SHA-256 do DER tem de ser o `ca_sha256` da resposta de `GET /api/v1/server` (confira também com
-quem administra o servidor). Daí em diante, use sempre `--cacert eclume-root.crt` (ou o equivalente
-da sua biblioteca HTTP) e nunca desligue a verificação. Durante uma rotação, o descritor traz também
-`ca_next_sha256`, e a próxima raiz está em `/downloads/eclume-root-proxima.crt`.
+The SHA-256 of the DER must be the `ca_sha256` of the `GET /api/v1/server` response (also check with
+whoever administers the server). From then on, always use `--cacert eclume-root.crt` (or the equivalent
+in your HTTP library) and never turn verification off. During a rotation, the descriptor also carries
+`ca_next_sha256`, and the next root is at `/downloads/eclume-root-proxima.crt`.
 
-## 2. Crie um token de acesso
+## 2. Create an access token
 
-Na web, abra **Tokens de acesso** e clique em **Novo token**. Dê um nome que diga qual programa o
-usa, escolha os escopos e a validade (30 dias, 90 dias ou nunca). O token (`eclp_…`) aparece **uma
-vez só**: guarde-o no cofre do programa, nunca no código. Criar token é só pela web, com a sessão
-da conta: um token não cria outro.
+On the web, open **Tokens de acesso** and click **Novo token**. Give it a name that says which program
+uses it, choose the scopes and the validity (30 days, 90 days or never). The token (`eclp_…`) appears **only
+once**: keep it in the program's vault, never in code. Creating a token is web-only, with the account's
+session: a token does not create another.
 
-## 3. Escolha os escopos
+## 3. Choose the scopes
 
-Dê ao programa só o que ele usa. A tela oferece quatro grupos e, em **Escopos individuais**, cada
-escopo solto:
+Give the program only what it uses. The screen offers four groups and, in **Escopos individuais**, each
+scope on its own:
 
-| Grupo | Escopos |
+| Group | Scopes |
 |---|---|
 | Buscar e ler gravações | `recordings:read`, `transcripts:read` |
 | Ler e editar resumos | `summaries:read`, `summaries:write` |
 | Editar campos e tags | `recordings:write` |
 | Excluir gravações | `recordings:delete` |
 
-Fora dos grupos ficam `transcripts:write` (renomear locutores e corrigir falas), `people:read` e
-`people:write`. Um importador de transcrições, como o lumea, vive com `transcripts:read` e
-`people:read`. Cada operação da referência diz o escopo que pede; sem ele, a resposta é **403**
-`insufficient_scope` com `required_scopes`.
+Outside the groups are `transcripts:write` (renaming speakers and correcting utterances), `people:read` and
+`people:write`. A transcript importer, like lumea, lives on `transcripts:read` and
+`people:read`. Each operation in the reference says the scope it asks for; without it, the response is **403**
+`insufficient_scope` with `required_scopes`.
 
-## 4. Autentique
+## 4. Authenticate
 
-Mande o token em toda requisição:
+Send the token on every request:
 
 ```bash
 curl --cacert eclume-root.crt \
   -H "Authorization: Bearer $ECLUME_TOKEN" \
-  https://eclume.exemplo:8443/api/v1/me
+  https://eclume.example:8443/api/v1/me
 ```
 
-Com `Authorization` presente, o servidor nunca usa cookie: o programa não precisa de CSRF. Token
-inválido, revogado ou vencido é **401** `unauthorized`; rotas só de sessão (criar token, código de
-pareamento, voz) respondem **403** `session_required`.
+With `Authorization` present, the server never uses a cookie: the program needs no CSRF. An invalid, revoked or
+expired token is **401** `unauthorized`; session-only routes (create token, pairing
+code, voice) answer **403** `session_required`.
 
-## 5. Pagine por cursor
+## 5. Page by cursor
 
-Toda listagem devolve `{items, next_cursor}`. Peça a próxima página com o cursor recebido até
-`next_cursor` vir `null`:
+Every listing returns `{items, next_cursor}`. Ask for the next page with the received cursor until
+`next_cursor` comes back `null`:
 
 ```bash
 curl --cacert eclume-root.crt -H "Authorization: Bearer $ECLUME_TOKEN" \
-  "https://eclume.exemplo:8443/api/v1/recordings?limit=100"
+  "https://eclume.example:8443/api/v1/recordings?limit=100"
 curl --cacert eclume-root.crt -H "Authorization: Bearer $ECLUME_TOKEN" \
-  "https://eclume.exemplo:8443/api/v1/recordings?limit=100&cursor=<next_cursor>"
+  "https://eclume.example:8443/api/v1/recordings?limit=100&cursor=<next_cursor>"
 ```
 
-`limit` vai de 1 a 200. O cursor é opaco e vale só para a ordenação (`sort`) que o gerou: não o
-monte nem o guarde entre ordenações.
+`limit` goes from 1 to 200. The cursor is opaque and valid only for the ordering (`sort`) that produced it: do not
+build it or keep it across orderings.
 
-## 6. Sincronize por `since`
+## 6. Sync by `since`
 
-Para trazer só o que mudou, use `?since=` nas listagens incrementais (`GET /transcripts`,
+To bring only what changed, use `?since=` on the incremental listings (`GET /transcripts`,
 `GET /recordings`):
 
-1. Na primeira vez, percorra tudo e guarde o maior `updated_at` que viu.
-2. Nas seguintes, peça `?since=<esse updated_at>` e percorra todas as páginas.
-3. `since` é **inclusivo** (`updated_at >= since`): o último item da rodada anterior volta.
-   Deduplique por `id` + `revision` — a `revision` sobe a cada edição, então o mesmo `id` com
-   `revision` maior é uma versão nova, e o mesmo par é repetição.
+1. The first time, walk everything and keep the greatest `updated_at` you saw.
+2. On the following ones, ask for `?since=<that updated_at>` and walk all the pages.
+3. `since` is **inclusive** (`updated_at >= since`): the last item of the previous round comes back.
+   Deduplicate by `id` + `revision` — the `revision` goes up on each edit, so the same `id` with a
+   greater `revision` is a new version, and the same pair is a repeat.
 
-Um resumo novo ou refeito também move o `updated_at` da transcrição e da gravação, então o
-`since` o percebe.
+A new or redone summary also moves the transcript's and the recording's `updated_at`, so
+`since` notices it.
 
-## 7. Leia os erros
+## 7. Read the errors
 
-Todo erro vem em `application/problem+json` (RFC 9457) com um `code` estável. Decida pelo `code`,
-nunca pelo `title`, que é texto para gente:
+Every error comes in `application/problem+json` (RFC 9457) with a stable `code`. Decide by the `code`,
+never by the `title`, which is text for people:
 
 ```json
 {"type": "https://eclume.dev/problems/insufficient-scope", "title": "Escopo insuficiente",
  "status": 403, "code": "insufficient_scope", "required_scopes": ["summaries:write"]}
 ```
 
-- **404** não diz se o recurso não existe ou se não é da conta.
-- **422** `validation_failed` traz `errors[]` com o campo e o motivo.
-- **403** `quota_exceeded` traz `quota`, `limit` e `used`.
-- **429** `rate_limited` traz o cabeçalho `Retry-After` (segundos): espere esse tempo antes de
-  repetir. Os logins e o pareamento têm limite de tentativas por IP; a conta também tem teto de
-  resumos na fila.
-- **500** `internal_error` não traz detalhe; o cabeçalho `X-Request-ID` é o que o administrador
-  procura no log.
+- **404** does not say whether the resource does not exist or does not belong to the account.
+- **422** `validation_failed` carries `errors[]` with the field and the reason.
+- **403** `quota_exceeded` carries `quota`, `limit` and `used`.
+- **429** `rate_limited` carries the `Retry-After` header (seconds): wait that long before
+  retrying. Logins and pairing have an attempt limit per IP; the account also has a ceiling on
+  summaries in the queue.
+- **500** `internal_error` carries no detail; the `X-Request-ID` header is what the administrator
+  looks for in the log.
 
-## 8. Conecte um assistente de IA pelo MCP
+## 8. Connect an AI assistant through MCP
 
-O servidor MCP fica em `https://eclume.exemplo:8443/mcp` (fora do `/api/v1` e da referência) e usa
-o mesmo token, com os mesmos escopos. Na web, **Conexão MCP** mostra o endereço, cria o token com
-os grupos acima e monta o comando `claude mcp add` para o Claude Code; no Claude Desktop, adicione
-um conector personalizado com o endereço e o token. A máquina do assistente também precisa confiar
-na CA do passo 1. Deixe **Excluir gravações** desmarcado se o assistente não precisa apagar nada:
-o texto de uma transcrição é dado, nunca ordem.
+The MCP server is at `https://eclume.example:8443/mcp` (outside `/api/v1` and the reference) and uses
+the same token, with the same scopes. On the web, **Conexão MCP** shows the address, creates the token with
+the groups above and builds the `claude mcp add` command for Claude Code; in Claude Desktop, add
+a custom connector with the address and the token. The assistant's machine also needs to trust
+the CA from step 1. Leave **Excluir gravações** unchecked if the assistant does not need to delete anything:
+the text of a transcript is data, never an order.
 
-## Para testar sem servidor
+## To test without a server
 
-O contrato tem um mock (Prism) que responde com os exemplos dos fixtures, útil para escrever o
-cliente antes de ter conta num servidor; veja [contracts/README.md](../../contracts/README.md).
+The contract has a mock (Prism) that answers with the fixtures' examples, useful for writing the
+client before having an account on a server; see [contracts/README.md](../../contracts/README.md).

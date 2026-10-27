@@ -1,9 +1,9 @@
-# `how-to/` — receitas para quem instala, integra e desenvolve o eclume
+# `how-to/` — recipes for whoever installs, integrates and develops eclume
 
-Passo a passo para uma tarefa concreta, válido para qualquer instalação: nada aqui depende do host
-desta produção, que tem o próprio runbook em [project/](../project/index.md). Cada página tem
+Step by step for a concrete task, valid for any installation: nothing here depends on the host of
+this production, which has its own runbook in [project/](../project/index.md). Every page has
 `type: how-to`.
 
-* [auto-hospedar.md](auto-hospedar.md) — subir o eclume num servidor próprio, com ou sem GPU: requisitos, `.env.prod`, deploy por contexto Docker, primeiro admin, provider de resumo, rede local, internet e cadastro
-* [integrar-com-a-api.md](integrar-com-a-api.md) — um programa usando a API v1 em nome de uma conta: CA do servidor, token e escopos, Bearer, cursor, sincronização por `since` com `id` + `revision`, erros `problem+json`, limite de tentativas e o MCP
-* [desenvolver-sem-gpu.md](desenvolver-sem-gpu.md) — do clone a uma gravação transcrita e resumida numa máquina Linux ou Windows sem GPU e sem host de build
+* [auto-hospedar.md](auto-hospedar.md) — bring up eclume on your own server, with or without a GPU: requirements, `.env.prod`, deploy through a Docker context, first admin, summary provider, local network, internet and signup
+* [integrar-com-a-api.md](integrar-com-a-api.md) — a program using the v1 API on behalf of an account: the server's CA, token and scopes, Bearer, cursor, synchronization by `since` with `id` + `revision`, `problem+json` errors, retry limit and MCP
+* [desenvolver-sem-gpu.md](desenvolver-sem-gpu.md) — from clone to a transcribed and summarized recording on a Linux or Windows machine with no GPU and no build host

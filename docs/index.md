@@ -4,29 +4,29 @@ okf_version: "0.1"
 
 # `docs/` — OKF knowledge bundle
 
-A árvore canônica de conhecimento do eclume, um bundle **Open Knowledge Format (OKF v0.1)**. Cada
-**home** tem nome fixo e um único propósito. Este `index.md` é a porta de entrada do bundle (a
-única listagem com frontmatter, e só `okf_version`). Nomes de pasta e chaves de frontmatter são
-canônicos em inglês kebab-case; **a prosa segue o idioma do repositório (português)**.
+eclume's canonical knowledge tree, an **Open Knowledge Format (OKF v0.1)** bundle. Each
+**home** has a fixed name and a single purpose. This `index.md` is the bundle's front door (the
+only listing with frontmatter, and only `okf_version`). Folder names and frontmatter keys are
+canonical in kebab-case English; **the prose follows the repository's language (English)**.
 
 ## Homes
 
-* [standards/](standards/index.md) — como **NÓS** fazemos (contratos e convenções atuais), por assunto; regra acordada mas não provada fica aqui como `authority: background`
-* [vision/](vision/index.md) — direção por área, sem prazo
-* [concepts/](concepts/index.md) — conhecimento genérico que sustentamos; inclui o [glossário](glossary.md)
-* [how-to/](how-to/index.md) — receitas para qualquer instalação: auto-hospedar e desenvolver sem GPU
-* [project/](project/index.md) — o manual deste repositório: referências de mercado e o runbook do host
+* [standards/](standards/index.md) — how **WE** do things (current contracts and conventions), by subject; a rule agreed but not proven lives here as `authority: background`
+* [vision/](vision/index.md) — direction by area, with no deadline
+* [concepts/](concepts/index.md) — generic knowledge we maintain; includes the [glossary](glossary.md)
+* [how-to/](how-to/index.md) — recipes for any installation: self-hosting and developing without a GPU
+* [project/](project/index.md) — this repository's manual: market references and the host runbook
 
-## Fronteiras
+## Boundaries
 
-- `standards/` = "como **NÓS** fazemos (atual)"; regra acordada mas não provada fica como `authority: background`.
-- `concepts/` = "o que **entendemos**" (explicativo, não vinculante).
-- A **caixa de tarefas** vive fora deste bundle, no workspace de specs gerido pelo Quenching (backend GitHub, `holetz/eclume`). A direção do produto está em [vision/](vision/index.md); o épico `holetz/eclume#1` é o registro da primeira construção.
-- Homes ainda vazias — `catalog/`, `external/`, `tutorials/`, `explanation/` — são instaladas quando o primeiro doc chegar.
+- `standards/` = "how **WE** do things (current)"; a rule agreed but not proven stays as `authority: background`.
+- `concepts/` = "what we **understand**" (explanatory, not binding).
+- The **task inbox** lives outside this bundle, in the specs workspace managed by Quenching (GitHub backend, `holetz/eclume`). Product direction is in [vision/](vision/index.md); epic `holetz/eclume#1` is the record of the first build.
+- Still-empty homes — `catalog/`, `external/`, `tutorials/`, `explanation/` — are installed when the first doc arrives.
 
-**Resolvendo um termo.** Palavra, sigla ou codinome desconhecido? Procure primeiro no
-[glossário](glossary.md): `grep -i '<termo>' docs/glossary.md`.
+**Resolving a term.** Unfamiliar word, acronym or codename? Look it up first in the
+[glossary](glossary.md): `grep -i '<term>' docs/glossary.md`.
 
-O contrato completo (homes, tipos, conformidade) vive nas `references/` do plugin `quenching`; o
-bundle é operado pelos comandos `quenching:knowledge:*` (`/quenching:knowledge:status` mostra o
-estado atual).
+The full contract (homes, types, conformance) lives in the `references/` of the `quenching` plugin; the
+bundle is operated by the `quenching:knowledge:*` commands (`/quenching:knowledge:status` shows the
+current state).
