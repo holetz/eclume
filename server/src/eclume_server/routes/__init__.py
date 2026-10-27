@@ -1,4 +1,4 @@
-"""Rotas da API v1."""
+"""API v1 routes."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ PREFIX = "/api/v1"
 
 
 def include_routes(app: FastAPI) -> None:
-    """Registra as rotas implementadas."""
+    """Register the implemented routes."""
     for module in (
         auth,
         server_info,
@@ -86,5 +86,5 @@ def include_routes(app: FastAPI) -> None:
         speaker_naming,
     ):
         app.include_router(module.router, prefix=PREFIX)
-    # URLs assinadas de mídia: fora de /api/v1, opacas para o cliente.
+    # Signed media URLs: outside /api/v1, opaque to the client.
     app.include_router(recordings.media_router)
