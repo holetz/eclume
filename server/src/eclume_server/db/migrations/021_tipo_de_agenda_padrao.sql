@@ -1,23 +1,23 @@
--- 021_tipo_de_agenda_padrao — todo usuário tem um tipo de agenda de reserva, e o título passa a ser
--- definido só pelos tipos (holetz/eclume#76).
+-- 021_tipo_de_agenda_padrao — every user has a fallback agenda type, and the title becomes
+-- defined by the types only (holetz/eclume#76).
 --
--- O tipo de reserva ("Geral", com o selo "Padrão" na tela) não pode ser excluído e é aplicado
--- quando nenhum outro tipo se encaixa com confiança, quando só ele existe, sem agente de detecção ou
--- quando a detecção falha: toda gravação processada ganha um tipo e, com ele, o resumo automático.
--- Cada tipo ganha a regra do assunto do título (`title_instructions`); vazia, vale a do tipo de
--- reserva. A regra do título embutido, que era editada em "Campos e regras", vira a regra do tipo de
--- reserva da conta. Padrões em docs/standards/code/processamento-automatico.md.
+-- The fallback type ("Geral", with the "Padrão" badge on screen) cannot be deleted and is applied
+-- when no other type fits with confidence, when it is the only one, with no detection agent or
+-- when detection fails: every processed recording gets a type and, with it, the automatic summary.
+-- Each type gains the title subject rule (`title_instructions`); when empty, the fallback type's
+-- applies. The built-in title rule, which was edited in "Campos e regras", becomes the rule of the account's
+-- fallback type. Patterns in docs/standards/code/processamento-automatico.md.
 
 ALTER TABLE agenda_types
     ADD COLUMN is_fallback         boolean NOT NULL DEFAULT false,
     ADD COLUMN title_instructions  text NOT NULL DEFAULT '';
 CREATE UNIQUE INDEX agenda_types_fallback_idx ON agenda_types (owner_id) WHERE is_fallback;
 
--- O admin também escreve a regra do assunto dos tipos que distribui.
+-- The admin also writes the subject rule of the types they distribute.
 ALTER TABLE default_agenda_types ADD COLUMN title_instructions text NOT NULL DEFAULT '';
 
--- O tipo de reserva de uma conta, com a regra do título embutido dela. Idempotente. "Geral" já usado
--- por um tipo do usuário vira "Geral (padrão)", como na migration 009.
+-- An account's fallback type, with its built-in title rule. Idempotent. "Geral" already used
+-- by a user type becomes "Geral (padrão)", as in migration 009.
 CREATE FUNCTION eclume_seed_fallback_type(target uuid) RETURNS void
     LANGUAGE plpgsql
     AS $$
@@ -49,8 +49,8 @@ $$;
 REVOKE ALL ON FUNCTION eclume_seed_fallback_type(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION eclume_seed_fallback_type(uuid) TO eclume_server;
 
--- A semeadura da conta nova cria também o tipo de reserva, depois dos embutidos (ele lê a regra do
--- título).
+-- Seeding a new account also creates the fallback type, after the built-in fields (it reads the title
+-- rule).
 CREATE OR REPLACE FUNCTION eclume_seed_user_defaults(target uuid) RETURNS void
     LANGUAGE plpgsql
     AS $$
@@ -69,6 +69,6 @@ $$;
 
 SELECT eclume_seed_fallback_type(id) FROM users;
 
--- O título deixa de ter regra e interruptor próprios na tela: o assunto é sempre preenchido, pela
--- regra do tipo da gravação.
+-- The title no longer has its own rule and switch on screen: the subject is always filled, by the
+-- rule of the recording's type.
 UPDATE fields SET auto_fill = true, updated_at = now() WHERE builtin = 'title' AND NOT auto_fill;

@@ -1,6 +1,6 @@
-"""Resumos: configuração da plataforma, criação versionada pelo tipo de agenda e o job `summarize`.
+"""Summaries: platform configuration, versioned creation by agenda type, and the `summarize` job.
 
-Contrato e decisões em docs/standards/code/server-agentes.md.
+Contract and decisions in docs/standards/code/server-agentes.md.
 """
 
 from __future__ import annotations
@@ -40,17 +40,17 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-# --- providers por finalidade --------------------------------------------------------------------
+# --- providers by purpose ------------------------------------------------------------------------
 
-# Colunas de `agent_providers` que `eclume_app` lê: a chave de API fica só para o papel de conexão.
+# Columns of `agent_providers` that `eclume_app` reads: the API key is for the connection role only.
 PROVIDER_PUBLIC = [column for column in t.agent_providers.c if column.name != "api_key_encrypted"]
 PURPOSES = ("summaries", "fields", "chat", "agenda_detection")
 
 
 async def provider_for(conn: AsyncConnection, purpose: str) -> Row | None:
-    """O provider habilitado que declara a finalidade (há no máximo um), sem a chave de API.
+    """The enabled provider that declares the purpose (there is at most one), without the API key.
 
-    O banco garante um por finalidade (migration 013); a ordem é a do cadastro de todo modo.
+    The database guarantees one per purpose (migration 013); the order is registration order anyway.
     """
     c = t.agent_providers.c
     query = (
@@ -62,7 +62,7 @@ async def provider_for(conn: AsyncConnection, purpose: str) -> Row | None:
     return (await conn.execute(query)).mappings().first()
 
 
-# --- formas JSON ------------------------------------------------------------------------------------
+# --- JSON shapes ------------------------------------------------------------------------------------
 
 
 def _id(value: UUID | None) -> str | None:
@@ -70,14 +70,14 @@ def _id(value: UUID | None) -> str | None:
 
 
 def provider_ref(row: Row) -> dict[str, Any] | None:
-    """Schema `AgentProviderRef` do instantâneo `provider_*` da linha; `None` sem provider."""
+    """Schema `AgentProviderRef` of the row's `provider_*` snapshot; `None` without a provider."""
     if row["provider_id"] is None:
         return None
     return {"id": str(row["provider_id"]), "name": row["provider_name"], "kind": row["provider_kind"]}
 
 
 def summary_json(row: Row) -> dict[str, Any]:
-    """Schema `Summary`, com tipo de agenda e provider em instantâneo."""
+    """Schema `Summary`, with agenda type and provider as a snapshot."""
     error = None
     if row["error_code"]:
         error = {"code": row["error_code"], "message": row["error_message"] or ""}
@@ -105,11 +105,11 @@ def summary_json(row: Row) -> dict[str, Any]:
     }
 
 
-# --- criação -----------------------------------------------------------------------------------------
+# --- creation ----------------------------------------------------------------------------------------
 
 
 async def lock_versions(conn: AsyncConnection, transcript_id: UUID) -> None:
-    """Serializa, até o fim da transação, as versões novas do resumo da transcrição."""
+    """Serializes, until the end of the transaction, the new versions of the transcript's summary."""
     await conn.execute(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
         {"key": f"summary:{transcript_id}"},
@@ -117,13 +117,13 @@ async def lock_versions(conn: AsyncConnection, transcript_id: UUID) -> None:
 
 
 async def next_version(conn: AsyncConnection, transcript_id: UUID) -> int:
-    """A próxima `version` do resumo da transcrição (sob `lock_versions`)."""
+    """The next `version` of the transcript's summary (under `lock_versions`)."""
     s = t.summaries.c
     query = select(func.coalesce(func.max(s.version), 0) + 1).where(s.transcript_id == transcript_id)
     return (await conn.execute(query)).scalar_one()
 
 
-async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, tipo, provider e gatilho
+async def create_summary(  # noqa: PLR0913 — the summary is born from transcript, type, provider and trigger
     conn: AsyncConnection,
     *,
     transcript: Row,
@@ -132,10 +132,10 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
     trigger: str,
     created_by: UUID,
 ) -> Row:
-    """Insere um resumo `queued` com a próxima `version` da transcrição.
+    """Inserts a `queued` summary with the transcript's next `version`.
 
-    Serve à API (sob a RLS do dono) e ao resumo automático (papel de conexão). As instruções do
-    tipo entram como instantâneo. O lock da transcrição serializa as versões novas.
+    Serves the API (under the owner's RLS) and the automatic summary (connection role). The type's
+    instructions go in as a snapshot. The transcript lock serializes the new versions.
     """
     await lock_versions(conn, transcript["id"])
     version = await next_version(conn, transcript["id"])
@@ -167,7 +167,7 @@ async def create_summary(  # noqa: PLR0913 — o resumo nasce de transcrição, 
     )
 
 
-# --- versões da gravação (edição, volta à gerada, estado) -------------------------------------------
+# --- recording versions (edit, revert to generated, state) -----------------------------------------
 
 SUMMARY_CHANGED = "summary_changed"
 SUMMARY_MISSING = "summary_missing"
@@ -175,7 +175,7 @@ TRANSCRIPT_MISSING = "transcript_missing"
 
 
 async def recording_transcript(conn: AsyncConnection, recording_id: UUID) -> Row:
-    """A transcrição da gravação do usuário: 404 sem a gravação, 409 `transcript_missing` sem transcrição."""
+    """The user's recording transcript: 404 without the recording, 409 `transcript_missing` without a transcript."""
     visible = (await conn.execute(select(t.recordings.c.id).where(t.recordings.c.id == recording_id))).first()
     if visible is None:
         raise not_found("Gravação inexistente ou sem acesso.")
@@ -190,7 +190,7 @@ async def recording_transcript(conn: AsyncConnection, recording_id: UUID) -> Row
 
 
 async def summary_provider(conn: AsyncConnection, provider_id: UUID | None) -> Row:
-    """O provider pedido, ou o de resumos da plataforma; ausente ou desabilitado → 422."""
+    """The requested provider, or the platform's summaries provider; missing or disabled → 422."""
     field = "provider_id"
     if provider_id is None:
         provider = await provider_for(conn, "summaries")
@@ -206,7 +206,7 @@ async def summary_provider(conn: AsyncConnection, provider_id: UUID | None) -> R
 
 
 async def summary_agenda_type(conn: AsyncConnection, transcript: Row, agenda_type_id: UUID | None) -> Row:
-    """O tipo pedido, ou o da gravação; nenhum → 422."""
+    """The requested type, or the recording's; none → 422."""
     field = "agenda_type_id"
     if agenda_type_id is None:
         agenda_type_id = (
@@ -222,24 +222,24 @@ async def summary_agenda_type(conn: AsyncConnection, transcript: Row, agenda_typ
     return row
 
 
-def _latest(transcript_id: UUID, *conditions: Any) -> Any:  # noqa: ANN401 — Select do SQLAlchemy
+def _latest(transcript_id: UUID, *conditions: Any) -> Any:  # noqa: ANN401 — SQLAlchemy Select
     s = t.summaries.c
     return select(t.summaries).where(s.transcript_id == transcript_id, *conditions).order_by(s.version.desc()).limit(1)
 
 
 async def current_version(conn: AsyncConnection, transcript_id: UUID) -> Row | None:
-    """A versão atual: a de maior `version` concluída."""
+    """The current version: the completed one with the highest `version`."""
     return (await conn.execute(_latest(transcript_id, t.summaries.c.status == "done"))).mappings().first()
 
 
 async def generated_version(conn: AsyncConnection, transcript_id: UUID) -> Row | None:
-    """A gerada de referência: a `generated` concluída mais recente."""
+    """The reference generated version: the most recent completed `generated`."""
     s = t.summaries.c
     return (await conn.execute(_latest(transcript_id, s.status == "done", s.origin == "generated"))).mappings().first()
 
 
 async def summary_state(conn: AsyncConnection, transcript_id: UUID) -> dict[str, Any]:
-    """Schema `SummaryState`: a atual, a gerada de referência, a geração em aberto e o total."""
+    """Schema `SummaryState`: the current one, the reference generated one, the open generation and the total."""
     s = t.summaries.c
     pending = (await conn.execute(_latest(transcript_id, s.status.in_(["queued", "running"])))).mappings().first()
     count = (await conn.execute(select(func.count()).where(s.transcript_id == transcript_id))).scalar_one()
@@ -253,10 +253,10 @@ async def summary_state(conn: AsyncConnection, transcript_id: UUID) -> dict[str,
 
 
 async def touch_recording(conn: AsyncConnection, transcript_id: UUID) -> None:
-    """Move `updated_at` da gravação e da transcrição quando o resumo atual muda.
+    """Moves `updated_at` of the recording and the transcript when the current summary changes.
 
-    O `?since=` de `GET /recordings` e `GET /transcripts` é como o desktop percebe que a pasta
-    sincronizada precisa de um resumo novo; sem isto um resumo refeito passava despercebido.
+    The `?since=` of `GET /recordings` and `GET /transcripts` is how the desktop notices that the
+    synced folder needs a new summary; without this a redone summary would go unnoticed.
     """
     now = func.now()
     recording_id = (
@@ -270,7 +270,7 @@ async def touch_recording(conn: AsyncConnection, transcript_id: UUID) -> None:
         await conn.execute(update(t.recordings).where(t.recordings.c.id == row[0]).values(updated_at=now))
 
 
-async def add_version(  # noqa: PLR0913 — a versão nasce da transcrição, do conteúdo e de quem a fez
+async def add_version(  # noqa: PLR0913 — the version is born from the transcript, the content and who made it
     conn: AsyncConnection,
     *,
     transcript: Row,
@@ -282,10 +282,10 @@ async def add_version(  # noqa: PLR0913 — a versão nasce da transcrição, do
     agent: tuple[Row, str] | None = None,
     chat_message_id: UUID | None = None,
 ) -> Row:
-    """Insere uma versão já concluída (`manual` ou `chat`), sob o `lock_versions` de quem chama.
+    """Inserts an already completed version (`manual` or `chat`), under the caller's `lock_versions`.
 
-    O tipo de agenda é o da versão de que ela partiu (`base`); `agent` é o par (provider, modelo)
-    de uma versão `chat`.
+    The agenda type is that of the version it started from (`base`); `agent` is the (provider, model)
+    pair of a `chat` version.
     """
     provider, model = agent if agent is not None else (None, None)
     values: dict[str, Any] = {
@@ -316,7 +316,7 @@ async def add_version(  # noqa: PLR0913 — a versão nasce da transcrição, do
 async def edit_summary(
     conn: AsyncConnection, transcript: Row, content_md: str, base_version: int, created_by: UUID
 ) -> Row:
-    """A edição à mão: versão `manual` sobre a atual; outra versão no meio → 409 `summary_changed`."""
+    """The hand edit: a `manual` version over the current one; another version in between → 409 `summary_changed`."""
     await lock_versions(conn, transcript["id"])
     current = await current_version(conn, transcript["id"])
     if base_version != (current["version"] if current else 0):
@@ -327,7 +327,7 @@ async def edit_summary(
 
 
 async def edit_current(conn: AsyncConnection, transcript: Row, content_md: str, created_by: UUID) -> Row:
-    """Edição sobre a versão atual, sem `base_version` (o servidor MCP): versão `manual`."""
+    """Edit over the current version, without `base_version` (the MCP server): a `manual` version."""
     await lock_versions(conn, transcript["id"])
     current = await current_version(conn, transcript["id"])
     return await add_version(
@@ -336,7 +336,7 @@ async def edit_current(conn: AsyncConnection, transcript: Row, content_md: str, 
 
 
 async def revert_summary(conn: AsyncConnection, transcript: Row, created_by: UUID) -> Row:
-    """Voltar à gerada: versão `manual` com o conteúdo da gerada de referência."""
+    """Revert to generated: a `manual` version with the content of the reference generated one."""
     await lock_versions(conn, transcript["id"])
     generated = await generated_version(conn, transcript["id"])
     if generated is None:
@@ -353,22 +353,22 @@ async def revert_summary(conn: AsyncConnection, transcript: Row, created_by: UUI
 
 
 async def delete_all(conn: AsyncConnection, transcript: Row) -> None:
-    """Apaga todas as versões e o chat de ajuste da gravação."""
+    """Deletes every version and the adjustment chat of the recording."""
     chat = t.summary_chat_messages.c
     await conn.execute(delete(t.summary_chat_messages).where(chat.recording_id == transcript["recording_id"]))
     await conn.execute(delete(t.summaries).where(t.summaries.c.transcript_id == transcript["id"]))
 
 
-# --- resumo automático ---------------------------------------------------------------------------
+# --- automatic summary ---------------------------------------------------------------------------
 
 
 async def start_auto_summary(conn: AsyncConnection, recording_id: UUID, revision: int) -> UUID | None:
-    """Abre o resumo automático da revisão, pelas instruções do tipo de agenda da gravação.
+    """Opens the revision's automatic summary, from the instructions of the recording's agenda type.
 
-    Serve à cadeia do worker (papel de conexão) e à troca manual do tipo (sob a RLS do dono). Sem
-    tipo ou sem provider de `summaries`, a etapa `summary` sai pulada. Já existindo o automático da
-    mesma revisão e do mesmo tipo (etapa repetida, ou o tipo escolhido de novo), nada é criado.
-    Devolve o resumo a enfileirar.
+    Serves the worker chain (connection role) and the manual type change (under the owner's RLS).
+    Without a type or without a `summaries` provider, the `summary` step ends skipped. When the
+    automatic summary of the same revision and the same type already exists (a repeated step, or the
+    type chosen again), nothing is created. Returns the summary to enqueue.
     """
     recording = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().one()
     transcript = (
@@ -417,7 +417,7 @@ async def start_auto_summary(conn: AsyncConnection, recording_id: UUID, revision
 async def _finish_step(
     conn: AsyncConnection, summary_id: UUID, state: str, error: tuple[str, str] | None, reason: str | None = None
 ) -> None:
-    """Fecha a etapa `summary` da revisão cujo resumo automático é este (se é); `reason` se pulada."""
+    """Closes the `summary` step of the revision whose automatic summary this is (if it is); `reason` if skipped."""
     ps = t.pipeline_steps.c
     values: dict[str, Any] = {
         "state": state,
@@ -438,19 +438,19 @@ async def _finish_step(
         await mark_recording_changed(conn, recording_id)
 
 
-# --- o job `summarize` ---------------------------------------------------------------------------
+# --- the `summarize` job ---------------------------------------------------------------------------
 
 MAX_ATTEMPTS = 3
 RETRY_DELAYS_S = (30, 120)
 GPU_RETRY_S = 60
 OLLAMA_WAIT_S = 2 * 3600
-# Abaixo do `timeout` do arq (30 min), para o resumo terminar `failed` e não preso em `running`.
+# Below the arq `timeout` (30 min), so the summary ends `failed` and not stuck in `running`.
 JOB_TIMEOUT_S = 25 * 60
 INTERNAL_ERROR = "internal_error"
 
 
 def provider_config(settings: Settings, row: Row, platform_key_encrypted: str | None = None) -> ProviderConfig:
-    """Configuração do provider com a chave decifrada; sem chave própria, vale a da plataforma."""
+    """Provider configuration with the decrypted key; without its own key, the platform's applies."""
     encrypted = row["api_key_encrypted"] or platform_key_encrypted
     api_key = decrypt(settings, encrypted) if encrypted else None
     return ProviderConfig(
@@ -464,7 +464,7 @@ def provider_config(settings: Settings, row: Row, platform_key_encrypted: str | 
 
 
 async def transcript_text(conn: AsyncConnection, transcript_id: UUID) -> TranscriptText:
-    """A transcrição pronta para o prompt (título, data, participantes e falas com tempo)."""
+    """The transcript ready for the prompt (title, date, participants and timed utterances)."""
     head = (
         (
             await conn.execute(
@@ -507,7 +507,7 @@ async def transcript_text(conn: AsyncConnection, transcript_id: UUID) -> Transcr
 
 
 async def _update_open(engine: AsyncEngine, summary_id: UUID, **values: Any) -> None:  # noqa: ANN401
-    """Atualiza o resumo se ele ainda existe e está em aberto (o dono pode tê-lo apagado)."""
+    """Updates the summary if it still exists and is open (the owner may have deleted it)."""
     async with system_tx(engine) as conn:
         await conn.execute(
             update(t.summaries)
@@ -517,7 +517,7 @@ async def _update_open(engine: AsyncEngine, summary_id: UUID, **values: Any) -> 
 
 
 async def fail_summary(engine: AsyncEngine, summary_id: UUID, code: str, message: str, attempts: int) -> str:
-    """Marca o resumo em aberto como falho e fecha a etapa `summary` dele (o job e a retomada)."""
+    """Marks the open summary as failed and closes its `summary` step (the job and the resume)."""
     await _update_open(
         engine,
         summary_id,
@@ -529,14 +529,14 @@ async def fail_summary(engine: AsyncEngine, summary_id: UUID, code: str, message
     )
     async with system_tx(engine) as conn:
         await _finish_step(conn, summary_id, "failed", (code, message))
-    log.warning("resumo %s falhou: %s — %s", summary_id, code, message)
+    log.warning("summary %s failed: %s — %s", summary_id, code, message)
     return f"falhou: {code}"
 
 
 async def load_provider(conn: AsyncConnection, provider_id: UUID) -> tuple[Row | None, str | None]:
-    """O provider com a chave cifrada (papel de conexão) e o segredo da plataforma que ele usa.
+    """The provider with the encrypted key (connection role) and the platform secret it uses.
 
-    Só o `anthropic` sem chave própria usa um: o `anthropic_api_key`.
+    Only `anthropic` without its own key uses one: the `anthropic_api_key`.
     """
     row = (
         (await conn.execute(select(t.agent_providers).where(t.agent_providers.c.id == provider_id))).mappings().first()
@@ -548,10 +548,10 @@ async def load_provider(conn: AsyncConnection, provider_id: UUID) -> tuple[Row |
 
 
 def next_try(ctx: dict[str, Any], exc: ProviderError, *, attempts: int, waited_s: float, options: dict) -> float | None:
-    """Em quantos segundos tentar de novo, ou `None` (falha definitiva).
+    """In how many seconds to retry, or `None` (permanent failure).
 
-    As regras de todo job de agente (resumo, campos, detecção): falha passageira retenta até
-    `MAX_ATTEMPTS`, e a GPU ocupada (Ollama) adia sem gastar tentativa até `ollama_wait_s`.
+    The rules of every agent job (summary, fields, detection): a transient failure retries up to
+    `MAX_ATTEMPTS`, and a busy GPU (Ollama) postpones without spending an attempt up to `ollama_wait_s`.
     """
     if exc.code == GPU_BUSY:
         wait = options.get("ollama_wait_s", OLLAMA_WAIT_S)
@@ -566,7 +566,7 @@ def next_try(ctx: dict[str, Any], exc: ProviderError, *, attempts: int, waited_s
 
 @dataclass(frozen=True)
 class AgentStep:
-    """Uma etapa do pipeline feita por agente: a gravação, a revisão, a etapa e o estado anterior."""
+    """A pipeline step done by an agent: the recording, the revision, the step and the previous state."""
 
     recording: Row
     revision: int
@@ -581,10 +581,11 @@ async def call_agent_step[T](
     provider: tuple[Row, str | None],
     call: Callable[[Provider], Awaitable[T]],
 ) -> T | str:
-    """Chama o agente de uma etapa: o resultado, ou o desfecho da falha, já gravado na etapa.
+    """Calls the agent of a step: the result, or the failure outcome, already written on the step.
 
-    Falha passageira volta à fila (`arq.Retry`, com as tentativas na `detail` da etapa); a definitiva
-    deixa a etapa `failed`, e quem chamou segue a cadeia. `provider` é o par de `load_provider`.
+    A transient failure goes back to the queue (`arq.Retry`, with the attempts in the step's `detail`);
+    a permanent one leaves the step `failed`, and the caller continues the chain. `provider` is the pair
+    of `load_provider`.
     """
     engine: AsyncEngine = ctx["engine"]
     try:
@@ -615,13 +616,13 @@ async def call_agent_step[T](
                 started_at=step.started_at,
             )
         if defer is not None:
-            # Fora da transação: o `Retry` dentro dela desfaria a contagem das tentativas.
+            # Outside the transaction: the `Retry` inside it would undo the attempt count.
             raise Retry(defer=defer) from exc
         return f"falhou: {exc.code}"
     except TimeoutError:
         error = (PROVIDER_TIMEOUT, f"A etapa passou de {JOB_TIMEOUT_S // 60} min.")
     except Exception as exc:
-        log.exception("etapa %s de %s: falha inesperada", step.step, step.recording["id"])
+        log.exception("step %s of %s: unexpected failure", step.step, step.recording["id"])
         error = (INTERNAL_ERROR, type(exc).__name__)
     async with system_tx(engine) as conn:
         await set_step(conn, step.recording, step.revision, step.step, "failed", error=error)
@@ -629,7 +630,7 @@ async def call_agent_step[T](
 
 
 def provider_factory(ctx: dict[str, Any]) -> Callable[[ProviderConfig], Provider]:
-    """A fábrica de providers do worker (`ctx["provider_factory"]` nos testes)."""
+    """The worker's provider factory (`ctx["provider_factory"]` in the tests)."""
     return ctx.get("provider_factory") or _default_factory(ctx)
 
 
@@ -641,11 +642,11 @@ def _default_factory(ctx: dict[str, Any]) -> Callable[[ProviderConfig], Provider
     return lambda config: build_provider(config, claude_bin=settings.claude_bin, gpu_idle=gpu_idle)
 
 
-async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PLR0911 — um desfecho por caminho do job
-    """O job `summarize`: gera o resumo e grava `done` ou `failed`; falha passageira volta à fila.
+async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PLR0911 — one outcome per job path
+    """The `summarize` job: generates the summary and writes `done` or `failed`; a transient failure requeues.
 
-    `ctx` é o do worker arq: `engine`, `settings` e `redis`, e — nos testes — `provider_factory`,
-    `retry_delays` e `gpu_retry_s`.
+    `ctx` is the arq worker's: `engine`, `settings` and `redis`, and — in the tests — `provider_factory`,
+    `retry_delays` and `gpu_retry_s`.
     """
     engine: AsyncEngine = ctx["engine"]
     async with system_tx(engine) as conn:
@@ -655,7 +656,7 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
             .first()
         )
         if summary is None:
-            # Apagado antes de gerar: a etapa do resumo automático não fica `active` para sempre.
+            # Deleted before generating: the automatic summary's step does not stay `active` forever.
             await _finish_step(conn, summary_id, "skipped", None, reason="summary_deleted")
             return "resumo apagado"
         if summary["status"] not in {"queued", "running"}:
@@ -687,7 +688,7 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
     except ProviderError as exc:
         return await _on_error(ctx, summary, config, exc, attempts)
     except Exception:
-        log.exception("resumo %s: falha inesperada", summary_id)
+        log.exception("summary %s: unexpected failure", summary_id)
         return await fail_summary(engine, summary_id, INTERNAL_ERROR, "Falha inesperada ao gerar o resumo.", attempts)
     async with system_tx(engine) as conn:
         await lock_versions(conn, summary["transcript_id"])
@@ -700,8 +701,8 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
             "error_message": None,
             "completed_at": func.now(),
         }
-        # Uma edição ou um ajuste que chegou durante a geração pegou um número acima: a geração
-        # pedida toma o próximo ao terminar, para virar a atual.
+        # An edit or an adjustment that arrived during generation took a higher number: the
+        # requested generation takes the next one when it finishes, to become the current one.
         following = await next_version(conn, summary["transcript_id"])
         if following > summary["version"] + 1:
             values["version"] = following
@@ -718,16 +719,16 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
 async def _on_error(
     ctx: dict[str, Any], summary: Row, config: ProviderConfig, exc: ProviderError, attempts: int
 ) -> str:
-    """Adia (fila da GPU), retenta (falha passageira) ou falha de vez."""
+    """Postpones (GPU queue), retries (transient failure) or fails for good."""
     engine: AsyncEngine = ctx["engine"]
     summary_id = summary["id"]
     waited = (datetime.now(UTC) - summary["created_at"]).total_seconds()
     defer = next_try(ctx, exc, attempts=attempts, waited_s=waited, options=config.options)
     if defer is not None:
-        # Esperar a GPU não é uma tentativa: o provider nem foi chamado.
+        # Waiting for the GPU is not an attempt: the provider was not even called.
         spent = attempts if exc.code != GPU_BUSY else summary["attempts"]
         await _update_open(engine, summary_id, status="queued", attempts=spent)
-        log.info("resumo %s: tentativa %d falhou (%s), nova tentativa", summary_id, attempts, exc.code)
+        log.info("summary %s: attempt %d failed (%s), retrying", summary_id, attempts, exc.code)
         raise Retry(defer=defer)
     if exc.code == GPU_BUSY:
         return await fail_summary(

@@ -1,10 +1,10 @@
-"""Extração por agente: o preenchimento dos campos (e das coleções) e a detecção do tipo de agenda.
+"""Agent extraction: filling the fields (and the collections) and detecting the agenda type.
 
-Campos: uma chamada para todos, com a transcrição inteira; não cabendo na janela, uma chamada por
-seção (as de `prompting.split_sections`) e a mescla por tipo. A mesma chamada escolhe as coleções
-automáticas, com o tipo de agenda e os participantes da gravação como contexto. Tipo: uma chamada com o início da
-transcrição que cabe na janela. As respostas são só JSON; o que não abre é `provider_bad_output`,
-retentável. Contrato em docs/standards/code/processamento-automatico.md.
+Fields: one call for all of them, with the whole transcript; when it does not fit the window, one call
+per section (those of `prompting.split_sections`) and a merge by kind. The same call picks the automatic
+collections, with the recording's agenda type and participants as context. Type: one call with the start
+of the transcript that fits the window. The answers are JSON only; what does not parse is
+`provider_bad_output`, retryable. Contract in docs/standards/code/processamento-automatico.md.
 """
 
 from __future__ import annotations
@@ -31,11 +31,11 @@ if TYPE_CHECKING:
 
 MAX_TEXT = 300
 MAX_LIST = 10
-# O cadastro de tags que vai ao prompt, com as descrições.
+# The tag registry that goes into the prompt, with the descriptions.
 MAX_KNOWN_TAGS = 200
-# O teto de uma tag, a automática e a padrão de um tipo.
+# The cap of one tag, the automatic one and a type's default one.
 MAX_TAG = 64
-# O teto das regras e instruções que o usuário escreve e que vão ao prompt.
+# The cap of the rules and instructions the user writes that go into the prompt.
 MAX_INSTRUCTIONS = 4000
 
 FIELDS_SYSTEM = (
@@ -49,13 +49,13 @@ _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 
 @dataclass(frozen=True)
 class FieldSpec:
-    """O que o agente precisa saber de um campo."""
+    """What the agent needs to know about a field."""
 
     key: str
     kind: str
     instructions: str
     options: tuple[str, ...] = ()
-    # O teto de cada item de lista (as tags têm o de `MAX_TAG`).
+    # The cap of each list item (tags use `MAX_TAG`).
     max_item: int = MAX_TEXT
 
 
@@ -69,7 +69,7 @@ def _describe(field: FieldSpec) -> str:
 
 @dataclass(frozen=True)
 class TagGuide:
-    """O cadastro de tags para o agente: (nome, descrição) e quantas tags novas ele pode criar."""
+    """The tag registry for the agent: (name, description) and how many new tags it may create."""
 
     tags: tuple[tuple[str, str], ...] = ()
     allow_new: int = 0
@@ -94,7 +94,7 @@ def _tag_section(guide: TagGuide) -> list[str]:
 
 @dataclass(frozen=True)
 class Participant:
-    """Uma pessoa do diretório ligada a um locutor da gravação, com os dados de cadastro."""
+    """A directory person linked to a speaker of the recording, with their registry data."""
 
     name: str
     company: str | None = None
@@ -105,7 +105,7 @@ class Participant:
 
 @dataclass(frozen=True)
 class CollectionSpec:
-    """Uma coleção automática: o nome e a regra ("quando incluir")."""
+    """An automatic collection: its name and its rule ("when to include")."""
 
     name: str
     instructions: str
@@ -113,7 +113,7 @@ class CollectionSpec:
 
 @dataclass(frozen=True)
 class RecordingContext:
-    """O que o agente sabe da gravação além da transcrição: o tipo, os participantes e as coleções."""
+    """What the agent knows of the recording besides the transcript: the type, the participants and the collections."""
 
     agenda_type: str | None = None
     participants: tuple[Participant, ...] = ()
@@ -150,9 +150,9 @@ def _expected(fields: list[FieldSpec], *, collections: bool) -> str:
 
 
 def fields_prompt(fields: list[FieldSpec], tags: TagGuide | None, context: RecordingContext | None = None) -> str:
-    """Prompt do usuário, depois da transcrição: a tarefa, os campos, as tags, o contexto e o formato.
+    """The user prompt, after the transcript: the task, the fields, the tags, the context and the format.
 
-    O contexto é o tipo de agenda, os participantes e as coleções automáticas da gravação.
+    The context is the recording's agenda type, participants and automatic collections.
     """
     context = context or RecordingContext()
     parts = [FIELDS_SYSTEM]
@@ -175,7 +175,7 @@ def fields_prompt(fields: list[FieldSpec], tags: TagGuide | None, context: Recor
 
 
 def parse_object(text: str) -> dict[str, Any]:
-    """O objeto JSON da resposta (tolera cercas de código); o resto é `provider_bad_output`."""
+    """The JSON object of the answer (tolerates code fences); anything else is `provider_bad_output`."""
     body = _FENCE.sub("", text.strip())
     start, end = body.find("{"), body.rfind("}")
     try:
@@ -187,8 +187,8 @@ def parse_object(text: str) -> dict[str, Any]:
     return value
 
 
-def clean(field: FieldSpec, value: Any) -> Any:  # noqa: ANN401 — o formato depende do tipo do campo
-    """O valor no formato do campo, ou `None` (escolha fora das opções, tipo errado, vazio)."""
+def clean(field: FieldSpec, value: Any) -> Any:  # noqa: ANN401 — the shape depends on the field kind
+    """The value in the field's shape, or `None` (choice outside the options, wrong type, empty)."""
     if field.kind == "list":
         items = value if isinstance(value, list) else []
         cleaned = [item.strip()[: field.max_item] for item in items if isinstance(item, str) and item.strip()]
@@ -202,7 +202,7 @@ def clean(field: FieldSpec, value: Any) -> Any:  # noqa: ANN401 — o formato de
 
 
 def merge(field: FieldSpec, values: list[Any]) -> Any:  # noqa: ANN401
-    """Mescla o resultado das seções: o mais frequente (texto, escolha) ou a união (lista)."""
+    """Merge the sections' results: the most frequent (text, choice) or the union (list)."""
     present = [value for value in values if value is not None]
     if not present:
         return None
@@ -210,12 +210,12 @@ def merge(field: FieldSpec, values: list[Any]) -> Any:  # noqa: ANN401
         return list(dict.fromkeys(item for value in present for item in value))[:MAX_LIST]
     counts = Counter(present)
     best = max(counts.values())
-    # Empate: o que apareceu primeiro.
+    # Tie: the one that appeared first.
     return next(value for value in present if counts[value] == best)
 
 
-def chosen_collections(value: Any, count: int) -> list[int]:  # noqa: ANN401 — a resposta do agente
-    """Os índices (a partir de 0) das coleções escolhidas; o que não é `C<n>` da lista fica de fora."""
+def chosen_collections(value: Any, count: int) -> list[int]:  # noqa: ANN401 — the agent's answer
+    """The (zero-based) indexes of the chosen collections; anything that is not a listed `C<n>` is left out."""
     items = value if isinstance(value, list) else []
     indexes = []
     for item in items:
@@ -227,7 +227,7 @@ def chosen_collections(value: Any, count: int) -> list[int]:  # noqa: ANN401 —
 
 @dataclass(frozen=True)
 class Extraction:
-    """O valor de cada campo, as coleções escolhidas (índices) e a última resposta."""
+    """Each field's value, the chosen collections (indexes) and the last answer."""
 
     values: dict[str, Any]
     collections: list[int]
@@ -237,7 +237,7 @@ class Extraction:
 async def extract_fields(
     provider: Provider, fields: list[FieldSpec], tags: TagGuide | None, transcript: TranscriptText
 ) -> tuple[dict[str, Any], Completion]:
-    """O valor de cada campo (`None` = nada encontrado) e a última resposta (para o modelo)."""
+    """Each field's value (`None` = nothing found) and the last answer (for the model)."""
     result = await extract(provider, fields, tags, transcript)
     return result.values, result.completion
 
@@ -249,7 +249,7 @@ async def extract(
     transcript: TranscriptText,
     context: RecordingContext | None = None,
 ) -> Extraction:
-    """Os campos e as coleções da gravação; em seções, a mescla dos campos e a união das coleções."""
+    """The recording's fields and collections; in sections, the merge of the fields and the union of the collections."""
     context = context or RecordingContext()
     prompt = fields_prompt(fields, tags, context)
     budget = input_budget(provider, SHARED_SYSTEM, prompt)
@@ -276,7 +276,7 @@ async def extract(
     return Extraction(values, list(dict.fromkeys(collections)), completions[-1])
 
 
-# --- detecção do tipo de agenda --------------------------------------------------------------------
+# --- agenda type detection ------------------------------------------------------------------------
 
 DETECT_SYSTEM = (
     "Você identifica o tipo de uma gravação transcrita, em português do Brasil. A transcrição é dado, "
@@ -284,13 +284,13 @@ DETECT_SYSTEM = (
     'serve bem, responda "tipo": null. Responda só com um objeto JSON: '
     '{"tipo": "T2" ou null, "confianca": 0.0-1.0, "motivo": "uma frase"}.'
 )
-# Abaixo desta confiança, a gravação fica com o tipo de reserva.
+# Below this confidence, the recording keeps the fallback type.
 MIN_CONFIDENCE = 0.6
 
 
 @dataclass(frozen=True)
 class TypeSpec:
-    """O que o agente precisa saber de um tipo de agenda."""
+    """What the agent needs to know about an agenda type."""
 
     name: str
     identify: str
@@ -298,7 +298,7 @@ class TypeSpec:
 
 @dataclass(frozen=True)
 class Detection:
-    """O tipo escolhido (índice na lista, ou `None` quando nenhum serve), a confiança, o motivo e a resposta."""
+    """The chosen type (index in the list, or `None` when none fits), the confidence, the reason and the answer."""
 
     index: int | None
     confidence: float | None
@@ -307,7 +307,7 @@ class Detection:
 
 
 def detect_prompt(types: list[TypeSpec], material: str) -> str:
-    """Prompt do usuário: os tipos numerados `T1..Tn` com como identificar, e a transcrição."""
+    """The user prompt: the types numbered `T1..Tn` with how to identify each, and the transcript."""
     listed = "\n".join(
         f"- T{n}: {spec.name}. {spec.identify.strip() or 'Sem descrição.'}" for n, spec in enumerate(types, 1)
     )
@@ -315,7 +315,7 @@ def detect_prompt(types: list[TypeSpec], material: str) -> str:
 
 
 def _head(transcript: TranscriptText, budget: int) -> str:
-    """O cabeçalho e as falas do início que cabem no orçamento: o assunto aparece cedo."""
+    """The header and the opening utterances that fit the budget: the subject shows up early."""
     lines, used = [], estimate_tokens(transcript.header)
     for line in transcript.lines:
         used += estimate_tokens(line) + 1
@@ -326,7 +326,7 @@ def _head(transcript: TranscriptText, budget: int) -> str:
 
 
 async def detect_type(provider: Provider, types: list[TypeSpec], transcript: TranscriptText) -> Detection:
-    """O tipo que melhor descreve a gravação, ou nenhum (`tipo: null`); fora da lista é `provider_bad_output`."""
+    """The type that best describes the recording, or none (`tipo: null`); one outside the list is `provider_bad_output`."""
     budget = input_budget(provider, DETECT_SYSTEM, detect_prompt(types, ""))
     if budget < MIN_SECTION_TOKENS:
         raise ProviderError(CONTEXT_TOO_LONG, "A janela de contexto do provider é pequena demais para os tipos.")

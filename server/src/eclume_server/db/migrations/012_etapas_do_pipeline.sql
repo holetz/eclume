@@ -1,8 +1,8 @@
--- 012_etapas_do_pipeline — o estado de cada etapa do processamento, por gravação e revisão
--- (holetz/eclume#33): recebido → pré-processamento → transcrição → campos → tipo de agenda → resumo.
+-- 012_etapas_do_pipeline — the state of each processing step, per recording and revision
+-- (holetz/eclume#33): received → preprocessing → transcription → fields → agenda type → summary.
 --
--- A revisão é a do job de transcrição: retranscrever refaz a cadeia numa revisão nova. A Saúde do
--- admin lê daqui as execuções das últimas 24 h. Padrões em
+-- The revision is the transcription job's: retranscribing redoes the chain in a new revision. The admin's
+-- Health page reads the runs of the last 24 h from here. Patterns in
 -- docs/standards/code/processamento-automatico.md.
 
 CREATE TABLE pipeline_steps (
@@ -20,17 +20,17 @@ CREATE TABLE pipeline_steps (
     ) STORED,
     error_code     text,
     error_message  text,
-    -- Motivo do pulo (`reason`), avisos, confiança da detecção, parâmetros do pré-processamento.
+    -- Skip reason (`reason`), warnings, detection confidence, preprocessing parameters.
     detail         jsonb NOT NULL DEFAULT '{}',
     UNIQUE (recording_id, revision, step),
     FOREIGN KEY (recording_id, owner_id) REFERENCES recordings (id, owner_id) ON DELETE CASCADE
 );
 CREATE INDEX pipeline_steps_health_idx ON pipeline_steps (step, finished_at);
 
--- --- histórico das gravações existentes --------------------------------------------------------
+-- --- history of the existing recordings --------------------------------------------------------
 
--- Recebido e transcrição saem dos jobs; um job ainda em aberto fica sem a linha da transcrição
--- (sai `pending`), e um nascido falho (hash divergente) falha já no recebido.
+-- Received and transcription come from the jobs; a job still open gets no transcription row
+-- (it comes out `pending`), and one born failed (hash mismatch) fails right at received.
 INSERT INTO pipeline_steps (owner_id, recording_id, revision, step, state, started_at, finished_at,
                             error_code, error_message)
 SELECT j.owner_id, j.recording_id, j.revision, 'received',
@@ -49,7 +49,7 @@ SELECT j.owner_id, j.recording_id, j.revision, 'transcription',
 FROM transcription_jobs j
 WHERE j.state IN ('succeeded', 'failed') AND j.error_code IS DISTINCT FROM 'hash_mismatch';
 
--- As etapas que não existiam antes ficam puladas nas revisões transcritas.
+-- The steps that did not exist before stay skipped in the transcribed revisions.
 INSERT INTO pipeline_steps (owner_id, recording_id, revision, step, state, started_at, finished_at, detail)
 SELECT j.owner_id, j.recording_id, j.revision, s.step, 'skipped',
        coalesce(j.finished_at, j.queued_at), coalesce(j.finished_at, j.queued_at),
@@ -58,7 +58,7 @@ FROM transcription_jobs j
 CROSS JOIN (VALUES ('preprocessing'), ('fields'), ('agenda_type')) AS s (step)
 WHERE j.state = 'succeeded';
 
--- O resumo: feito na última revisão transcrita que tem resumo automático; pulado nas demais.
+-- The summary: done in the last transcribed revision that has an automatic summary; skipped in the others.
 INSERT INTO pipeline_steps (owner_id, recording_id, revision, step, state, started_at, finished_at, detail)
 SELECT j.owner_id, j.recording_id, j.revision, 'summary',
        CASE WHEN automatic.done THEN 'done' ELSE 'skipped' END,
@@ -77,13 +77,13 @@ LEFT JOIN LATERAL (
 ) automatic ON true
 WHERE j.state = 'succeeded';
 
--- --- RLS e GRANTs ------------------------------------------------------------------------------
+-- --- RLS and GRANTs ----------------------------------------------------------------------------
 
 ALTER TABLE pipeline_steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pipeline_steps FORCE ROW LEVEL SECURITY;
 CREATE POLICY pipeline_steps_own ON pipeline_steps
     USING (owner_id = eclume_user()) WITH CHECK (owner_id = eclume_user());
--- O upload e a retranscrição (sob a RLS do dono) abrem as etapas da revisão nova.
+-- The upload and the retranscription (under the owner's RLS) open the steps of the new revision.
 GRANT SELECT, INSERT, UPDATE ON pipeline_steps TO eclume_app;
--- Já coberto pelo ALTER DEFAULT PRIVILEGES da 006 (mesmo migrador); repetido por clareza.
+-- Already covered by the ALTER DEFAULT PRIVILEGES of 006 (same migrator); repeated for clarity.
 GRANT SELECT, INSERT, UPDATE, DELETE ON pipeline_steps TO eclume_server;

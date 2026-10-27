@@ -1,12 +1,12 @@
--- 032_agente_habilidades_e_acoes — as habilidades do usuário e as ações do Agente (holetz/eclume#145).
+-- 032_agente_habilidades_e_acoes — the user's skills and the Agent's actions (holetz/eclume#145).
 --
--- `agent_skills` guarda as habilidades da pessoa: um nome curto (`/nome` na conversa), a descrição
--- que o agente lê para escolher, as instruções em Markdown e, opcionalmente, as ferramentas
--- permitidas (nulo = todas). `agent_actions` é a proposta de ação que o agente fez e, ao mesmo
--- tempo, o registro de auditoria: os alvos congelados na proposta, quem confirmou e o resultado
--- por alvo. Ela sobrevive à exclusão da conversa (`SET NULL`) e sai só com a conta.
--- `agent_messages` ganha a habilidade usada na pergunta. Tudo sob a RLS do dono.
--- Regras em docs/standards/code/server-agentes.md §Agente.
+-- `agent_skills` keeps the person's skills: a short name (`/name` in the conversation), the description
+-- the agent reads to choose, the instructions in Markdown and, optionally, the allowed
+-- tools (null = all). `agent_actions` is the action proposal the agent made and, at the same
+-- time, the audit record: the targets frozen in the proposal, who confirmed and the result
+-- per target. It survives the conversation's deletion (`SET NULL`) and only goes with the account.
+-- `agent_messages` gains the skill used in the question. All under the owner's RLS.
+-- Rules in docs/standards/code/server-agentes.md `§Agente`.
 
 CREATE TABLE agent_skills (
     id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -24,18 +24,18 @@ CREATE TABLE agent_skills (
 CREATE TABLE agent_actions (
     id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id       uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    -- A conversa e a resposta que propuseram; nulas depois que a conversa sai (a auditoria fica).
+    -- The conversation and the answer that proposed it; null after the conversation goes (the audit stays).
     session_id     uuid REFERENCES agent_sessions (id) ON DELETE SET NULL,
     message_id     uuid REFERENCES agent_messages (id) ON DELETE SET NULL,
     tool           text NOT NULL,
     params         jsonb NOT NULL DEFAULT '{}',
     summary        text NOT NULL,
-    -- [{recording_id, title}], congelados na proposta: é o que o cartão mostrou.
+    -- [{recording_id, title}], frozen in the proposal: it is what the card showed.
     targets        jsonb NOT NULL DEFAULT '[]',
     status         text NOT NULL DEFAULT 'proposed' CHECK (
         status IN ('proposed', 'queued', 'running', 'done', 'failed', 'cancelled', 'expired')
     ),
-    -- {recording_id: {status: done|skipped|failed, detail}}, gravado junto com a operação de cada alvo.
+    -- {recording_id: {status: done|skipped|failed, detail}}, written together with each target's operation.
     results        jsonb NOT NULL DEFAULT '{}',
     error          jsonb,
     confirmed_via  text CHECK (confirmed_via IN ('session', 'pat')),
@@ -60,5 +60,5 @@ CREATE POLICY agent_skills_own ON agent_skills
 CREATE POLICY agent_actions_own ON agent_actions
     USING (owner_id = eclume_user()) WITH CHECK (owner_id = eclume_user());
 GRANT SELECT, INSERT, UPDATE, DELETE ON agent_skills, agent_actions TO eclume_app;
--- Já coberto pelo ALTER DEFAULT PRIVILEGES da 006 (mesmo migrador); repetido por clareza.
+-- Already covered by the ALTER DEFAULT PRIVILEGES of 006 (same migrator); repeated for clarity.
 GRANT SELECT, INSERT, UPDATE, DELETE ON agent_skills, agent_actions TO eclume_server;

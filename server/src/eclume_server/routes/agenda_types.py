@@ -1,8 +1,9 @@
-"""Tipos de agenda do usuário: listar, criar, obter, editar e excluir.
+"""The user's agenda types: list, create, get, edit and delete.
 
-A conta nasce com os tipos padrão da plataforma (`eclume_seed_user_defaults`) e o tipo de reserva, e
-os muda à vontade. O tipo de reserva não sai (409 `fallback_agenda_type`). Excluir um tipo passa as
-gravações que o usavam para o tipo de reserva; os resumos guardam nome e instruções.
+The account is born with the platform's default types (`eclume_seed_user_defaults`) and the fallback
+type, and changes them at will. The fallback type cannot be deleted (409 `fallback_agenda_type`).
+Deleting a type moves the recordings that used it to the fallback type; the summaries keep name and
+instructions.
 """
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ from eclume_server.tags import adopt
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
 Reader = Annotated[Principal, Depends(requires("summaries:read"))]
-# A lista também serve à credencial de dispositivo (só `recordings:*`), que escolhe o tipo ao parar.
+# The list also serves the device credential (only `recordings:*`), which picks the type when stopping.
 ListReader = Annotated[Principal, Depends(requires_any("summaries:read", "recordings:read"))]
 Writer = Annotated[Principal, Depends(requires("summaries:write"))]
 NAME_TAKEN = "Já existe um tipo de agenda com esse nome."
@@ -51,7 +52,7 @@ NAME_TAKEN = "Já existe um tipo de agenda com esse nome."
 async def list_agenda_types(
     principal: ListReader, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50
 ) -> dict[str, Any]:
-    """Tipos do usuário, na ordem da lista."""
+    """The user's types, in list order."""
     c = t.agenda_types.c
     query = select(t.agenda_types).order_by(c.position, c.id).limit(limit + 1)
     if cursor:
@@ -64,13 +65,13 @@ async def list_agenda_types(
 
 @router.post("/agenda-types", status_code=201)
 async def create_agenda_type(body: AgendaTypeCreate, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Cria um tipo; nome repetido entre os tipos do usuário é 409."""
+    """Create a type; a name repeated among the user's types is 409."""
     values = create_values(body)
     try:
         async with user_tx(ctx.engine, principal.user_id) as conn:
             if values["position"] is None:
                 values["position"] = await next_position(conn, t.agenda_types)
-            # As tags padrão entram no cadastro, na grafia dele.
+            # The default tags enter the tag registry, in its spelling.
             values["default_tags"] = await adopt(conn, principal.user_id, values["default_tags"])
             row = (
                 (
@@ -93,13 +94,13 @@ class AgendaTypePreviewRequest(BaseModel):
 
     agenda_type: AgendaTypeDraft
     recording_id: UUID
-    # O tipo salvo que o rascunho edita (o rascunho entra no lugar dele); sem ele, o de mesmo nome.
+    # The saved type the draft edits (the draft takes its place); without it, the one with the same name.
     agenda_type_id: UUID | None = None
 
 
 @router.post("/agenda-types/preview", status_code=202)
 async def preview_agenda_type(body: AgendaTypePreviewRequest, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Mostra a detecção, o título, as tags e o resumo de um tipo em rascunho numa gravação."""
+    """Show the detection, title, tags and summary of a draft type on a recording."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await check_transcribed(conn, [body.recording_id], "recording_id")
         quota = await agent_limit(conn, principal.user_id)
@@ -113,7 +114,7 @@ async def preview_agenda_type(body: AgendaTypePreviewRequest, principal: Writer,
 
 @router.get("/agenda-types/{agenda_type_id}")
 async def get_agenda_type_route(agenda_type_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Um tipo do usuário."""
+    """One of the user's types."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return agenda_type_json(await get_agenda_type(conn, agenda_type_id))
 
@@ -122,7 +123,7 @@ async def get_agenda_type_route(agenda_type_id: UUID, principal: Reader, ctx: Ct
 async def update_agenda_type(
     agenda_type_id: UUID, body: AgendaTypePatch, principal: Writer, ctx: Ctx
 ) -> dict[str, Any]:
-    """Edita o tipo; vale para as próximas detecções e resumos (os já feitos ficam como estão)."""
+    """Edit the type; it applies to future detections and summaries (those already made stay as they are)."""
     values = changes_of(body)
     try:
         async with user_tx(ctx.engine, principal.user_id) as conn:
@@ -142,14 +143,14 @@ async def update_agenda_type(
                 .one()
             )
     except IntegrityError as exc:
-        # O contrato não declara 409 no PATCH: nome repetido é um campo inválido.
+        # The contract declares no 409 on PATCH: a repeated name is an invalid field.
         raise invalid_field("name", NAME_TAKEN) from exc
     return agenda_type_json(row)
 
 
 @router.delete("/agenda-types/{agenda_type_id}", status_code=204)
 async def delete_agenda_type(agenda_type_id: UUID, principal: Writer, ctx: Ctx) -> Response:
-    """Exclui o tipo; as gravações que o usavam passam para o tipo de reserva, que não sai."""
+    """Delete the type; the recordings that used it move to the fallback type, which cannot be deleted."""
     r = t.recordings.c
     async with user_tx(ctx.engine, principal.user_id) as conn:
         agenda_type = await get_agenda_type(conn, agenda_type_id)

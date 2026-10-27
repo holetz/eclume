@@ -24,7 +24,7 @@ Member = Annotated[Principal, Depends(requires(session_only=True))]
 
 
 class AudioRetentionPatch(BaseModel):
-    """Corpo do `PATCH /me/audio-retention`: `days` nulo desliga a retenção."""
+    """Body of `PATCH /me/audio-retention`: a null `days` turns retention off."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -33,14 +33,14 @@ class AudioRetentionPatch(BaseModel):
 
 @router.get("/me/audio-retention")
 async def get_audio_retention(principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Os dias da conta, o teto da plataforma e a janela que de fato vale."""
+    """The account's days, the platform ceiling and the window that actually applies."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await retention_json(conn, principal.user_id)
 
 
 @router.patch("/me/audio-retention")
 async def patch_audio_retention(body: AudioRetentionPatch, principal: Member, ctx: Ctx) -> dict[str, Any]:
-    """Muda os dias da conta; o job diário apaga o áudio das gravações mais antigas que a janela."""
+    """Change the account's days; the daily job deletes the audio of recordings older than the window."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await set_account_days(conn, principal.user_id, body.days)
         return await retention_json(conn, principal.user_id)

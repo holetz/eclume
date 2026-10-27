@@ -1,10 +1,11 @@
-"""As operações de escrita sobre uma gravação, compartilhadas pelo MCP, pela API e pelo Agente.
+"""The write operations on a recording, shared by MCP, the API and the Agent.
 
-Cada função roda dentro da transação de quem chama, sob a RLS do dono (`user_tx`): gravação de outra
-conta é 404, como na rota. Quem chama confere o escopo (o MCP pelo token, a rota pela dependência,
-o Agente na confirmação) e, depois do commit, enfileira o resumo devolvido. O Agente chama estas
-funções no próprio processo, em vez do `/mcp` por HTTP (holetz/eclume#145). Contrato em
-docs/standards/code/server-agentes.md §Agente e docs/standards/code/server-mcp-e-dispositivos.md.
+Each function runs inside the caller's transaction, under the owner's RLS (`user_tx`): another
+account's recording is 404, as in the route. The caller checks the scope (MCP by the token, the
+route by the dependency, the Agent on confirmation) and, after the commit, enqueues the returned
+summary. The Agent calls these functions in its own process, instead of `/mcp` over HTTP
+(holetz/eclume#145). Contract in docs/standards/code/server-agentes.md §Agente and
+docs/standards/code/server-mcp-e-dispositivos.md.
 """
 
 from __future__ import annotations
@@ -39,12 +40,13 @@ if TYPE_CHECKING:
 async def regenerate_summary(
     conn: AsyncConnection, redis: ArqRedis, owner_id: UUID, recording_id: UUID
 ) -> tuple[UUID, str]:
-    """Abre um resumo novo pelas instruções do tipo de agenda da gravação; devolve o id a enfileirar e o token da cota.
+    """Open a new summary from the recording's agenda type instructions; return the id to enqueue and the quota token.
 
-    Quem chama estorna o token (`refund_agent_request`) se o resumo não chegar à fila.
+    The caller refunds the token (`refund_agent_request`) if the summary does not reach the queue.
 
-    404 sem a gravação, 409 `transcript_missing` sem transcrição, 429 com os resumos em aberto no
-    teto e 403 `quota_exceeded` com a cota de 24 h do agente estourada (o pedido conta nela).
+    404 without the recording, 409 `transcript_missing` without a transcript, 429 with the open
+    summaries at the ceiling and 403 `quota_exceeded` with the agent's 24 h quota exhausted (the
+    request counts in it).
     """
     transcript = await recording_transcript(conn, recording_id)
     agenda_type = await summary_agenda_type(conn, transcript, None)
@@ -63,14 +65,14 @@ async def regenerate_summary(
 
 
 async def _touch(conn: AsyncConnection, recording_id: UUID, now: datetime) -> None:
-    # O que aparece na transcrição mudou: `?since=` precisa enxergar.
+    # What shows in the transcript changed: `?since=` must see it.
     await conn.execute(update(t.transcripts).where(t.transcripts.c.recording_id == recording_id).values(updated_at=now))
 
 
 async def edit_tags(
     conn: AsyncConnection, owner_id: UUID, recording_id: UUID, *, add: list[str], remove: list[str]
 ) -> bool:
-    """Acrescenta e tira tags (origem `edited`, como na tela); `False` se nada mudou."""
+    """Add and remove tags (origin `edited`, as on screen); `False` if nothing changed."""
     recording = await get_visible(conn, recording_id)
     current = list(recording["tags"] or [])
     removed = {tag.casefold() for tag in remove}
@@ -88,7 +90,7 @@ async def edit_tags(
 
 
 async def check_collections(conn: AsyncConnection, collection_ids: list[UUID]) -> None:
-    """422 se algum id não for coleção do usuário da transação."""
+    """422 if some id is not a collection of the transaction's user."""
     wanted = set(collection_ids)
     if not wanted:
         return
@@ -98,9 +100,9 @@ async def check_collections(conn: AsyncConnection, collection_ids: list[UUID]) -
 
 
 async def edit_collections(conn: AsyncConnection, recording_id: UUID, *, add: list[UUID], remove: list[UUID]) -> bool:
-    """Inclui e tira a gravação de coleções existentes; o agente de coleções não as muda mais.
+    """Add the recording to and remove it from existing collections; the collections agent no longer changes them.
 
-    422 se alguma coleção de `add` não é do dono; `False` se nada mudou.
+    422 if some collection of `add` is not the owner's; `False` if nothing changed.
     """
     await check_collections(conn, add)
     recording = await get_visible(conn, recording_id)
@@ -120,9 +122,9 @@ async def edit_collections(conn: AsyncConnection, recording_id: UUID, *, add: li
 
 
 async def change_agenda_type(conn: AsyncConnection, recording_id: UUID, agenda_type_id: UUID | None) -> UUID | None:
-    """O tipo escolhido pelo usuário: aplica título e tags e, transcrita, abre o resumo automático novo.
+    """The type the user chose: apply title and tags and, once transcribed, open the new automatic summary.
 
-    `None` tira o tipo e devolve a escolha à detecção. Devolve o resumo a enfileirar, se houver.
+    `None` removes the type and hands the choice back to detection. Return the summary to enqueue, if any.
     """
     agenda_type = None
     if agenda_type_id is not None:

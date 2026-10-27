@@ -1,15 +1,15 @@
--- 006_papel_de_conexao — papel de conexão da aplicação sem superusuário e sem DDL.
+-- 006_papel_de_conexao — the application's connection role, with no superuser and no DDL.
 --
--- Três papéis (docs/standards/code/server-nucleo.md §Papéis do banco):
---   * o dono/migrador — quem roda esta migration (o superusuário da imagem em produção); dono de
---     todo objeto, usado só pelo one-shot `migrate`;
---   * `eclume_server` — conexão do server e do worker CPU: sem SUPERUSER, sem ser dono, só DML.
---     Tem BYPASSRLS porque as operações de sistema (credenciais, ingestão, saúde) atravessam
---     organizações por desenho; as requisições baixam para `eclume_app` por transação;
---   * `eclume_app` — inalterado: NOLOGIN, NOBYPASSRLS, alvo do `SET LOCAL ROLE` da RLS.
+-- Three roles (docs/standards/code/server-nucleo.md `§Papéis do banco`):
+--   * the owner/migrator — whoever runs this migration (the image's superuser in production); owner of
+--     every object, used only by the one-shot `migrate`;
+--   * `eclume_server` — connection of the server and the CPU worker: no SUPERUSER, not an owner, DML only.
+--     It has BYPASSRLS because the system operations (credentials, ingestion, health) cross
+--     organizations by design; requests drop to `eclume_app` per transaction;
+--   * `eclume_app` — unchanged: NOLOGIN, NOBYPASSRLS, target of the RLS `SET LOCAL ROLE`.
 --
--- O papel nasce NOLOGIN; `eclume-server migrate` com `ECLUME_RUNTIME_DB_PASSWORD` liga o LOGIN e
--- fixa a senha. Idempotente: dev, teste e produção rodam o mesmo arquivo.
+-- The role is born NOLOGIN; `eclume-server migrate` with `ECLUME_RUNTIME_DB_PASSWORD` enables LOGIN and
+-- sets the password. Idempotent: dev, test and production run the same file.
 
 DO $$
 BEGIN
@@ -20,17 +20,17 @@ END
 $$;
 ALTER ROLE eclume_server NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
 
--- Membro de `eclume_app`, para o `SET LOCAL ROLE eclume_app` de toda requisição.
+-- Member of `eclume_app`, for the `SET LOCAL ROLE eclume_app` of every request.
 GRANT eclume_app TO eclume_server;
 
 GRANT USAGE ON SCHEMA public TO eclume_server;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO eclume_server;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO eclume_server;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO eclume_server;
--- O registro das migrations é do migrador: a aplicação só lê.
+-- The migrations registry belongs to the migrator: the application only reads it.
 REVOKE INSERT, UPDATE, DELETE ON schema_migrations FROM eclume_server;
 
--- Objetos que as próximas migrations criarem (pelo mesmo migrador) já nascem com o acesso.
+-- Objects the next migrations create (by the same migrator) are born with the access already.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO eclume_server;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO eclume_server;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO eclume_server;

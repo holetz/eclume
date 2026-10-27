@@ -1,6 +1,6 @@
-"""Resumos versionados de transcrições, pelas instruções de um tipo de agenda.
+"""Versioned summaries of transcripts, following an agenda type's instructions.
 
-Tudo é do dono: a RLS mostra só os tipos, as transcrições e os resumos da conta.
+Everything belongs to the owner: RLS shows only the account's types, transcripts and summaries.
 """
 
 from __future__ import annotations
@@ -54,11 +54,11 @@ class SummaryEdit(BaseModel):
     base_version: int = Field(ge=0)
 
 
-# --- resumos ------------------------------------------------------------------------------------
+# --- summaries ----------------------------------------------------------------------------------
 
 
 async def _transcript(conn: AsyncConnection, transcript_id: UUID) -> Row:
-    """Transcrição do usuário, ou 404."""
+    """The user's transcript, or 404."""
     row = (await conn.execute(select(t.transcripts).where(t.transcripts.c.id == transcript_id))).mappings().first()
     if row is None:
         raise not_found("Transcrição inexistente ou sem acesso.")
@@ -76,7 +76,7 @@ async def _summary(conn: AsyncConnection, summary_id: UUID) -> Row:
 async def list_summaries(
     transcript_id: UUID, principal: Reader, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50
 ) -> dict[str, Any]:
-    """Resumos da transcrição, da maior `version` para a menor (a geração toma o número ao terminar)."""
+    """The transcript's summaries, from the highest `version` to the lowest (generation takes the number on finishing)."""
     c = t.summaries.c
     query = (
         select(t.summaries)
@@ -97,7 +97,7 @@ async def list_summaries(
 async def create_transcript_summary(
     transcript_id: UUID, body: SummaryCreate, principal: Writer, ctx: Ctx
 ) -> dict[str, Any]:
-    """Gera uma nova versão do resumo daquele tipo de agenda, na fila do worker CPU."""
+    """Generate a new version of the summary for that agenda type, on the CPU worker queue."""
     async with refunding(ctx.queue.pool, principal.user_id) as charge:
         async with user_tx(ctx.engine, principal.user_id) as conn:
             transcript = await _transcript(conn, transcript_id)
@@ -119,14 +119,14 @@ async def create_transcript_summary(
 
 @router.get("/summaries/{summary_id}")
 async def get_summary(summary_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Um resumo (o cliente consulta até `done` ou `failed`)."""
+    """One summary (the client polls until `done` or `failed`)."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return summary_json(await _summary(conn, summary_id))
 
 
 @router.delete("/summaries/{summary_id}", status_code=204)
 async def delete_summary(summary_id: UUID, principal: Writer, ctx: Ctx) -> Response:
-    """Exclui uma versão; um job ainda na fila encontra o resumo apagado e não faz nada."""
+    """Delete a version; a job still in the queue finds the summary deleted and does nothing."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         transcript_id = (
             await conn.execute(
@@ -140,12 +140,12 @@ async def delete_summary(summary_id: UUID, principal: Writer, ctx: Ctx) -> Respo
     return Response(status_code=204)
 
 
-# --- o resumo da gravação: versões ---------------------------------------------------------------
+# --- the recording's summary: versions ----------------------------------------------------------
 
 
 @router.get("/recordings/{recording_id}/summary")
 async def get_recording_summary(recording_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """A versão atual, a gerada de referência e a geração em aberto."""
+    """The current version, the generated reference one and the open generation."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         transcript = await recording_transcript(conn, recording_id)
         return await summary_state(conn, transcript["id"])
@@ -153,7 +153,7 @@ async def get_recording_summary(recording_id: UUID, principal: Reader, ctx: Ctx)
 
 @router.put("/recordings/{recording_id}/summary")
 async def put_recording_summary(recording_id: UUID, body: SummaryEdit, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Grava a edição à mão como versão `manual` (409 `summary_changed` se outra entrou antes)."""
+    """Save the hand edit as a `manual` version (409 `summary_changed` if another got in first)."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         transcript = await recording_transcript(conn, recording_id)
         row = await edit_summary(conn, transcript, body.content_md, body.base_version, principal.user_id)
@@ -162,7 +162,7 @@ async def put_recording_summary(recording_id: UUID, body: SummaryEdit, principal
 
 @router.post("/recordings/{recording_id}/summary/revert", status_code=201)
 async def revert_recording_summary(recording_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Volta à gerada de referência numa versão nova (409 `summary_missing` sem gerada)."""
+    """Revert to the generated reference in a new version (409 `summary_missing` with no generated one)."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         transcript = await recording_transcript(conn, recording_id)
         row = await revert_summary(conn, transcript, principal.user_id)
@@ -171,7 +171,7 @@ async def revert_recording_summary(recording_id: UUID, principal: Writer, ctx: C
 
 @router.delete("/recordings/{recording_id}/summary", status_code=204)
 async def delete_recording_summary(recording_id: UUID, principal: Writer, ctx: Ctx) -> Response:
-    """Apaga todas as versões e o chat de ajuste da gravação."""
+    """Delete every version and the recording's adjustment chat."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         transcript = await recording_transcript(conn, recording_id)
         await delete_all(conn, transcript)

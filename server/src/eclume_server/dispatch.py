@@ -1,11 +1,11 @@
-"""Despacho na vez da conta: a fila justa da GPU sem mexer no arq.
+"""Per-account turn dispatch: the GPU's fair queue without touching arq.
 
-Cada conta tem no máximo um `transcribe` em `eclume:gpu`. O job nasce `queued` sem
-`dispatched_at` (retido no banco); `next_for` o marca e o enfileira quando a conta não tem outro
-despachado em aberto e ainda está dentro dos minutos de GPU de 24 h. Com um job por conta na fila
-FIFO do arq, o rodízio entre contas sai sozinho. Quem chama: o `complete` do upload, retranscrever,
-a retentativa do admin, a ingestão e a falha do `transcribe`, e o cron `dispatch_waiting` como rede.
-Regras em docs/standards/api/jobs-transcricao.md §Filas.
+Each account has at most one `transcribe` in `eclume:gpu`. The job is born `queued` without
+`dispatched_at` (held in the database); `next_for` marks and enqueues it when the account has no
+other open dispatched job and is still within its 24 h GPU minutes. With one job per account in
+arq's FIFO queue, the round-robin between accounts comes for free. Callers: the upload's
+`complete`, retranscribe, the admin retry, ingestion and the `transcribe` failure, and the
+`dispatch_waiting` cron as a safety net. Rules in docs/standards/api/jobs-transcricao.md `§Filas`.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-# Primeira chave do `pg_advisory_xact_lock(int, int)` do despacho; a segunda é a conta.
+# First key of the dispatch's `pg_advisory_xact_lock(int, int)`; the second is the account.
 _LOCK_CLASS = 98
 _OPEN = ("queued", "running")
 
@@ -44,10 +44,10 @@ async def _lock(conn: AsyncConnection, owner_id: UUID) -> None:
 
 
 async def next_for(engine: AsyncEngine, redis: ArqRedis, owner_id: UUID) -> UUID | None:
-    """Despacha o job retido mais antigo da conta, se é a vez dela; devolve a gravação despachada.
+    """Dispatch the account's oldest held job, if it is its turn; return the dispatched recording.
 
-    O enfileiramento vem depois do commit: se ele se perde, o job despachado fica sem arq e o reaper
-    o põe de volta na fila uma vez (`stalled.py`).
+    Enqueueing comes after the commit: if it is lost, the dispatched job is left without arq and the
+    reaper puts it back in the queue once (`stalled.py`).
     """
     jobs = t.transcription_jobs
     async with system_tx(engine) as conn:
@@ -87,7 +87,7 @@ async def next_for(engine: AsyncEngine, redis: ArqRedis, owner_id: UUID) -> UUID
 
 
 async def next_for_recording(engine: AsyncEngine, redis: ArqRedis, recording_id: UUID | str) -> UUID | None:
-    """`next_for` da conta dona da gravação (a ingestão e a falha só conhecem a gravação)."""
+    """`next_for` of the account that owns the recording (ingestion and failure only know the recording)."""
     async with system_tx(engine) as conn:
         owner_id = (
             await conn.execute(select(t.recordings.c.owner_id).where(t.recordings.c.id == recording_id))
@@ -96,10 +96,10 @@ async def next_for_recording(engine: AsyncEngine, redis: ArqRedis, recording_id:
 
 
 async def held_counts(conn: AsyncConnection) -> dict[str, int]:
-    """Jobs retidos (só números): os que aguardam a vez da conta e os que aguardam a janela de minutos.
+    """Held jobs (numbers only): those awaiting the account's turn and those awaiting the minutes window.
 
-    O retido de uma conta sem job despachado e dentro dos minutos conta como na vez da conta: o
-    próximo despacho (ou o cron) o leva.
+    A held job of an account with no dispatched job and within its minutes counts as on the
+    account's turn: the next dispatch (or the cron) takes it.
     """
     jobs = t.transcription_jobs.c
     held = {"account_turn": 0, "gpu_minutes": 0}
@@ -118,7 +118,7 @@ async def held_counts(conn: AsyncConnection) -> dict[str, int]:
 
 
 async def dispatch_waiting(engine: AsyncEngine, redis: ArqRedis) -> list[UUID]:
-    """Rede de segurança: tenta o despacho de toda conta com job retido; devolve o que despachou."""
+    """Safety net: try the dispatch of every account with a held job; return what it dispatched."""
     jobs = t.transcription_jobs.c
     async with system_tx(engine) as conn:
         owners = (
@@ -133,5 +133,5 @@ async def dispatch_waiting(engine: AsyncEngine, redis: ArqRedis) -> list[UUID]:
         if recording_id is not None:
             dispatched.append(recording_id)
     if dispatched:
-        log.info("dispatch_waiting: %d gravação(ões) despachada(s)", len(dispatched))
+        log.info("dispatch_waiting: %d recording(s) dispatched", len(dispatched))
     return dispatched

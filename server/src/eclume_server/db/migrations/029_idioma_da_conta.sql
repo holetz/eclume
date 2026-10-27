@@ -1,8 +1,8 @@
--- 029_idioma_da_conta — idioma de transcrição preferido da conta (holetz/eclume#121).
+-- 029_idioma_da_conta — the account's preferred transcription language (holetz/eclume#121).
 --
--- `users.transcription_language` é um idioma (`pt`, `en-US`), `auto` (a engine detecta) ou nulo
--- (vale o padrão do servidor, `asr.default_language`). O idioma do job sai na hora de enfileirar:
--- o do arquivo, o da conta, o do servidor, `pt`. Regras em docs/standards/api/jobs-transcricao.md.
+-- `users.transcription_language` is a language (`pt`, `en-US`), `auto` (the engine detects) or null
+-- (the server default applies, `asr.default_language`). The job's language is set at enqueue time:
+-- the file's, the account's, the server's, `pt`. Rules in docs/standards/api/jobs-transcricao.md.
 
 ALTER TABLE users
     ADD COLUMN transcription_language text;

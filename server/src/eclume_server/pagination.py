@@ -1,4 +1,4 @@
-"""Paginação por cursor opaco (`?cursor=&limit=`, resposta `{items, next_cursor}`)."""
+"""Opaque-cursor pagination (`?cursor=&limit=`, response `{items, next_cursor}`)."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ if TYPE_CHECKING:
     Cursor = Annotated[str | None, Query(description="Cursor opaco devolvido em `next_cursor`.")]
 
 
-def __getattr__(name: str) -> Any:  # noqa: ANN401 — PEP 562: `Limit` e `Cursor` só existem com FastAPI
-    """Os parâmetros de rota `Limit` e `Cursor` carregam o FastAPI na primeira importação; o worker não os usa."""
+def __getattr__(name: str) -> Any:  # noqa: ANN401 — PEP 562: `Limit` and `Cursor` exist only with FastAPI
+    """The route parameters `Limit` and `Cursor` load FastAPI on first import; the worker does not use them."""
     if name not in {"Limit", "Cursor"}:
         raise AttributeError(name)
     from fastapi import Query  # noqa: PLC0415
@@ -31,19 +31,19 @@ def __getattr__(name: str) -> Any:  # noqa: ANN401 — PEP 562: `Limit` e `Curso
 
 
 def iso(value: datetime | None) -> str | None:
-    """RFC 3339 em UTC com `Z`."""
+    """RFC 3339 in UTC with `Z`."""
     if value is None:
         return None
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def encode_cursor(sort_value: datetime, row_id: UUID) -> str:
-    """Cursor opaco da posição `(ordenação, id)`."""
+    """Opaque cursor of the `(sort key, id)` position."""
     return _encode([sort_value.isoformat(), str(row_id)])
 
 
 def _encode(values: list[str]) -> str:
-    """Base64url do JSON em UTF-8 direto: um emoji custa 4 bytes, e não os 12 do escape duplo."""
+    """Base64url of the JSON in plain UTF-8: an emoji costs 4 bytes, not the 12 of the double escape."""
     raw = json.dumps(values, ensure_ascii=False).encode()
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
@@ -63,7 +63,7 @@ _FLAT_LIST = re.compile(rf"\[\s*{_JSON_STRING}(?:\s*,\s*{_JSON_STRING})*\s*\]", 
 
 
 def _decode_json(cursor: str) -> object:
-    """O JSON dentro de um cursor base64url; grande demais, base64, UTF-8, formato, JSON inválidos ou aninhados viram 422 no campo `cursor`."""
+    """The JSON inside a base64url cursor; too large, or invalid or nested base64, UTF-8, format or JSON, becomes 422 on the `cursor` field."""
     if len(cursor) > MAX_CURSOR_LENGTH:
         raise invalid_field("cursor", "cursor inválido")
     try:
@@ -77,7 +77,7 @@ def _decode_json(cursor: str) -> object:
 
 
 def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
-    """Posição de um cursor; inválido vira 422 no campo `cursor`."""
+    """Position of a cursor; an invalid one becomes 422 on the `cursor` field."""
     sort_value, row_id = decode_position(cursor, 2)
     try:
         return datetime.fromisoformat(sort_value), UUID(row_id)
@@ -86,12 +86,12 @@ def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
 
 
 def encode_position(*values: object) -> str:
-    """Cursor opaco de uma posição qualquer (texto, número, id), para ordenações sem data."""
+    """Opaque cursor of an arbitrary position (text, number, id), for orderings without a date."""
     return _encode([str(value) for value in values])
 
 
 def decode_position(cursor: str, size: int) -> list[str]:
-    """Os `size` valores de um cursor de `encode_position`; inválido vira 422 no campo `cursor`."""
+    """The `size` values of an `encode_position` cursor; an invalid one becomes 422 on the `cursor` field."""
     values = _decode_json(cursor)
     if not isinstance(values, list) or len(values) != size or not all(isinstance(v, str) for v in values):
         raise invalid_field("cursor", "cursor inválido")
@@ -99,7 +99,7 @@ def decode_position(cursor: str, size: int) -> list[str]:
 
 
 def decode_ordered_position(cursor: str) -> tuple[int, UUID]:
-    """Posição `(position, id)` das listas na ordem escolhida pelo usuário."""
+    """`(position, id)` position of the lists in the order the user chose."""
     position, row_id = decode_position(cursor, 2)
     try:
         return int(position), UUID(row_id)
@@ -108,7 +108,7 @@ def decode_ordered_position(cursor: str) -> tuple[int, UUID]:
 
 
 def decode_named_position(cursor: str) -> tuple[str, UUID]:
-    """Posição `(nome ordenável, id)` das listas em ordem alfabética."""
+    """`(sortable name, id)` position of the lists in alphabetical order."""
     name, row_id = decode_position(cursor, 2)
     try:
         return name, UUID(row_id)
@@ -117,7 +117,7 @@ def decode_named_position(cursor: str) -> tuple[str, UUID]:
 
 
 def page(items: list[dict[str, Any]], rows: list[Any], limit: int, sort_key: str) -> dict[str, Any]:
-    """Monta a página a partir de `limit + 1` linhas lidas: a sobra só diz que há próxima."""
+    """Build the page from `limit + 1` rows read: the extra one only says there is a next page."""
     next_cursor = None
     if len(rows) > limit:
         last = rows[limit - 1]

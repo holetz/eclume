@@ -1,18 +1,19 @@
-"""Retomada da cadeia por agente: o que nunca chegou à fila volta sozinho.
+"""Resuming the agent chain: whatever never reached the queue comes back on its own.
 
-O commit seguido do enfileiramento continua sendo o caminho; se o Redis oscilou ou o worker parou
-entre os dois, a etapa ficaria `pending` para sempre. O cron `resume_pipelines` (a cada 5 min,
-`unique`) relê o estado no banco e relança pelo `_job_id` determinístico, que o arq deduplica:
+Commit followed by enqueue is still the path; if Redis flickered or the worker stopped between the
+two, the step would stay `pending` forever. The `resume_pipelines` cron (every 5 min, `unique`)
+rereads the state in the database and relaunches by the deterministic `_job_id`, which arq dedups:
 
-- na revisão atual com o job de transcrição `succeeded` há mais de `RESUME_AFTER` e a etapa
-  `speakers` fora de `waiting` (a gravação parada à espera dos nomes não é relançada): tipo de agenda
-  sem linha → `detect_agenda_type`; tipo final e campos sem linha → `fill_fields`; campos finais e
-  resumo sem linha → o resumo automático (sem refazer os campos);
-- resumo `queued`/`running` há mais de `RESUME_AFTER`: sumido do arq → reenfileirado; concluído no
-  arq com o resumo ainda aberto → `failed` (`internal_error`). O que o arq ainda conhece (na fila,
-  adiado, rodando) nunca é tocado.
+- on the current revision with the transcription job `succeeded` for more than `RESUME_AFTER` and
+  the `speakers` step out of `waiting` (a recording paused waiting for names is not relaunched):
+  agenda type without a row → `detect_agenda_type`; final type and fields without a row →
+  `fill_fields`; final fields and summary without a row → the automatic summary (without redoing
+  the fields);
+- summary `queued`/`running` for more than `RESUME_AFTER`: gone from arq → re-enqueued; finished in
+  arq with the summary still open → `failed` (`internal_error`). What arq still knows (queued,
+  deferred, running) is never touched.
 
-Regras em docs/standards/code/processamento-automatico.md §Retomada.
+Rules in docs/standards/code/processamento-automatico.md `§Retomada`.
 """
 
 from __future__ import annotations
@@ -39,20 +40,20 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 RESUME_AFTER = timedelta(minutes=5)
-# Relançamentos por passada, os mais antigos primeiro.
+# Relaunches per pass, oldest first.
 RESUME_LIMIT = 50
 LOST_SUMMARY_MESSAGE = "O resumo terminou sem resposta do agente. Gere de novo."
 
 
-def _joined_step(latest: Any, name: str) -> tuple[Any, Any]:  # noqa: ANN401 — Core do SQLAlchemy
-    """O alias de `pipeline_steps` da etapa `name` e a condição que o liga à revisão de `latest`."""
+def _joined_step(latest: Any, name: str) -> tuple[Any, Any]:  # noqa: ANN401 — SQLAlchemy Core
+    """The `pipeline_steps` alias of step `name` and the condition joining it to `latest`'s revision."""
     step = t.pipeline_steps.alias(f"step_{name}")
     on = and_(step.c.recording_id == latest.c.recording_id, step.c.revision == latest.c.revision, step.c.step == name)
     return step, on
 
 
 async def _stalled_chains(engine: AsyncEngine, cutoff: datetime) -> list[tuple[UUID, int, str]]:
-    """`(gravação, revisão, o que relançar)` da revisão atual, com a transcrição pronta antes de `cutoff`."""
+    """`(recording, revision, what to relaunch)` of the current revision, with the transcript ready before `cutoff`."""
     jobs = t.transcription_jobs
     latest = select(jobs.c.recording_id, jobs.c.revision, jobs.c.state, jobs.c.finished_at).distinct(
         jobs.c.recording_id
@@ -74,7 +75,7 @@ async def _stalled_chains(engine: AsyncEngine, cutoff: datetime) -> list[tuple[U
             latest.c.state == "succeeded",
             latest.c.finished_at <= cutoff,
             summary.c.id.is_(None),
-            # Parada à espera de nomear os locutores: quem a solta enfileira o tipo.
+            # Paused waiting for the speakers to be named: whoever releases it enqueues the type.
             speakers.c.state.is_distinct_from("waiting"),
         )
         .order_by(latest.c.finished_at)
@@ -122,14 +123,14 @@ async def _open_summaries(engine: AsyncEngine, cutoff: datetime) -> list[tuple[U
 async def resume(
     engine: AsyncEngine, redis: ArqRedis, now: datetime | None = None, limit: int = RESUME_LIMIT
 ) -> list[str]:
-    """Uma passada da retomada; devolve o que relançou ou fechou, para o log."""
+    """One resume pass; return what it relaunched or closed, for the log."""
     cutoff = (now or datetime.now(UTC)) - RESUME_AFTER
     done: list[str] = []
     for recording_id, revision, job in await _stalled_chains(engine, cutoff):
         if len(done) >= limit:
             return done
         await _resume_chain(engine, redis, recording_id, revision, job)
-        log.warning("retomada: %s da gravação %s (revisão %d) relançado", job, recording_id, revision)
+        log.warning("resume: %s of recording %s (revision %d) relaunched", job, recording_id, revision)
         done.append(f"{recording_id}: {job}")
     for summary_id, attempts in await _open_summaries(engine, cutoff):
         if len(done) >= limit:
@@ -137,10 +138,10 @@ async def resume(
         status = await Job(summarize_job_id(summary_id), redis, _queue_name=AGENT_QUEUE).status()
         if status == JobStatus.not_found:
             await enqueue_summary(redis, summary_id)
-            log.warning("retomada: resumo %s sumido do arq reenfileirado", summary_id)
+            log.warning("resume: summary %s gone from arq re-enqueued", summary_id)
             done.append(f"{summary_id}: summarize")
         elif status == JobStatus.complete:
             await fail_summary(engine, summary_id, INTERNAL_ERROR, LOST_SUMMARY_MESSAGE, attempts)
-            log.warning("retomada: resumo %s concluído no arq sem fechar; marcado falho", summary_id)
+            log.warning("resume: summary %s finished in arq without closing; marked failed", summary_id)
             done.append(f"{summary_id}: failed")
     return done

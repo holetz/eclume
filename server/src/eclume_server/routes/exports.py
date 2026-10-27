@@ -1,6 +1,6 @@
-"""Exportação da gravação em TXT, SRT, MD e DOCX.
+"""Export of the recording as TXT, SRT, MD and DOCX.
 
-Tudo é do dono: a RLS mostra só as gravações, as transcrições e os resumos da conta.
+Everything belongs to the owner: RLS shows only the account's recordings, transcripts and summaries.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from eclume_server.problems import insufficient_scope
 router = APIRouter()
 Ctx = Annotated[AppContext, Depends(get_ctx)]
 Reader = Annotated[Principal, Depends(requires("transcripts:read"))]
-# Os formatos que levam o resumo pedem também `summaries:read` num PAT.
+# The formats that carry the summary also require `summaries:read` on a PAT.
 WITH_SUMMARY = {"md", "docx"}
 
 
@@ -31,12 +31,12 @@ async def export_recording(
     principal: Reader,
     ctx: Ctx,
 ) -> Response:
-    """Exporta a transcrição (`txt`, `srt`), o resumo (`md`) ou os dois (`docx`)."""
+    """Export the transcript (`txt`, `srt`), the summary (`md`) or both (`docx`)."""
     if export_format in WITH_SUMMARY and principal.method == "pat" and "summaries:read" not in principal.scopes:
         raise insufficient_scope(["summaries:read"])
     async with user_tx(ctx.engine, principal.user_id) as conn:
         export = await load_export(conn, recording_id)
-    # O DOCX de uma transcrição longa leva segundos de CPU: fora do event loop.
+    # The DOCX of a long transcript takes seconds of CPU: off the event loop.
     body = await run_in_threadpool(RENDERERS[export_format], export)
     filename = f"{slug(export.title, 'gravacao')}.{export_format}"
     return Response(

@@ -1,11 +1,11 @@
-"""Marcação obrigatória dos locutores: a etapa `speakers` do pipeline (holetz/eclume#144).
+"""Mandatory speaker naming: the pipeline's `speakers` step (holetz/eclume#144).
 
-Com `users.require_speaker_naming` ligada, a ingestão para a cadeia por agente quando algum locutor
-com fala suficiente ficou sem pessoa: a etapa `speakers` fica `waiting` (`unnamed_speakers`) e o
-tipo de agenda não é enfileirado. Ela sai da espera quando o dono liga a última pessoa que faltava
-(`done`), quando solta a gravação (`continued_by_user`) ou quando desliga a preferência
-(`naming_not_required`); quem chama enfileira `detect_agenda_type` depois do commit. Regras em
-docs/standards/code/processamento-automatico.md §Marcação dos locutores.
+With `users.require_speaker_naming` on, ingestion stops the agent chain when some speaker with
+enough speech was left without a person: the `speakers` step becomes `waiting` (`unnamed_speakers`)
+and the agenda type is not queued. It leaves the wait when the owner links the last missing person
+(`done`), when they release the recording (`continued_by_user`) or when they switch the preference
+off (`naming_not_required`); the caller queues `detect_agenda_type` after the commit. Rules in
+docs/standards/code/processamento-automatico.md `§Marcação dos locutores`.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 STEP = "speakers"
 WAITING = "waiting"
-# Fragmentos de diarização não prendem a gravação: o mesmo piso da comparação por voz.
+# Diarization fragments do not hold the recording: the same floor as the voice comparison.
 MIN_REQUIRED_TALK_MS = 10_000
 UNNAMED = "unnamed_speakers"
 CONTINUED = "continued_by_user"
@@ -35,13 +35,13 @@ NOT_REQUIRED = "naming_not_required"
 
 
 async def required(conn: AsyncConnection, owner_id: UUID) -> bool:
-    """Se a conta exige a marcação dos locutores."""
+    """Whether the account requires speaker naming."""
     query = select(t.users.c.require_speaker_naming).where(t.users.c.id == owner_id)
     return bool((await conn.execute(query)).scalar())
 
 
 async def unnamed_count(conn: AsyncConnection, transcript_id: UUID) -> int:
-    """Quantos locutores da transcrição, com pelo menos `MIN_REQUIRED_TALK_MS` de fala, estão sem pessoa."""
+    """How many of the transcript's speakers, with at least `MIN_REQUIRED_TALK_MS` of speech, have no person."""
     s = t.speakers.c
     query = (
         select(func.count())
@@ -56,9 +56,9 @@ async def unnamed_count(conn: AsyncConnection, transcript_id: UUID) -> int:
 
 
 async def gate(conn: AsyncConnection, recording: Row, revision: int, transcript_id: UUID) -> bool:
-    """Grava a etapa `speakers` da revisão recém-ingerida; `True` quando a cadeia para nela.
+    """Write the `speakers` step of the just-ingested revision; `True` when the chain stops there.
 
-    Roda na transação da ingestão, depois da restauração dos vínculos e da atribuição pela voz.
+    Runs in the ingestion transaction, after the links are restored and the voice attribution.
     """
     unnamed = await unnamed_count(conn, transcript_id) if await required(conn, recording["owner_id"]) else 0
     if unnamed:
@@ -69,7 +69,7 @@ async def gate(conn: AsyncConnection, recording: Row, revision: int, transcript_
 
 
 async def _waiting_revision(conn: AsyncConnection, recording_id: UUID) -> tuple[Row, int] | None:
-    """`(gravação, revisão)` quando a revisão atual da gravação está parada nos locutores."""
+    """`(recording, revision)` when the recording's current revision is paused at the speakers."""
     recording = (
         (
             await conn.execute(
@@ -91,7 +91,7 @@ async def _waiting_revision(conn: AsyncConnection, recording_id: UUID) -> tuple[
 
 
 async def release_if_named(conn: AsyncConnection, recording_id: UUID) -> int | None:
-    """Solta a gravação parada quando nenhum locutor obrigatório ficou sem pessoa; devolve a revisão."""
+    """Release the paused recording when no required speaker is left without a person; return the revision."""
     waiting = await _waiting_revision(conn, recording_id)
     if waiting is None:
         return None
@@ -101,8 +101,8 @@ async def release_if_named(conn: AsyncConnection, recording_id: UUID) -> int | N
     ).scalar()
     unnamed = await unnamed_count(conn, transcript_id) if transcript_id is not None else 0
     if unnamed:
-        # Ainda falta alguém: só a contagem do motivo acompanha. O instante da espera fica, para os
-        # avisos de desfecho (que comparam o `finished_at`) não repetirem a cada pessoa ligada.
+        # Someone is still missing: only the reason's count follows. The wait's instant stays, so the
+        # outcome notices (which compare `finished_at`) do not repeat for each linked person.
         ps = t.pipeline_steps.c
         await conn.execute(
             update(t.pipeline_steps)
@@ -115,7 +115,7 @@ async def release_if_named(conn: AsyncConnection, recording_id: UUID) -> int | N
 
 
 async def release(conn: AsyncConnection, recording_id: UUID, reason: str) -> int | None:
-    """Solta a gravação parada sem exigir os nomes (`skipped` com `reason`); devolve a revisão."""
+    """Release the paused recording without requiring the names (`skipped` with `reason`); return the revision."""
     waiting = await _waiting_revision(conn, recording_id)
     if waiting is None:
         return None
@@ -125,7 +125,7 @@ async def release(conn: AsyncConnection, recording_id: UUID, reason: str) -> int
 
 
 def waiting_select() -> Select[Any]:
-    """`(recording_id, revision)` das gravações cuja revisão atual está parada nos locutores."""
+    """`(recording_id, revision)` of the recordings whose current revision is paused at the speakers."""
     ps = t.pipeline_steps.c
     jobs = t.transcription_jobs.c
     latest = select(func.max(jobs.revision)).where(jobs.recording_id == ps.recording_id).scalar_subquery()
@@ -133,17 +133,17 @@ def waiting_select() -> Select[Any]:
 
 
 def awaiting_condition() -> ColumnElement[bool]:
-    """A condição da biblioteca para `?awaiting=speakers`."""
+    """The library condition for `?awaiting=speakers`."""
     return t.recordings.c.id.in_(waiting_select().with_only_columns(t.pipeline_steps.c.recording_id))
 
 
 async def waiting_count(conn: AsyncConnection) -> int:
-    """Quantas gravações visíveis na transação estão paradas nos locutores."""
+    """How many recordings visible in the transaction are paused at the speakers."""
     return int((await conn.execute(select(func.count()).select_from(waiting_select().subquery()))).scalar_one())
 
 
 async def release_account(conn: AsyncConnection, owner_id: UUID) -> list[tuple[UUID, int]]:
-    """Solta todas as gravações paradas da conta (a preferência foi desligada)."""
+    """Release all of the account's paused recordings (the preference was switched off)."""
     ps = t.pipeline_steps.c
     rows = (await conn.execute(waiting_select().where(ps.owner_id == owner_id))).all()
     released = []
@@ -155,5 +155,5 @@ async def release_account(conn: AsyncConnection, owner_id: UUID) -> list[tuple[U
 
 
 def awaiting_of(pipeline: list[dict[str, Any]]) -> str | None:
-    """`Recording.awaiting`: `"speakers"` quando a etapa dos locutores espera o dono."""
+    """`Recording.awaiting`: `"speakers"` when the speakers step is waiting for the owner."""
     return "speakers" if any(step["step"] == STEP and step["state"] == WAITING for step in pipeline) else None

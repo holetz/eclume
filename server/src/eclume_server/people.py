@@ -1,4 +1,4 @@
-"""Diretório de pessoas do usuário: consulta com estatísticas, forma JSON, atributos e facetas."""
+"""The user's people directory: query with statistics, JSON shape, attributes and facets."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
     from eclume_server.serialize import Row
 
-# Sob a RLS, a subconsulta só enxerga as transcrições do usuário.
+# Under RLS, the subquery only sees the user's transcripts.
 _stats = (
     select(
         func.count(distinct(t.speakers.c.transcript_id)).label("transcript_count"),
@@ -43,7 +43,7 @@ _samples = (
 
 
 def person_select() -> Select:
-    """Pessoas do usuário com as estatísticas de transcrição e o total de amostras de voz."""
+    """The user's people with the transcript statistics and the total of voice samples."""
     return select(
         t.people,
         _stats.c.transcript_count,
@@ -75,7 +75,7 @@ def person_json(row: Row) -> dict[str, Any]:
 
 
 async def get_person(conn: AsyncConnection, person_id: UUID) -> Any:  # noqa: ANN401
-    """Pessoa do usuário, ou 404."""
+    """The user's person, or 404."""
     row = (await conn.execute(person_select().where(t.people.c.id == person_id))).mappings().first()
     if row is None:
         raise not_found("Pessoa inexistente ou sem acesso.")
@@ -83,12 +83,12 @@ async def get_person(conn: AsyncConnection, person_id: UUID) -> Any:  # noqa: AN
 
 
 def normalized(value: str) -> ColumnElement[str]:
-    """`lower(unaccent(value))` no banco, como a coluna `people.sort_name`."""
+    """`lower(unaccent(value))` in the database, like the `people.sort_name` column."""
     return func.lower(func.eclume_unaccent(value, type_=Text))
 
 
 def prefix_filter(q: str) -> ColumnElement[bool]:
-    """Nome (qualquer palavra) ou e-mail começando por `q`, sem acento nem caixa."""
+    """Name (any word) or e-mail starting with `q`, ignoring accents and case."""
     escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     term = normalized(escaped)
     sort_name = t.people.c.sort_name
@@ -99,23 +99,23 @@ def prefix_filter(q: str) -> ColumnElement[bool]:
     )
 
 
-# --- atributos de cadastro (020_pessoas_enriquecidas) ------------------------------------------------
+# --- profile attributes (020_pessoas_enriquecidas) ----------------------------------------------------
 
-# Os atributos de texto da pessoa e o teto de cada um.
+# The person's text attributes and the ceiling of each.
 ATTRIBUTES = {"company": 120, "department": 120, "job_title": 120, "phone": 40}
 MAX_PERSON_TAGS = 20
 MAX_PERSON_TAG = 64
 
 
 def clean_attribute(value: str | None) -> str | None:
-    """O atributo sem espaços nas pontas; vazio vira `None`."""
+    """The attribute without surrounding spaces; empty becomes `None`."""
     if value is None:
         return None
     return value.strip() or None
 
 
 def clean_tags(tags: list[str]) -> list[str]:
-    """Tags de pessoa sem espaços nas pontas, sem vazias e sem repetição (ignorando a caixa)."""
+    """Person tags without surrounding spaces, without empty ones and without repeats (ignoring case)."""
     seen: dict[str, str] = {}
     for tag in tags:
         name = tag.strip()
@@ -125,14 +125,14 @@ def clean_tags(tags: list[str]) -> list[str]:
 
 
 def _matches(column: ColumnElement[str], values: list[str]) -> ColumnElement[bool]:
-    """O atributo igual a um dos valores, sem acento nem caixa."""
+    """The attribute equal to one of the values, ignoring accents and case."""
     return normalized(column).in_([normalized(value) for value in values])
 
 
 def attribute_conditions(
     company: list[str] | None, department: list[str] | None, tag: list[str] | None
 ) -> list[ColumnElement[bool]]:
-    """As condições sobre `people` de cada atributo pedido: OU dentro do atributo, E entre eles."""
+    """The conditions on `people` for each requested attribute: OR within an attribute, AND between them."""
     p = t.people.c
     conditions = []
     if company:
@@ -147,7 +147,7 @@ def attribute_conditions(
 
 
 def participant_filter(conditions: list[ColumnElement[bool]]) -> ColumnElement[bool]:
-    """Algum locutor da gravação está ligado a UMA pessoa que cumpre todas as condições."""
+    """Some speaker of the recording is linked to ONE person that meets every condition."""
     return exists(
         select(1)
         .select_from(
@@ -160,9 +160,9 @@ def participant_filter(conditions: list[ColumnElement[bool]]) -> ColumnElement[b
 
 
 async def facets(conn: AsyncConnection) -> dict[str, list[dict[str, Any]]]:
-    """Os valores em uso de empresa, área e tag de pessoa, com quantas pessoas usam cada um.
+    """The values in use for company, area and person tag, with how many people use each.
 
-    Empresa e área se agrupam sem acento e sem caixa; o valor mostrado é a grafia mais usada.
+    Company and area are grouped ignoring accents and case; the value shown is the most used spelling.
     """
     p = t.people.c
     result: dict[str, list[dict[str, Any]]] = {}

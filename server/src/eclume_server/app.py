@@ -1,4 +1,4 @@
-"""App FastAPI do eclume (`uvicorn eclume_server.app:create_app --factory`)."""
+"""The eclume FastAPI app (`uvicorn eclume_server.app:create_app --factory`)."""
 
 from __future__ import annotations
 
@@ -28,27 +28,27 @@ if TYPE_CHECKING:
 
     from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-access_log = logging.getLogger("eclume_server.acesso")
+access_log = logging.getLogger("eclume_server.access")
 REQUEST_ID_HEADER = b"x-request-id"
-# A sonda do compose e o painel batem aqui o tempo todo: o acesso bem-sucedido não vai ao log.
+# The compose probe and the panel hit this all the time: a successful access is not logged.
 HEALTH_PATH = "/api/v1/health"
-# O id recebido só é reaproveitado se for curto e sem nada que injete no log ou no cabeçalho.
+# A received id is reused only when it is short and carries nothing that injects into the log or header.
 _REQUEST_ID_OK = re.compile(r"[A-Za-z0-9._-]{1,128}")
 
 
 class RequestIdMiddleware:
-    """Dá a cada requisição HTTP um `X-Request-ID` (o recebido ou um novo) e registra o acesso.
+    """Gives each HTTP request an `X-Request-ID` (the received one or a new one) and logs the access.
 
-    O log de acesso grava método, caminho, status e duração; nunca a query string (as URLs de parte
-    e de áudio são assinadas) nem cabeçalhos. `/api/v1/health/*` só aparece quando falha (4xx/5xx).
+    The access log records method, path, status and duration; never the query string (part and
+    audio URLs are signed) nor headers. `/api/v1/health/*` appears only when it fails (4xx/5xx).
     """
 
     def __init__(self, app: ASGIApp) -> None:
-        """Envolve `app`."""
+        """Wrap `app`."""
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Atende a requisição com o id no contexto de log e no cabeçalho da resposta."""
+        """Serve the request with the id in the log context and in the response header."""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -77,7 +77,7 @@ class RequestIdMiddleware:
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    """Monta o app; sem `settings`, lê do ambiente."""
+    """Build the app; without `settings`, read them from the environment."""
     settings = settings or get_settings()
     configurar_logs()
 
@@ -87,7 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         queue = await Queue.connect(settings.redis_url)
         app.state.ctx = AppContext(settings=settings, engine=engine, storage=Storage(settings), queue=queue)
         try:
-            # O lifespan de um subapp nunca roda: o session manager do MCP roda aqui.
+            # A sub-app's lifespan never runs: the MCP session manager runs here.
             async with mcp.session_manager.run():
                 yield
         finally:

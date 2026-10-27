@@ -1,7 +1,7 @@
-"""Chat sobre a base de gravações: perguntar e consultar a resposta até `done` ou `failed`.
+"""Chat over the recordings base: ask and poll the reply until `done` or `failed`.
 
-O estado vive 1 h no Redis; o pedido de outra conta é 404. O agente só enxerga o que é do dono
-(RLS). Contrato em docs/standards/code/server-agentes.md.
+The state lives 1 h in Redis; another account's request is 404. The agent sees only what belongs to
+the owner (RLS). Contract in docs/standards/code/server-agentes.md.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ Reader = Annotated[Principal, Depends(requires("summaries:read"))]
 
 
 class BaseChatTurn(BaseModel):
-    """Schema `BaseChatTurn`: uma mensagem da conversa até aqui."""
+    """Schema `BaseChatTurn`: one message of the conversation so far."""
 
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=4000)
@@ -40,9 +40,9 @@ class BaseChatRequest(BaseModel):
 
 @router.post("/base-chat", status_code=202, deprecated=True)
 async def ask_base_chat(body: BaseChatRequest, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Guarda a pergunta e enfileira o `base_chat` no worker CPU."""
+    """Store the question and enqueue `base_chat` on the CPU worker."""
     history = [turn.model_dump() for turn in body.history]
-    # Sessão e credencial de aparelho leem transcrições; um PAT, só com `transcripts:read`.
+    # A session and a device credential read transcripts; a PAT, only with `transcripts:read`.
     transcripts = principal.method != "pat" or "transcripts:read" in principal.scopes
     async with user_tx(ctx.engine, principal.user_id) as conn:
         quota = await agent_limit(conn, principal.user_id)
@@ -53,7 +53,7 @@ async def ask_base_chat(body: BaseChatRequest, principal: Reader, ctx: Ctx) -> d
 
 @router.get("/base-chat/{chat_id}", deprecated=True)
 async def read_base_chat(chat_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """O estado da pergunta; o cliente consulta até `done` ou `failed`."""
+    """The question's state; the client polls until `done` or `failed`."""
     chat = await get_chat(ctx.queue.pool, chat_id, principal.user_id)
     if chat is None:
         raise not_found("Pergunta inexistente, expirada ou de outra conta.")

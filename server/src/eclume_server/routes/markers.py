@@ -1,6 +1,6 @@
-"""Marcadores da gravação: listar, enviar em lote (idempotente), editar a nota e excluir.
+"""The recording's markers: list, send in a batch (idempotent), edit the note and delete.
 
-Tudo é do dono: a RLS mostra só as gravações e os marcadores da conta.
+Everything belongs to the owner: RLS shows only the account's recordings and markers.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def _page(rows: list[Any]) -> dict[str, Any]:
 
 @router.get("/recordings/{recording_id}/markers")
 async def get_markers(recording_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Os marcadores da gravação, em ordem de `at_ms` (página única)."""
+    """The recording's markers, in `at_ms` order (single page)."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await get_visible(conn, recording_id)
         return _page(await list_markers(conn, recording_id))
@@ -61,7 +61,7 @@ async def get_markers(recording_id: UUID, principal: Reader, ctx: Ctx) -> dict[s
 
 @router.post("/recordings/{recording_id}/markers")
 async def post_markers(recording_id: UUID, body: MarkerBatch, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Grava o lote; reenviar o mesmo `client_id` atualiza a nota e não duplica."""
+    """Save the batch; resending the same `client_id` updates the note and does not duplicate."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         recording = await get_visible(conn, recording_id)
         await upsert_markers(
@@ -77,7 +77,7 @@ async def post_markers(recording_id: UUID, body: MarkerBatch, principal: Writer,
 
 @router.patch("/markers/{marker_id}")
 async def patch_marker(marker_id: UUID, body: MarkerPatch, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Troca a nota do marcador (`null` apaga a nota)."""
+    """Replace the marker's note (`null` clears the note)."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = (
             (
@@ -100,7 +100,7 @@ async def patch_marker(marker_id: UUID, body: MarkerPatch, principal: Writer, ct
 
 @router.delete("/markers/{marker_id}", status_code=204)
 async def delete_marker(marker_id: UUID, principal: Writer, ctx: Ctx) -> Response:
-    """Exclui o marcador."""
+    """Delete the marker."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         recording_id = (
             await conn.execute(delete(t.markers).where(t.markers.c.id == marker_id).returning(t.markers.c.recording_id))
