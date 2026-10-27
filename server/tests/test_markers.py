@@ -1,4 +1,4 @@
-"""Marcadores: junto do upload (inclusive deduplicado), lote idempotente, edição, exclusão e isolamento."""
+"""Markers: alongside the upload (deduplicated included), idempotent batch, edit, deletion and isolation."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _markers(api: Api, recording_id: str) -> list[dict[str, Any]]:
     return response.json()["items"]
 
 
-def test_marcadores_do_upload_e_do_upload_deduplicado(
+def test_markers_of_the_upload_and_of_the_deduplicated_upload(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     api = as_user(make_user())
@@ -41,7 +41,7 @@ def test_marcadores_do_upload_e_do_upload_deduplicado(
         (42_000, "Decisão sobre as turmas", "NB-MARIANA"),
     ]
 
-    # O app caiu depois de subir o áudio e reenvia: o upload deduplica e os marcadores não repetem.
+    # The app crashed after uploading the audio and resends: the upload deduplicates and the markers do not repeat.
     body = {
         "filename": "reuniao.opus",
         "content_type": "audio/ogg; codecs=opus",
@@ -61,12 +61,12 @@ def test_marcadores_do_upload_e_do_upload_deduplicado(
     assert api.get(f"/api/v1/recordings/{recording['id']}").json()["marker_count"] == 3
 
 
-def test_lote_idempotente_edicao_e_exclusao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_idempotent_batch_edit_and_deletion(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     owner = as_user(make_user())
     recording = upload_file(owner, audio_bytes(100))
     url = f"/api/v1/recordings/{recording['id']}/markers"
     first = _marker(5_000, "Início")
-    # Depois da duração (ainda desconhecida) é aceito: a tela mostra no fim.
+    # Past the (still unknown) duration is accepted: the screen shows it at the end.
     batch = {"markers": [first, _marker(99_000_000)], "device_name": "iPhone 15 · Mariana"}
     posted = owner.post(url, json=batch)
     assert posted.status_code == 200, posted.text
@@ -77,7 +77,7 @@ def test_lote_idempotente_edicao_e_exclusao(as_user: Callable[[Account], Api], m
     marker_id = again[0]["id"]
     patched = owner.patch(f"/api/v1/markers/{marker_id}", json={"note": None})
     assert (patched.status_code, patched.json()["note"]) == (200, None)
-    # A nota editada na web sobrevive a um reenvio do app sem nota.
+    # The note edited on the web survives an app resend without a note.
     owner.patch(f"/api/v1/markers/{marker_id}", json={"note": "Editada na web"})
     resent = owner.post(url, json={"markers": [first | {"note": None}]}).json()["items"]
     assert resent[0]["note"] == "Editada na web"
@@ -96,7 +96,7 @@ def test_lote_idempotente_edicao_e_exclusao(as_user: Callable[[Account], Api], m
     assert owner.get(f"/api/v1/recordings/{recording['id']}").json()["marker_count"] == 1
 
 
-def test_marcador_de_outra_conta_nao_existe(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_marker_of_another_account_does_not_exist(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     owner, stranger = as_user(make_user()), as_user(make_user())
     recording = upload_file(owner, audio_bytes(100), markers=[_marker(1_000, "nota")])
     marker_id = _markers(owner, recording["id"])[0]["id"]
@@ -108,7 +108,9 @@ def test_marcador_de_outra_conta_nao_existe(as_user: Callable[[Account], Api], m
     assert _markers(owner, recording["id"])[0]["note"] == "nota"
 
 
-def test_tipo_escolhido_ao_parar_a_gravacao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_agenda_type_chosen_when_stopping_the_recording(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
     api = as_user(make_user())
     types = {item["name"]: item for item in api.get("/api/v1/agenda-types").json()["items"]}
     team = types["Reunião de equipe"]
@@ -116,7 +118,7 @@ def test_tipo_escolhido_ao_parar_a_gravacao(as_user: Callable[[Account], Api], m
     assert recording["agenda_type"] == {"id": team["id"], "name": "Reunião de equipe", "origin": "edited"}
     assert set(team["default_tags"]) <= set(recording["tags"])
     assert recording["title"].startswith("Reunião de equipe · ")
-    # O padrão de título não troca o título que a pessoa escreveu.
+    # The title pattern does not replace the title the person wrote.
     titled = upload_file(api, audio_bytes(100), title="Planejamento Q4", agenda_type_id=team["id"])
     assert (titled["title"], titled["agenda_type"]["origin"]) == ("Planejamento Q4", "edited")
     invalid = api.post(
@@ -133,7 +135,7 @@ def test_tipo_escolhido_ao_parar_a_gravacao(as_user: Callable[[Account], Api], m
     assert invalid.json()["errors"][0]["field"] == "agenda_type_id"
 
 
-def test_marcador_move_o_updated_at_da_gravacao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_marker_moves_the_recording_updated_at(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     owner = as_user(make_user())
     recording = upload_file(owner, audio_bytes(100), markers=[_marker(1_000, "nota")])
     url = f"/api/v1/recordings/{recording['id']}"
