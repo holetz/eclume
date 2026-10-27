@@ -32,7 +32,7 @@ function sameDraft(a: FieldDraft, b: FieldDraft): boolean {
 }
 
 interface FieldEditorProps {
-  /** O campo salvo, ou `null` para o rascunho de um campo novo. */
+  /** The saved field, or `null` for the draft of a new field. */
   field: Field | null
   onDirtyChange: (dirty: boolean) => void
   onSaved: (field: Field) => void
@@ -173,7 +173,7 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
         <button type="submit" className="btn btn-primary" disabled={!canSave}>
           {save.isPending ? 'Salvando…' : 'Salvar'}
         </button>
-        {/* Testa o rascunho como está, sem salvar. */}
+        {/* Tests the draft as it is, without saving. */}
         <button
           type="button"
           className="btn btn-secondary"
@@ -208,7 +208,7 @@ function DeleteFieldDialog({ field, onClose, onDeleted }: { field: Field; onClos
             type="button"
             className="btn btn-danger"
             disabled={remove.isPending}
-            // A lista recarrega antes do fim do mutate e desmonta este painel: a promessa segue mesmo assim.
+            // The list reloads before the mutate ends and unmounts this panel: the promise carries on anyway.
             onClick={() => remove.mutateAsync(field.id).then(onDeleted, () => {})}
           >
             Excluir campo
