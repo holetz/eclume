@@ -1,7 +1,7 @@
 ---
 type: standard
-title: Formato do áudio enviado pelo navegador
-description: Antes do upload, o navegador converte áudio e vídeo para Opus mono 16 kHz em Ogg (32 kbps) pela biblioteca isolada web/src/lib/media-convert — WebCodecs com Mediabunny, ffmpeg.wasm de fallback — e este é o formato, o porquê e a API que o app consome.
+title: Format of the audio the browser sends
+description: Before the upload, the browser converts audio and video to Opus mono 16 kHz in Ogg (32 kbps) through the isolated library web/src/lib/media-convert — WebCodecs with Mediabunny, ffmpeg.wasm as the fallback — and this is the format, the reason and the API the app consumes.
 resource: web/src/lib/media-convert/**, web/vitest.browser.config.ts, web/scripts/media-fixtures.sh
 tags: [code, web, audio, opus, webcodecs, upload]
 timestamp: 2026-09-27
@@ -11,66 +11,66 @@ source: holetz/eclume#7, holetz/eclume#37
 maintainer: holetz
 ---
 
-# Formato do áudio enviado pelo navegador
+# Format of the audio the browser sends
 
-Arquivos de reunião chegam com vários GB, mas só o áudio interessa ao ASR. Por isso o navegador
-**converte antes de subir**, e o servidor recebe sempre o mesmo formato.
+Meeting files arrive at several GB, but only the audio matters to ASR. That is why the browser
+**converts before uploading**, and the server always receives the same format.
 
-## O formato-alvo: Opus mono 16 kHz em Ogg, 32 kbps
+## The target format: Opus mono 16 kHz in Ogg, 32 kbps
 
-| Propriedade | Valor | Por quê |
+| Property | Value | Why |
 |---|---|---|
-| Codec | Opus | Fala transparente a 24–32 kbps; lido por ffmpeg, WhisperX e navegadores |
-| Canais | 1 (mono) | O Whisper/WhisperX processa mono; o downmix é feito na conversão |
-| Taxa | 16 kHz | É a taxa de entrada do Whisper; mais que isso é banda desperdiçada |
-| Bitrate | 32 kbps (aceita 16–64 kbps) | ~14,4 MB por hora de áudio |
-| Contêiner | Ogg (`audio/ogg; codecs=opus`, `.ogg`) | O Ogg do Mediabunny é append-only: a saída sai em ordem, sem reescrever cabeçalho |
+| Codec | Opus | Transparent speech at 24–32 kbps; read by ffmpeg, WhisperX and browsers |
+| Channels | 1 (mono) | Whisper/WhisperX processes mono; the downmix is done in the conversion |
+| Rate | 16 kHz | It is Whisper's input rate; anything more is wasted bandwidth |
+| Bitrate | 32 kbps (accepts 16–64 kbps) | ~14.4 MB per hour of audio |
+| Container | Ogg (`audio/ogg; codecs=opus`, `.ogg`) | Mediabunny's Ogg is append-only: the output comes out in order, without rewriting a header |
 
-**Opus decodifica sempre a 48 kHz.** Os 16 kHz ficam no campo *input sample rate* do cabeçalho
-`OpusHead`. Por isso a verificação lê o `OpusHead` (byte 9 = canais; bytes 12–15, little-endian =
-taxa de entrada), e **não** o `sample_rate` do ffprobe, que reporta 48000 para qualquer Opus.
+**Opus always decodes at 48 kHz.** The 16 kHz sit in the *input sample rate* field of the
+`OpusHead` header. That is why the check reads the `OpusHead` (byte 9 = channels; bytes 12–15, little-endian =
+input rate), and **not** ffprobe's `sample_rate`, which reports 48000 for any Opus.
 
-## Onde a conversão vive
+## Where the conversion lives
 
-`web/src/lib/media-convert/` é uma biblioteca autocontida, testável sem o app:
+`web/src/lib/media-convert/` is a self-contained library, testable without the app:
 
-- **nada dentro dela importa de fora da pasta** — o `eslint.config.js` recusa import que comece
-  com `../` ou `/` em `src/lib/media-convert/**`;
-- **o app importa só de `src/lib/media-convert`** (o `index.ts`), nunca de um módulo interno.
+- **nothing inside it imports from outside the folder** — `eslint.config.js` refuses an import that starts
+  with `../` or `/` in `src/lib/media-convert/**`;
+- **the app imports only from `src/lib/media-convert`** (the `index.ts`), never from an internal module.
 
-Os dois motores são carregados **sob demanda** (`import()` dinâmico): importar a biblioteca custa
-~5 KB; o Mediabunny (~140 KB gzip) chega na primeira conversão, e o ffmpeg.wasm (~32 MB de wasm)
-só quando o fallback é usado.
+The two engines are loaded **on demand** (dynamic `import()`): importing the library costs
+~5 KB; Mediabunny (~140 KB gzip) arrives on the first conversion, and ffmpeg.wasm (~32 MB of wasm)
+only when the fallback is used.
 
-## Os motores
+## The engines
 
-- **WebCodecs com Mediabunny (via principal).** A entrada é lida em fatias
-  (`CustomSource` sobre `blob.slice()`), então um vídeo de vários GB nunca entra inteiro na
-  memória; o vídeo é descartado, o áudio é decodificado, reamostrado para 16 kHz mono e
-  codificado em Opus. A saída (~14 MB/h) fica em memória.
-- **ffmpeg.wasm (fallback).** Core single-thread (`@ffmpeg/core`) servido pela própria origem
-  (import `?url` do Vite), sem CDN e sem COOP/COEP. A entrada é montada com `WORKERFS`, que lê o
-  arquivo sob demanda. O `vite.config.ts` exclui `@ffmpeg/ffmpeg` do pré-bundle, que quebraria a
-  URL do worker.
-- **Quando cai para o fallback:** em `engine: 'auto'`, quando o WebCodecs falha com `unsupported`
-  (contêiner que o Mediabunny não lê, como AVI; codec sem decoder no navegador) ou `failed`, ou
-  quando o navegador não tem `AudioEncoder`/`AudioDecoder`. `no-audio` e `aborted` nunca caem.
-- **Bitrate no Mediabunny:** use `new Quality({ bitrate })`. `new Quality(32000)` com um número é
-  um nível *qualitativo* (0–1), não um bitrate — o encoder recusa a config e tudo cai no fallback.
+- **WebCodecs with Mediabunny (main path).** The input is read in slices
+  (`CustomSource` over `blob.slice()`), so a video of several GB never enters memory whole;
+  the video is discarded, the audio is decoded, resampled to 16 kHz mono and
+  encoded in Opus. The output (~14 MB/h) stays in memory.
+- **ffmpeg.wasm (fallback).** A single-thread core (`@ffmpeg/core`) served by the origin itself
+  (Vite's `?url` import), with no CDN and no COOP/COEP. The input is mounted with `WORKERFS`, which reads the
+  file on demand. `vite.config.ts` excludes `@ffmpeg/ffmpeg` from the pre-bundle, which would break the
+  worker URL.
+- **When it falls back:** under `engine: 'auto'`, when WebCodecs fails with `unsupported`
+  (a container Mediabunny does not read, such as AVI; a codec with no decoder in the browser) or `failed`, or
+  when the browser has no `AudioEncoder`/`AudioDecoder`. `no-audio` and `aborted` never fall back.
+- **Bitrate in Mediabunny:** use `new Quality({ bitrate })`. `new Quality(32000)` with a number is
+  a *qualitative* level (0–1), not a bitrate — the encoder refuses the config and everything falls back.
 
-## A API pública
+## The public API
 
 ```ts
 convertAudio(file: Blob, options?: {
   signal?: AbortSignal
   onProgress?: (p: { ratio: number; bytesRead: number; bytesTotal: number }) => void
-  bitrate?: number                           // 16_000..64_000; padrão 32_000
-  engine?: 'auto' | 'webcodecs' | 'ffmpeg'   // padrão 'auto'
+  bitrate?: number                           // 16_000..64_000; default 32_000
+  engine?: 'auto' | 'webcodecs' | 'ffmpeg'   // default 'auto'
 }): Promise<{ blob: Blob; sha256: string; durationSec: number; engine: 'webcodecs' | 'ffmpeg' }>
 
 probeMedia(file: Blob, options?: { bitrate?: number }): Promise<{
   durationSec: number | null; hasAudio: boolean | null; estimatedBytes: number | null
-  engine: 'webcodecs' | 'ffmpeg'             // o motor que 'auto' vai usar
+  engine: 'webcodecs' | 'ffmpeg'             // the engine 'auto' will use
 }>
 
 estimateOutputSize(durationSec: number, bitrate?: number): number
@@ -81,76 +81,76 @@ class MediaConvertError extends Error {
 OUTPUT_FORMAT, DEFAULT_BITRATE, MIN_BITRATE, MAX_BITRATE, sha256Hex
 ```
 
-- **Contexto seguro é pré-requisito.** Sem HTTPS (`isSecureContext` falso) `convertAudio` rejeita
-  com `insecure-context` antes de ler o arquivo, com mensagem em pt-BR pedindo `https://`.
-- **Erros:** toda falha de conversão sai como `MediaConvertError` com `code`, mensagem em pt-BR e
-  a causa original em `cause`. Argumento inválido (bitrate fora da faixa, duração negativa) é
-  erro de programação e lança `RangeError`.
-- **Hash:** `sha256` é o SHA-256 do `blob` em hex minúsculo — o valor que o upload com dedup
-  envia.
-- **Progresso:** `ratio` vai de 0 a 1 e nunca recua dentro de um motor; ao cair para o fallback,
-  recomeça do zero uma vez. `bytesRead` são os bytes realmente lidos do arquivo e podem terminar
-  abaixo de `bytesTotal`, porque o demuxer pula o vídeo; no ffmpeg.wasm, é estimado pela razão.
-- **Duração:** `durationSec` é relida do próprio arquivo convertido.
+- **A secure context is a prerequisite.** Without HTTPS (`isSecureContext` false) `convertAudio` rejects
+  with `insecure-context` before reading the file, with a pt-BR message asking for `https://`.
+- **Errors:** every conversion failure comes out as a `MediaConvertError` with `code`, a pt-BR message and
+  the original cause in `cause`. An invalid argument (bitrate out of range, negative duration) is a
+  programming error and throws `RangeError`.
+- **Hash:** `sha256` is the SHA-256 of the `blob` in lowercase hex — the value the deduplicated upload
+  sends.
+- **Progress:** `ratio` goes from 0 to 1 and never goes back within an engine; on falling back,
+  it restarts from zero once. `bytesRead` are the bytes actually read from the file and may end
+  below `bytesTotal`, because the demuxer skips the video; in ffmpeg.wasm, it is estimated from the ratio.
+- **Duration:** `durationSec` is reread from the converted file itself.
 
-## O início da gravação, lido antes da conversão
+## The recording start, read before the conversion
 
-O Opus convertido não carrega os metadados do original. Por isso o import lê o **início da
-gravação** do arquivo original na seleção, em paralelo ao `probeMedia` e antes de converter:
+The converted Opus does not carry the original's metadata. That is why the import reads the **recording
+start** of the original file at selection, in parallel with `probeMedia` and before converting:
 
 ```ts
 readRecordedAt(file: Blob, options?: { now?: Date }): Promise<{
   at: Date
   source: 'metadata' | 'file_date'
   precision: 'minute' | 'day'
-  detail: string                  // mvhd, DateUTC, a tag lida ou lastModified
+  detail: string                  // mvhd, DateUTC, the tag read, or lastModified
 }>
 ```
 
-As fontes, na ordem de preferência:
+The sources, in order of preference:
 
-1. **MP4, MOV e M4A:** o `creation_time` do `moov/mvhd`, em segundos desde 1904-01-01 UTC
-   (versões 0 e 1). Um leitor de caixas próprio percorre as caixas de topo por `blob.slice` de
-   16 bytes, porque o `moov` pode estar no fim do arquivo, e lê só o `mvhd`. O Mediabunny 1.59
-   pula esse campo no demux.
-2. **Matroska e WebM:** o `DateUTC` (ID `0x4461`, nanossegundos desde 2001-01-01 UTC) no `Info`
-   do segmento, procurado nos primeiros 256 KB.
-3. **As tags pelo Mediabunny** (`getMetadataTags()`, carregado sob demanda): QuickTime
-   `com.apple.quicktime.creationdate`, ID3 `TDRC`, `©day`, Vorbis `DATE` e WAV `ICRD`. Uma tag sem
-   fuso é hora local. Uma tag só com o dia fica com `precision: 'day'` e recebe a hora da data de
-   modificação quando é o mesmo dia local; senão, 12:00.
-4. **Fallback:** `file.lastModified`, com `source: 'file_date'`.
+1. **MP4, MOV and M4A:** the `creation_time` of `moov/mvhd`, in seconds since 1904-01-01 UTC
+   (versions 0 and 1). A box reader of its own walks the top-level boxes through `blob.slice` of
+   16 bytes, because the `moov` may be at the end of the file, and reads only the `mvhd`. Mediabunny 1.59
+   skips that field in the demux.
+2. **Matroska and WebM:** the `DateUTC` (ID `0x4461`, nanoseconds since 2001-01-01 UTC) in the segment's
+   `Info`, searched for in the first 256 KB.
+3. **The tags through Mediabunny** (`getMetadataTags()`, loaded on demand): QuickTime
+   `com.apple.quicktime.creationdate`, ID3 `TDRC`, `©day`, Vorbis `DATE` and WAV `ICRD`. A tag without a
+   time zone is local time. A tag with only the day gets `precision: 'day'` and takes the time of the
+   modification date when it is the same local day; otherwise, 12:00.
+4. **Fallback:** `file.lastModified`, with `source: 'file_date'`.
 
-As fontes 1 e 2 são UTC. Uma data zerada (1904 ou 1970), anterior a 1990 ou mais de um dia no
-futuro é descartada e a leitura passa à fonte seguinte. `readRecordedAt` nunca rejeita: falha de
-leitura vira o fallback.
+Sources 1 and 2 are UTC. A zeroed date (1904 or 1970), one before 1990 or one more than a day in the
+future is discarded and the reading moves to the next source. `readRecordedAt` never rejects: a read
+failure becomes the fallback.
 
-**O que o import envia.** A pessoa confirma ou corrige a data por arquivo. O upload manda
-`recorded_at` (o valor local convertido em ISO) e `recorded_at_source`: `file_metadata` quando a
-data veio dos metadados e não foi editada; `user` quando foi editada ou quando veio do fallback,
-porque a pessoa confirmou uma data que o arquivo não trazia. O `title` não vai: sem ele, o servidor
-usa o nome do arquivo e o preenchimento automático pode trocá-lo.
+**What the import sends.** The person confirms or corrects the date per file. The upload sends
+`recorded_at` (the local value converted to ISO) and `recorded_at_source`: `file_metadata` when the
+date came from the metadata and was not edited; `user` when it was edited or when it came from the fallback,
+because the person confirmed a date the file did not carry. The `title` is not sent: without it, the server
+uses the file name and the automatic fill can replace it.
 
-## Como é verificado
+## How it is verified
 
-- **Unitários** (`npm --prefix web test`, ambiente node): ambiente, estimativa, hash, progresso,
-  erros e a escolha de motor com os motores substituídos por dublês; o início da gravação com
-  bytes sintéticos de `mvhd` e `DateUTC` e tags simuladas.
-- **Navegador** (`npm run fixtures && npm run test:browser`, no host de build por `remote-run`
-  e na CI): vitest browser mode com `@vitest/browser-playwright` no canal `chrome` — o
-  Google Chrome tem os decoders proprietários (AAC), que o Chromium do Playwright não tem.
-  `scripts/media-fixtures.sh` gera, com ffmpeg, 10 s de áudio estéreo 48 kHz em MP4, MOV, M4A,
-  WebM, MKV, MP3, WAV e OGG (todos pelo WebCodecs), AVI (pelo fallback), um MP4 sem áudio e
-  arquivos de 120 s para o cancelamento. A saída tem de ter `OpusHead` com 1 canal e 16000 Hz,
-  duração de 10 s ± 0,5 s, tamanho entre 50% e 150% de `estimateOutputSize` e o `sha256` do
-  próprio blob.
-- Provado em Chrome 154 headless no host (2026-09-24): o `AudioEncoder` aceita Opus a 16 kHz mono,
-  e as oito fixtures convertem pelo WebCodecs.
-- Os mesmos testes rodam no Firefox e no WebKit do Playwright (holetz/eclume#113): cada motor
-  converte pelo caminho que tem (WebCodecs quando decodifica a faixa e codifica Opus, a reserva
-  ffmpeg.wasm quando não), e o que depende só do WebCodecs é pulado com o motivo. No WebKit, a
-  decodificação de Vorbis (MKV e OGG) pelo WebCodecs trava sem erro e é pulada (2026-10-01).
-- Na CI, o job `web-browser` roda `npm run fixtures && npm run test:browser` no Google Chrome que
-  já vem no runner `ubuntu-latest`, com o ffmpeg instalado por apt.
-- Para validar à mão: `npm --prefix web run dev` e abrir `/media-convert.html` (só no dev, fora do
-  build de produção).
+- **Unit** (`npm --prefix web test`, node environment): environment, estimate, hash, progress,
+  errors and the engine choice with the engines replaced by doubles; the recording start with
+  synthetic `mvhd` and `DateUTC` bytes and simulated tags.
+- **Browser** (`npm run fixtures && npm run test:browser`, on the build host through `remote-run`
+  and in CI): vitest browser mode with `@vitest/browser-playwright` on the `chrome` channel —
+  Google Chrome has the proprietary decoders (AAC), which Playwright's Chromium does not.
+  `scripts/media-fixtures.sh` generates, with ffmpeg, 10 s of 48 kHz stereo audio in MP4, MOV, M4A,
+  WebM, MKV, MP3, WAV and OGG (all through WebCodecs), AVI (through the fallback), an MP4 without audio and
+  120 s files for cancellation. The output must have an `OpusHead` with 1 channel and 16000 Hz,
+  a duration of 10 s ± 0.5 s, a size between 50% and 150% of `estimateOutputSize` and the `sha256` of the
+  blob itself.
+- Proven in headless Chrome 154 on the host (2026-09-24): `AudioEncoder` accepts Opus at 16 kHz mono,
+  and the eight fixtures convert through WebCodecs.
+- The same tests run on Playwright's Firefox and WebKit (holetz/eclume#113): each engine
+  converts through the path it has (WebCodecs when it decodes the track and encodes Opus, the
+  ffmpeg.wasm fallback when it does not), and what depends only on WebCodecs is skipped with the reason. On WebKit,
+  Vorbis decoding (MKV and OGG) through WebCodecs hangs without an error and is skipped (2026-10-01).
+- In CI, the `web-browser` job runs `npm run fixtures && npm run test:browser` on the Google Chrome that
+  already ships with the `ubuntu-latest` runner, with ffmpeg installed through apt.
+- To validate by hand: `npm --prefix web run dev` and open `/media-convert.html` (dev only, outside the
+  production build).
