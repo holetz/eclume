@@ -1,4 +1,4 @@
-"""Teto do corpo por rota (413 `payload_too_large`) e o 500 genérico `internal_error`."""
+"""Per-route body ceiling (413 `payload_too_large`) and the generic 500 `internal_error`."""
 
 from __future__ import annotations
 
@@ -58,7 +58,9 @@ def _chunks(size: int) -> Iterator[bytes]:
         ("PUT", "/api/v1/uploads/abc/parts/1", PART_SIZE),
     ],
 )
-def test_teto_por_rota_aceita_o_limite_e_recusa_um_byte_a_mais(api: TestClient, method: str, path: str, limit: int):
+def test_per_route_ceiling_accepts_the_limit_and_refuses_one_byte_more(
+    api: TestClient, method: str, path: str, limit: int
+):
     assert api.request(method, path, content=b"x" * limit).json() == {"size": limit}
     response = api.request(method, path, content=b"x" * (limit + 1))
     assert response.status_code == 413
@@ -67,14 +69,16 @@ def test_teto_por_rota_aceita_o_limite_e_recusa_um_byte_a_mais(api: TestClient, 
     assert response.json()["limit"] == limit
 
 
-def test_corpo_sem_content_length_e_contado_enquanto_chega(api: TestClient):
+def test_body_without_content_length_is_counted_as_it_arrives(api: TestClient):
     response = api.post("/api/v1/auth/login", content=_chunks(CREDENTIAL_LIMIT * 3))
     assert response.status_code == 413
     assert response.json()["code"] == "payload_too_large"
     assert api.post("/api/v1/auth/login", content=_chunks(1000)).json() == {"size": 1000}
 
 
-def test_erro_inesperado_vira_500_problem_json_e_vai_para_o_log(api: TestClient, caplog: pytest.LogCaptureFixture):
+def test_unexpected_error_becomes_500_problem_json_and_goes_to_the_log(
+    api: TestClient, caplog: pytest.LogCaptureFixture
+):
     with caplog.at_level(logging.ERROR, logger="eclume_server.problems"):
         response = api.get("/api/v1/boom")
     assert response.status_code == 500
@@ -84,6 +88,6 @@ def test_erro_inesperado_vira_500_problem_json_e_vai_para_o_log(api: TestClient,
     assert any(record.exc_info and "falha de teste" in str(record.exc_info[1]) for record in caplog.records)
 
 
-def test_app_real_recusa_o_corpo_grande_no_login(client: TestClient):
+def test_real_app_refuses_the_large_body_on_login(client: TestClient):
     response = client.post("/api/v1/auth/login", content=b"{" + b" " * CREDENTIAL_LIMIT + b"}")
     assert (response.status_code, response.json()["code"]) == (413, "payload_too_large")

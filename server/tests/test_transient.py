@@ -1,4 +1,4 @@
-"""O que é falha passageira de Postgres e S3 nos jobs de retorno do worker GPU."""
+"""What counts as a transient Postgres and S3 failure in the GPU worker's return jobs."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from eclume_server.transient import is_transient
 
 
 class _PgError(Exception):
-    """Erro do driver com o SQLSTATE, como o adaptador do asyncpg expõe."""
+    """Driver error carrying the SQLSTATE, as the asyncpg adapter exposes it."""
 
     def __init__(self, sqlstate: str) -> None:
         super().__init__(sqlstate)
@@ -54,7 +54,7 @@ def _wrapped(cause: BaseException) -> RuntimeError:
     ],
     ids=lambda exc: type(exc).__name__,
 )
-def test_passageira(exc: BaseException):
+def test_transient(exc: BaseException):
     assert is_transient(exc)
 
 
@@ -72,5 +72,5 @@ def test_passageira(exc: BaseException):
     ],
     ids=lambda exc: type(exc).__name__,
 )
-def test_definitiva(exc: BaseException):
+def test_permanent(exc: BaseException):
     assert not is_transient(exc)
