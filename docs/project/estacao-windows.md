@@ -79,7 +79,7 @@ jsdom no Windows, sem ser regressão.
   digital e o guarda em `%APPDATA%\io.github.holetz.eclume\servidor-ca.pem`. Basta o e-mail e a
   senha da conta (ou o código de pareamento da web, em "Avançado"). A credencial de dispositivo
   fica no Gerenciador de Credenciais (alvo `pat.eclume-desktop`, o mesmo do PAT antigo).
-  ([desktop-deteccao-e-sync.md](../standards/code/desktop-deteccao-e-sync.md#conta-e-credencial)).
+  ([desktop-deteccao-e-sync.md](../standards/code/desktop-deteccao-e-sync.md#account-and-credential)).
 - **Versões 0.1.x** pediam a CA no sistema (`certutil -addstore -f Root eclume-root.crt`, como
   administrador) ou a CA extra nas configurações, e um PAT colado. Quem atualiza de uma delas
   continua com o PAT e pode trocar pela conta em Configurações · Servidor.

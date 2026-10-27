@@ -713,7 +713,7 @@ moves down; below 56rem, the fields too):
   own. On reappearing, the tab reads right away and the watermark recovers what finished while it was
   hidden (the notice arrives on coming back, not during). It applies the
   outcome rule and the watermark of the desktop
-  ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md#aviso-do-fim-do-processamento)), with
+  ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md#processing-end-notice)), with
   the same test cases: summary ready, summary that failed, ready without a summary (reason through the
   vocabulary's `motivo()`), transcription that failed and, since 2.22.0, "Precisa de você" (step
   `speakers` in `waiting`, instant = the wait's `finished_at`); cancelling and `summary_deleted` do not notify. The

@@ -37,7 +37,7 @@ UI (React, ui/src) ──invoke/listen──▶ src-tauri (comandos, evento esta
   `eclume-recorder` (encoder, fila SQLite, recuperação), o `eclume-sync` (upload retomável, CA
   fixada, login e pareamento) e o `eclume-audio-capture` com a feature `mic` (o `MicSource` por
   `cpal`, AAudio no Android). O que o crate de sync oferece ao celular está em
-  [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md#o-que-o-crate-de-sync-oferece-ao-app-móvel);
+  [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md#what-the-sync-crate-offers-the-mobile-app);
   a pausa, o tempo de áudio e a fila v4, em [desktop-gravacao.md](desktop-gravacao.md).
 - **Um núcleo por processo**: `OnceLock<Mutex<Core>>` (`iniciar`, `global`), independente do
   `tauri::App`. A Activity pode morrer e voltar enquanto o serviço grava, e o WorkManager chama o
