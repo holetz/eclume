@@ -1,4 +1,4 @@
-"""Ligação de aparelhos: login por e-mail e senha ou código de pareamento, que emitem a credencial."""
+"""Device linking: login by e-mail and password or by pairing code, both of which issue the credential."""
 
 from __future__ import annotations
 
@@ -55,9 +55,9 @@ class DevicePair(BaseModel):
 async def device_login(
     body: DeviceLogin, request: Request, ctx: Ctx, _: Annotated[None, Depends(attempts("devices_login"))]
 ) -> dict[str, Any]:
-    """Confere a senha como o login do navegador e emite o token de dispositivo.
+    """Check the password like the browser login and issue the device token.
 
-    Conta sem o aceite do aviso em vigor não ganha credencial nova: 403 `notice_required`.
+    An account without acceptance of the current notice gets no new credential: 403 `notice_required`.
     """
     user_id = await user_password_login(ctx, body.email, body.password, client_ip(request))
     async with system_tx(ctx.engine) as conn:
@@ -70,7 +70,7 @@ async def device_login(
 
 @router.post("/devices/pairing-codes", status_code=201)
 async def new_pairing_code(principal: SessionUser, request: Request, ctx: Ctx) -> dict[str, Any]:
-    """Código de 6 caracteres por 10 minutos, com o link do QR; vence os anteriores pendentes."""
+    """A 6-character code for 10 minutes, with the QR link; expires the earlier pending ones."""
     server = server_info(ctx.settings, str(request.base_url))
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await create_pairing_code(conn, principal.user_id, ctx.settings.secret_key, server)
@@ -78,7 +78,7 @@ async def new_pairing_code(principal: SessionUser, request: Request, ctx: Ctx) -
 
 @router.get("/devices/pairing-codes/{pairing_code_id}")
 async def get_pairing_code(pairing_code_id: UUID, principal: SessionUser, ctx: Ctx) -> dict[str, Any]:
-    """Estado do código (`pending`, `used`, `expired`) e a credencial que ele emitiu."""
+    """The code's state (`pending`, `used`, `expired`) and the credential it issued."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         query = t.pairing_codes.select().where(t.pairing_codes.c.id == pairing_code_id)
         row = (await conn.execute(query)).mappings().first()
@@ -94,7 +94,7 @@ async def pair_device(
     ctx: Ctx,
     _: Annotated[None, Depends(attempts("devices_pair", global_factor=PAIR_GLOBAL_FACTOR))],
 ) -> dict[str, Any]:
-    """Troca o código (uso único) pela credencial de dispositivo do dono dele."""
+    """Exchange the code (single use) for its owner's device credential."""
     async with system_tx(ctx.engine) as conn:
         code = await redeem_pairing_code(conn, body.code, ctx.settings.secret_key)
         if code is None:

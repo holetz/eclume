@@ -1,7 +1,7 @@
-"""Tipos de agenda padrão da plataforma (`/admin/default-agenda-types`). Só a sessão de admin.
+"""The platform's default agenda types (`/admin/default-agenda-types`). Admin session only.
 
-Os marcados com `include_for_new_users` são copiados para cada conta nova no cadastro
-(`eclume_seed_user_defaults`); mudar um padrão não mexe nas cópias que as contas já têm.
+Those marked `include_for_new_users` are copied to every new account at sign-up
+(`eclume_seed_user_defaults`); changing a default does not touch the copies accounts already have.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ MISSING = "Tipo de agenda padrão inexistente."
 
 @router.get("/default-agenda-types")
 async def list_default_agenda_types(_: Admin, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50) -> dict[str, Any]:
-    """Tipos padrão, na ordem da lista."""
+    """Default types, in list order."""
     c = t.default_agenda_types.c
     query = select(t.default_agenda_types).order_by(c.position, c.id).limit(limit + 1)
     if cursor:
@@ -50,7 +50,7 @@ async def list_default_agenda_types(_: Admin, ctx: Ctx, cursor: Cursor = None, l
 
 @router.post("/default-agenda-types", status_code=201)
 async def create_default_agenda_type(body: DefaultAgendaTypeCreate, _: Admin, ctx: Ctx) -> dict[str, Any]:
-    """Cria um tipo padrão; vale para as contas criadas depois."""
+    """Create a default type; it applies to accounts created afterwards."""
     values = create_values(body)
     try:
         async with system_tx(ctx.engine) as conn:
@@ -70,7 +70,7 @@ async def create_default_agenda_type(body: DefaultAgendaTypeCreate, _: Admin, ct
 async def update_default_agenda_type(
     agenda_type_id: UUID, body: DefaultAgendaTypePatch, _: Admin, ctx: Ctx
 ) -> dict[str, Any]:
-    """Edita o tipo padrão; as contas que já o copiaram ficam com a cópia delas."""
+    """Edit the default type; accounts that already copied it keep their copy."""
     values = changes_of(body)
     try:
         async with system_tx(ctx.engine) as conn:
@@ -95,7 +95,7 @@ async def update_default_agenda_type(
 
 @router.delete("/default-agenda-types/{agenda_type_id}", status_code=204)
 async def delete_default_agenda_type(agenda_type_id: UUID, _: Admin, ctx: Ctx) -> Response:
-    """Exclui o tipo padrão; as cópias das contas ficam."""
+    """Delete the default type; the accounts' copies stay."""
     async with system_tx(ctx.engine) as conn:
         result = await conn.execute(delete(t.default_agenda_types).where(t.default_agenda_types.c.id == agenda_type_id))
     if result.rowcount == 0:
