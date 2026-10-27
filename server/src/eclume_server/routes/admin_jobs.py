@@ -1,8 +1,8 @@
-"""Retentativa de jobs de transcrição pelo admin (`/admin/jobs/{job_id}/retry`). Só a sessão de admin.
+"""Retrying transcription jobs by the admin (`/admin/jobs/{job_id}/retry`). Admin session only.
 
-Regras em docs/standards/code/server-admin.md: vale para a gravação de qualquer usuário, mas só para
-o job mais recente da gravação e em estado `failed`, lido depois de travar a linha da gravação. A
-resposta não traz conteúdo da gravação.
+Rules in docs/standards/code/server-admin.md: it applies to any user's recording, but only to the
+recording's most recent job and in the `failed` state, read after locking the recording's row. The
+response carries no recording content.
 """
 
 from __future__ import annotations
@@ -28,14 +28,14 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 
 @router.post("/jobs/{job_id}/retry", status_code=202)
 async def retry_job(job_id: UUID, ctx: Ctx) -> dict[str, Any]:
-    """Cria e enfileira o job da revisão seguinte da gravação do job que falhou."""
+    """Create and enqueue the job of the next revision of the failed job's recording."""
     jobs = t.transcription_jobs
-    # Papel de conexão: a gravação é de um usuário, não do admin.
+    # Connection role: the recording belongs to a user, not to the admin.
     async with system_tx(ctx.engine) as conn:
         recording_id = (await conn.execute(select(jobs.c.recording_id).where(jobs.c.id == job_id))).scalar()
         if recording_id is None:
             raise not_found("Job inexistente.")
-        # Trava a gravação antes de ler o estado: um segundo pedido simultâneo recebe 409.
+        # Lock the recording before reading the state: a second concurrent request gets 409.
         row = await lock_recording(conn, recording_id)
         if row["job_id"] != job_id:
             raise conflict("A gravação já tem um job mais recente que este.")

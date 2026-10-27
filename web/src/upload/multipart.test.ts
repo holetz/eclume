@@ -1,5 +1,5 @@
 // @vitest-environment node
-// O Blob do jsdom não serve de corpo para o fetch do Node; no ambiente node, os dois são nativos.
+// The jsdom Blob does not work as a body for Node's fetch; in the node environment, both are native.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '../api/client'
 import { ApiError } from '../api/problem'
@@ -12,7 +12,7 @@ const BASE = `http://127.0.0.1:4010/api/v1/uploads/${UPLOAD}/parts`
 
 afterEach(() => vi.unstubAllGlobals())
 
-/** Arquivo de 10 bytes em partes de 4: três partes (4, 4 e 2 bytes). */
+/** A 10-byte file in parts of 4: three parts (4, 4 and 2 bytes). */
 function file(): UploadFile {
   return {
     blob: new Blob(['0123456789'], { type: 'audio/ogg' }),
@@ -45,7 +45,7 @@ const client = createApiClient('http://localhost')
 const options = { client, retryDelayMs: () => 0 }
 
 describe('runUpload', () => {
-  it('deduplica: com o hash já conhecido, nada é enviado', async () => {
+  it('deduplicates: with the hash already known, nothing is sent', async () => {
     const http = mockFetch({ 'POST /api/v1/uploads': () => fixtures.uploadDeduplicated() })
     const outcome = await runUpload(file(), options)
     expect(outcome).toEqual({ recordingId: '01928f3a-1c00-7a00-8000-000000000401', deduplicated: true })
@@ -61,7 +61,7 @@ describe('runUpload', () => {
     })
   })
 
-  it('manda o início da gravação, a origem e a natureza, e sem título deixa o nome ao servidor', async () => {
+  it('sends the recording start, the source and the kind, and without a title leaves the name to the server', async () => {
     const http = mockFetch({ 'POST /api/v1/uploads': () => fixtures.uploadDeduplicated() })
     await runUpload(
       { ...file(), title: undefined, recordedAt: '2026-09-19T14:02:00.000Z', recordedAtSource: 'file_metadata', kind: 'meeting' },
@@ -77,13 +77,13 @@ describe('runUpload', () => {
     expect(body).not.toHaveProperty('language')
   })
 
-  it('manda o idioma escolhido para o arquivo', async () => {
+  it('sends the language chosen for the file', async () => {
     const http = mockFetch({ 'POST /api/v1/uploads': () => fixtures.uploadDeduplicated() })
     await runUpload({ ...file(), language: 'auto' }, options)
     expect(await http.calls[0].json()).toMatchObject({ language: 'auto' })
   })
 
-  it('cria, envia as partes com os headers recebidos e conclui com os ETags em ordem', async () => {
+  it('creates, sends the parts with the headers received and completes with the ETags in order', async () => {
     const http = mockFetch({
       'POST /api/v1/uploads': () => json(created(), 201),
       'PUT /api/v1/uploads/:id/parts/:n': putOk,
@@ -110,7 +110,7 @@ describe('runUpload', () => {
     expect(progress.filter((p) => p.phase === 'uploading').map((p) => p.bytesDone).at(-1)).toBe(10)
   })
 
-  it('pede URLs para as partes que vieram sem', async () => {
+  it('requests URLs for the parts that came without one', async () => {
     const http = mockFetch({
       'POST /api/v1/uploads': () => json(created([1]), 201),
       'POST /api/v1/uploads/:id/part-urls': () => ({ parts: [partUrl(2), partUrl(3)] }),
@@ -122,7 +122,7 @@ describe('runUpload', () => {
     expect(http.requests('PUT /api/v1/uploads/:id/parts/:n')).toHaveLength(3)
   })
 
-  it('retoma: consulta o upload e sobe só as partes que faltam', async () => {
+  it('resumes: queries the upload and sends only the missing parts', async () => {
     const inProgress = {
       ...fixtures.uploadInProgress(),
       size_bytes: 10,
@@ -146,7 +146,7 @@ describe('runUpload', () => {
     expect(progress.find((p) => p.phase === 'uploading')?.bytesDone).toBe(4)
   })
 
-  it('URL recusada (403) é renovada e a parte é reenviada', async () => {
+  it('a refused URL (403) is renewed and the part is resent', async () => {
     let refused = false
     const http = mockFetch({
       'POST /api/v1/uploads': () => json(created(), 201),
@@ -165,7 +165,7 @@ describe('runUpload', () => {
     expect(http.requests('PUT /api/v1/uploads/:id/parts/:n')).toHaveLength(4)
   })
 
-  it('tenta de novo em falha de rede e 5xx, e desiste depois do limite', async () => {
+  it('retries on a network failure and 5xx, and gives up after the limit', async () => {
     let failures = 0
     mockFetch({
       'POST /api/v1/uploads': () => json(created(), 201),
@@ -184,7 +184,7 @@ describe('runUpload', () => {
     expect(failures).toBe(3)
   })
 
-  it('para e rejeita quando o chamador cancela', async () => {
+  it('stops and rejects when the caller cancels', async () => {
     const controller = new AbortController()
     mockFetch({
       'POST /api/v1/uploads': () => json(created(), 201),
@@ -197,7 +197,7 @@ describe('runUpload', () => {
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
   })
 
-  it('exige o ETag da parte e recusa upload expirado', async () => {
+  it('requires the part ETag and refuses an expired upload', async () => {
     mockFetch({
       'POST /api/v1/uploads': () => json(created(), 201),
       'PUT /api/v1/uploads/:id/parts/:n': () => empty(200),
@@ -208,7 +208,7 @@ describe('runUpload', () => {
     await expect(runUpload(file(), { ...options, uploadId: UPLOAD })).rejects.toMatchObject({ code: 'upload_gone' })
   })
 
-  it('propaga o problem do complete', async () => {
+  it('propagates the complete problem', async () => {
     mockFetch({
       'POST /api/v1/uploads': () => json(created(), 201),
       'PUT /api/v1/uploads/:id/parts/:n': putOk,
@@ -221,7 +221,7 @@ describe('runUpload', () => {
 })
 
 describe('cancelUpload', () => {
-  it('aborta no servidor e tolera upload já inexistente', async () => {
+  it('aborts on the server and tolerates an upload that no longer exists', async () => {
     const http = mockFetch({ 'DELETE /api/v1/uploads/:id': () => empty(204) })
     await cancelUpload(UPLOAD, client)
     expect(http.requests('DELETE /api/v1/uploads/:id')).toHaveLength(1)

@@ -14,8 +14,8 @@ function seeded() {
 
 afterEach(() => window.sessionStorage.clear())
 
-describe('escopo da conta', () => {
-  it('a conta nova apaga o cache de usuário e os rascunhos da aba, mas não o admin nem a sessão', () => {
+describe('account scope', () => {
+  it('a new account clears the user cache and the tab drafts, but neither the admin nor the session', () => {
     window.sessionStorage.setItem('eclume-conta', 'conta-a')
     window.sessionStorage.setItem(DRAFT, '{"base_version":2,"content_md":"# A"}')
     window.sessionStorage.setItem('eclume-recarga-chunk', '1')
@@ -29,14 +29,14 @@ describe('escopo da conta', () => {
     expect(window.sessionStorage.getItem('eclume-conta')).toBe('conta-b')
   })
 
-  it('a mesma conta que volta mantém os rascunhos', () => {
+  it('the same account coming back keeps the drafts', () => {
     window.sessionStorage.setItem('eclume-conta', 'conta-a')
     window.sessionStorage.setItem(DRAFT, '{"base_version":2,"content_md":"# A"}')
     enterAccount(seeded(), 'conta-a', ['me'])
     expect(window.sessionStorage.getItem(DRAFT)).not.toBeNull()
   })
 
-  it('o 401 apaga as consultas de usuário e mantém os rascunhos', () => {
+  it('a 401 clears the user queries and keeps the drafts', () => {
     window.sessionStorage.setItem(DRAFT, '{"base_version":2,"content_md":"# A"}')
     const client = seeded()
     clearUserQueries(client)

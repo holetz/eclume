@@ -1,4 +1,4 @@
-// Demonstração manual da biblioteca de conversão (só no `npm run dev`, em /media-convert.html).
+// Manual demo of the conversion library (only under `npm run dev`, at /media-convert.html).
 import {
   checkEnvironment,
   convertAudio,
@@ -8,13 +8,13 @@ import {
 } from '../lib/media-convert'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
-const arquivo = $<HTMLInputElement>('arquivo')
-const converter = $<HTMLButtonElement>('converter')
-const cancelar = $<HTMLButtonElement>('cancelar')
-const progresso = $<HTMLProgressElement>('progresso')
-const estado = $('estado')
-const resultado = $('resultado')
-const ouvir = $<HTMLAudioElement>('ouvir')
+const fileInput = $<HTMLInputElement>('arquivo')
+const convertButton = $<HTMLButtonElement>('converter')
+const cancelButton = $<HTMLButtonElement>('cancelar')
+const progressBar = $<HTMLProgressElement>('progresso')
+const statusLine = $('estado')
+const resultList = $('resultado')
+const player = $<HTMLAudioElement>('ouvir')
 
 const mb = (bytes: number) => `${(bytes / 1_000_000).toFixed(2)} MB`
 
@@ -25,23 +25,23 @@ $('ambiente').textContent =
 
 let controller: AbortController | null = null
 
-function linha(termo: string, valor: string | Node): [HTMLElement, HTMLElement] {
+function row(term: string, value: string | Node): [HTMLElement, HTMLElement] {
   const dd = document.createElement('dd')
-  dd.append(valor)
-  return [Object.assign(document.createElement('dt'), { textContent: termo }), dd]
+  dd.append(value)
+  return [Object.assign(document.createElement('dt'), { textContent: term }), dd]
 }
 
-function mostrarErro(error: unknown) {
-  estado.className = 'erro'
-  estado.textContent =
+function showError(error: unknown) {
+  statusLine.className = 'erro'
+  statusLine.textContent =
     error instanceof MediaConvertError ? `${error.message} (${error.code})` : String(error)
 }
 
-arquivo.addEventListener('change', async () => {
-  const file = arquivo.files?.[0]
-  resultado.hidden = ouvir.hidden = true
-  estado.textContent = ''
-  converter.disabled = !file
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files?.[0]
+  resultList.hidden = player.hidden = true
+  statusLine.textContent = ''
+  convertButton.disabled = !file
   if (!file) return
   try {
     const probe = await probeMedia(file)
@@ -50,47 +50,47 @@ arquivo.addEventListener('change', async () => {
       `saída estimada ${probe.estimatedBytes === null ? '?' : mb(probe.estimatedBytes)} · ` +
       `motor ${probe.engine}`
   } catch (error) {
-    mostrarErro(error)
+    showError(error)
   }
 })
 
-converter.addEventListener('click', async () => {
-  const file = arquivo.files?.[0]
+convertButton.addEventListener('click', async () => {
+  const file = fileInput.files?.[0]
   if (!file) return
   controller = new AbortController()
-  converter.disabled = true
-  cancelar.disabled = false
-  estado.className = ''
-  const inicio = performance.now()
+  convertButton.disabled = true
+  cancelButton.disabled = false
+  statusLine.className = ''
+  const start = performance.now()
   try {
     const result = await convertAudio(file, {
       signal: controller.signal,
       onProgress: ({ ratio, bytesRead, bytesTotal }) => {
-        progresso.value = ratio
-        estado.textContent = `${Math.round(ratio * 100)}% · lidos ${mb(bytesRead)} de ${mb(bytesTotal)}`
+        progressBar.value = ratio
+        statusLine.textContent = `${Math.round(ratio * 100)}% · lidos ${mb(bytesRead)} de ${mb(bytesTotal)}`
       },
     })
-    const segundos = (performance.now() - inicio) / 1000
-    estado.textContent = `Pronto em ${segundos.toFixed(1)} s.`
+    const seconds = (performance.now() - start) / 1000
+    statusLine.textContent = `Pronto em ${seconds.toFixed(1)} s.`
     const url = URL.createObjectURL(result.blob)
-    const nome = file.name.replace(/\.[^.]+$/, '') + OUTPUT_FORMAT.extension
-    const link = Object.assign(document.createElement('a'), { href: url, download: nome, textContent: nome })
-    resultado.replaceChildren(
-      ...linha('Motor', result.engine),
-      ...linha('Tamanho', `${mb(result.blob.size)} (entrada ${mb(file.size)})`),
-      ...linha('Duração', `${result.durationSec.toFixed(2)} s`),
-      ...linha('SHA-256', result.sha256),
-      ...linha('Baixar', link),
+    const name = file.name.replace(/\.[^.]+$/, '') + OUTPUT_FORMAT.extension
+    const link = Object.assign(document.createElement('a'), { href: url, download: name, textContent: name })
+    resultList.replaceChildren(
+      ...row('Motor', result.engine),
+      ...row('Tamanho', `${mb(result.blob.size)} (entrada ${mb(file.size)})`),
+      ...row('Duração', `${result.durationSec.toFixed(2)} s`),
+      ...row('SHA-256', result.sha256),
+      ...row('Baixar', link),
     )
-    resultado.hidden = ouvir.hidden = false
-    ouvir.src = url
+    resultList.hidden = player.hidden = false
+    player.src = url
   } catch (error) {
-    mostrarErro(error)
+    showError(error)
   } finally {
     controller = null
-    converter.disabled = false
-    cancelar.disabled = true
+    convertButton.disabled = false
+    cancelButton.disabled = true
   }
 })
 
-cancelar.addEventListener('click', () => controller?.abort())
+cancelButton.addEventListener('click', () => controller?.abort())

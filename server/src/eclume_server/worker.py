@@ -1,19 +1,19 @@
-"""Workers CPU do server: `eclume:default` (`WorkerSettings`) e `eclume:agents` (`AgentWorkerSettings`).
+"""The server's CPU workers: `eclume:default` (`WorkerSettings`) and `eclume:agents` (`AgentWorkerSettings`).
 
-Em produção os dois rodam no mesmo processo e no mesmo event loop (`eclume-server worker`,
-`run_combined`): dois `arq.Worker`, cada um com a sua fila, as suas vagas, as suas funções e os
-seus crons, mas com um só engine do banco e um só cliente de armazenamento. `WorkerSettings` e
-`AgentWorkerSettings` seguem valendo para `arq` isolado (staging, e2e, testes).
+In production both run in the same process and the same event loop (`eclume-server worker`,
+`run_combined`): two `arq.Worker`s, each with its own queue, slots, functions and crons, but with
+a single database engine and a single storage client. `WorkerSettings` and `AgentWorkerSettings`
+still hold for a standalone `arq` (staging, e2e, tests).
 
-O de `eclume:default` consome o que o worker GPU enfileira ao fim de um `transcribe` —
-`ingest_transcript` e `transcription_failed` —, purga os embeddings e roda os crons: descarta
-uploads vencidos e marca como falha recuperável o job de transcrição que o worker GPU abandonou e a
-resposta do chat que nenhum job vai terminar (`reap_stalled_jobs`), e relança a etapa por agente
-ou o resumo que nunca chegou à fila (`resume_pipelines`). O de `eclume:agents`
-(`ECLUME_AGENT_MAX_JOBS` vagas) roda as etapas por agente do pipeline (`detect_agenda_type`,
-`fill_fields` e o resumo automático), gera os resumos (`summarize`), responde os chats e as
-pré-visualizações: a ingestão nunca espera atrás de uma chamada a agente. Contrato em
-docs/standards/api/jobs-transcricao.md e docs/standards/code/processamento-automatico.md.
+The `eclume:default` one consumes what the GPU worker enqueues at the end of a `transcribe` —
+`ingest_transcript` and `transcription_failed` —, purges the embeddings and runs the crons: it
+discards expired uploads, marks as a recoverable failure the transcription job the GPU worker
+abandoned and the chat reply no job will finish (`reap_stalled_jobs`), and relaunches the agent
+step or the summary that never reached the queue (`resume_pipelines`). The `eclume:agents` one
+(`ECLUME_AGENT_MAX_JOBS` slots) runs the pipeline's agent steps (`detect_agenda_type`,
+`fill_fields` and the automatic summary), generates the summaries (`summarize`), and answers the
+chats and the previews: ingestion never waits behind an agent call. Contract in
+docs/standards/api/jobs-transcricao.md and docs/standards/code/processamento-automatico.md.
 """
 
 from __future__ import annotations
@@ -71,29 +71,29 @@ log = logging.getLogger("eclume_server.worker")
 AGENT_ACTION_TIMEOUT_S = 600
 SUMMARIZE_TIMEOUT_S = 30 * 60
 SUMMARIZE_MAX_TRIES = 500
-# Vagas do worker de `eclume:default` (o padrão do arq, explícito): só ingestão, falhas e varreduras.
+# Slots of the `eclume:default` worker (arq's default, made explicit): only ingestion, failures and sweeps.
 DEFAULT_MAX_JOBS = 10
 DEFAULT_POLL_DELAY_S = 2.0
 AGENT_POLL_DELAY_S = 1.0
-# Falha passageira de Postgres ou S3 nos jobs de retorno do worker GPU: 3 novas tentativas com
-# espera crescente (315 s no total, abaixo de `job_stall_seconds`, para o reaper não decidir antes).
+# Transient Postgres or S3 failure in the GPU worker's return jobs: 3 retries with a growing
+# delay (315 s in total, below `job_stall_seconds`, so the reaper does not decide first).
 INGEST_RETRY_DELAYS_S = (15, 60, 240)
 RETURN_MAX_TRIES = len(INGEST_RETRY_DELAYS_S) + 1
-# Códigos de pareamento vencidos sem uso somem depois disso (cron `expire_pairing_codes`).
+# Expired, unused pairing codes are removed after this (cron `expire_pairing_codes`).
 PAIRING_RETENTION = timedelta(days=1)
-# Sessões (de usuário e de admin) vencidas há mais disso somem (cron `purge_expired`).
+# Sessions (user and admin) expired for longer than this are removed (cron `purge_expired`).
 SESSION_RETENTION = timedelta(days=1)
-# Uploads terminais com mais disso somem: um app que retome depois recebe 404 e abre outro, que cai
-# no dedup por hash da gravação.
+# Terminal uploads older than this are removed: an app that resumes later gets a 404 and opens
+# another one, which falls into the recording's hash dedup.
 UPLOAD_RETENTION = timedelta(days=30)
 TERMINAL_UPLOADS = ("completed", "deduplicated", "aborted", "expired")
 
 
 async def startup(ctx: dict[str, Any]) -> None:
-    """Log, engine e storage do processo; `ctx["settings"]` substitui o ambiente (testes).
+    """The process's logging, engine and storage; `ctx["settings"]` overrides the environment (tests).
 
-    Um `engine` e um `storage` já no `ctx` (o worker único os compartilha entre as filas) ficam
-    como estão, e quem os criou é quem os fecha.
+    An `engine` and a `storage` already in `ctx` (the single worker shares them between the
+    queues) are left as they are, and whoever created them closes them.
     """
     configurar_logs()
     settings: Settings = ctx.get("settings") or get_settings()
@@ -105,15 +105,15 @@ async def startup(ctx: dict[str, Any]) -> None:
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
-    """Fecha o pool do banco, se foi este worker que o abriu."""
+    """Close the database pool, if this worker opened it."""
     if ctx.get("engine_owned"):
         await ctx["engine"].dispose()
 
 
 async def job_start(ctx: dict[str, Any]) -> None:
-    """Põe `job_id`, `recording_id` e `revision` no contexto de log do job que vai rodar.
+    """Put `job_id`, `recording_id` and `revision` in the log context of the job about to run.
 
-    O arq chama isto na task do job, antes da função; o contexto vale só para aquele job.
+    arq calls this in the job's task, before the function; the context holds for that job only.
     """
     contexto_do_job(ctx.get("job_id"))
 
@@ -125,15 +125,15 @@ async def ingest_transcript(
     embeddings_key: str | None,
     engine_info: dict[str, Any] | None,
 ) -> str:
-    """Persiste a transcrição produzida pelo worker GPU e marca a gravação como `transcribed`.
+    """Persist the transcript produced by the GPU worker and mark the recording as `transcribed`.
 
-    A revisão vem do `_job_id` (`ingest_transcript:{recording_id}:{revision}`); sem ela (worker
-    antigo), vale o job mais recente. A mensagem de uma revisão que não está mais em aberto é
-    ignorada. Uma ingestão que falha desfaz a transação inteira; numa transação nova, o job e a
-    gravação viram falha recuperável `ingest_failed`, para a gravação não ficar presa na fila.
-    Só quem fecha o job apaga o hash de progresso. A falha passageira de Postgres ou S3 volta à
-    fila antes disso (`INGEST_RETRY_DELAYS_S`); a definitiva, ou a passageira que dura todas as
-    tentativas, vira `ingest_failed`.
+    The revision comes from the `_job_id` (`ingest_transcript:{recording_id}:{revision}`); without
+    it (an old worker), the most recent job holds. The message of a revision that is no longer open
+    is ignored. A failing ingestion rolls back the whole transaction; in a new transaction, the job
+    and the recording become the recoverable failure `ingest_failed`, so the recording does not stay
+    stuck in the queue. Only whoever closes the job deletes the progress hash. A transient Postgres
+    or S3 failure goes back to the queue before that (`INGEST_RETRY_DELAYS_S`); a permanent one, or
+    a transient one that outlasts every attempt, becomes `ingest_failed`.
     """
     job_revision = return_revision("ingest_transcript", recording_id, ctx.get("job_id"))
     try:
@@ -150,7 +150,7 @@ async def ingest_transcript(
             revision = await current_revision(conn, UUID(recording_id))
     except Exception as exc:
         _retry_if_transient(ctx, "ingest_transcript", recording_id, exc)
-        log.exception("ingest_transcript %s (revisão %s): a ingestão falhou", recording_id, job_revision)
+        log.exception("ingest_transcript %s (revision %s): ingestion failed", recording_id, job_revision)
         async with system_tx(ctx["engine"]) as conn:
             result = await fail(conn, UUID(recording_id), INGEST_FAILED, INGEST_FAILED_MESSAGE, revision=job_revision)
         if result.closed:
@@ -161,27 +161,27 @@ async def ingest_transcript(
     if outcome.persisted or outcome.gone:
         await ctx["redis"].delete(progress_key(recording_id))
     if outcome.gone:
-        # Excluída durante a transcrição: os artefatos que o worker GPU acabou de gravar não ficam.
+        # Deleted during transcription: the artifacts the GPU worker just wrote do not stay.
         await ctx["storage"].delete_artifacts(recording_id)
     elif outcome.persisted:
         await _keep_only_revision(ctx["storage"], recording_id, outcome.revision)
-        # A cadeia por agente começa pelo tipo, só quando esta ingestão gravou a transcrição e nenhum
-        # locutor espera ser nomeado (a rota que o nomeia enfileira o tipo).
+        # The agent chain starts with the type, only when this ingestion wrote the transcript and no
+        # speaker is waiting to be named (the route that names it enqueues the type).
         if not outcome.waiting:
             await _enqueue_step(ctx, "detect_agenda_type", recording_id, revision)
     log.info("ingest_transcript %s: %s", recording_id, outcome.message)
-    # A GPU ficou livre para esta conta: o próximo job retido dela entra na fila.
+    # The GPU is free for this account: its next held job enters the queue.
     await next_for_recording(ctx["engine"], ctx["redis"], recording_id)
     return outcome.message
 
 
 def _retry_if_transient(ctx: dict[str, Any], job: str, recording_id: str, exc: Exception) -> None:
-    """Levanta `Retry` (fora da transação) se a falha é passageira e ainda há tentativa."""
+    """Raise `Retry` (outside the transaction) if the failure is transient and an attempt is left."""
     delays = ctx.get("ingest_retry_delays", INGEST_RETRY_DELAYS_S)
     attempt = ctx.get("job_try", 1)
     if attempt <= len(delays) and is_transient(exc):
         log.warning(
-            "%s %s: falha passageira na tentativa %d (%s: %s); tenta de novo",
+            "%s %s: transient failure on attempt %d (%s: %s); retrying",
             job,
             recording_id,
             attempt,
@@ -192,16 +192,16 @@ def _retry_if_transient(ctx: dict[str, Any], job: str, recording_id: str, exc: E
 
 
 async def _keep_only_revision(storage: Storage, recording_id: str, revision: int | None) -> None:
-    """Depois do commit, o bucket guarda só os artefatos da revisão gravada; falhar aqui só vai ao log.
+    """After the commit, the bucket keeps only the stored revision's artifacts; a failure here only goes to the log.
 
-    O que sobrar sai na próxima ingestão ou na exclusão da gravação.
+    Whatever is left is removed on the next ingestion or when the recording is deleted.
     """
     if revision is None:
         return
     try:
         await storage.delete_other_revisions(recording_id, revision)
     except Exception:
-        log.exception("ingest_transcript %s: a limpeza das outras revisões falhou", recording_id)
+        log.exception("ingest_transcript %s: cleaning up the other revisions failed", recording_id)
 
 
 async def _enqueue_step(ctx: dict[str, Any], job: str, recording_id: str, revision: int) -> None:
@@ -217,17 +217,17 @@ async def _run_step(
     revision: int,
     run: Callable[[dict[str, Any], UUID, int], Awaitable[str]],
 ) -> str:
-    """Roda a etapa por agente; uma falha inesperada fora da chamada ao agente deixa a etapa `failed`.
+    """Run the agent step; an unexpected failure outside the agent call leaves the step `failed`.
 
-    O `Retry` (falha passageira do agente) volta à fila como sempre; o resto vira `internal_error`,
-    e quem chamou segue a cadeia.
+    A `Retry` (a transient agent failure) goes back to the queue as always; anything else becomes
+    `internal_error`, and the caller continues the chain.
     """
     try:
         return await run(ctx, UUID(recording_id), revision)
     except Retry:
         raise
     except Exception as exc:
-        log.exception("etapa %s de %s (revisão %d): falha inesperada", step, recording_id, revision)
+        log.exception("step %s of %s (revision %d): unexpected failure", step, recording_id, revision)
         async with system_tx(ctx["engine"]) as conn:
             recording = (
                 (
@@ -249,23 +249,23 @@ async def _run_step(
 
 
 async def detect_agenda_type(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
-    """Escolhe e aplica o tipo de agenda da revisão (ou o de reserva) e segue para os campos."""
+    """Choose and apply the revision's agenda type (or the fallback one) and move on to the fields."""
     result = await _run_step(ctx, "agenda_type", recording_id, revision, run_detect)
     if result not in {GONE, STALE}:
-        # Pulada ou falha, a gravação fica com o tipo de reserva: o resumo sempre tem um tipo. Nem uma
-        # falha aqui para a cadeia.
+        # Skipped or failed, the recording gets the fallback type: the summary always has a type. Not
+        # even a failure here stops the chain.
         try:
             async with system_tx(ctx["engine"]) as conn:
                 await ensure_type(conn, UUID(recording_id))
         except Exception:
-            log.exception("detect_agenda_type %s: o tipo de reserva não foi aplicado", recording_id)
+            log.exception("detect_agenda_type %s: the fallback type was not applied", recording_id)
         await _enqueue_step(ctx, "fill_fields", recording_id, revision)
-    log.info("detect_agenda_type %s (revisão %d): %s", recording_id, revision, result)
+    log.info("detect_agenda_type %s (revision %d): %s", recording_id, revision, result)
     return result
 
 
 async def fill_fields(ctx: dict[str, Any], recording_id: str, revision: int) -> str:
-    """Preenche os campos automáticos da revisão e abre o resumo automático pelo tipo."""
+    """Fill the revision's automatic fields and open the automatic summary for the type."""
     result = await _run_step(ctx, "fields", recording_id, revision, run_fill_fields)
     if result not in {GONE, STALE}:
         async with system_tx(ctx["engine"]) as conn:
@@ -273,18 +273,18 @@ async def fill_fields(ctx: dict[str, Any], recording_id: str, revision: int) -> 
         if summary_id is not None:
             await enqueue_summary(ctx["redis"], summary_id)
             result += f"; resumo automático {summary_id} na fila"
-    log.info("fill_fields %s (revisão %d): %s", recording_id, revision, result)
+    log.info("fill_fields %s (revision %d): %s", recording_id, revision, result)
     return result
 
 
 async def transcription_failed(
     ctx: dict[str, Any], recording_id: str, error_code: str, message: str, stage: str | None = None
 ) -> str:
-    """Marca o job da revisão e a gravação como falhos; `stage` (worker novo) diz a etapa que falhou.
+    """Mark the revision's job and the recording as failed; `stage` (a new worker) names the failed stage.
 
-    A revisão vem do `_job_id` (`transcription_failed:{recording_id}:{revision}`), como na ingestão.
-    A falha passageira de Postgres volta à fila como na ingestão; esgotadas as tentativas, relança, e
-    o reaper cobre o job.
+    The revision comes from the `_job_id` (`transcription_failed:{recording_id}:{revision}`), as in
+    ingestion. A transient Postgres failure goes back to the queue as in ingestion; once the attempts
+    run out, it re-raises, and the reaper covers the job.
     """
     revision = return_revision("transcription_failed", recording_id, ctx.get("job_id"))
     started_at = await ctx["redis"].hget(progress_key(recording_id), "started_at")
@@ -300,18 +300,19 @@ async def transcription_failed(
         raise
     if result.closed:
         await ctx["redis"].delete(progress_key(recording_id))
-    log.info("transcription_failed %s (revisão %s): %s", recording_id, revision, result.message)
+    log.info("transcription_failed %s (revision %s): %s", recording_id, revision, result.message)
     await next_for_recording(ctx["engine"], ctx["redis"], recording_id)
     return result.message
 
 
 async def purge_embedding_objects(ctx: dict[str, Any], owner_id: str | None = None) -> int:
-    """Apaga do bucket os `speaker_embeddings.json`: de toda a plataforma ou só da conta.
+    """Delete the `speaker_embeddings.json` files from the bucket: for the whole platform or one account only.
 
-    Sem dono (voz desligada na plataforma), lista `recordings/`: alcança toda revisão e as chaves
-    antigas sem revisão; nada é apagado se a identificação por voz tiver sido religada nesse
-    meio-tempo. Com dono (a conta deixou de guardar amostras), só as gravações da conta, e nada se
-    ela voltou a guardar. Um job antigo, sem argumento, segue valendo para a plataforma.
+    Without an owner (voice turned off on the platform), it lists `recordings/`: it reaches every
+    revision and the old keys without a revision; nothing is deleted if voice identification was
+    turned back on in the meantime. With an owner (the account stopped keeping samples), only the
+    account's recordings, and nothing if it keeps them again. An old job, with no argument, still
+    applies to the platform.
     """
     async with system_tx(ctx["engine"]) as conn:
         if owner_id is None:
@@ -330,14 +331,14 @@ async def purge_embedding_objects(ctx: dict[str, Any], owner_id: str | None = No
 
 
 async def summarize(ctx: dict[str, Any], summary_id: str) -> str:
-    """Gera um resumo (docs/standards/code/server-agentes.md)."""
+    """Generate a summary (docs/standards/code/server-agentes.md)."""
     result = await run_summary(ctx, UUID(summary_id))
     log.info("summarize %s: %s", summary_id, result)
     return result
 
 
 async def summary_chat(ctx: dict[str, Any], message_id: str) -> str:
-    """Responde um pedido do chat de ajuste do resumo (docs/standards/code/server-agentes.md)."""
+    """Answer a request of the summary's adjustment chat (docs/standards/code/server-agentes.md)."""
     result = await run_summary_chat(ctx, UUID(message_id))
     log.info("summary_chat %s: %s", message_id, result)
     return result
@@ -349,28 +350,28 @@ async def agent_turn(
     transcripts: bool = True,  # noqa: FBT001, FBT002
     scopes: list[str] | None = None,
 ) -> str:
-    """Responde uma pergunta do Agente (docs/standards/code/server-agentes.md §Agente)."""
+    """Answer a question to the Agent (docs/standards/code/server-agentes.md `§Agente`)."""
     result = await run_agent_turn_job(ctx, message_id, transcripts, scopes)
     log.info("agent_turn %s: %s", message_id, result)
     return result
 
 
 async def agent_action(ctx: dict[str, Any], action_id: str, attempt: int = 0) -> str:
-    """Executa uma ação confirmada do Agente, alvo a alvo (docs/standards/code/server-agentes.md §Agente)."""
+    """Run a confirmed Agent action, target by target (docs/standards/code/server-agentes.md `§Agente`)."""
     result = await run_agent_action_job(ctx, action_id, attempt)
     log.info("agent_action %s: %s", action_id, result)
     return result
 
 
 async def base_chat(ctx: dict[str, Any], chat_id: str) -> str:
-    """Responde uma pergunta do chat sobre a base (docs/standards/code/server-agentes.md)."""
+    """Answer a question of the base chat (docs/standards/code/server-agentes.md)."""
     result = await run_base_chat_job(ctx, chat_id)
     log.info("base_chat %s: %s", chat_id, result)
     return result
 
 
 async def expire_uploads(ctx: dict[str, Any]) -> int:
-    """Aborta os uploads em andamento que passaram do prazo."""
+    """Abort the in-progress uploads that are past their deadline."""
     now = datetime.now(UTC)
     async with system_tx(ctx["engine"]) as conn:
         rows = (
@@ -391,9 +392,9 @@ async def expire_uploads(ctx: dict[str, Any]) -> int:
 
 
 async def purge_pairing_codes(conn: AsyncConnection, now: datetime | None = None) -> int:
-    """Apaga os códigos de pareamento vencidos sem uso há mais de `PAIRING_RETENTION`.
+    """Delete the pairing codes expired without use for longer than `PAIRING_RETENTION`.
 
-    Fica aqui, e não em `devices.py`, porque aquele importa `routes` e o worker não carrega a API.
+    It lives here, not in `devices.py`, because that one imports `routes` and the worker does not load the API.
     """
     cutoff = (now or datetime.now(UTC)) - PAIRING_RETENTION
     codes = t.pairing_codes
@@ -402,13 +403,13 @@ async def purge_pairing_codes(conn: AsyncConnection, now: datetime | None = None
 
 
 async def expire_pairing_codes(ctx: dict[str, Any]) -> int:
-    """Cron: os códigos vencidos sem uso somem; os usados ficam com o `token_id`."""
+    """Cron: expired unused codes are removed; used ones stay with their `token_id`."""
     async with system_tx(ctx["engine"]) as conn:
         return await purge_pairing_codes(conn)
 
 
 async def purge_stale_rows(conn: AsyncConnection, now: datetime | None = None) -> dict[str, int]:
-    """Apaga sessões vencidas há mais de `SESSION_RETENTION` e uploads terminais com mais de `UPLOAD_RETENTION`."""
+    """Delete sessions expired for longer than `SESSION_RETENTION` and terminal uploads older than `UPLOAD_RETENTION`."""
     now = now or datetime.now(UTC)
     removed = {}
     for table in (t.sessions, t.admin_sessions):
@@ -423,7 +424,7 @@ async def purge_stale_rows(conn: AsyncConnection, now: datetime | None = None) -
 
 
 async def purge_expired(ctx: dict[str, Any]) -> int:
-    """Cron diário: retenção mínima de sessões e uploads; `api_tokens` ficam (o usuário vê os revogados)."""
+    """Daily cron: minimum retention of sessions and uploads; `api_tokens` stay (the user sees the revoked ones)."""
     async with system_tx(ctx["engine"]) as conn:
         removed = await purge_stale_rows(conn)
     log.info("purge_expired: %s", removed)
@@ -436,57 +437,57 @@ async def purge_audio(ctx: dict[str, Any]) -> int:
 
 
 async def reap_stalled_jobs(ctx: dict[str, Any]) -> int:
-    """Marca como falha os jobs de transcrição e as respostas do chat que ninguém mais vai terminar."""
+    """Mark as failed the transcription jobs and chat replies that nobody will finish anymore."""
     reaped = await reap(ctx["engine"], ctx["redis"], ctx["settings"])
     return len(reaped) + await reap_stalled_chats(ctx["engine"])
 
 
 async def dispatch_transcriptions(ctx: dict[str, Any]) -> int:
-    """Rede do despacho na vez da conta: põe na GPU o job retido de quem não tem outro lá."""
+    """Safety net of the per-account turn dispatch: put on the GPU the held job of an account with none there."""
     return len(await dispatch_waiting(ctx["engine"], ctx["redis"]))
 
 
 async def drain_storage_deletions(ctx: dict[str, Any]) -> int:
-    """Tira do bucket o que a fila de exclusão guarda (`storage_deletions.py`)."""
+    """Remove from the bucket what the deletion queue holds (`storage_deletions.py`)."""
     return await drain(ctx["engine"], ctx["storage"])
 
 
 async def reconcile_storage(ctx: dict[str, Any]) -> int:
-    """Põe na fila de exclusão o que está no bucket sem linha no banco há mais de 24 h."""
+    """Put in the deletion queue what has been in the bucket without a database row for more than 24 h."""
     return await reconcile(ctx["engine"], ctx["storage"])
 
 
 async def resume_pipelines(ctx: dict[str, Any]) -> int:
-    """Relança as etapas por agente e os resumos que nunca chegaram à fila (`resume.py`)."""
+    """Relaunch the agent steps and summaries that never reached the queue (`resume.py`)."""
     return len(await resume(ctx["engine"], ctx["redis"]))
 
 
 def _agent_functions() -> list[Any]:
     return [
-        # As tentativas são contadas no banco (`summaries.attempts`); o arq só precisa não
-        # desistir antes, e esperar a GPU (Ollama) re-enfileira sem gastar tentativa.
+        # Attempts are counted in the database (`summaries.attempts`); arq only needs not to give
+        # up first, and waiting for the GPU (Ollama) re-enqueues without spending an attempt.
         func(summarize, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
-        # As etapas por agente contam as tentativas na `detail` da etapa, como o resumo no banco.
+        # The agent steps count their attempts in the step's `detail`, as the summary does in the database.
         func(fill_fields, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
         func(detect_agenda_type, timeout=SUMMARIZE_TIMEOUT_S, max_tries=SUMMARIZE_MAX_TRIES),
         func(run_preview, timeout=SUMMARIZE_TIMEOUT_S),
-        # Acima do teto do laço, para a resposta terminar `failed` e não presa em `running`; uma
-        # nova tentativa só (contada em `summary_chat_messages.attempts`).
+        # Above the loop's ceiling, so the reply ends `failed` and not stuck in `running`; a single
+        # retry (counted in `summary_chat_messages.attempts`).
         func(summary_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=3),
-        # Sem nova tentativa: o estado vive no Redis e a pessoa pergunta de novo.
+        # No retry: the state lives in Redis and the person asks again.
         func(base_chat, timeout=CHAT_TIMEOUT_S + 60, max_tries=1),
-        # Sem nova tentativa: a resposta termina `failed` e a pessoa pergunta de novo.
+        # No retry: the reply ends `failed` and the person asks again.
         func(agent_turn, timeout=CHAT_TIMEOUT_S + 60, max_tries=1),
-        # Até 50 alvos, cada um numa transação curta; o resultado por alvo torna a repetição segura.
+        # Up to 50 targets, each in a short transaction; the per-target result makes a retry safe.
         func(agent_action, timeout=AGENT_ACTION_TIMEOUT_S, max_tries=3),
     ]
 
 
 def worker_settings(settings: Settings) -> dict[str, Any]:
-    """Parâmetros do `arq.Worker` de `eclume:default` para esta configuração."""
+    """Parameters of the `eclume:default` `arq.Worker` for this configuration."""
     return {
         "functions": [
-            # Só a falha passageira volta à fila (`Retry`); o resto termina na primeira tentativa.
+            # Only a transient failure goes back to the queue (`Retry`); the rest ends on the first attempt.
             func(ingest_transcript, max_tries=RETURN_MAX_TRIES),
             func(transcription_failed, max_tries=RETURN_MAX_TRIES),
             purge_embedding_objects,
@@ -496,9 +497,9 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
             cron(expire_pairing_codes, minute=15, run_at_startup=False, unique=True),
             cron(purge_expired, hour=3, minute=40, run_at_startup=False, unique=True),
             cron(purge_audio, hour=3, minute=50, run_at_startup=False, unique=True),
-            # A cada minuto; `unique` evita duas varreduras sobrepostas com dois workers CPU.
+            # Every minute; `unique` prevents two overlapping sweeps with two CPU workers.
             cron(reap_stalled_jobs, second=0, run_at_startup=False, unique=True),
-            # O job retido cujo despacho não veio (reaper, cancelamento, exclusão, janela de minutos).
+            # The held job whose dispatch never came (reaper, cancellation, deletion, minutes window).
             cron(dispatch_transcriptions, second=15, run_at_startup=False, unique=True),
             cron(resume_pipelines, minute=set(range(2, 60, 5)), run_at_startup=False, unique=True),
             cron(drain_storage_deletions, second=30, run_at_startup=False, unique=True),
@@ -506,30 +507,30 @@ def worker_settings(settings: Settings) -> dict[str, Any]:
         ],
         "queue_name": DEFAULT_QUEUE,
         "max_jobs": DEFAULT_MAX_JOBS,
-        # A fila default tem pouco tráfego e as varreduras mais finas são de 15 s: sondar a cada 2 s basta.
+        # The default queue has little traffic and the finest sweeps are 15 s: polling every 2 s is enough.
         "poll_delay": DEFAULT_POLL_DELAY_S,
-        # A chave de health-check do arq (`eclume:default:health-check`) é a sonda da Saúde.
+        # arq's health-check key (`eclume:default:health-check`) is the Health probe.
         "health_check_interval": 15,
         "redis_settings": RedisSettings.from_dsn(settings.redis_url),
         "on_startup": startup,
         "on_shutdown": shutdown,
         "on_job_start": job_start,
         "ctx": {"settings": settings},
-        # Fase A da fila sem pickle: lê JSON e o pickle antigo sem globais.
+        # Phase A of the pickle-free queue: reads JSON and the old pickle without globals.
         "job_deserializer": desserializar,
     }
 
 
 def agent_worker_settings(settings: Settings) -> dict[str, Any]:
-    """Parâmetros do `arq.Worker` de `eclume:agents`: os jobs por agente, sem crons."""
+    """Parameters of the `eclume:agents` `arq.Worker`: the agent jobs, without crons."""
     return {
         "functions": _agent_functions(),
         "cron_jobs": None,
         "queue_name": AGENT_QUEUE,
         "max_jobs": settings.agent_max_jobs,
-        # O Agente é interativo (chat, ações): 1 s de espera pelo primeiro job é o teto aceito.
+        # The Agent is interactive (chat, actions): 1 s of wait for the first job is the accepted ceiling.
         "poll_delay": AGENT_POLL_DELAY_S,
-        # `eclume:agents:health-check`, a segunda chave da sonda `cpu_worker` da Saúde.
+        # `eclume:agents:health-check`, the second key of the Health `cpu_worker` probe.
         "health_check_interval": 15,
         "redis_settings": RedisSettings.from_dsn(settings.redis_url),
         "on_startup": startup,
@@ -545,7 +546,7 @@ _AGENTS_FROM_ENV = agent_worker_settings(get_settings())
 
 
 class WorkerSettings:
-    """Entrada do CLI do arq; lê `ECLUME_*` do ambiente na importação."""
+    """Entry point of the arq CLI; reads `ECLUME_*` from the environment on import."""
 
     functions = _FROM_ENV["functions"]
     cron_jobs = _FROM_ENV["cron_jobs"]
@@ -562,7 +563,7 @@ class WorkerSettings:
 
 
 class AgentWorkerSettings:
-    """Entrada do CLI do arq para o worker de agentes (`arq eclume_server.worker.AgentWorkerSettings`)."""
+    """Entry point of the arq CLI for the agent worker (`arq eclume_server.worker.AgentWorkerSettings`)."""
 
     functions = _AGENTS_FROM_ENV["functions"]
     cron_jobs = _AGENTS_FROM_ENV["cron_jobs"]
@@ -579,23 +580,23 @@ class AgentWorkerSettings:
 
 
 async def _run_worker(worker: Worker) -> None:
-    """Roda um `arq.Worker` até o fim ou até o sinal de parada, e o fecha."""
+    """Run an `arq.Worker` until it ends or until the stop signal, and close it."""
     try:
         await worker.async_run()
     except asyncio.CancelledError:
-        pass  # o `handle_sig` cancelou o laço: parada pedida
+        pass  # `handle_sig` cancelled the loop: a stop was requested
     finally:
         await worker.close()
 
 
 async def run_combined(settings: Settings | None = None) -> None:
-    """Roda os workers de `eclume:default` e de `eclume:agents` no mesmo event loop.
+    """Run the `eclume:default` and `eclume:agents` workers in the same event loop.
 
-    Cada fila mantém as próprias vagas (`max_jobs`), funções, crons e chave de health-check; o
-    engine do banco e o armazenamento são um só. SIGTERM e SIGINT vão aos dois workers
-    (`handle_signals=False`: o arq não registra handler por conta própria, para não valer só o do
-    último). Sai quando os dois terminaram; se um deles cai com exceção, o outro é parado e a
-    exceção sobe.
+    Each queue keeps its own slots (`max_jobs`), functions, crons and health-check key; the database
+    engine and the storage are shared. SIGTERM and SIGINT go to both workers
+    (`handle_signals=False`: arq registers no handler of its own, so that not only the last one's
+    holds). It exits when both have finished; if one of them dies with an exception, the other is
+    stopped and the exception propagates.
     """
     settings = settings or get_settings()
     engine = make_runtime_engine(settings, worker=True)
@@ -616,7 +617,7 @@ async def run_combined(settings: Settings | None = None) -> None:
     tasks = [asyncio.create_task(_run_worker(worker)) for worker in workers]
     try:
         _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
-        if pending:  # um dos workers caiu: o outro não fica sozinho
+        if pending:  # one of the workers died: the other does not stay alone
             stop(signal.SIGTERM)
         await asyncio.gather(*tasks)
     finally:
@@ -626,5 +627,5 @@ async def run_combined(settings: Settings | None = None) -> None:
 
 
 def main() -> None:
-    """Entrada de `eclume-server worker`."""
+    """Entry point of `eclume-server worker`."""
     asyncio.run(run_combined())

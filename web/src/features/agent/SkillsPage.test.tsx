@@ -8,7 +8,7 @@ import { preloadRoute, renderApp } from '../../test/render'
 beforeAll(() => preloadRoute('/agente/habilidades'))
 afterEach(() => vi.unstubAllGlobals())
 
-const ata = {
+const minutesSkill = {
   id: '01928f3a-1c00-7a00-8000-000000000b01',
   name: 'ata',
   description: 'Escreve a ata de uma reunião com decisões e prazos.',
@@ -27,17 +27,17 @@ const tools = [
 function mockSkills(extra: Parameters<typeof mockFetch>[0] = {}) {
   return mockFetch({
     'GET /api/v1/me': () => fixtures.me(),
-    'GET /api/v1/agent/skills': () => ({ items: [ata] }),
+    'GET /api/v1/agent/skills': () => ({ items: [minutesSkill] }),
     'GET /api/v1/agent/tools': () => ({ items: tools }),
-    'POST /api/v1/agent/skills': async (request: Request) => ({ ...ata, ...(await request.json()), id: 'nova' }),
-    'PATCH /api/v1/agent/skills/:id': async (request: Request) => ({ ...ata, ...(await request.json()) }),
+    'POST /api/v1/agent/skills': async (request: Request) => ({ ...minutesSkill, ...(await request.json()), id: 'nova' }),
+    'PATCH /api/v1/agent/skills/:id': async (request: Request) => ({ ...minutesSkill, ...(await request.json()) }),
     'DELETE /api/v1/agent/skills/:id': () => empty(),
     ...extra,
   })
 }
 
-describe('Habilidades', () => {
-  it('lista as habilidades e está no grupo Agente do menu', async () => {
+describe('Skills', () => {
+  it('lists the skills and sits in the Agente menu group', async () => {
     mockSkills()
     renderApp('/agente/habilidades')
     expect(await screen.findByRole('heading', { level: 1, name: 'Habilidades' })).toBeInTheDocument()
@@ -51,7 +51,7 @@ describe('Habilidades', () => {
     expect(within(nav).getByRole('link', { name: 'Agente' })).not.toHaveAttribute('aria-current')
   })
 
-  it('cria uma habilidade com as ferramentas permitidas', async () => {
+  it('creates a skill with the allowed tools', async () => {
     const http = mockSkills()
     renderApp('/agente/habilidades')
     await userEvent.click(await screen.findByRole('button', { name: 'Nova habilidade' }))
@@ -72,7 +72,7 @@ describe('Habilidades', () => {
     })
   })
 
-  it('recusa nome fora do padrão antes de enviar', async () => {
+  it('rejects a name outside the pattern before sending', async () => {
     mockSkills()
     renderApp('/agente/habilidades')
     await userEvent.click(await screen.findByRole('button', { name: 'Nova habilidade' }))
@@ -82,7 +82,7 @@ describe('Habilidades', () => {
     expect(within(dialog).getByRole('button', { name: 'Salvar' })).toBeDisabled()
   })
 
-  it('desliga e exclui depois de confirmar', async () => {
+  it('disables and deletes after confirming', async () => {
     const http = mockSkills()
     renderApp('/agente/habilidades')
     await userEvent.click(await screen.findByRole('button', { name: 'Desligar /ata' }))
@@ -95,7 +95,7 @@ describe('Habilidades', () => {
     await waitFor(() => expect(http.requests('DELETE /api/v1/agent/skills/:id')).toHaveLength(1))
   })
 
-  it('sem habilidade, explica como criar', async () => {
+  it('with no skill, explains how to create one', async () => {
     mockSkills({ 'GET /api/v1/agent/skills': () => ({ items: [] }) })
     renderApp('/agente/habilidades')
     expect(await screen.findByText(/Nenhuma habilidade ainda/)).toBeInTheDocument()

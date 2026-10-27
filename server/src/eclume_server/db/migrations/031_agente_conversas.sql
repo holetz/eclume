@@ -1,12 +1,12 @@
--- 031_agente_conversas — as conversas do Agente, com as mensagens e os arquivos (holetz/eclume#142).
+-- 031_agente_conversas — the Agent's conversations, with the messages and the files (holetz/eclume#142).
 --
--- `agent_sessions` é uma conversa do usuário (título e última atividade em `updated_at`);
--- `agent_messages` guarda a pergunta (`user`, sempre `done`) e a resposta (`assistant`, que o job
--- `agent_turn` leva de `queued` a `done` ou `failed`, com as fontes e o modelo); `agent_files` guarda
--- os anexos (`input`, com o texto extraído) e os arquivos que o agente gerou (`output`), cujo
--- conteúdo mora no bucket em `storage_key`. As três vivem sob a RLS do dono. Um arquivo que sai
--- (a conversa excluída, em cascata, ou a conta) leva o objeto do bucket pela fila da 024.
--- Regras em docs/standards/code/server-agentes.md §Agente.
+-- `agent_sessions` is a user conversation (title and last activity in `updated_at`);
+-- `agent_messages` keeps the question (`user`, always `done`) and the answer (`assistant`, which the
+-- `agent_turn` job takes from `queued` to `done` or `failed`, with the sources and the model); `agent_files` keeps
+-- the attachments (`input`, with the extracted text) and the files the agent generated (`output`), whose
+-- content lives in the bucket at `storage_key`. All three live under the owner's RLS. A file that goes
+-- (the conversation deleted, by cascade, or the account) takes the bucket object through the 024 queue.
+-- Rules in docs/standards/code/server-agentes.md `§Agente`.
 
 CREATE TABLE agent_sessions (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -31,21 +31,21 @@ CREATE TABLE agent_messages (
     created_at  timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 CREATE INDEX agent_messages_session_idx ON agent_messages (session_id, created_at, id);
--- As respostas em aberto da conta (o limite de pedidos simultâneos).
+-- The account's open answers (the concurrent request limit).
 CREATE INDEX agent_messages_open_idx ON agent_messages (owner_id) WHERE status IN ('queued', 'running');
 
 CREATE TABLE agent_files (
     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id      uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     session_id    uuid NOT NULL REFERENCES agent_sessions (id) ON DELETE CASCADE,
-    -- A mensagem que levou o anexo ou que gerou o arquivo; nulo no anexo ainda não enviado.
+    -- The message that carried the attachment or that generated the file; null on an attachment not sent yet.
     message_id    uuid REFERENCES agent_messages (id) ON DELETE SET NULL,
     direction     text NOT NULL CHECK (direction IN ('input', 'output')),
     name          text NOT NULL CHECK (name <> '' AND char_length(name) <= 200),
     media_type    text NOT NULL,
     size_bytes    bigint NOT NULL CHECK (size_bytes >= 0),
     storage_key   text NOT NULL,
-    -- O texto extraído do anexo (cortado no teto); nulo no arquivo gerado.
+    -- The text extracted from the attachment (cut at the ceiling); null on a generated file.
     text_content  text,
     created_at    timestamptz NOT NULL DEFAULT clock_timestamp()
 );
@@ -65,11 +65,11 @@ CREATE POLICY agent_messages_own ON agent_messages
 CREATE POLICY agent_files_own ON agent_files
     USING (owner_id = eclume_user()) WITH CHECK (owner_id = eclume_user());
 GRANT SELECT, INSERT, UPDATE, DELETE ON agent_sessions, agent_messages, agent_files TO eclume_app;
--- Já coberto pelo ALTER DEFAULT PRIVILEGES da 006 (mesmo migrador); repetido por clareza.
+-- Already covered by the ALTER DEFAULT PRIVILEGES of 006 (same migrator); repeated for clarity.
 GRANT SELECT, INSERT, UPDATE, DELETE ON agent_sessions, agent_messages, agent_files TO eclume_server;
 
--- O arquivo que sai leva o objeto do bucket. SECURITY DEFINER: quem exclui é o dono, sob a RLS,
--- sem acesso à fila.
+-- The file that goes takes the bucket object. SECURITY DEFINER: the deleter is the owner, under RLS,
+-- with no access to the queue.
 CREATE FUNCTION eclume_agent_file_storage_deleted() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path = public, pg_temp

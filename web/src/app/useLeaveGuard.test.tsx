@@ -34,14 +34,14 @@ function setup() {
   return router
 }
 
-describe('guarda de saída', () => {
-  it('sem alteração, sai sem perguntar', async () => {
+describe('leave guard', () => {
+  it('without changes, leaves without asking', async () => {
     setup()
     await userEvent.click(screen.getByRole('link', { name: 'Outra' }))
     expect(await screen.findByRole('heading', { name: 'Outra rota' })).toBeInTheDocument()
   })
 
-  it('com alteração, mudar só a busca não pede nada', async () => {
+  it('with changes, changing only the search asks nothing', async () => {
     const router = setup()
     await userEvent.type(screen.getByLabelText('Texto'), 'oi')
     await userEvent.click(screen.getByRole('link', { name: 'Trecho' }))
@@ -50,7 +50,7 @@ describe('guarda de saída', () => {
     expect(screen.getByLabelText('Texto')).toHaveValue('oi')
   })
 
-  it('com alteração, outra rota pede confirmação; continuar mantém, descartar sai', async () => {
+  it('with changes, another route asks for confirmation; continuing stays, discarding leaves', async () => {
     setup()
     await userEvent.type(screen.getByLabelText('Texto'), 'oi')
     await userEvent.click(screen.getByRole('link', { name: 'Outra' }))

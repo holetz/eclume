@@ -1,9 +1,9 @@
-"""Falha passageira de Postgres ou S3: o que os jobs de retorno do worker GPU tentam de novo.
+"""Transient Postgres or S3 failure: what the GPU worker's callback jobs retry.
 
-Passageira é a conexão recusada, caída ou com timeout (com o Postgres ou o S3), o pool esgotado, o
-S3 respondendo 5xx ou `SlowDown`, e o deadlock ou a falha de serialização do Postgres. O resto —
-dado inválido, JSON malformado, `NoSuchKey`, violação de integridade — é definitivo: repetir daria
-o mesmo erro. Contrato em docs/standards/api/jobs-transcricao.md §O server ingere.
+Transient means a refused, dropped or timed-out connection (to Postgres or S3), an exhausted pool,
+S3 answering 5xx or `SlowDown`, and a Postgres deadlock or serialization failure. Everything else —
+invalid data, malformed JSON, `NoSuchKey`, an integrity violation — is permanent: retrying would give
+the same error. Contract in `docs/standards/api/jobs-transcricao.md` `§O server ingere`.
 """
 
 from __future__ import annotations
@@ -15,11 +15,11 @@ from botocore.exceptions import ConnectionError as BotoConnectionError
 from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
-# SQLSTATE: conexão (classe 08), deadlock, serialização, conexões esgotadas e o servidor parando.
+# SQLSTATE: connection (class 08), deadlock, serialization, exhausted connections and the server shutting down.
 _SQLSTATE_PREFIXES = ("08", "40001", "40P01", "53300", "57P01", "57P02", "57P03")
 _S3_TRANSIENT_CODES = frozenset({"SlowDown", "RequestTimeout", "ServiceUnavailable", "InternalError"})
 _HTTP_SERVER_ERROR = 500
-# Quantos elos da cadeia de causas olhar (a cadeia pode ter ciclo).
+# How many links of the cause chain to look at (the chain may have a cycle).
 _MAX_CHAIN = 8
 
 
@@ -42,7 +42,7 @@ def _transient_one(exc: BaseException) -> bool:
 
 
 def is_transient(exc: BaseException) -> bool:
-    """Se `exc` (ou uma causa dela: `__cause__`, `orig`) é falha passageira de Postgres ou S3."""
+    """Whether `exc` (or one of its causes: `__cause__`, `orig`) is a transient Postgres or S3 failure."""
     seen: set[int] = set()
     pending: list[BaseException] = [exc]
     while pending and len(seen) < _MAX_CHAIN:

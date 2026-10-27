@@ -1,5 +1,5 @@
-// Fallback por ffmpeg.wasm. Só é alcançado por import() dinâmico: o core (~30 MB de wasm)
-// fica num chunk à parte e só é baixado quando o WebCodecs não serve.
+// ffmpeg.wasm fallback. Reached only through a dynamic import(): the core (~30 MB of wasm)
+// lives in a separate chunk and is downloaded only when WebCodecs does not work.
 import { FFFSType, FFmpeg, type LogEvent, type ProgressEvent } from '@ffmpeg/ffmpeg'
 import coreURL from '@ffmpeg/core?url'
 import wasmURL from '@ffmpeg/core/wasm?url'
@@ -25,7 +25,7 @@ export async function convertWithFfmpeg({
     logs.push(message)
     if (logs.length > LOG_TAIL) logs.shift()
   }
-  // O WORKERFS não expõe as leituras: os bytes são estimados pela razão.
+  // WORKERFS does not expose the reads: the bytes are estimated from the ratio.
   const onProgress = ({ progress: ratio }: ProgressEvent) =>
     progress.setRatio(ratio, Math.round(ratio * file.size))
   const terminate = () => ffmpeg.terminate()
@@ -35,7 +35,7 @@ export async function convertWithFfmpeg({
   try {
     await ffmpeg.load({ coreURL, wasmURL })
     await ffmpeg.createDir(INPUT_DIR)
-    // WORKERFS lê o Blob sob demanda, sem copiá-lo para a memória do wasm.
+    // WORKERFS reads the Blob on demand, without copying it into the wasm memory.
     await ffmpeg.mount(FFFSType.WORKERFS, { blobs: [{ name: 'arquivo', data: file }] }, INPUT_DIR)
     const code = await ffmpeg.exec([
       '-hide_banner',

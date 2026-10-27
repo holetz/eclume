@@ -1,4 +1,4 @@
-"""`GET /privacy`: para onde vai cada dado, pública para quem ainda vai se cadastrar."""
+"""`GET /privacy`: where each piece of data goes, public for whoever is about to sign up."""
 
 from __future__ import annotations
 
@@ -15,6 +15,6 @@ router = APIRouter()
 
 @router.get("/privacy")
 async def get_privacy_info(ctx: Annotated[AppContext, Depends(get_ctx)]) -> dict[str, Any]:
-    """O destino da transcrição e de cada finalidade de agente, conforme a configuração em vigor."""
+    """The destination of the transcription and of each agent purpose, per the configuration in force."""
     async with system_tx(ctx.engine) as conn:
         return await privacy_info(conn)

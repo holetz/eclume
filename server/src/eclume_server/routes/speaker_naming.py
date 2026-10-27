@@ -1,9 +1,9 @@
-"""Marcação obrigatória dos locutores da conta: `GET`/`PATCH /me/speaker-naming`.
+"""The account's mandatory speaker naming: `GET`/`PATCH /me/speaker-naming`.
 
-A leitura aceita PAT com `recordings:read` (os clientes mostram quantas gravações esperam); a
-escrita, só a sessão. Ligar vale para as próximas ingestões; desligar solta, na mesma transação,
-toda gravação parada da conta e enfileira a cadeia de cada uma depois do commit. Regras em
-docs/standards/code/processamento-automatico.md §Marcação dos locutores.
+Reading accepts a PAT with `recordings:read` (the clients show how many recordings are waiting);
+writing, only the session. Turning it on applies to future ingestions; turning it off releases, in
+the same transaction, every held recording of the account and enqueues the chain of each one after
+the commit. Rules in docs/standards/code/processamento-automatico.md `§Marcação dos locutores`.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ Member = Annotated[Principal, Depends(requires(session_only=True))]
 
 
 class SpeakerNamingPatch(BaseModel):
-    """Corpo do `PATCH /me/speaker-naming`."""
+    """Body of `PATCH /me/speaker-naming`."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -47,14 +47,14 @@ async def _preference_json(conn: AsyncConnection, user_id: UUID) -> dict[str, An
 
 @router.get("/me/speaker-naming")
 async def get_speaker_naming(principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Se a conta exige nomear os locutores e quantas gravações esperam por isso."""
+    """Whether the account requires naming the speakers and how many recordings are waiting for it."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await _preference_json(conn, principal.user_id)
 
 
 @router.patch("/me/speaker-naming")
 async def patch_speaker_naming(body: SpeakerNamingPatch, principal: Member, ctx: Ctx) -> dict[str, Any]:
-    """Liga ou desliga a marcação obrigatória; desligar solta as gravações paradas."""
+    """Turn mandatory naming on or off; turning it off releases the held recordings."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await conn.execute(
             update(t.users).where(t.users.c.id == principal.user_id).values(require_speaker_naming=body.required)

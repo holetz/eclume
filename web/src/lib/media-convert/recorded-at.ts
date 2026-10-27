@@ -1,25 +1,25 @@
-// O início da gravação lido do próprio arquivo, antes da conversão: o Opus convertido não carrega os
-// metadados do original. Fontes, em ordem: `creation_time` do `mvhd` (MP4, MOV, M4A), `DateUTC` do
-// Matroska/WebM, as tags de data que o Mediabunny expõe e, por fim, a data de modificação.
+// The recording start read from the file itself, before conversion: the converted Opus does not carry the
+// original's metadata. Sources, in order: the `mvhd` `creation_time` (MP4, MOV, M4A), the Matroska/WebM
+// `DateUTC`, the date tags Mediabunny exposes and, last, the modification date.
 
 export interface RecordedAt {
   at: Date
-  /** `metadata`: lida do arquivo; `file_date`: sem data no arquivo, usa a de modificação. */
+  /** `metadata`: read from the file; `file_date`: no date in the file, the modification date is used. */
   source: 'metadata' | 'file_date'
-  /** `day`: a fonte só trazia o dia; a hora veio da data de modificação ou é 12:00. */
+  /** `day`: the source carried only the day; the time came from the modification date or is 12:00. */
   precision: 'minute' | 'day'
-  /** De onde veio o valor (`mvhd`, `DateUTC`, a tag lida ou `lastModified`). */
+  /** Where the value came from (`mvhd`, `DateUTC`, the tag read or `lastModified`). */
   detail: string
 }
 
 interface ReadRecordedAtOptions {
-  /** "Agora", para descartar datas no futuro. */
+  /** "Now", to discard dates in the future. */
   now?: Date
-  /** Lê as tags de data do arquivo; o padrão usa o Mediabunny, carregado sob demanda. */
+  /** Reads the file's date tags; the default uses Mediabunny, loaded on demand. */
   readTags?: (file: Blob) => Promise<DateTag | null>
 }
 
-/** Uma data lida das tags: o texto cru (quando há) e o `Date` que o demuxer já interpretou. */
+/** A date read from the tags: the raw text (when there is one) and the `Date` the demuxer already parsed. */
 export interface DateTag {
   key: string
   raw: string | null
@@ -54,7 +54,7 @@ interface Box {
   end: number
 }
 
-/** Lê o cabeçalho de uma caixa MP4 (tamanho de 32 ou 64 bits; 0 = até o fim do pai). */
+/** Reads the header of an MP4 box (32- or 64-bit size; 0 = up to the end of the parent). */
 async function readBox(file: Blob, offset: number, parentEnd: number): Promise<Box | null> {
   if (offset + 8 > parentEnd) return null
   const header = await view(file, offset, offset + 16)
@@ -73,8 +73,8 @@ async function readBox(file: Blob, offset: number, parentEnd: number): Promise<B
 }
 
 /**
- * O `creation_time` do `moov/mvhd`, em segundos desde 1904-01-01 UTC (versões 0 e 1). Percorre as
- * caixas de topo por fatias de 16 bytes, porque o `moov` pode estar no fim do arquivo.
+ * The `moov/mvhd` `creation_time`, in seconds since 1904-01-01 UTC (versions 0 and 1). Walks the
+ * top-level boxes in 16-byte slices, because the `moov` may be at the end of the file.
  */
 export async function readMp4CreationTime(file: Blob): Promise<Date | null> {
   let offset = 0
@@ -101,12 +101,12 @@ export async function readMp4CreationTime(file: Blob): Promise<Date | null> {
   return null
 }
 
-/** O `DateUTC` (ID 0x4461, nanossegundos desde 2001-01-01 UTC) do `Info` de um Matroska ou WebM. */
+/** The `DateUTC` (ID 0x4461, nanoseconds since 2001-01-01 UTC) of a Matroska or WebM `Info`. */
 export async function readMatroskaDate(file: Blob): Promise<Date | null> {
   const data = await view(file, 0, MATROSKA_SCAN_BYTES)
   if (data.byteLength < 4 || data.getUint32(0) !== 0x1a45dfa3) return null
   for (let index = 4; index + 11 <= data.byteLength; index++) {
-    // ID de 2 bytes seguido do tamanho 8 em VINT de 1 byte (0x88).
+    // 2-byte ID followed by size 8 as a 1-byte VINT (0x88).
     if (data.getUint8(index) === 0x44 && data.getUint8(index + 1) === 0x61 && data.getUint8(index + 2) === 0x88) {
       const nanoseconds = data.getBigInt64(index + 3)
       return new Date(MATROSKA_EPOCH_MS + Number(nanoseconds / 1_000_000n))
@@ -118,7 +118,7 @@ export async function readMatroskaDate(file: Blob): Promise<Date | null> {
 const DAY_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/
 const LOCAL_TIME = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/
 
-/** Interpreta o texto de uma tag: só o dia, data e hora sem fuso (hora local) ou com fuso. */
+/** Parses a tag's text: day only, date and time without a zone (local time) or with a zone. */
 function parseTagText(text: string): { date: Date; dayOnly: boolean } | null {
   const value = text.trim()
   const day = DAY_ONLY.exec(value)
@@ -134,7 +134,7 @@ function parseTagText(text: string): { date: Date; dayOnly: boolean } | null {
 
 const DATE_KEYS = ['com.apple.quicktime.creationdate', 'TDRC', 'TDOR', 'TYER', '©day', 'DATE', 'date', 'ICRD', 'creation_time']
 
-/** As tags de data pelo Mediabunny (ID3 `TDRC`, `©day`, QuickTime `creationdate`, Vorbis `DATE`, WAV `ICRD`). */
+/** The date tags through Mediabunny (ID3 `TDRC`, `©day`, QuickTime `creationdate`, Vorbis `DATE`, WAV `ICRD`). */
 async function readTagsWithMediabunny(file: Blob): Promise<DateTag | null> {
   const { ALL_FORMATS, BlobSource, Input } = await import('mediabunny')
   const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) })
@@ -155,7 +155,7 @@ async function readTagsWithMediabunny(file: Blob): Promise<DateTag | null> {
   }
 }
 
-/** Dia só: a hora vem da data de modificação quando é o mesmo dia local; senão, 12:00. */
+/** Day only: the time comes from the modification date when it is the same local day; otherwise, 12:00. */
 function withTimeOfDay(day: Date, modified: Date): Date {
   const sameDay =
     day.getFullYear() === modified.getFullYear() &&
@@ -169,8 +169,8 @@ function fileDate(file: Blob): Date {
 }
 
 /**
- * O início da gravação: dos metadados quando há uma data plausível (de 1990 até um dia no futuro),
- * senão a data de modificação do arquivo. Nunca rejeita: falha de leitura vira o fallback.
+ * The recording start: from the metadata when there is a plausible date (from 1990 up to one day ahead),
+ * otherwise the file's modification date. Never rejects: a read failure becomes the fallback.
  */
 export async function readRecordedAt(file: Blob, options: ReadRecordedAtOptions = {}): Promise<RecordedAt> {
   const now = options.now ?? new Date()

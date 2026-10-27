@@ -1,4 +1,4 @@
-"""Saúde da fila, da GPU e dos modelos (`/admin/health`). Só a sessão de admin."""
+"""Health of the queue, the GPU and the models (`/admin/health`). Admin session only."""
 
 from __future__ import annotations
 
@@ -16,5 +16,5 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 
 @router.get("/health")
 async def get_admin_health(ctx: Ctx) -> dict[str, Any]:
-    """Estado atual das filas, do worker GPU e dos jobs da plataforma."""
+    """Current state of the queues, the GPU worker and the platform's jobs."""
     return await admin_health(ctx)

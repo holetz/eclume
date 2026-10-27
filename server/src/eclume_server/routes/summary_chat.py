@@ -1,6 +1,6 @@
-"""Chat de ajuste do resumo: pedir, listar a conversa e consultar a resposta até `done`.
+"""The summary's adjustment chat: ask, list the conversation and poll the reply until `done`.
 
-Tudo é do dono: a RLS mostra só as gravações e as mensagens da conta.
+Everything belongs to the owner: RLS shows only the account's recordings and messages.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ class SummaryChatRequest(BaseModel):
 async def send_summary_chat(
     recording_id: UUID, body: SummaryChatRequest, principal: Writer, ctx: Ctx
 ) -> dict[str, Any]:
-    """Grava o pedido e a resposta em aberto e enfileira o `summary_chat` no worker CPU."""
+    """Save the request and the open reply and enqueue `summary_chat` on the CPU worker."""
     async with refunding(ctx.queue.pool, principal.user_id) as charge:
         async with user_tx(ctx.engine, principal.user_id) as conn:
             transcript = await recording_transcript(conn, recording_id)
@@ -56,7 +56,7 @@ async def send_summary_chat(
 async def list_summary_chat(
     recording_id: UUID, principal: Reader, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50
 ) -> dict[str, Any]:
-    """As mensagens do chat da gravação, em ordem cronológica."""
+    """The recording's chat messages, in chronological order."""
     m = t.summary_chat_messages.c
     query = (
         select(t.summary_chat_messages)
@@ -75,7 +75,7 @@ async def list_summary_chat(
 
 @router.get("/summary-chat-messages/{message_id}")
 async def get_summary_chat_message(message_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Uma mensagem (o cliente consulta a resposta até `done` ou `failed`)."""
+    """One message (the client polls the reply until `done` or `failed`)."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = (
             (await conn.execute(select(t.summary_chat_messages).where(t.summary_chat_messages.c.id == message_id)))

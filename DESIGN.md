@@ -3,7 +3,7 @@
 # Run `/impeccable document` to propose changes, then `cq design import` to fold them into the source.
 version: "alpha"
 name: "eclume"
-description: "Linho e nogueira: Archivo, raio zero, fios de 2px, terracota só para gravação e falha. Valores espelham o design-system/styles.css (gerado em web/src/styles/eclume.css e nas outras duas cópias)."
+description: "Linen and walnut: Archivo, zero radius, 2px rules, terracotta only for recording and failure. Values mirror design-system/styles.css (generated into web/src/styles/eclume.css and the other two copies)."
 colors:
   background: "#F7F5F2"
   surface: "#ECE8E2"

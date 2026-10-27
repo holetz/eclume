@@ -1,11 +1,11 @@
--- 002_agentes — agentes de sumarização (holetz/eclume#9): providers da organização, templates de
--- resumo (pessoais e padrões da organização) e resumos versionados, com isolamento por RLS.
+-- 002_agentes — summarization agents (holetz/eclume#9): the organization's providers, summary
+-- templates (personal and organization defaults) and versioned summaries, isolated by RLS.
 --
--- Padrão do núcleo (docs/standards/code/server-nucleo.md): `org_id` em toda tabela, políticas por
--- comando lendo `eclume_org()`/`eclume_user()`, `ENABLE` + `FORCE ROW LEVEL SECURITY`. O worker
--- CPU (papel de sistema) grava o andamento dos resumos; `eclume_app` só cria e apaga.
+-- Core pattern (docs/standards/code/server-nucleo.md): `org_id` in every table, per-command
+-- policies reading `eclume_org()`/`eclume_user()`, `ENABLE` + `FORCE ROW LEVEL SECURITY`. The CPU
+-- worker (system role) writes the summaries' progress; `eclume_app` only creates and deletes.
 
--- O usuário da transação é admin ativo da organização (lido sob a RLS de `users`).
+-- The transaction's user is an active admin of the organization (read under the RLS of `users`).
 CREATE OR REPLACE FUNCTION eclume_admin() RETURNS boolean
     LANGUAGE sql STABLE
     AS $$
@@ -24,7 +24,7 @@ CREATE TABLE agent_providers (
     kind               text NOT NULL CHECK (kind IN ('ollama', 'openai-compatible', 'anthropic', 'claude-cli')),
     base_url           text,
     model              text NOT NULL,
-    -- `crypto.encrypt` (AES-GCM); a API devolve só `api_key_set`.
+    -- `crypto.encrypt` (AES-GCM); the API only returns `api_key_set`.
     api_key_encrypted  text,
     enabled            boolean NOT NULL DEFAULT true,
     options            jsonb NOT NULL DEFAULT '{}',
@@ -35,9 +35,9 @@ CREATE INDEX agent_providers_org_idx ON agent_providers (org_id, created_at, id)
 
 -- --- templates ----------------------------------------------------------------------------------
 
--- `owner_id` nulo: padrão da organização (`scope: organization`), editado só por admin. O padrão
--- da organização para o resumo automático é `org_settings.summarization.default_template_id`;
--- `is_default` aqui é o padrão pessoal, no máximo um por usuário.
+-- Null `owner_id`: organization default (`scope: organization`), edited by admins only. The
+-- organization's default for the automatic summary is `org_settings.summarization.default_template_id`;
+-- `is_default` here is the personal default, at most one per user.
 CREATE TABLE summary_templates (
     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id        uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
@@ -53,10 +53,10 @@ CREATE TABLE summary_templates (
 CREATE INDEX summary_templates_org_idx ON summary_templates (org_id, created_at, id);
 CREATE UNIQUE INDEX summary_templates_default_idx ON summary_templates (owner_id) WHERE is_default;
 
--- --- resumos ------------------------------------------------------------------------------------
+-- --- summaries ----------------------------------------------------------------------------------
 
--- Template e provider ficam em instantâneo (nome, tipo, instruções): o resumo sobrevive à edição
--- ou à exclusão deles.
+-- Template and provider are kept as a snapshot (name, type, instructions): the summary survives their
+-- editing or deletion.
 CREATE TABLE summaries (
     id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id               uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
@@ -85,10 +85,10 @@ CREATE TABLE summaries (
 CREATE INDEX summaries_transcript_idx ON summaries (transcript_id, created_at DESC, id DESC);
 CREATE INDEX summaries_provider_open_idx ON summaries (provider_id) WHERE status IN ('queued', 'running');
 
--- --- padrões iniciais ---------------------------------------------------------------------------
+-- --- initial defaults ---------------------------------------------------------------------------
 
--- Semeia os três templates padrão da organização e, se ela ainda não tem, faz da ata o template
--- padrão do resumo automático. Roda com o papel de sistema (`create_org` e esta migration).
+-- Seeds the organization's three default templates and, if it has none yet, makes the minutes the
+-- default template of the automatic summary. Runs with the system role (`create_org` and this migration).
 CREATE OR REPLACE FUNCTION eclume_seed_summary_templates(target uuid) RETURNS void
     LANGUAGE plpgsql
     AS $$
@@ -98,7 +98,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM summary_templates WHERE org_id = target AND owner_id IS NULL) THEN
         RETURN;
     END IF;
-    -- Instantes distintos: a listagem ordena por `created_at` e os três nascem na mesma transação.
+    -- Distinct instants: the listing sorts by `created_at` and all three are born in the same transaction.
     INSERT INTO summary_templates (org_id, name, description, instructions, created_at, updated_at)
     VALUES (
         target,
@@ -150,7 +150,7 @@ ALTER TABLE agent_providers   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE summary_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE summaries         ENABLE ROW LEVEL SECURITY;
 
--- Providers: a organização lê (o resumo resolve o provider padrão sob a RLS); só admin escreve.
+-- Providers: the organization reads (the summary resolves the default provider under RLS); only admins write.
 CREATE POLICY agent_providers_read ON agent_providers FOR SELECT
     USING (org_id = eclume_org());
 CREATE POLICY agent_providers_insert ON agent_providers FOR INSERT
@@ -161,7 +161,7 @@ CREATE POLICY agent_providers_update ON agent_providers FOR UPDATE
 CREATE POLICY agent_providers_delete ON agent_providers FOR DELETE
     USING (org_id = eclume_org() AND eclume_admin());
 
--- Templates: os padrões da organização e os próprios; o dono escreve os seus, o admin os da organização.
+-- Templates: the organization defaults and one's own; the owner writes theirs, the admin the organization's.
 CREATE POLICY summary_templates_read ON summary_templates FOR SELECT
     USING (org_id = eclume_org() AND (owner_id IS NULL OR owner_id = eclume_user()));
 CREATE POLICY summary_templates_insert ON summary_templates FOR INSERT
@@ -172,7 +172,7 @@ CREATE POLICY summary_templates_update ON summary_templates FOR UPDATE
 CREATE POLICY summary_templates_delete ON summary_templates FOR DELETE
     USING (org_id = eclume_org() AND (owner_id = eclume_user() OR (owner_id IS NULL AND eclume_admin())));
 
--- Resumos herdam a visibilidade da transcrição; criar e apagar é do dono da gravação.
+-- Summaries inherit the transcript's visibility; creating and deleting belongs to the recording's owner.
 CREATE POLICY summaries_read ON summaries FOR SELECT
     USING (org_id = eclume_org() AND EXISTS (SELECT 1 FROM transcripts t WHERE t.id = transcript_id));
 CREATE POLICY summaries_insert ON summaries FOR INSERT
@@ -193,8 +193,8 @@ CREATE POLICY summaries_delete ON summaries FOR DELETE
         )
     );
 
--- `org_settings`: a política da 001 valia para todo comando; vira só leitura, e a escrita é do
--- admin (o padrão da organização de templates aqui, o painel da #12 depois).
+-- `org_settings`: the policy from 001 applied to every command; it becomes read-only, and writing belongs to the
+-- admin (the organization's template default here, the panel of #12 later).
 DROP POLICY org_settings_org ON org_settings;
 CREATE POLICY org_settings_read ON org_settings FOR SELECT
     USING (org_id = eclume_org());

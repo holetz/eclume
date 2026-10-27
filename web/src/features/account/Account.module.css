@@ -1,4 +1,4 @@
-/* A tela Conta: os dados, privacidade e dados, trocar a senha e a zona de perigo, em painéis do DS. */
+/* The Conta screen: the data, privacy and data, changing the password and the danger zone, in DS panels. */
 :where(.page) p {
   margin: 0;
 }
@@ -24,7 +24,7 @@
   margin: 0;
 }
 
-/* Um par termo/valor gerado; o `div` some do grid para a lista seguir em duas colunas. */
+/* A generated term/value pair; the `div` drops out of the grid so the list keeps two columns. */
 .row {
   display: contents;
 }

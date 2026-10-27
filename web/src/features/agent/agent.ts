@@ -1,8 +1,8 @@
-// O Agente: conversas guardadas no servidor (/agent/sessions), anexos e arquivos gerados. A pergunta
-// devolve 202 com a pergunta gravada e a resposta na fila, e a tela consulta a resposta até `done`
-// ou `failed`. O histórico é o da conversa no servidor: o cliente não reenvia nada. A pergunta pode
-// escolher uma habilidade, e a resposta pode trazer propostas de ação, que a pessoa confirma ou descarta
-// no cartão e a tela consulta até terminar (holetz/eclume#145).
+// The Agent: conversations stored on the server (/agent/sessions), attachments and generated files. A
+// question returns 202 with the question stored and the answer queued, and the screen polls the answer
+// until `done` or `failed`. The history is the server's conversation: the client resends nothing. A
+// question may pick a skill, and the answer may carry action proposals, which the person confirms or
+// discards on the card and the screen polls until they finish (holetz/eclume#145).
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
@@ -32,11 +32,11 @@ export const actionKey = (id: string) => [...AGENT_KEY, 'action', id] as const
 export const isActive = (message: Pick<AgentMessage, 'status'> | undefined) =>
   message?.status === 'queued' || message?.status === 'running'
 
-/** A ação confirmada ainda executando. */
+/** The confirmed action still running. */
 export const isRunning = (action: Pick<AgentAction, 'status'> | undefined) =>
   action?.status === 'queued' || action?.status === 'running'
 
-/** O endereço do conteúdo do arquivo: a mesma origem, com a sessão por cookie. */
+/** The URL of the file content: same origin, with the session by cookie. */
 export const fileUrl = (file: Pick<AgentFile, 'id'>) => `/api/v1/agent/files/${file.id}/content`
 
 export function sizeLabel(bytes: number): string {
@@ -45,7 +45,7 @@ export function sizeLabel(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`
 }
 
-/** As conversas recentes, para a lista ao lado da conversa. */
+/** The recent conversations, for the list beside the conversation. */
 export function useRecentSessions() {
   return useQuery({
     queryKey: [...sessionsKey, 'recent'],
@@ -53,7 +53,7 @@ export function useRecentSessions() {
   })
 }
 
-/** Todas as conversas, por página (a página Conversas). */
+/** All conversations, paged (the Conversas page). */
 export function useAllSessions() {
   return useInfiniteQuery({
     queryKey: [...sessionsKey, 'all'],
@@ -74,14 +74,14 @@ export function useAgentSession(id: string | undefined) {
     queryFn: () =>
       unwrap(api.GET('/api/v1/agent/sessions/{session_id}', { params: { path: { session_id: id ?? '' } } })),
     enabled: Boolean(id),
-    // As respostas chegam pelas consultas de cada mensagem e as mudanças da tela já atualizam o
-    // cache; reler a conversa a cada montagem só arriscaria apagar a pergunta recém-enviada.
+    // Answers arrive through each message's polling and the screen's changes already update the
+    // cache; rereading the conversation on every mount would only risk erasing the question just sent.
     staleTime: 60_000,
     retry: false,
   })
 }
 
-/** Uma resposta: consulta enquanto está na fila ou rodando. */
+/** One answer: polls while it is queued or running. */
 export function useAgentMessage(message: AgentMessage) {
   const queryClient = useQueryClient()
   return useQuery({
@@ -92,12 +92,12 @@ export function useAgentMessage(message: AgentMessage) {
           params: { path: { session_id: message.session_id, message_id: message.id } },
         }),
       )
-      // Pronta, a conversa ganha a resposta e a lista sobe a conversa.
+      // Once ready, the conversation gains the answer and the list moves the conversation up.
       if (!isActive(fresh)) void queryClient.invalidateQueries({ queryKey: sessionsKey })
       return fresh
     },
     initialData: message,
-    // Pronta desde o começo, não há o que consultar.
+    // Ready from the start, there is nothing to poll.
     staleTime: isActive(message) ? 0 : Infinity,
     retry: false,
     refetchInterval: pollWhile((data: AgentMessage | undefined) => isActive(data), AGENT_POLL_MS),
@@ -109,7 +109,7 @@ export function useCreateSession() {
   return useMutation({
     mutationFn: (title: string = '') => unwrap(api.POST('/api/v1/agent/sessions', { body: { title } })),
     onSuccess: (session) => {
-      // A conversa nova já nasce no cache, vazia: a tela não precisa buscá-la.
+      // The new conversation is born in the cache, empty: the screen need not fetch it.
       queryClient.setQueryData<AgentSessionDetail>(sessionKey(session.id), { ...session, messages: [], pending_files: [] })
       void queryClient.invalidateQueries({ queryKey: sessionsKey })
     },
@@ -220,7 +220,7 @@ export function useAskAgent() {
   })
 }
 
-/** Uma proposta de ação: consulta enquanto a execução confirmada está na fila ou rodando. */
+/** One action proposal: polls while the confirmed run is queued or running. */
 export function useAgentAction(action: AgentAction) {
   return useQuery({
     queryKey: actionKey(action.id),
@@ -241,7 +241,7 @@ export function useDecideAction() {
         : unwrap(api.POST('/api/v1/agent/actions/{action_id}/cancel', { params: { path: { action_id: id } } })),
     onSuccess: (action) => {
       queryClient.setQueryData<AgentAction>(actionKey(action.id), action)
-      // Confirmada, a consulta recomeça até a execução terminar.
+      // Once confirmed, polling restarts until the run finishes.
       if (isRunning(action)) void queryClient.invalidateQueries({ queryKey: actionKey(action.id) })
     },
   })

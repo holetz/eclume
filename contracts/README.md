@@ -1,110 +1,112 @@
 # contracts
 
-Fonte da verdade da API v1 do eclume: o que qualquer cliente — o web, os apps, o seu programa ou
-um assistente de IA — pode pedir a um servidor eclume e o que recebe de volta. As convenções e as
-regras de evolução estão no standard
+Source of truth for eclume's API v1: what any client — the web, the apps, your own program or an
+AI assistant — can ask of an eclume server and what it gets back. The conventions and the
+evolution rules are in the standard
 [docs/standards/api/contrato-v1.md](../docs/standards/api/contrato-v1.md).
 
-- **Referência navegável.** Todo servidor eclume serve a referência gerada deste contrato, na
-  versão que ele roda, em `https://<servidor>/referencia-api.html` (rotas, escopos, parâmetros,
-  esquemas e exemplos, sem nada de fora da origem). O web a gera do `openapi-v1.bundled.yaml` no
-  build.
-- **Guia de integração.** Do token à sincronização incremental, com erros, limites e o MCP:
+- **Browsable reference.** Every eclume server serves the generated reference of this contract, in
+  the version it runs, at `https://<server>/referencia-api.html` (routes, scopes, parameters,
+  schemas and examples, with nothing from outside the origin). The web generates it from
+  `openapi-v1.bundled.yaml` at build time.
+- **Integration guide.** From the token to incremental sync, with errors, limits and the MCP:
   [docs/how-to/integrar-com-a-api.md](../docs/how-to/integrar-com-a-api.md).
-- **Mock.** Para escrever um cliente sem servidor, o mock abaixo responde com os exemplos.
+- **Mock.** To write a client without a server, the mock below answers with the examples.
 
-| Arquivo | O que é |
+| File | What it is |
 |---|---|
-| `openapi-v1.yaml` | **Fonte.** OpenAPI 3.1 da API v1: autenticação, escopos, erros, paginação e todas as rotas. |
-| `transcript.schema.json` | **Fonte.** JSON Schema 2020-12 da transcrição, referenciado pelo OpenAPI. É também a saída do worker GPU. |
-| `fixtures/` | **Fonte.** Exemplos realistas em pt-BR, um arquivo por exemplo do OpenAPI (`externalValue`). |
-| `openapi-v1.bundled.yaml` | **Gerado** por `tools/bundle.py`: arquivo único, sem refs externas, com as fixtures inlinadas. É o que o mock e os geradores de tipos leem. Não edite à mão. |
-| `tools/bundle.py` | Gera o bundle; `--check` falha se ele estiver desatualizado. |
-| `tests/` | Testes de contrato (pytest do workspace) e o smoke do mock; fixam também os campos obsoletos da v1 (`DEPRECATED_V1`), que seguem obrigatórios até a `/api/v2`. |
+| `openapi-v1.yaml` | **Source.** OpenAPI 3.1 of API v1: authentication, scopes, errors, pagination and every route. |
+| `transcript.schema.json` | **Source.** JSON Schema 2020-12 of the transcript, referenced by the OpenAPI. It is also the GPU worker's output. |
+| `fixtures/` | **Source.** Realistic pt-BR examples, one file per OpenAPI example (`externalValue`). |
+| `openapi-v1.bundled.yaml` | **Generated** by `tools/bundle.py`: a single file, with no external refs and the fixtures inlined. It is what the mock and the type generators read. Do not edit by hand. |
+| `tools/bundle.py` | Generates the bundle; `--check` fails if it is stale. |
+| `tests/` | Contract tests (workspace pytest) and the mock smoke test; they also pin v1's deprecated fields (`DEPRECATED_V1`), which stay required until `/api/v2`. |
 
 ```bash
-uv run python contracts/tools/bundle.py          # depois de mudar qualquer fonte
-uv run pytest contracts/tests                    # OpenAPI, schema, fixtures, export .md, mapeamento lumea
+uv run python contracts/tools/bundle.py          # after changing any source
+uv run pytest contracts/tests                    # OpenAPI, schema, fixtures, .md export, lumea mapping
 docker compose -f deploy/docker-compose.mock.yml up -d --wait
 bash contracts/tests/smoke-mock.sh
 ```
 
 ## Mock server
 
-O Prism (`stoplight/prism:5.15.10`) serve o bundle em `http://127.0.0.1:4010`, em modo estático:
-cada rota responde com o exemplo declarado, que vem de `fixtures/`.
+Prism (`stoplight/prism:5.15.10`) serves the bundle at `http://127.0.0.1:4010`, in static mode:
+each route answers with its declared example, which comes from `fixtures/`.
 
-- **Credencial.** Rotas protegidas exigem a *presença* da credencial: `Authorization: Bearer
-  eclp_<qualquer coisa>` ou o cookie `eclume_session`. Sem ela, 401 com o problem de
-  `fixtures/problem-unauthorized.json`. O mock **não** confere escopos. As rotas
-  `/api/v1/admin/*` exigem o cookie `eclume_admin_session` da conta de admin; PAT ou sessão de
-  usuário ali dão 401.
-- **Validação.** O corpo e os parâmetros são validados contra o contrato; requisição inválida
-  recebe 422.
-- **Escolher a resposta.** `Prefer: code=<status>` escolhe o status e `Prefer: example=<nome>` o
-  exemplo. Atenção: `POST /api/v1/uploads` responde por padrão com o **200** (`deduplicated`),
-  porque o Prism escolhe o menor 2xx; mande `Prefer: code=201` para simular um upload novo.
-- **Upload completo.** As URLs de parte do exemplo apontam para o próprio mock
-  (`PUT /api/v1/uploads/{id}/parts/{n}`, que devolve `ETag`), então o fluxo create → partes →
-  complete roda inteiro contra ele.
-- **Porta.** Publicada só em `127.0.0.1` (`ECLUME_MOCK_PORT` muda a porta). Para um container
-  do lumea na bridge padrão alcançar o mock, suba com `ECLUME_MOCK_BIND=172.17.0.1` e use
-  `http://172.17.0.1:4010`, ou `extra_hosts: ["host.docker.internal:host-gateway"]` no serviço.
+- **Credential.** Protected routes require the *presence* of a credential: `Authorization: Bearer
+  eclp_<anything>` or the `eclume_session` cookie. Without it, 401 with the problem from
+  `fixtures/problem-unauthorized.json`. The mock does **not** check scopes. The
+  `/api/v1/admin/*` routes require the admin account's `eclume_admin_session` cookie; a PAT or a
+  user session there gets 401.
+- **Validation.** The body and the parameters are validated against the contract; an invalid
+  request gets 422.
+- **Choosing the response.** `Prefer: code=<status>` picks the status and `Prefer: example=<name>`
+  the example. Note: `POST /api/v1/uploads` answers by default with the **200** (`deduplicated`),
+  because Prism picks the lowest 2xx; send `Prefer: code=201` to simulate a new upload.
+- **Full upload.** The example's part URLs point at the mock itself
+  (`PUT /api/v1/uploads/{id}/parts/{n}`, which returns an `ETag`), so the create → parts →
+  complete flow runs end to end against it.
+- **Port.** Published only on `127.0.0.1` (`ECLUME_MOCK_PORT` changes the port). For a lumea
+  container on the default bridge to reach the mock, start it with `ECLUME_MOCK_BIND=172.17.0.1`
+  and use `http://172.17.0.1:4010`, or `extra_hosts: ["host.docker.internal:host-gateway"]` in the
+  service.
 
-## Exemplos de uso
+## Usage examples
 
-### O lumea, importador por PAT (holetz/lumea#13)
+### lumea, a PAT-based importer
 
-1. Com um checkout do eclume ao lado (`~/Projetos/eclume`), suba o mock:
+1. With an eclume checkout alongside (`~/Projetos/eclume`), start the mock:
    `docker compose -f ~/Projetos/eclume/deploy/docker-compose.mock.yml up -d --wait`.
-2. Aponte o importador para `http://127.0.0.1:4010` com qualquer PAT `eclp_...`.
-3. `GET /api/v1/me` mostra a conta conectada e os escopos do PAT; `GET /api/v1/transcripts?since=`
-   lista; `GET /api/v1/transcripts/{id}` traz a transcrição de 3 locutores.
-4. Nos testes unitários do lumea, copie as fixtures necessárias (`transcript-3-locutores.json`,
-   `transcript-page.json`) em vez de depender do mock; o teste de integração usa o mock.
+2. Point the importer at `http://127.0.0.1:4010` with any `eclp_...` PAT.
+3. `GET /api/v1/me` shows the connected account and the PAT's scopes; `GET /api/v1/transcripts?since=`
+   lists; `GET /api/v1/transcripts/{id}` returns the 3-speaker transcript.
+4. In lumea's unit tests, copy the fixtures you need (`transcript-3-locutores.json`,
+   `transcript-page.json`) instead of depending on the mock; the integration test uses the mock.
 
-### O app desktop, upload retomável (holetz/eclume#13)
+### The desktop app, resumable upload (#13)
 
-`POST /api/v1/uploads` (com `Prefer: code=201`), `PUT` de cada parte na `url` recebida,
-`POST /api/v1/uploads/{id}/complete` e polling de `GET /api/v1/recordings/{id}` até `transcribed`
-ou `failed`. Retomada: `GET /api/v1/uploads/{id}` e `POST /api/v1/uploads/{id}/part-urls`.
+`POST /api/v1/uploads` (with `Prefer: code=201`), `PUT` of each part to the `url` received,
+`POST /api/v1/uploads/{id}/complete` and polling `GET /api/v1/recordings/{id}` until `transcribed`
+or `failed`. Resuming: `GET /api/v1/uploads/{id}` and `POST /api/v1/uploads/{id}/part-urls`.
 
-### O mapeamento para o `transcricao.md` do lumea
+### The mapping to lumea's `transcricao.md`
 
-O JSON v1 gera o frontmatter de `transcricao.md` (`lumea/assets/meet/transcribe/store.py`,
-`models.py`) sem perda. O teste `test_json_v1_gera_o_frontmatter_do_lumea_sem_perda` prova o
-mapeamento com a fixture de 3 locutores.
+The v1 JSON generates the frontmatter of `transcricao.md` (`lumea/assets/meet/transcribe/store.py`,
+`models.py`) without loss. The test `test_json_v1_gera_o_frontmatter_do_lumea_sem_perda` proves
+the mapping with the 3-speaker fixture.
 
-| `transcricao.md` | JSON v1 |
+| `transcricao.md` | v1 JSON |
 |---|---|
 | `quando` | `recorded_at` |
-| `participantes[].nome` | `speakers[].person.name`; sem pessoa, `speakers[].label` |
+| `participantes[].nome` | `speakers[].person.name`; with no person, `speakers[].label` |
 | `participantes[].speaker_id` | `speakers[].id` |
-| `participantes[].papel` | não existe no eclume: o importador decide (`desconhecido` por padrão) |
-| `gaps[]` `speaker-identity` | um por locutor com `person: null`; `amostra` = texto do primeiro segmento dele |
-| corpo `**Nome** [HH:MM:SS]: texto` | `segments[]`: nome do locutor, `start_ms` truncado para segundos, `text` |
-| chave de dedup | `content_hash` (`sha256:` do áudio); reimportar é idempotente, `revision` diz se mudou |
+| `participantes[].papel` | does not exist in eclume: the importer decides (`desconhecido` by default) |
+| `gaps[]` `speaker-identity` | one per speaker with `person: null`; `amostra` = the text of that speaker's first segment |
+| body `**Nome** [HH:MM:SS]: texto` | `segments[]`: speaker name, `start_ms` truncated to seconds, `text` |
+| dedup key | `content_hash` (`sha256:` of the audio); reimporting is idempotent, `revision` says whether it changed |
 
-Uma sugestão por voz (`speakers[].suggestions`) **não** é identidade: o locutor segue com gap até
-alguém confirmar a pessoa no eclume.
+A voice suggestion (`speakers[].suggestions`) is **not** an identity: the speaker keeps its gap
+until someone confirms the person in eclume.
 
-## Regras de evolução
+## Evolution rules
 
-A v1 só recebe mudanças **aditivas**:
+v1 only takes **additive** changes:
 
-- **Permitido:** rota nova; parâmetro ou campo de requisição novo e **opcional**; campo de
-  resposta novo; valor de enum novo em resposta; código de erro (`code`) novo; formato de export
-  novo; escopo novo exigido só por rota nova.
-- **Proibido na v1:** remover ou renomear rota, campo ou parâmetro; mudar tipo ou significado;
-  tornar obrigatório um campo de requisição que era opcional; apertar a validação de uma entrada
-  existente; exigir escopo ou papel a mais numa rota existente; trocar o status de sucesso.
-- **Clientes:** ignoram propriedades desconhecidas e toleram valores de enum desconhecidos em
-  respostas; decidem erros por `code`. Por isso os schemas de resposta não usam
-  `additionalProperties: false` (os testes fecham os objetos só para pegar fixture errada).
-- **Toda mudança** sobe `info.version` (minor; patch para texto) e, se tocar a transcrição,
-  `schema_version`; atualiza as fixtures; regenera o bundle; e passa em `uv run pytest contracts/tests`.
-- **Quebra de compatibilidade** vira `/api/v2` com `openapi-v2.yaml` próprio. A v1 continua servida
-  durante a transição, anunciando o fim com os headers `Deprecation` e `Sunset`.
-- **Exceção única: a 2.0.0.** O fim da organização (conta por usuário, admin com sessão própria)
-  saiu sob `/api/v1`, porque o desktop e o lumea não usam nada do que mudou; o porquê está no
-  standard.
+- **Allowed:** a new route; a new **optional** request parameter or field; a new response field;
+  a new enum value in a response; a new error code (`code`); a new export format; a new scope
+  required only by a new route.
+- **Forbidden in v1:** removing or renaming a route, field or parameter; changing a type or a
+  meaning; making an optional request field required; tightening the validation of an existing
+  input; requiring an extra scope or role on an existing route; changing the success status.
+- **Clients:** ignore unknown properties and tolerate unknown enum values in responses; decide on
+  errors by `code`. That is why the response schemas do not use `additionalProperties: false`
+  (the tests close the objects only to catch a wrong fixture).
+- **Every change** bumps `info.version` (minor; patch for text) and, if it touches the transcript,
+  `schema_version`; updates the fixtures; regenerates the bundle; and passes
+  `uv run pytest contracts/tests`.
+- **A breaking change** becomes `/api/v2` with its own `openapi-v2.yaml`. v1 keeps being served
+  during the transition, announcing its end with the `Deprecation` and `Sunset` headers.
+- **The single exception: 2.0.0.** The end of the organization (one account per user, an admin
+  with its own session) shipped under `/api/v1`, because the desktop and lumea use nothing that
+  changed; the reason is in the standard.

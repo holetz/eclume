@@ -4,12 +4,12 @@ interface SwitchProps {
   checked: boolean
   onChange: (checked: boolean) => void
   disabled?: boolean
-  /** O rótulo visível; sem ele, passe `label` para o nome acessível. */
+  /** The visible label; without it, pass `label` for the accessible name. */
   children?: ReactNode
   label?: string
 }
 
-/** O `.switch` do Design System: um checkbox com papel de interruptor. */
+/** The Design System `.switch`: a checkbox with the switch role. */
 export function Switch({ checked, onChange, disabled, children, label }: SwitchProps) {
   return (
     <label className="switch">

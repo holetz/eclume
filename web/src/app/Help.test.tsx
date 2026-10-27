@@ -40,8 +40,8 @@ function renderPage() {
 
 const drawer = () => screen.queryByRole('dialog', { name: 'Ajuda' })
 
-describe('gaveta de ajuda', () => {
-  it('abre com ? fora de campos editáveis e mostra os atalhos, com o / da busca', async () => {
+describe('help drawer', () => {
+  it('opens with ? outside editable fields and shows the shortcuts, with the search /', async () => {
     renderPage()
     expect(drawer()).not.toBeInTheDocument()
     await userEvent.keyboard('?')
@@ -51,14 +51,14 @@ describe('gaveta de ajuda', () => {
     expect(screen.getByRole('button', { name: 'Fechar a ajuda' })).toHaveFocus()
   })
 
-  it('não abre com ? dentro de um campo', async () => {
+  it('does not open with ? inside a field', async () => {
     renderPage()
     await userEvent.type(screen.getByLabelText('Nome'), 'quem?')
     expect(drawer()).not.toBeInTheDocument()
     expect(screen.getByLabelText('Nome')).toHaveValue('quem?')
   })
 
-  it('fecha com Esc e devolve o foco a quem abriu', async () => {
+  it('closes with Esc and returns focus to whoever opened it', async () => {
     renderPage()
     const button = screen.getByRole('button', { name: 'Ajuda' })
     await userEvent.click(button)
@@ -68,7 +68,7 @@ describe('gaveta de ajuda', () => {
     expect(button).toHaveFocus()
   })
 
-  it('mostra os artigos da página pelo catálogo e navega mantendo a gaveta aberta', async () => {
+  it('shows the page articles from the catalog and navigates keeping the drawer open', async () => {
     renderPage()
     await userEvent.click(screen.getByRole('button', { name: 'Ajuda' }))
     const help = drawer()!
@@ -83,7 +83,7 @@ describe('gaveta de ajuda', () => {
     expect(drawer()).toBeInTheDocument()
   })
 
-  it('busca na gaveta, com / pondo o foco na busca, e troca a lista pelos resultados', async () => {
+  it('searches in the drawer, with / focusing the search, and swaps the list for the results', async () => {
     renderPage()
     await userEvent.keyboard('?')
     const search = await within(drawer()!).findByRole('searchbox', { name: 'Buscar na ajuda' })
@@ -102,14 +102,14 @@ describe('gaveta de ajuda', () => {
     expect(within(drawer()!).getByText('Nada encontrado. Tente outras palavras.')).toBeInTheDocument()
   })
 
-  it('sem HelpProvider, o PageHead não tem botão Ajuda', () => {
+  it('without a HelpProvider, PageHead has no Help button', () => {
     render(<PageHead title="Pessoas" />)
     expect(screen.queryByRole('button', { name: 'Ajuda' })).not.toBeInTheDocument()
   })
 })
 
-describe('gaveta de ajuda com um diálogo aberto', () => {
-  it('o ? não abre a gaveta por baixo do modal, e o Esc fecha só o diálogo', async () => {
+describe('help drawer with a dialog open', () => {
+  it('? does not open the drawer beneath the modal, and Esc closes only the dialog', async () => {
     const user = userEvent.setup()
     let closed = 0
     render(

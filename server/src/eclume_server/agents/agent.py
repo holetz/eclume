@@ -1,12 +1,12 @@
-"""O laço do Agente: uma ação JSON por chamada, sobre as ferramentas de um `ToolRegistry`.
+"""The Agent loop: one JSON action per call, over the tools of a `ToolRegistry`.
 
-É o laço do chat sobre a base (`agents/base_chat.py`) generalizado: o `system` lista só as
-ferramentas que a credencial enxerga, cada ação é validada e executada pela ferramenta dona, e a
-ação terminal `reply` traz a resposta e as fontes. Os arquivos que o agente preparou
-(`write_file`) e as propostas de ação (que a pessoa confirma depois) voltam no resultado. A
-habilidade escolhida pela pessoa entra no `system` e restringe as ferramentas; sem ela, o `system`
-lista as habilidades e o agente pode carregar uma com `use_skill` (holetz/eclume#145). Funciona com
-qualquer provider, pela `Provider.complete` de texto. Contrato em docs/standards/code/server-agentes.md §Agente.
+It is the base chat loop (`agents/base_chat.py`) generalised: the `system` lists only the
+tools the credential can see, each action is validated and run by the tool that owns it, and the
+terminal `reply` action carries the answer and the sources. The files the agent prepared
+(`write_file`) and the action proposals (which the person confirms later) come back in the result.
+The skill the person chose enters the `system` and restricts the tools; without one, the `system`
+lists the skills and the agent may load one with `use_skill` (holetz/eclume#145). It works with
+any provider, through the text `Provider.complete`. Contract in docs/standards/code/server-agentes.md `§Agente`.
 """
 
 from __future__ import annotations
@@ -46,14 +46,14 @@ _REPLY_USAGE = (
     '{"action": "reply", "message": "a resposta em Markdown", "sources": ["id", …]} — responde; '
     "`sources` são os ids das gravações em que a resposta se apoia (os arquivos preparados vão juntos)."
 )
-# O começo fixo do `system`: identifica a chamada do Agente (os testes roteiam por ele).
+# The fixed start of the `system`: identifies the Agent call (the tests route on it).
 AGENT_SYSTEM_PREFIX = "Você é o Agente do eclume"
 LIMIT_NOTE = "Você já fez todas as consultas permitidas: responda agora com a ação reply."
 
 
 @dataclass(frozen=True)
 class AttachedFile:
-    """Um anexo que a conversa oferece ao agente: o id, o nome e o tamanho do texto."""
+    """An attachment the conversation offers the agent: its id, name and text length."""
 
     id: UUID
     name: str
@@ -62,23 +62,23 @@ class AttachedFile:
 
 @dataclass(frozen=True)
 class AgentContext:
-    """O que o agente vê: a conversa até aqui, a pergunta, os anexos e as instruções da pessoa."""
+    """What the agent sees: the conversation so far, the question, the attachments and the person's instructions."""
 
     history: list[tuple[str, str]]
     question: str
     files: list[AttachedFile] = field(default_factory=list)
-    # Sem `transcripts:read` na credencial, o agente não busca nem lê transcrições.
+    # Without `transcripts:read` on the credential, the agent neither searches nor reads transcripts.
     transcripts: bool = True
     scopes: frozenset[str] = frozenset()
-    # Instruções extras da pessoa, além das da habilidade.
+    # The person's extra instructions, on top of the skill's.
     instructions: str = ""
-    # A habilidade que a pessoa escolheu (`/nome` ou o seletor) e as ligadas, `(nome, descrição)`.
+    # The skill the person chose (`/name` or the picker) and the enabled ones, `(name, description)`.
     skill: Skill | None = None
     skills: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def capabilities(self) -> Capabilities:
-        """O que a credencial e a conversa permitem."""
+        """What the credential and the conversation allow."""
         return Capabilities(
             transcripts=self.transcripts,
             files=bool(self.files),
@@ -87,7 +87,7 @@ class AgentContext:
         )
 
     def full_instructions(self) -> str:
-        """As instruções da habilidade escolhida, seguidas das instruções extras."""
+        """The chosen skill's instructions, followed by the extra instructions."""
         parts = []
         if self.skill is not None:
             parts.append(f"### Habilidade /{self.skill.name}\n\n{self.skill.instructions.strip()}")
@@ -98,7 +98,7 @@ class AgentContext:
 
 @dataclass
 class AgentResult:
-    """A resposta, as fontes `(id, título)`, os arquivos preparados, as ações pendentes e as consultas."""
+    """The answer, the `(id, title)` sources, the prepared files, the pending actions and the lookups."""
 
     message: str
     sources: list[tuple[UUID, str]]
@@ -118,7 +118,7 @@ def agent_system(
     skills: list[tuple[str, str]] | None = None,
     allowed: frozenset[str] | None = None,
 ) -> str:
-    """O `system` do Agente: o papel, as fontes, o resguardo, as ações e as habilidades disponíveis."""
+    """The Agent `system`: the role, the sources, the safeguard, the actions and the available skills."""
     sources = (
         "Para perguntas sobre as gravações, comece pelos resumos (search_summaries, read_summary) e só "
         "leia ou busque nas transcrições quando o resumo não trouxer o que a pergunta pede."
@@ -154,7 +154,7 @@ def agent_system(
 
 
 def correction(registry: ToolRegistry, caps: Capabilities, allowed: frozenset[str] | None = None) -> str:
-    """O pedido de correção depois de uma saída que não é ação válida."""
+    """The correction request after an output that is not a valid action."""
     names = registry.names(caps, allowed)
     return f"Responda só com um objeto JSON de uma das ações: {', '.join(names[:-1])} ou {names[-1]}."
 
@@ -169,7 +169,7 @@ def _valid_reply(action: dict[str, Any]) -> bool:
 def parse_action(
     text: str, registry: ToolRegistry, caps: Capabilities, allowed: frozenset[str] | None = None
 ) -> dict[str, Any] | None:
-    """O último objeto JSON da saída que é uma ação válida e disponível (credencial e habilidade), ou `None`."""
+    """The last JSON object of the output that is a valid, available action (credential and skill), or `None`."""
     available = {tool.name: tool for tool in registry.available(caps, allowed)}
     for candidate in [*reversed(_FENCE.findall(text)), text]:
         action = _last_object(candidate)
@@ -185,7 +185,7 @@ def parse_action(
 
 
 def agent_prompt(context: AgentContext) -> str:
-    """O prompt fixo: as últimas mensagens, os anexos e a pergunta."""
+    """The fixed prompt: the latest messages, the attachments and the question."""
     history = "\n".join(
         f"{'Pessoa' if role == 'user' else 'Agente'}: {content}" for role, content in context.history[-HISTORY:]
     )
@@ -207,7 +207,7 @@ def _recording_id(value: object) -> UUID | None:
 def _result(
     action: dict[str, Any], state: RunState, calls: list[dict[str, Any]], completion: Completion
 ) -> AgentResult:
-    """A resposta final, com as fontes citadas que apareceram nos resultados."""
+    """The final answer, with the cited sources that appeared in the results."""
     cited = dict.fromkeys(_recording_id(item) for item in action.get("sources") or [])
     sources = [(rid, state.seen[rid]) for rid in cited if rid in state.seen][:MAX_SOURCES]
     return AgentResult(
@@ -225,7 +225,7 @@ def _result(
 async def _call(
     tool: AgentTool, env: AgentEnv, action: dict[str, Any], state: RunState, budget: int
 ) -> tuple[str, dict[str, Any]]:
-    """Roda a ferramenta; a que pede confirmação vira proposta (com `plan`) ou ação pendente."""
+    """Run the tool; one that asks for confirmation becomes a proposal (with `plan`) or a pending action."""
     if tool.confirm and tool.plan is not None:
         return await tool.plan(env, action, state)
     if tool.confirm:
@@ -240,14 +240,14 @@ async def run_agent(
     env: AgentEnv,
     registry: ToolRegistry | None = None,
 ) -> AgentResult:
-    """O laço do Agente: executa as ferramentas pedidas até a resposta.
+    """The Agent loop: runs the requested tools until the answer.
 
-    Uma saída que não é ação válida recebe um pedido de correção; a segunda é `provider_bad_output`.
-    Depois de `MAX_TOOL_CALLS` chamadas, a próxima resposta tem de ser `reply`, senão
-    `chat_tool_limit`. Uma ferramenta com `confirm` não roda: com `plan`, vira proposta em
-    `proposals`; sem ele, o agente recebe `NEEDS_CONFIRMATION` e a ação fica em `pending_actions`. A
-    habilidade escolhida (ou carregada por `use_skill`) restringe as ações às permitidas por ela. As
-    fontes são as citadas em `reply.sources` que apareceram nos resultados.
+    An output that is not a valid action gets a correction request; the second is `provider_bad_output`.
+    After `MAX_TOOL_CALLS` calls, the next answer must be `reply`, otherwise
+    `chat_tool_limit`. A tool with `confirm` does not run: with `plan`, it becomes a proposal in
+    `proposals`; without one, the agent receives `NEEDS_CONFIRMATION` and the action stays in
+    `pending_actions`. The chosen skill (or the one loaded by `use_skill`) restricts the actions to
+    the ones it allows. The sources are those cited in `reply.sources` that appeared in the results.
     """
     registry = registry or default_registry()
     caps = context.capabilities
@@ -279,7 +279,7 @@ async def run_agent(
         if len(calls) >= MAX_TOOL_CALLS:
             raise ProviderError(CHAT_TOOL_LIMIT, f"O agente passou de {MAX_TOOL_CALLS} chamadas de ferramenta.")
         tool = registry.get(action["action"])
-        assert tool is not None  # noqa: S101 — `parse_action` só devolve ferramenta registrada
+        assert tool is not None  # noqa: S101 — `parse_action` only returns a registered tool
         block, record = await _call(tool, env, action, state, max(input_budget(provider, system, full), 0))
         results.append(block)
         calls.append(record)

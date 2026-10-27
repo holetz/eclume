@@ -1,5 +1,5 @@
-// Fixtures do contrato (contracts/fixtures/), tipadas pelo schema gerado. Os testes usam os
-// mesmos exemplos que o mock server serve.
+// Contract fixtures (contracts/fixtures/), typed by the generated schema. The tests use the
+// same examples the mock server serves.
 import type { Schemas } from '../api/client'
 import adminHealth from '../../../contracts/fixtures/admin-health.json'
 import adminMe from '../../../contracts/fixtures/admin-me.json'
@@ -58,7 +58,7 @@ import voiceAssignment from '../../../contracts/fixtures/voice-assignment.json'
 
 type Transcript = import('../api/schema.gen').operations['getTranscript']['responses'][200]['content']['application/json']
 
-/** Cópia profunda, para um teste poder alterar a fixture sem afetar os outros. */
+/** Deep copy, so a test can change the fixture without affecting the others. */
 function fresh<T>(value: unknown): () => T {
   return () => structuredClone(value) as T
 }

@@ -1,6 +1,6 @@
-// Upload resumível em partes do contrato v1 (multipart S3 com dedup por hash), sem React:
-// create (com sha256) → PUT de cada parte na URL recebida → complete. Retomar é consultar o
-// upload e subir só as partes que o armazenamento ainda não confirmou.
+// Resumable multipart upload of contract v1 (S3 multipart with hash deduplication), without React:
+// create (with sha256) → PUT of each part to the URL received → complete. Resuming means querying the
+// upload and sending only the parts the storage has not confirmed yet.
 import { api, type ApiClient, type Schemas } from '../api/client'
 import { ApiError, unwrap } from '../api/problem'
 
@@ -9,18 +9,18 @@ type PartUrl = Schemas['PartUrl']
 
 export interface UploadFile {
   blob: Blob
-  /** SHA-256 do blob, em hex minúsculo (o da conversão). */
+  /** SHA-256 of the blob, in lowercase hex (the conversion's). */
   sha256: string
   filename: string
   contentType: string
-  /** Sem título, o servidor usa o nome do arquivo e o preenchimento automático pode trocá-lo. */
+  /** Without a title, the server uses the file name and auto-fill may replace it. */
   title?: string
   durationMs?: number
-  /** Início da gravação (ISO 8601). */
+  /** Recording start (ISO 8601). */
   recordedAt?: string
   recordedAtSource?: Schemas['RecordedAtSource']
   kind?: Schemas['RecordingKind']
-  /** Idioma da transcrição deste arquivo (ou `auto`); sem ele, vale o da conta. */
+  /** Transcription language of this file (or `auto`); without it, the account's applies. */
   language?: string
 }
 
@@ -34,16 +34,16 @@ export interface UploadProgress {
 
 export interface UploadOutcome {
   recordingId: string
-  /** Já existia gravação com o mesmo hash: nada foi transferido. */
+  /** A recording with the same hash already existed: nothing was transferred. */
   deduplicated: boolean
 }
 
 export interface UploadOptions {
-  /** Retoma este upload em vez de criar outro. */
+  /** Resumes this upload instead of creating another. */
   uploadId?: string
   signal?: AbortSignal
   onProgress?: (progress: UploadProgress) => void
-  /** Chamado assim que o upload existe no servidor, para permitir retomar ou cancelar. */
+  /** Called as soon as the upload exists on the server, to allow resuming or cancelling. */
   onCreated?: (uploadId: string) => void
   concurrency?: number
   maxAttempts?: number
@@ -85,7 +85,7 @@ function isRetryableStatus(status: number): boolean {
 }
 
 export async function runUpload(file: UploadFile, options: UploadOptions = {}): Promise<UploadOutcome> {
-  // Um controlador próprio, ligado ao do chamador: a falha de uma parte também para as outras.
+  // An own controller, linked to the caller's: the failure of one part also stops the others.
   const local = new AbortController()
   const stop = () => local.abort(options.signal?.reason)
   if (options.signal?.aborted) stop()
@@ -147,7 +147,7 @@ async function transfer(file: UploadFile, options: UploadOptions, local: AbortCo
 
   const uploadId = current.id
   const partSize = current.part_size
-  // O número de partes sai do tamanho do arquivo e do part_size fixado pelo servidor.
+  // The number of parts comes from the file size and the part_size fixed by the server.
   const partCount = Math.max(1, Math.ceil(size / partSize))
   const partBytes = (n: number) => Math.min(n * partSize, size) - (n - 1) * partSize
 
@@ -191,7 +191,7 @@ async function transfer(file: UploadFile, options: UploadOptions, local: AbortCo
       let response: Response | null = null
       let failure: unknown = null
       try {
-        // A URL de parte se autoriza sozinha; o cookie da mesma origem vai junto e é ignorado.
+        // The part URL authorizes itself; the same-origin cookie goes along and is ignored.
         response = await fetch(target.url, {
           method: target.method,
           headers: target.headers,
@@ -223,7 +223,7 @@ async function transfer(file: UploadFile, options: UploadOptions, local: AbortCo
           { cause: failure },
         )
       }
-      // 403: URL expirada ou recusada — pede uma nova para a parte e tenta de novo.
+      // 403: URL expired or refused — request a new one for the part and try again.
       if (response?.status === 403) await requestUrls([n])
       else await wait(retryDelay(attempt), signal)
     }
@@ -253,7 +253,7 @@ async function transfer(file: UploadFile, options: UploadOptions, local: AbortCo
   return { recordingId: recording.id, deduplicated: false }
 }
 
-/** Aborta o upload no servidor e descarta as partes. Upload já inexistente não é erro. */
+/** Aborts the upload on the server and discards the parts. An upload that no longer exists is not an error. */
 export async function cancelUpload(uploadId: string, client: ApiClient = api): Promise<void> {
   const { response } = await client.DELETE('/api/v1/uploads/{upload_id}', {
     params: { path: { upload_id: uploadId } },

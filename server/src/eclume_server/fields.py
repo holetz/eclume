@@ -1,7 +1,7 @@
-"""Campos do usuário: os embutidos (título e tags) e os próprios (texto, lista, escolha).
+"""The user's fields: the built-in ones (title and tags) and their own (text, list, choice).
 
-Cada campo tem a regra ("como identificar") que o agente segue ao preenchê-lo. Contrato e decisões
-em docs/standards/code/processamento-automatico.md.
+Each field has the rule ("como identificar") the agent follows when filling it. Contract and decisions
+in docs/standards/code/processamento-automatico.md.
 """
 
 from __future__ import annotations
@@ -49,17 +49,17 @@ if TYPE_CHECKING:
 
 Kind = Literal["text", "list", "choice"]
 Option = Annotated[str, Field(min_length=1, max_length=120)]
-# Marcadores do padrão de título que um campo não pode encobrir.
+# Title pattern placeholders a field cannot shadow.
 RESERVED_KEYS = frozenset({"assunto", "data", "tipo"})
 MAX_KEY = 64
-# Itens de um valor de lista escrito pelo usuário.
+# Items of a list value written by the user.
 MAX_VALUE_ITEMS = 50
 # O filtro por campo da biblioteca e da busca: `<field_id>:<valor>`.
 FIELD_FILTER = r"^([0-9a-fA-F-]{36}):(.+)$"
 
 
 class FieldDraft(BaseModel):
-    """Schema `FieldDraft`: o conteúdo de um campo, salvo ou em rascunho."""
+    """Schema `FieldDraft`: the content of a field, saved or as a draft."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -71,7 +71,7 @@ class FieldDraft(BaseModel):
 
 
 class FieldCreate(FieldDraft):
-    """Schema `FieldCreate`: sem `position`, o campo vai para o fim da lista."""
+    """Schema `FieldCreate`: without `position`, the field goes to the end of the list."""
 
     position: int | None = Field(default=None, ge=0)
 
@@ -105,13 +105,13 @@ def field_json(row: Row) -> dict[str, Any]:
 
 
 def slug(name: str) -> str:
-    """Chave do campo a partir do nome: minúsculas, sem acento, `_` no lugar do resto."""
+    """The field key from the name: lowercase, without accents, `_` in place of the rest."""
     plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
     return re.sub(r"[^a-z0-9]+", "_", plain).strip("_")[:MAX_KEY] or "campo"
 
 
 async def free_key(conn: AsyncConnection, name: str) -> str:
-    """Uma chave livre entre os campos do usuário (sufixo `_2`, `_3`… quando já usada)."""
+    """A free key among the user's fields (suffix `_2`, `_3`… when already taken)."""
     base = slug(name)
     taken = set((await conn.execute(select(t.fields.c.key))).scalars()) | RESERVED_KEYS
     key, n = base, 1
@@ -122,7 +122,7 @@ async def free_key(conn: AsyncConnection, name: str) -> str:
 
 
 def check_options(kind: str, options: list[str]) -> list[str]:
-    """Opções sem repetição; escolha exige ao menos uma, e os outros tipos não têm opções."""
+    """Options without repeats; choice requires at least one, and the other types have no options."""
     unique = list(dict.fromkeys(options))
     if kind == "choice" and not unique:
         raise invalid_field("options", "um campo de escolha precisa de ao menos uma opção")
@@ -132,18 +132,18 @@ def check_options(kind: str, options: list[str]) -> list[str]:
 
 
 async def get_field(conn: AsyncConnection, field_id: UUID) -> Row:
-    """Campo do usuário da transação (a RLS só mostra os dele), ou 404."""
+    """The transaction user's field (RLS only shows theirs), or 404."""
     row = (await conn.execute(select(t.fields).where(t.fields.c.id == field_id))).mappings().first()
     if row is None:
         raise not_found("Campo inexistente ou sem acesso.")
     return row
 
 
-# --- valores por gravação ------------------------------------------------------------------------
+# --- values per recording ------------------------------------------------------------------------
 
 
 def validate_value(field: Row, value: Any) -> Any:  # noqa: ANN401 — o formato depende do tipo do campo
-    """O valor no formato do tipo do campo, ou 422 em `value`; `null` limpa (menos o título)."""
+    """The value in the field type's format, or 422 on `value`; `null` clears (except the title)."""
     kind = field["kind"]
     if value is None:
         if field["builtin"] == "title":
@@ -167,7 +167,7 @@ def validate_value(field: Row, value: Any) -> Any:  # noqa: ANN401 — o formato
     return value
 
 
-async def set_value(  # noqa: PLR0913 — o valor, a origem e o instantâneo de quem preencheu
+async def set_value(  # noqa: PLR0913 — the value, the origin and the snapshot of who filled it
     conn: AsyncConnection,
     recording_id: UUID,
     field: Row,
@@ -178,14 +178,14 @@ async def set_value(  # noqa: PLR0913 — o valor, a origem e o instantâneo de 
     provider_name: str | None = None,
     model: str | None = None,
 ) -> bool:
-    """Grava o valor e a origem; título e tags vão também para `recordings`, que a busca lê.
+    """Write the value and the origin; title and tags also go to `recordings`, which search reads.
 
-    Serve às rotas (sob a RLS do dono) e ao preenchimento automático (papel de conexão). O valor
-    `auto` só substitui outro `auto`: o que o usuário escreveu ou aceitou no meio-tempo fica, e a
-    função devolve `False`.
+    Serves the routes (under the owner's RLS) and automatic filling (connection role). An `auto`
+    value only replaces another `auto`: what the user wrote or accepted in the meantime stays, and
+    the function returns `False`.
     """
     if field["builtin"] == "tags" and origin != "auto" and value:
-        # A tag que o usuário escreve entra no cadastro, e a gravação fica com a grafia dele.
+        # A tag the user writes enters the catalog, and the recording keeps the user's spelling.
         value = await adopt(conn, field["owner_id"], value)
     fv = t.field_values
     values = {
@@ -208,7 +208,7 @@ async def set_value(  # noqa: PLR0913 — o valor, a origem e o instantâneo de 
     )
     if written.first() is None:
         return False
-    # O embutido tem o nome da coluna de `recordings` em que o valor também vive.
+    # A built-in field has the name of the `recordings` column where the value also lives.
     column = field["builtin"]
     if column is None or value is None:
         return True
@@ -216,7 +216,7 @@ async def set_value(  # noqa: PLR0913 — o valor, a origem e o instantâneo de 
     await conn.execute(
         update(t.recordings).where(t.recordings.c.id == recording_id).values({column: value, "updated_at": now})
     )
-    # Título e tags aparecem na transcrição: o `?since=` dos clientes precisa ver a mudança.
+    # Title and tags appear in the transcript: the clients' `?since=` must see the change.
     await conn.execute(update(t.transcripts).where(t.transcripts.c.recording_id == recording_id).values(updated_at=now))
     return True
 
@@ -232,7 +232,7 @@ async def builtin_fields(conn: AsyncConnection, owner_id: UUID) -> dict[str, Row
 
 
 async def mark_edited(conn: AsyncConnection, recording_id: UUID, owner_id: UUID, changes: dict[str, Any]) -> None:
-    """Título e tags que o usuário escreveu (edição ou upload) viram origem `edited`."""
+    """Title and tags the user wrote (edit or upload) get origin `edited`."""
     builtins = await builtin_fields(conn, owner_id)
     for builtin in ("title", "tags"):
         if builtin in changes and builtin in builtins:
@@ -240,7 +240,7 @@ async def mark_edited(conn: AsyncConnection, recording_id: UUID, owner_id: UUID,
 
 
 async def recording_values(conn: AsyncConnection, recording: Row) -> list[dict[str, Any]]:
-    """Schema `RecordingFieldValue` de cada campo do usuário, com os sem valor (`value`/`origin` nulos)."""
+    """Schema `RecordingFieldValue` of each of the user's fields, including those without a value (`value`/`origin` null)."""
     fv = t.field_values
     rows = (
         (
@@ -271,13 +271,13 @@ async def recording_values(conn: AsyncConnection, recording: Row) -> list[dict[s
     return items
 
 
-# --- preenchimento automático (job `fill_fields`) --------------------------------------------------
+# --- automatic filling (job `fill_fields`) -------------------------------------------------------
 
 LOCKED = ("edited", "accepted")
 
 
 async def eligible_fields(conn: AsyncConnection, recording_id: UUID, owner_id: UUID) -> list[Row]:
-    """Campos a preencher: os de `auto_fill` cujo valor o usuário não escreveu nem aceitou."""
+    """Fields to fill: the `auto_fill` ones whose value the user neither wrote nor accepted."""
     fv = t.field_values.c
     locked = select(fv.field_id).where(fv.recording_id == recording_id, fv.origin.in_(LOCKED))
     query = (
@@ -289,7 +289,7 @@ async def eligible_fields(conn: AsyncConnection, recording_id: UUID, owner_id: U
 
 
 async def tag_guide(conn: AsyncConnection, owner_id: UUID) -> tuple[TagGuide, list[str]]:
-    """O cadastro de tags e o modo da conta, para o agente, e os nomes cadastrados."""
+    """The tag catalog and the account mode, for the agent, and the catalogued names."""
     rows = await catalog(conn, owner_id)
     _, limit = await prefs(conn, owner_id)
     names = [row["name"] for row in rows]
@@ -298,7 +298,7 @@ async def tag_guide(conn: AsyncConnection, owner_id: UUID) -> tuple[TagGuide, li
 
 
 def spec(row: Row, title: str | None = None) -> FieldSpec:
-    """O campo como o agente o vê; o título segue a regra do assunto do tipo da gravação (`title`)."""
+    """The field as the agent sees it; the title follows the subject rule of the recording's type (`title`)."""
     return FieldSpec(
         key=row["key"],
         kind=row["kind"],
@@ -309,10 +309,10 @@ def spec(row: Row, title: str | None = None) -> FieldSpec:
 
 
 async def recording_context(conn: AsyncConnection, recording: Row) -> tuple[RecordingContext, list[Row]]:
-    """O contexto da gravação para o agente e as coleções que ele pode escolher.
+    """The recording context for the agent and the collections it can choose.
 
-    Coleções elegíveis: as automáticas com regra, se o usuário não mexeu nas coleções da gravação.
-    Participantes: as pessoas ligadas aos locutores, com os dados de cadastro.
+    Eligible collections: the automatic ones with a rule, if the user has not touched the recording's
+    collections. Participants: the people linked to the speakers, with their registration data.
     """
     agenda_type = None
     if recording["agenda_type_id"] is not None:
@@ -363,10 +363,11 @@ async def recording_context(conn: AsyncConnection, recording: Row) -> tuple[Reco
 
 
 async def apply_collections(conn: AsyncConnection, recording_id: UUID, eligible: list[Row], chosen: list[UUID]) -> int:
-    """Grava as coleções que o agente escolheu entre as elegíveis; devolve quantas ficaram.
+    """Write the collections the agent chose among the eligible ones; return how many remained.
 
-    Origem `edited` (o usuário mexeu enquanto o agente trabalhava): nada muda. Origem `auto`: as
-    escolhidas substituem as automáticas de antes, e as outras ficam. Sem origem (o envio): só soma.
+    Origin `edited` (the user touched them while the agent worked): nothing changes. Origin `auto`:
+    the chosen ones replace the previous automatic ones, and the others stay. No origin (the upload):
+    it only adds.
     """
     recording = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().first()
     if recording is None or recording["collections_origin"] == "edited":
@@ -384,7 +385,7 @@ async def apply_collections(conn: AsyncConnection, recording_id: UUID, eligible:
             .where(t.recordings.c.id == recording_id)
             .values(collection_ids=updated, collections_origin=origin, updated_at=now)
         )
-        # As coleções são as pastas do desktop: a transcrição reaparece no `?since=`.
+        # Collections are the desktop folders: the transcript reappears in `?since=`.
         await conn.execute(
             update(t.transcripts).where(t.transcripts.c.recording_id == recording_id).values(updated_at=now)
         )
@@ -392,12 +393,12 @@ async def apply_collections(conn: AsyncConnection, recording_id: UUID, eligible:
 
 
 async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int) -> str:
-    """O job `fill_fields`: preenche os campos automáticos da revisão e grava a etapa `fields`.
+    """The `fill_fields` job: fill the revision's automatic fields and write the `fields` step.
 
-    Roda com o papel de conexão, no worker CPU, depois da detecção do tipo: o assunto do título segue
-    a regra do tipo da gravação, e no fim (preenchida, pulada ou falha) o título é remontado pelo
-    padrão do tipo. Nunca sobrescreve um valor `edited` ou `accepted`. Falha passageira volta à fila
-    (`arq.Retry`); a definitiva deixa a etapa `failed`, e a cadeia segue.
+    Runs with the connection role, on the CPU worker, after type detection: the title subject follows
+    the rule of the recording's type, and at the end (filled, skipped or failed) the title is rebuilt
+    from the type's pattern. It never overwrites an `edited` or `accepted` value. A transient failure
+    goes back to the queue (`arq.Retry`); a permanent one leaves the step `failed`, and the chain goes on.
     """
     engine = ctx["engine"]
     async with system_tx(engine) as conn:
@@ -442,12 +443,12 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
         return outcome
     values, completion = outcome.values, outcome.completion
     async with system_tx(engine) as conn:
-        # O usuário pode ter escrito um valor enquanto o agente trabalhava: esse fica.
+        # The user may have written a value while the agent worked: that one stays.
         still = {row["id"] for row in await eligible_fields(conn, recording_id, recording["owner_id"])}
         filled = 0
         if "tags" in values:
-            # Só as tags do cadastro (ou variações delas); as novas, no modo autogerenciado e até o
-            # limite, entram no cadastro com a origem `auto`.
+            # Only catalog tags (or variations of them); new ones, in self-managed mode and up to the
+            # limit, enter the catalog with origin `auto`.
             kept, new = resolve(
                 values["tags"], catalog_names, allow_new=tags.allow_new, room=MAX_CATALOG - len(catalog_names)
             )
@@ -484,11 +485,11 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
 
 
 async def field_filters(conn: AsyncConnection, raw: list[str]) -> list[ColumnElement[bool]]:
-    """Um filtro por campo (`<field_id>:<valor>`): OU entre os valores do mesmo campo.
+    """A filter per field (`<field_id>:<valor>`): OR between values of the same field.
 
-    Título e tags são embutidos e vivem na gravação; os demais, em `field_values` (texto ou escolha
-    é o valor igual; lista, um dos itens). Um campo que a conta não tem não encontra nada. Os
-    predicados usam `recordings`: valem em `GET /recordings` e em `GET /search`.
+    Title and tags are built in and live on the recording; the others, in `field_values` (text or
+    choice is the equal value; list, one of the items). A field the account does not have matches
+    nothing. The predicates use `recordings`: they apply in `GET /recordings` and in `GET /search`.
     """
     wanted: dict[UUID, list[str]] = {}
     for item in raw:

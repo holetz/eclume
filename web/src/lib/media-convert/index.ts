@@ -1,4 +1,4 @@
-// API pública da biblioteca de conversão. O app importa só daqui.
+// Public API of the conversion library. The app imports only from here.
 export {
   convertAudio,
   probeMedia,
