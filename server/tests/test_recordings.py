@@ -1,4 +1,4 @@
-"""Gravações: leitura, edição, exclusão, áudio, progresso, retranscrição e compartilhamento."""
+"""Recordings: read, edit, delete, audio, progress, retranscription and sharing."""
 
 from __future__ import annotations
 
@@ -19,17 +19,17 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 
-def test_listagem_com_cursor_malformado_responde_422(
+def test_listing_with_malformed_cursor_returns_422(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     api = as_user(make_user())
-    # `["2026-01-01T00:00:00", 5]`: JSON bem formado, mas o id não é texto.
+    # `["2026-01-01T00:00:00", 5]`: well-formed JSON, but the id is not text.
     response = api.get("/api/v1/recordings", params={"cursor": "WyIyMDI2LTAxLTAxVDAwOjAwOjAwIiwgNV0"})
     assert response.status_code == 422
     assert "cursor inválido" in response.text
 
 
-def test_listar_obter_e_filtrar(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_list_get_and_filter(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     first = upload_file(api, audio_bytes(100), tags=["cliente-a"])
     second = upload_file(api, audio_bytes(100), tags=["cliente-b"])
@@ -56,7 +56,7 @@ def _ids(api: Api, **params: object) -> list[str]:
     return [r["id"] for r in response.json()["items"]]
 
 
-def test_biblioteca_por_intervalo_e_filtros(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_library_by_range_and_filters(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
 
     def recording(when: str, **fields: object) -> str:
@@ -66,11 +66,11 @@ def test_biblioteca_por_intervalo_e_filtros(as_user: Callable[[Account], Api], m
     b = recording("2026-09-03T10:00:00Z", tags=["y"], kind="note")
     c = recording("2026-09-10T10:00:00Z", tags=["x", "z"])
 
-    # A semana: `from` inclusivo, `to` exclusivo, pelo início da gravação.
+    # The week: `from` inclusive, `to` exclusive, by the recording start.
     week = {"from": "2026-09-01T10:00:00Z", "to": "2026-09-10T10:00:00Z", "sort": "recorded_asc"}
     assert _ids(api, **week) == [a, b]
     assert _ids(api, sort="recorded_desc") == [c, b, a]
-    # Paginando pela data de gravação, nada se perde nem se repete.
+    # Paging by recording date, nothing is lost or repeated.
     seen, cursor = [], None
     while True:
         page = api.get(
@@ -82,7 +82,7 @@ def test_biblioteca_por_intervalo_e_filtros(as_user: Callable[[Account], Api], m
             break
     assert seen == [a, b, c]
 
-    # OU dentro do mesmo filtro, E entre filtros.
+    # OR within the same filter, AND across filters.
     assert set(_ids(api, tag=["x", "y"])) == {a, b, c}
     assert _ids(api, tag="x", kind="meeting", sort="recorded_asc") == [a, c]
     assert _ids(api, tag="y", kind="meeting") == []
@@ -90,7 +90,7 @@ def test_biblioteca_por_intervalo_e_filtros(as_user: Callable[[Account], Api], m
     assert set(_ids(api, kind=["note", "meeting"])) == {a, b, c}
     assert set(_ids(api, status=["queued", "failed"])) == {a, b, c}
 
-    # Campos do usuário: o valor do campo próprio e os embutidos (título e tags).
+    # User fields: the value of a custom field and the built-in ones (title and tags).
     field = api.post("/api/v1/fields", json={"name": "Cliente", "kind": "text"}).json()
     team = api.post("/api/v1/fields", json={"name": "Equipes", "kind": "list"}).json()
     assert api.put(f"/api/v1/recordings/{a}/fields/{field['id']}", json={"value": "Serra Azul"}).status_code == 200
@@ -105,9 +105,7 @@ def test_biblioteca_por_intervalo_e_filtros(as_user: Callable[[Account], Api], m
     assert api.get("/api/v1/recordings", params={"field": "sem-dois-pontos"}).status_code == 422
 
 
-def test_biblioteca_por_pessoa(
-    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
-):
+def test_library_by_person(as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services):
     api = as_user(make_user())
     with_rafael = transcribed(api, services.settings)
     without = transcribed(api, services.settings)
@@ -120,7 +118,7 @@ def test_biblioteca_por_pessoa(
     assert without["id"] in _ids(api)
 
 
-def test_biblioteca_por_atributos_de_um_mesmo_participante(
+def test_library_by_attributes_of_the_same_participant(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -140,7 +138,7 @@ def test_biblioteca_por_atributos_de_um_mesmo_participante(
         assert linked.status_code == 200, linked.text
 
     link(both, "S1", rafael)
-    # A empresa e a tag estão na gravação, mas em pessoas diferentes.
+    # The company and the tag are in the recording, but on different people.
     link(split, "S1", ana)
     link(split, "S2", bruno)
 
@@ -154,7 +152,7 @@ def test_biblioteca_por_atributos_de_um_mesmo_participante(
     assert nobody["id"] not in _ids(api, person_tag="cliente")
 
 
-def test_editar_metadados_so_o_dono(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_edit_metadata_owner_only(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     owner = as_user(make_user())
     recording = upload_file(owner, audio_bytes(100))
     patched = owner.patch(
@@ -170,7 +168,7 @@ def test_editar_metadados_so_o_dono(as_user: Callable[[Account], Api], make_user
         "pt-BR",
     )
     assert body["updated_at"] > recording["updated_at"]
-    # Corrigir a data a torna informada pela pessoa; a natureza muda à mão.
+    # Correcting the date makes it user-provided; the kind changes by hand.
     assert recording["recorded_at_source"] == "upload"
     redated = owner.patch(
         f"/api/v1/recordings/{recording['id']}", json={"recorded_at": "2026-09-01T10:00:00Z", "kind": "note"}
@@ -191,7 +189,7 @@ def test_editar_metadados_so_o_dono(as_user: Callable[[Account], Api], make_user
     )
 
 
-def test_excluir_apaga_audio(as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services):
+def test_delete_removes_audio(as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services):
     account = make_user()
     api = as_user(account)
     recording = upload_file(api, audio_bytes(100))
@@ -200,7 +198,7 @@ def test_excluir_apaga_audio(as_user: Callable[[Account], Api], make_user: Calla
     assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 1
     assert api.delete(f"/api/v1/recordings/{recording['id']}").status_code == 204
     assert api.get(f"/api/v1/recordings/{recording['id']}").status_code == 404
-    # O áudio sai pela fila de exclusão, no dreno.
+    # The audio leaves through the deletion queue, on drain.
     drain_storage(services.settings)
     assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 0
 
@@ -212,7 +210,7 @@ def _count(services: Services, sql: str, **params: Any) -> int:  # noqa: ANN401
     return run(services.sql(go))
 
 
-def test_excluir_leva_resumo_chat_marcadores_e_audio(
+def test_delete_takes_summary_chat_markers_and_audio(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -224,7 +222,7 @@ def test_excluir_leva_resumo_chat_marcadores_e_audio(
     done = api.post(f"/api/v1/transcripts/{tid}/summaries", json={"agenda_type_id": types[0]["id"]})
     assert done.status_code == 202, done.text
     run_cpu(services.settings)
-    # Um resumo ainda na fila quando a gravação sai, e um pedido de ajuste já feito.
+    # A summary still queued when the recording goes away, and an adjustment request already made.
     queued = api.post(f"/api/v1/transcripts/{tid}/summaries", json={"agenda_type_id": types[0]["id"]})
     assert queued.status_code == 202, queued.text
 
@@ -260,14 +258,12 @@ def test_excluir_leva_resumo_chat_marcadores_e_audio(
     }
     drain_storage(services.settings)
     assert s3.list_objects_v2(Bucket=services.settings.s3_bucket, Prefix=key)["KeyCount"] == 0
-    # O resumo que estava na fila encontra a gravação apagada e não faz nada.
+    # The summary that was queued finds the recording deleted and does nothing.
     agents = run_cpu(services.settings)
     assert agents.calls == []
 
 
-def test_audio_redireciona_para_url_assinada_com_range(
-    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
-):
+def test_audio_redirects_to_signed_url_with_range(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     data = audio_bytes(5000)
     recording = upload_file(api, data)
@@ -286,7 +282,7 @@ def test_audio_redireciona_para_url_assinada_com_range(
     assert api.client.get(location.replace("sig=", "sig=0")).status_code == 401
 
 
-def test_progresso_do_worker_aparece_no_job(
+def test_worker_progress_shows_in_the_job(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -307,14 +303,14 @@ def test_progresso_do_worker_aparece_no_job(
     assert api.get("/api/v1/recordings", params={"status": "queued"}).json()["items"] == []
 
 
-def test_progresso_de_outra_revisao_nao_aparece(
+def test_progress_of_another_revision_does_not_show(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
     recording = upload_file(api, audio_bytes(100))
     client = redis.Redis.from_url(services.settings.redis_url)
     key = f"eclume:progress:{recording['id']}"
-    # O job em aberto é a revisão 1; o hash que sobrou é de outra revisão.
+    # The open job is revision 1; the leftover hash belongs to another revision.
     client.hset(key, mapping={"revision": "2", "stage": "diarize", "pct": "40", "updated_at": "2026-09-18T14:09:35Z"})
     body = api.get(f"/api/v1/recordings/{recording['id']}").json()
     assert body["status"] == "queued"
@@ -324,7 +320,7 @@ def test_progresso_de_outra_revisao_nao_aparece(
     assert api.get(f"/api/v1/recordings/{recording['id']}").json()["job"]["progress"] == 0.4
 
 
-def test_retranscrever_so_sem_job_em_andamento(
+def test_retranscribe_only_without_a_job_in_progress(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -358,7 +354,7 @@ _SECOND_REVISION = (
 )
 
 
-def test_retranscrever_em_corrida_responde_409(
+def test_retranscribe_in_a_race_returns_409(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -378,7 +374,7 @@ def test_retranscrever_em_corrida_responde_409(
         )
 
     run(services.sql(failed))
-    # O primeiro pedido segura a gravação e cria a revisão 2; o segundo, à espera do lock, vê o job novo.
+    # The first request holds the recording and creates revision 2; the second, waiting on the lock, sees the new job.
     second = run(
         while_recording_locked(
             services, rid, lambda: api.post(f"/api/v1/recordings/{rid}/retranscribe"), _SECOND_REVISION, id=rid
@@ -394,13 +390,13 @@ def _cancel_requested(services: Services, recording_id: str, revision: int = 1) 
     return bool(redis.Redis.from_url(services.settings.redis_url).exists(f"eclume:cancel:{recording_id}:{revision}"))
 
 
-def test_cancelar_a_transcricao_em_curso(
+def test_cancel_the_running_transcription(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
     recording = upload_file(api, audio_bytes(103))
     rid = recording["id"]
-    # O worker GPU está no pré-processamento desta revisão.
+    # The GPU worker is preprocessing this revision.
     redis.Redis.from_url(services.settings.redis_url).hset(
         f"eclume:progress:{rid}", mapping={"revision": "1", "stage": "preprocess", "pct": "5", "updated_at": "agora"}
     )
@@ -418,7 +414,7 @@ def test_cancelar_a_transcricao_em_curso(
     assert steps["transcription"]["state"] == "pending"
     assert _cancel_requested(services, rid)
 
-    # Sem job em aberto, 409; "Transcrever de novo" é a volta.
+    # With no open job, 409; "Transcrever de novo" is the way back.
     again = api.post(f"/api/v1/recordings/{rid}/cancel")
     assert (again.status_code, again.headers["content-type"]) == (409, "application/problem+json")
     retried = api.post(f"/api/v1/recordings/{rid}/retranscribe")
@@ -427,7 +423,9 @@ def test_cancelar_a_transcricao_em_curso(
     assert not _cancel_requested(services, rid, 2)
 
 
-def test_cancelar_na_fila_pula_a_transcricao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_cancel_while_queued_skips_the_transcription(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
     api = as_user(make_user())
     recording = upload_file(api, audio_bytes(104))
     body = api.post(f"/api/v1/recordings/{recording['id']}/cancel").json()
@@ -437,7 +435,7 @@ def test_cancelar_na_fila_pula_a_transcricao(as_user: Callable[[Account], Api], 
     assert other.post(f"/api/v1/recordings/{recording['id']}/cancel").status_code == 404
 
 
-def test_excluir_a_gravacao_cancela_o_job_em_aberto(
+def test_deleting_the_recording_cancels_the_open_job(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -446,7 +444,7 @@ def test_excluir_a_gravacao_cancela_o_job_em_aberto(
     assert _cancel_requested(services, recording["id"])
 
 
-def test_excluir_por_pat_exige_recordings_delete(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_delete_by_pat_requires_recordings_delete(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     session = as_user(make_user())
     recording = upload_file(session, audio_bytes(101))
     writer = session.pat("recordings:read", "recordings:write")
@@ -458,7 +456,7 @@ def test_excluir_por_pat_exige_recordings_delete(as_user: Callable[[Account], Ap
     assert session.get(f"/api/v1/recordings/{recording['id']}").status_code == 404
 
 
-def test_dono_obsoleto_e_o_proprio_usuario_sem_join(
+def test_stale_owner_is_the_user_itself_without_a_join(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     from eclume_server.recordings import recording_select  # noqa: PLC0415
@@ -469,6 +467,6 @@ def test_dono_obsoleto_e_o_proprio_usuario_sem_join(
     recording = upload_file(api, audio_bytes(106))
     body = api.get(f"/api/v1/recordings/{recording['id']}").json()
     assert body["owner"] == {"id": str(account.user_id), "name": "Mariana Couto"}
-    # O nome vem do usuário da transação, não de um join com `users` por linha.
+    # The name comes from the transaction user, not from a per-row join with `users`.
     for query in (recording_select(), transcript_select()):
         assert "JOIN users" not in str(query)

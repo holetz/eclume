@@ -1,4 +1,4 @@
-"""Edição da transcrição pelo dono: locutor (nome e pessoa), mesclagem e segmento."""
+"""Transcript editing by the owner: speaker (name and person), merge and segment."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def owned(as_user: Callable[[Account], Api], make_user: Callable[..., Account], 
     return {"api": api, "recording": recording, "tid": tid, "base": f"/api/v1/transcripts/{tid}"}
 
 
-def test_renomear_e_ligar_a_pessoa(
+def test_rename_and_link_the_person(
     owned: dict[str, Any],
     make_user: Callable[..., Account],
     as_user: Callable[[Account], Api],
@@ -76,7 +76,7 @@ def test_renomear_e_ligar_a_pessoa(
     assert api.patch(f"{base}/speakers/S2", json={"person_id": foreign["id"]}).status_code == 422
 
 
-def test_so_o_dono_edita(
+def test_only_the_owner_edits(
     owned: dict[str, Any],
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
@@ -98,7 +98,7 @@ def test_so_o_dono_edita(
     assert api.get(base).json()["speakers"][0]["label"] == "Mariana"
 
 
-def test_mesclar_locutores(owned: dict[str, Any], services: Services):
+def test_merge_speakers(owned: dict[str, Any], services: Services):
     api, base, tid = owned["api"], owned["base"], owned["tid"]
     for speaker in ("S2", "S3"):
         _sql(
@@ -129,7 +129,7 @@ def test_mesclar_locutores(owned: dict[str, Any], services: Services):
     assert _sql(services, "SELECT speaker_id FROM speaker_embeddings WHERE transcript_id = :t", t=tid) == [("S2",)]
 
 
-def test_corrigir_segmento(owned: dict[str, Any], services: Services):
+def test_correct_segment(owned: dict[str, Any], services: Services):
     api, base, tid = owned["api"], owned["base"], owned["tid"]
     before = api.get(base, params={"include": "words"}).json()
     assert "words" in before["segments"][1]
@@ -147,7 +147,7 @@ def test_corrigir_segmento(owned: dict[str, Any], services: Services):
     after = api.get(base, params={"include": "words"}).json()
     assert "words" not in after["segments"][1]
     assert after["revision"] == before["revision"] + 1
-    # O índice full-text acompanha o texto novo, sem acento.
+    # The full-text index follows the new text, without accents.
     found = _sql(
         services,
         "SELECT segment_id FROM segments WHERE transcript_id = :t AND tsv @@ websearch_to_tsquery('eclume_pt', 'calibracao')",
@@ -166,8 +166,8 @@ def test_corrigir_segmento(owned: dict[str, Any], services: Services):
     assert api.patch(f"{base}/segments/seg-0002", json={}).status_code == 422
 
 
-def test_editar_a_transcricao_move_o_updated_at_da_gravacao(owned: dict[str, Any]):
-    """A pasta sincronizada lista por `recordings.updated_at`: uma correção precisa reaparecer no `?since=`."""
+def test_editing_the_transcript_moves_the_recording_updated_at(owned: dict[str, Any]):
+    """The synced folder lists by `recordings.updated_at`: a correction must show up again in `?since=`."""
     api, base = owned["api"], owned["base"]
     recording_url = f"/api/v1/recordings/{owned['recording']['id']}"
     before = api.get(recording_url).json()["updated_at"]
