@@ -1,16 +1,16 @@
-// Verificação visual de Organizar, Minhas configurações e Ajuda contra o Design System, com o mock:
-// - afirma o estilo computado (canto zero no .qr-slot e nos painéis, QR preto sobre branco no escuro,
-//   .list-row e .table do DS, .help-drawer fixo à direita, nenhuma requisição externa);
-// - com E2E_SCREENSHOTS=1, salva as telas em claro e escuro, a 1440×900 e a 390×844, em
-//   test-results/screens/app-<tela>[-movel]-<claro|escuro>.png;
-// - com E2E_SCREENSHOTS=1, salva também, do design-system/ (ou de ECLUME_DS_DIR), os quadros de
-//   examples/organize.html, settings.html, mobile.html e help.html (ds-<quadro>-<claro|escuro>.png).
+// Visual check of Organizar, Minhas configurações and Ajuda against the Design System, with the mock:
+// - asserts the computed style (zero radius on .qr-slot and on the panels, black QR on white in dark,
+//   the DS .list-row and .table, .help-drawer fixed on the right, no external request);
+// - with E2E_SCREENSHOTS=1, saves the screens in light and dark, at 1440×900 and 390×844, in
+//   test-results/screens/app-<screen>[-movel]-<claro|escuro>.png;
+// - with E2E_SCREENSHOTS=1, also saves, from design-system/ (or from ECLUME_DS_DIR), the frames of
+//   examples/organize.html, settings.html, mobile.html and help.html (ds-<frame>-<claro|escuro>.png).
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 
 const SCREENS = process.env.E2E_SCREENSHOTS ? 'test-results/screens' : null
-// O Design System versionado em design-system/; ECLUME_DS_DIR aponta para outro export, se preciso.
+// The Design System versioned in design-system/; ECLUME_DS_DIR points at another export, if needed.
 const DS_DIR = process.env.ECLUME_DS_DIR ?? fileURLToPath(new URL('../../design-system', import.meta.url))
 const DESKTOP = { width: 1440, height: 900 }
 const MOBILE = { width: 390, height: 844 }
@@ -27,7 +27,7 @@ const DS_FRAMES = {
 } as const
 
 test.beforeEach(async ({ page, baseURL }) => {
-  // O mock não emite cookies: o login bem-sucedido ganha os cookies que o servidor real poria.
+  // The mock sets no cookies: a successful login gets the cookies the real server would set.
   await page.route('**/api/v1/auth/login', async (route) => {
     const response = await route.fetch()
     if (response.status() === 204) {
@@ -40,7 +40,7 @@ test.beforeEach(async ({ page, baseURL }) => {
   })
 })
 
-/** O mock só tem o exemplo "usado" do estado do código: aqui o código continua pendente. */
+/** The mock only has the "usado" example of the code state: here the code stays pending. */
 async function keepPairingPending(page: Page) {
   await page.route('**/api/v1/devices/pairing-codes/*', async (route) => {
     const response = await route.fetch()
@@ -48,7 +48,7 @@ async function keepPairingPending(page: Page) {
   })
 }
 
-/** O exemplo do mock vence numa data fixa: o código criado passa a vencer daqui a 10 minutos. */
+/** The mock example expires on a fixed date: the created code now expires 10 minutes from now. */
 async function freshPairingCodes(page: Page) {
   await page.route('**/api/v1/devices/pairing-codes', async (route) => {
     if (route.request().method() !== 'POST') return route.continue()
@@ -68,7 +68,7 @@ async function login(page: Page) {
   await expect(page.locator('#conteudo')).toBeVisible()
 }
 
-/** Troca o tema do sistema e espera o app gravar o `data-theme` correspondente. */
+/** Switches the system theme and waits for the app to write the matching `data-theme`. */
 async function applyScheme(page: Page, scheme: 'light' | 'dark') {
   await page.emulateMedia({ colorScheme: scheme })
   await expect(page.locator('html')).toHaveAttribute('data-theme', scheme)
@@ -89,13 +89,13 @@ const computed = (page: Page, selector: string, property: string) =>
     .first()
     .evaluate((element, name) => getComputedStyle(element).getPropertyValue(name), property)
 
-/** Espera a tela carregada: o h1 e nenhum "Carregando…" ou "Gerando…". */
+/** Waits for the loaded screen: the h1 and no "Carregando…" or "Gerando…". */
 async function ready(page: Page, heading: string) {
   await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible()
   await expect(page.getByRole('status').filter({ hasText: /^(Carregando|Gerando|Procurando)/ })).toHaveCount(0)
 }
 
-test('organizar, configurações e ajuda no Design System: cantos, QR, listas, tabela, gaveta e nada externo', async ({
+test('organize, settings and help in the Design System: radii, QR, lists, table, drawer and nothing external', async ({
   page,
   baseURL,
 }) => {
@@ -148,7 +148,7 @@ test('organizar, configurações e ajuda no Design System: cantos, QR, listas, t
 
 for (const viewport of [DESKTOP, MOBILE]) {
   const mobile = viewport === MOBILE
-  test(`screenshots a ${viewport.width}×${viewport.height}`, async ({ page }) => {
+  test(`screenshots at ${viewport.width}×${viewport.height}`, async ({ page }) => {
     test.skip(!SCREENS, 'só com E2E_SCREENSHOTS=1')
     await page.setViewportSize(viewport)
     await login(page)
@@ -170,7 +170,7 @@ for (const viewport of [DESKTOP, MOBILE]) {
       await page.goto(route)
       await ready(page, heading)
       if (name === 'app-movel') await expect(page.getByRole('img', { name: /Código QR/ })).toBeVisible()
-      // Sem rolagem lateral da página, também a 390px.
+      // No horizontal page scroll, also at 390px.
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width)
       await shoot(page, name, mobile)
     }
@@ -194,7 +194,7 @@ for (const viewport of [DESKTOP, MOBILE]) {
   })
 }
 
-test('quadros de referência do Design System', async ({ page }) => {
+test('Design System reference frames', async ({ page }) => {
   test.skip(!SCREENS, 'só com E2E_SCREENSHOTS=1')
   await page.setViewportSize({ width: 4700, height: 3200 })
   for (const [file, frames] of Object.entries(DS_FRAMES)) {
