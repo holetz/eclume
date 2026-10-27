@@ -9,8 +9,8 @@ beforeAll(() => preloadRoute('/pessoas'))
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('diretório de pessoas', () => {
-  it('lista as pessoas numa tabela com contagem e filtra por nome', async () => {
+describe('people directory', () => {
+  it('lists the people in a table with a count and filters by name', async () => {
     const http = mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
       'GET /api/v1/people': (request) => {
@@ -25,13 +25,13 @@ describe('diretório de pessoas', () => {
     const link = await within(table).findByRole('link', { name: 'Mariana Couto' })
     expect(link).toHaveAttribute('href', '/pessoas/01928f3a-1c00-7a00-8000-000000000301')
     expect(link.closest('.speaker')).toHaveClass('speaker-2')
-    // A primeira linha é o cadastro; depois, uma linha por pessoa.
+    // The first row is the registration row; after it, one row per person.
     const rows = within(table).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(4)
     expect(within(rows[2]).getByText('14')).toHaveClass('tabular')
     expect(within(table).getByRole('columnheader', { name: 'Amostras de voz' })).toBeInTheDocument()
     expect(within(table).getByRole('columnheader', { name: 'Empresa' })).toBeInTheDocument()
-    // O e-mail quase nunca importa: começa escondido.
+    // The e-mail hardly ever matters: it starts hidden.
     expect(within(table).queryByRole('columnheader', { name: 'E-mail' })).not.toBeInTheDocument()
 
     await userEvent.type(screen.getByRole('searchbox', { name: 'Buscar pessoas' }), 'raf')
@@ -40,7 +40,7 @@ describe('diretório de pessoas', () => {
     expect(queries).toContain('raf')
   })
 
-  it('cadastra uma pessoa na linha de cadastro com nome e empresa, com Enter', async () => {
+  it('registers a person in the registration row with name and company, with Enter', async () => {
     const created = { ...fixtures.person(), name: 'Rafael Lima' }
     const http = mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
@@ -62,7 +62,7 @@ describe('diretório de pessoas', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Pessoas' })).toBeInTheDocument()
   })
 
-  it('mostra o erro do cadastro na própria linha', async () => {
+  it('shows the registration error in the row itself', async () => {
     mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
       'GET /api/v1/people': () => fixtures.personPage(),
@@ -76,7 +76,7 @@ describe('diretório de pessoas', () => {
     expect(name.closest('tr')).toContainElement(screen.getByRole('alert'))
   })
 
-  it('escolhe as colunas no menu Colunas e lembra a escolha', async () => {
+  it('chooses the columns in the Colunas menu and remembers the choice', async () => {
     mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
       'GET /api/v1/people': () => fixtures.personPage(),

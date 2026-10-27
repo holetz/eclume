@@ -24,8 +24,8 @@ function mockPerson(extra: Parameters<typeof mockFetch>[0] = {}) {
 
 const stat = (label: string) => screen.getByText(label, { selector: '.stat .kicker' }).closest('.stat') as HTMLElement
 
-describe('página da pessoa', () => {
-  it('mostra o cabeçalho e os números: gravações, tempo de fala e amostras de voz', async () => {
+describe('person page', () => {
+  it('shows the header and the numbers: recordings, speaking time and voice samples', async () => {
     mockPerson()
     renderApp(`/pessoas/${RAFAEL}`)
     expect(await screen.findByRole('heading', { level: 1, name: 'Rafael Lima' })).toBeInTheDocument()
@@ -38,7 +38,7 @@ describe('página da pessoa', () => {
     expect(within(stat('Tempo de fala')).getByText('7 min 29 s')).toBeInTheDocument()
   })
 
-  it('diz quando a identificação por voz está desligada ou sem amostras', async () => {
+  it('says when voice identification is off or has no samples', async () => {
     mockPerson({
       'GET /api/v1/people/:id/voiceprint': () => ({ ...fixtures.voiceprint(), enabled: false, sample_count: 0, samples: [] }),
     })
@@ -47,41 +47,41 @@ describe('página da pessoa', () => {
     expect(within(stat('Amostras de voz')).getByText('0')).toBeInTheDocument()
   })
 
-  it('troca de aba pelo clique e pelas setas, e guarda a aba em ?aba=', async () => {
+  it('switches tabs by click and by arrow keys, and keeps the tab in ?aba=', async () => {
     const http = mockPerson()
     renderApp(`/pessoas/${RAFAEL}`)
     const tabs = await screen.findByRole('tablist', { name: 'Sobre a pessoa' })
-    const gravacoes = within(tabs).getByRole('tab', { name: 'Gravações' })
-    expect(gravacoes).toHaveAttribute('aria-selected', 'true')
-    const lista = await screen.findByRole('list', { name: 'Gravações da pessoa' })
-    expect(within(lista).getAllByRole('link')[0]).toHaveAttribute('href', expect.stringMatching(/^\/gravacoes\//))
+    const recordingsTab = within(tabs).getByRole('tab', { name: 'Gravações' })
+    expect(recordingsTab).toHaveAttribute('aria-selected', 'true')
+    const list = await screen.findByRole('list', { name: 'Gravações da pessoa' })
+    expect(within(list).getAllByRole('link')[0]).toHaveAttribute('href', expect.stringMatching(/^\/gravacoes\//))
 
     await userEvent.click(within(tabs).getByRole('tab', { name: 'Falas' }))
-    const falas = await screen.findByRole('list', { name: 'Falas da pessoa' })
-    expect(within(falas).getAllByRole('listitem')).toHaveLength(3)
-    expect(within(falas).getByRole('link', { name: /02:02/ })).toHaveAttribute(
+    const utterances = await screen.findByRole('list', { name: 'Falas da pessoa' })
+    expect(within(utterances).getAllByRole('listitem')).toHaveLength(3)
+    expect(within(utterances).getByRole('link', { name: /02:02/ })).toHaveAttribute(
       'href',
       '/gravacoes/01928f3a-1c00-7a00-8000-000000000401?t=122500',
     )
     expect(new URL(http.requests('GET /api/v1/search')[0].url).searchParams.get('person')).toBe(RAFAEL)
 
     await userEvent.keyboard('{ArrowRight}')
-    const amostras = within(tabs).getByRole('tab', { name: 'Amostras de voz' })
-    expect(amostras).toHaveAttribute('aria-selected', 'true')
-    expect(amostras).toHaveFocus()
+    const samplesTab = within(tabs).getByRole('tab', { name: 'Amostras de voz' })
+    expect(samplesTab).toHaveAttribute('aria-selected', 'true')
+    expect(samplesTab).toHaveFocus()
     expect(await screen.findByRole('list', { name: 'Amostras de voz' })).toBeInTheDocument()
     await userEvent.keyboard('{ArrowRight}')
-    expect(gravacoes).toHaveFocus()
+    expect(recordingsTab).toHaveFocus()
   })
 
-  it('abre direto na aba de ?aba=', async () => {
+  it('opens straight on the ?aba= tab', async () => {
     mockPerson()
     renderApp(`/pessoas/${RAFAEL}?aba=falas`)
     expect(await screen.findByRole('tab', { name: 'Falas' })).toHaveAttribute('aria-selected', 'true')
     expect(await screen.findByRole('list', { name: 'Falas da pessoa' })).toBeInTheDocument()
   })
 
-  it('edita no diálogo', async () => {
+  it('edits in the dialog', async () => {
     let current = fixtures.person()
     const http = mockPerson({
       'GET /api/v1/people/:id': () => current,
@@ -90,16 +90,16 @@ describe('página da pessoa', () => {
     renderApp(`/pessoas/${RAFAEL}`)
     await userEvent.click(await screen.findByRole('button', { name: 'Editar' }))
     const dialog = screen.getByRole('dialog', { name: 'Editar pessoa' })
-    const nome = within(dialog).getByLabelText('Nome')
-    await userEvent.clear(nome)
-    await userEvent.type(nome, 'Rafael Lima Souza')
+    const name = within(dialog).getByLabelText('Nome')
+    await userEvent.clear(name)
+    await userEvent.type(name, 'Rafael Lima Souza')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'Rafael Lima Souza' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(await http.requests('PATCH /api/v1/people/:id')[0].json()).toMatchObject({ name: 'Rafael Lima Souza' })
   })
 
-  it('mostra e edita o cadastro: empresa, área, cargo e tags da pessoa', async () => {
+  it('shows and edits the record: company, department, role and person tags', async () => {
     let current = fixtures.person()
     const http = mockPerson({
       'GET /api/v1/people/:id': () => current,
@@ -128,7 +128,7 @@ describe('página da pessoa', () => {
     })
   })
 
-  it('exclui pelo diálogo de edição, com confirmação', async () => {
+  it('deletes through the edit dialog, with confirmation', async () => {
     const http = mockPerson({
       'DELETE /api/v1/people/:id': () => empty(),
       'GET /api/v1/people': () => fixtures.personPage(),

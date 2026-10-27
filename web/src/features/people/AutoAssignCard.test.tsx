@@ -14,8 +14,8 @@ const base = {
   'GET /api/v1/people': () => fixtures.personPage(),
 }
 
-describe('atribuição automática de locutores', () => {
-  it('mostra o limiar e salva a mudança dele', async () => {
+describe('automatic speaker assignment', () => {
+  it('shows the threshold and saves its change', async () => {
     const http = mockFetch({
       ...base,
       'GET /api/v1/me/voice-assignment': () => fixtures.voiceAssignment(),
@@ -35,7 +35,7 @@ describe('atribuição automática de locutores', () => {
     expect(await http.requests('PATCH /api/v1/me/voice-assignment')[0].json()).toEqual({ threshold: 0.9 })
   })
 
-  it('desliga a atribuição pelo interruptor', async () => {
+  it('turns the assignment off with the switch', async () => {
     const http = mockFetch({
       ...base,
       'GET /api/v1/me/voice-assignment': () => fixtures.voiceAssignment(),
@@ -47,7 +47,7 @@ describe('atribuição automática de locutores', () => {
     expect(await http.requests('PATCH /api/v1/me/voice-assignment')[0].json()).toEqual({ enabled: false })
   })
 
-  it('não aparece com a identificação por voz desligada na plataforma', async () => {
+  it('does not show with voice identification turned off on the platform', async () => {
     mockFetch({
       ...base,
       'GET /api/v1/me/voice-assignment': () => ({ ...fixtures.voiceAssignment(), platform_enabled: false }),
@@ -57,7 +57,7 @@ describe('atribuição automática de locutores', () => {
     expect(screen.queryByRole('region', { name: 'Atribuição automática de locutores' })).not.toBeInTheDocument()
   })
 
-  it('avisa, sem o interruptor, quando a conta não guarda amostras de voz', async () => {
+  it('warns, without the switch, when the account does not keep voice samples', async () => {
     mockFetch({
       ...base,
       'GET /api/v1/me/voice-assignment': () => ({ ...fixtures.voiceAssignment(), keep_samples: false }),
