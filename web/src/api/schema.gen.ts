@@ -4709,133 +4709,133 @@ export interface components {
         };
         /**
          * Transcript
-         * @description Transcrição do eclume, contrato v1. É o corpo de `GET /api/v1/transcripts/{transcript_id}` e a saída do worker GPU. Evolui só de forma aditiva: o consumidor ignora propriedades que não conhece e tolera valores de enum novos (regras em contracts/README.md).
+         * @description eclume transcript, contract v1. It is the body of `GET /api/v1/transcripts/{transcript_id}` and the output of the GPU worker. It evolves only additively: the consumer ignores properties it does not know and tolerates new enum values (rules in contracts/README.md).
          */
         Transcript: {
             /**
-             * @description Versão deste schema, `1.<minor>`. O minor sobe a cada mudança aditiva; a 1.2 marca `owner` como obsoleto.
+             * @description Version of this schema, `1.<minor>`. The minor goes up with every additive change; 1.2 marks `owner` as deprecated.
              * @example 1.1
              */
             schema_version: string;
             /**
              * Format: uuid
-             * @description Id da transcrição. Estável entre revisões e retranscrições.
+             * @description Transcript id. Stable across revisions and retranscriptions.
              */
             id: string;
             /**
              * Format: uuid
-             * @description Gravação de onde a transcrição saiu.
+             * @description Recording the transcript came from.
              */
             recording_id: string;
-            /** @description Título da gravação. */
+            /** @description Recording title. */
             title: string;
-            /** @description Idioma do conteúdo, BCP 47 (`pt-BR`, `pt`, `en`). */
+            /** @description Content language, BCP 47 (`pt-BR`, `pt`, `en`). */
             language: string;
             /**
              * Format: date-time
-             * @description Início da gravação (RFC 3339). Sem data informada pelo cliente, é o instante do upload.
+             * @description Recording start (RFC 3339). Without a date supplied by the client, it is the upload instant.
              */
             recorded_at: string;
-            /** @description Duração do áudio em milissegundos. */
+            /** @description Audio duration in milliseconds. */
             duration_ms: number;
             /**
-             * @description Como o áudio chegou ao eclume: `desktop` (app de captura), `upload` (navegador) ou `api` (integração por PAT).
+             * @description How the audio reached eclume: `desktop` (capture app), `upload` (browser) or `api` (integration through a PAT).
              * @enum {string}
              */
             source: "desktop" | "upload" | "api";
-            /** @description Hash do arquivo de áudio enviado, `sha256:<hex>`. É a chave de deduplicação do upload e da importação no lumea. */
+            /** @description Hash of the uploaded audio file, `sha256:<hex>`. It is the deduplication key of the upload and of the import into lumea. */
             content_hash: string;
-            /** @description Revisão do conteúdo. Sobe a cada edição (locutor renomeado, pessoa ligada, segmento corrigido) e a cada retranscrição. */
+            /** @description Content revision. It goes up with every edit (speaker renamed, person linked, segment corrected) and with every retranscription. */
             revision: number;
             /** Format: date-time */
             created_at: string;
             /**
              * Format: date-time
-             * @description Última mudança de qualquer campo; é o que `GET /api/v1/transcripts?since=` compara.
+             * @description Last change to any field; it is what `GET /api/v1/transcripts?since=` compares.
              */
             updated_at: string;
             /**
              * @deprecated
-             * @description Obsoleto desde o schema 1.2: sempre o próprio usuário (cada conta é isolada); sai na versão 2 do schema.
+             * @description Deprecated since schema 1.2: always the user themselves (each account is isolated); removed in version 2 of the schema.
              */
             owner: components["schemas"]["UserRef"];
             engine?: components["schemas"]["TranscriptEngine"];
-            /** @description Locutores da transcrição. Sem diarização, há um locutor só. */
+            /** @description Speakers of the transcript. Without diarization, there is a single speaker. */
             speakers: components["schemas"]["Speaker"][];
-            /** @description Falas em ordem de `start_ms`. Todo `speaker_id` aponta para um locutor de `speakers`. */
+            /** @description Utterances in `start_ms` order. Every `speaker_id` points to a speaker in `speakers`. */
             segments: components["schemas"]["Segment"][];
-            /** @description Tags da gravação. */
+            /** @description Recording tags. */
             tags?: string[];
             /**
-             * @description Natureza da gravação: `meeting` (reunião) ou `note` (nota por voz). Desde o schema 1.1.
+             * @description Nature of the recording: `meeting` (meeting) or `note` (voice note). Since schema 1.1.
              * @enum {string}
              */
             kind?: "meeting" | "note";
             /**
-             * @description De onde veio `recorded_at`: `capture` (relógio do app que gravou), `file_metadata` (metadados do arquivo, confirmados na importação), `user` (informada ou corrigida) ou `upload` (hora do envio). Desde o schema 1.1.
+             * @description Where `recorded_at` came from: `capture` (clock of the app that recorded), `file_metadata` (file metadata, confirmed at import), `user` (supplied or corrected) or `upload` (upload time). Since schema 1.1.
              * @enum {string}
              */
             recorded_at_source?: "capture" | "file_metadata" | "user" | "upload";
         };
-        /** @description Referência curta a um usuário do eclume. */
+        /** @description Short reference to an eclume user. */
         UserRef: {
             /** Format: uuid */
             id: string;
             name: string;
         };
-        /** @description Referência curta a uma pessoa do diretório da organização. */
+        /** @description Short reference to a person in the organization's directory. */
         PersonRef: {
             /** Format: uuid */
             id: string;
             name: string;
         };
-        /** @description Pessoa sugerida para um locutor pela impressão de voz. Só a atribuição automática da conta (`Speaker.auto_score`) liga sem confirmação, e só acima do limiar dela. */
+        /** @description Person suggested for a speaker by the voiceprint. Only the account's automatic assignment (`Speaker.auto_score`) links without confirmation, and only above its threshold. */
         SpeakerSuggestion: {
             person: components["schemas"]["PersonRef"];
-            /** @description Similaridade de cosseno normalizada, de 0 a 1. */
+            /** @description Normalized cosine similarity, from 0 to 1. */
             score: number;
         };
-        /** @description Locutor de uma transcrição. */
+        /** @description Speaker of a transcript. */
         Speaker: {
-            /** @description Id do locutor, único dentro da transcrição (`S1`, `S2`...). Estável entre edições; some só numa mesclagem. */
+            /** @description Speaker id, unique within the transcript (`S1`, `S2`...). Stable across edits; disappears only in a merge. */
             id: string;
-            /** @description Nome exibido. Começa como `Locutor N` e muda quando o usuário renomeia o locutor. */
+            /** @description Display name. It starts as `Locutor N` and changes when the user renames the speaker. */
             label: string;
-            /** @description Pessoa ligada ao locutor, ou `null` enquanto ninguém a identificou. Vem de uma confirmação humana ou, com `auto_score`, da atribuição automática pela voz. */
+            /** @description Person linked to the speaker, or `null` while nobody has identified them. It comes from a human confirmation or, with `auto_score`, from the automatic assignment by voice. */
             person: components["schemas"]["PersonRef"] | null;
-            /** @description Pontuação (cosseno normalizado, 0 a 1) com que a voz ligou o locutor à `person` na ingestão, quando a atribuição automática da conta estava ligada; `null` se alguém ligou ou confirmou o vínculo, e sempre `null` sem `person`. Confirmar (`PATCH` com o mesmo `person_id`) o zera e só então reforça a impressão de voz. */
+            /** @description Score (normalized cosine, 0 to 1) with which the voice linked the speaker to the `person` at ingestion, when the account's automatic assignment was on; `null` if someone linked or confirmed the link, and always `null` without `person`. Confirming (`PATCH` with the same `person_id`) clears it and only then reinforces the voiceprint. */
             auto_score?: number | null;
-            /** @description Sugestões por voz ainda não confirmadas, da maior para a menor `score`. */
+            /** @description Voice suggestions not yet confirmed, from highest to lowest `score`. */
             suggestions?: components["schemas"]["SpeakerSuggestion"][];
-            /** @description Tempo total de fala do locutor, em milissegundos. */
+            /** @description Total speaking time of the speaker, in milliseconds. */
             talk_ms?: number;
         };
-        /** @description Palavra com tempo do alinhamento. `start_ms` e `end_ms` são `null` quando o alinhador não conseguiu posicioná-la (números, siglas). */
+        /** @description Word with alignment timing. `start_ms` and `end_ms` are `null` when the aligner could not place it (numbers, acronyms). */
         Word: {
             text: string;
             start_ms: number | null;
             end_ms: number | null;
             confidence?: number;
         };
-        /** @description Uma fala contínua de um locutor. `end_ms >= start_ms`. */
+        /** @description One continuous utterance by a speaker. `end_ms >= start_ms`. */
         Segment: {
-            /** @description Id do segmento, único dentro da transcrição. */
+            /** @description Segment id, unique within the transcript. */
             id: string;
-            /** @description Locutor da fala; aponta para `speakers[].id`. */
+            /** @description Speaker of the utterance; points to `speakers[].id`. */
             speaker_id: string;
             start_ms: number;
             end_ms: number;
             text: string;
-            /** @description Confiança média do ASR no segmento, de 0 a 1. */
+            /** @description Average ASR confidence in the segment, from 0 to 1. */
             confidence?: number;
-            /** @description Palavras com tempo. Presente só com `?include=words`. */
+            /** @description Timed words. Present only with `?include=words`. */
             words?: components["schemas"]["Word"][];
         };
-        /** @description Proveniência: engine e modelos que produziram a transcrição. */
+        /** @description Provenance: engine and models that produced the transcript. */
         TranscriptEngine: {
             /** @description Engine (`whisperx-local`, `openai-compatible`, `cpu`). */
             name: string;
-            /** @description Modelo de ASR (`large-v3-turbo`). */
+            /** @description ASR model (`large-v3-turbo`). */
             model: string;
             diarization_model?: string | null;
         };

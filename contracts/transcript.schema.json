@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Transcript",
-  "description": "Transcrição do eclume, contrato v1. É o corpo de `GET /api/v1/transcripts/{transcript_id}` e a saída do worker GPU. Evolui só de forma aditiva: o consumidor ignora propriedades que não conhece e tolera valores de enum novos (regras em contracts/README.md).",
+  "description": "eclume transcript, contract v1. It is the body of `GET /api/v1/transcripts/{transcript_id}` and the output of the GPU worker. It evolves only additively: the consumer ignores properties it does not know and tolerates new enum values (rules in contracts/README.md).",
   "type": "object",
   "required": [
     "schema_version",
@@ -22,53 +22,53 @@
   ],
   "properties": {
     "schema_version": {
-      "description": "Versão deste schema, `1.<minor>`. O minor sobe a cada mudança aditiva; a 1.2 marca `owner` como obsoleto.",
+      "description": "Version of this schema, `1.<minor>`. The minor goes up with every additive change; 1.2 marks `owner` as deprecated.",
       "type": "string",
       "pattern": "^1\\.[0-9]+$",
       "examples": ["1.1"]
     },
     "id": {
-      "description": "Id da transcrição. Estável entre revisões e retranscrições.",
+      "description": "Transcript id. Stable across revisions and retranscriptions.",
       "type": "string",
       "format": "uuid"
     },
     "recording_id": {
-      "description": "Gravação de onde a transcrição saiu.",
+      "description": "Recording the transcript came from.",
       "type": "string",
       "format": "uuid"
     },
     "title": {
-      "description": "Título da gravação.",
+      "description": "Recording title.",
       "type": "string",
       "minLength": 1
     },
     "language": {
-      "description": "Idioma do conteúdo, BCP 47 (`pt-BR`, `pt`, `en`).",
+      "description": "Content language, BCP 47 (`pt-BR`, `pt`, `en`).",
       "type": "string",
       "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
     },
     "recorded_at": {
-      "description": "Início da gravação (RFC 3339). Sem data informada pelo cliente, é o instante do upload.",
+      "description": "Recording start (RFC 3339). Without a date supplied by the client, it is the upload instant.",
       "type": "string",
       "format": "date-time"
     },
     "duration_ms": {
-      "description": "Duração do áudio em milissegundos.",
+      "description": "Audio duration in milliseconds.",
       "type": "integer",
       "minimum": 0
     },
     "source": {
-      "description": "Como o áudio chegou ao eclume: `desktop` (app de captura), `upload` (navegador) ou `api` (integração por PAT).",
+      "description": "How the audio reached eclume: `desktop` (capture app), `upload` (browser) or `api` (integration through a PAT).",
       "type": "string",
       "enum": ["desktop", "upload", "api"]
     },
     "content_hash": {
-      "description": "Hash do arquivo de áudio enviado, `sha256:<hex>`. É a chave de deduplicação do upload e da importação no lumea.",
+      "description": "Hash of the uploaded audio file, `sha256:<hex>`. It is the deduplication key of the upload and of the import into lumea.",
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
     },
     "revision": {
-      "description": "Revisão do conteúdo. Sobe a cada edição (locutor renomeado, pessoa ligada, segmento corrigido) e a cada retranscrição.",
+      "description": "Content revision. It goes up with every edit (speaker renamed, person linked, segment corrected) and with every retranscription.",
       "type": "integer",
       "minimum": 1
     },
@@ -77,12 +77,12 @@
       "format": "date-time"
     },
     "updated_at": {
-      "description": "Última mudança de qualquer campo; é o que `GET /api/v1/transcripts?since=` compara.",
+      "description": "Last change to any field; it is what `GET /api/v1/transcripts?since=` compares.",
       "type": "string",
       "format": "date-time"
     },
     "owner": {
-      "description": "Obsoleto desde o schema 1.2: sempre o próprio usuário (cada conta é isolada); sai na versão 2 do schema.",
+      "description": "Deprecated since schema 1.2: always the user themselves (each account is isolated); removed in version 2 of the schema.",
       "deprecated": true,
       "$ref": "#/$defs/UserRef"
     },
@@ -90,21 +90,21 @@
       "$ref": "#/$defs/TranscriptEngine"
     },
     "speakers": {
-      "description": "Locutores da transcrição. Sem diarização, há um locutor só.",
+      "description": "Speakers of the transcript. Without diarization, there is a single speaker.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/Speaker"
       }
     },
     "segments": {
-      "description": "Falas em ordem de `start_ms`. Todo `speaker_id` aponta para um locutor de `speakers`.",
+      "description": "Utterances in `start_ms` order. Every `speaker_id` points to a speaker in `speakers`.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/Segment"
       }
     },
     "tags": {
-      "description": "Tags da gravação.",
+      "description": "Recording tags.",
       "type": "array",
       "items": {
         "type": "string",
@@ -112,19 +112,19 @@
       }
     },
     "kind": {
-      "description": "Natureza da gravação: `meeting` (reunião) ou `note` (nota por voz). Desde o schema 1.1.",
+      "description": "Nature of the recording: `meeting` (meeting) or `note` (voice note). Since schema 1.1.",
       "type": "string",
       "enum": ["meeting", "note"]
     },
     "recorded_at_source": {
-      "description": "De onde veio `recorded_at`: `capture` (relógio do app que gravou), `file_metadata` (metadados do arquivo, confirmados na importação), `user` (informada ou corrigida) ou `upload` (hora do envio). Desde o schema 1.1.",
+      "description": "Where `recorded_at` came from: `capture` (clock of the app that recorded), `file_metadata` (file metadata, confirmed at import), `user` (supplied or corrected) or `upload` (upload time). Since schema 1.1.",
       "type": "string",
       "enum": ["capture", "file_metadata", "user", "upload"]
     }
   },
   "$defs": {
     "UserRef": {
-      "description": "Referência curta a um usuário do eclume.",
+      "description": "Short reference to an eclume user.",
       "type": "object",
       "required": ["id", "name"],
       "properties": {
@@ -139,7 +139,7 @@
       }
     },
     "PersonRef": {
-      "description": "Referência curta a uma pessoa do diretório da organização.",
+      "description": "Short reference to a person in the organization's directory.",
       "type": "object",
       "required": ["id", "name"],
       "properties": {
@@ -154,7 +154,7 @@
       }
     },
     "SpeakerSuggestion": {
-      "description": "Pessoa sugerida para um locutor pela impressão de voz. Só a atribuição automática da conta (`Speaker.auto_score`) liga sem confirmação, e só acima do limiar dela.",
+      "description": "Person suggested for a speaker by the voiceprint. Only the account's automatic assignment (`Speaker.auto_score`) links without confirmation, and only above its threshold.",
       "type": "object",
       "required": ["person", "score"],
       "properties": {
@@ -162,7 +162,7 @@
           "$ref": "#/$defs/PersonRef"
         },
         "score": {
-          "description": "Similaridade de cosseno normalizada, de 0 a 1.",
+          "description": "Normalized cosine similarity, from 0 to 1.",
           "type": "number",
           "minimum": 0,
           "maximum": 1
@@ -170,22 +170,22 @@
       }
     },
     "Speaker": {
-      "description": "Locutor de uma transcrição.",
+      "description": "Speaker of a transcript.",
       "type": "object",
       "required": ["id", "label", "person"],
       "properties": {
         "id": {
-          "description": "Id do locutor, único dentro da transcrição (`S1`, `S2`...). Estável entre edições; some só numa mesclagem.",
+          "description": "Speaker id, unique within the transcript (`S1`, `S2`...). Stable across edits; disappears only in a merge.",
           "type": "string",
           "pattern": "^S[0-9]+$"
         },
         "label": {
-          "description": "Nome exibido. Começa como `Locutor N` e muda quando o usuário renomeia o locutor.",
+          "description": "Display name. It starts as `Locutor N` and changes when the user renames the speaker.",
           "type": "string",
           "minLength": 1
         },
         "person": {
-          "description": "Pessoa ligada ao locutor, ou `null` enquanto ninguém a identificou. Vem de uma confirmação humana ou, com `auto_score`, da atribuição automática pela voz.",
+          "description": "Person linked to the speaker, or `null` while nobody has identified them. It comes from a human confirmation or, with `auto_score`, from the automatic assignment by voice.",
           "oneOf": [
             {
               "$ref": "#/$defs/PersonRef"
@@ -196,27 +196,27 @@
           ]
         },
         "auto_score": {
-          "description": "Pontuação (cosseno normalizado, 0 a 1) com que a voz ligou o locutor à `person` na ingestão, quando a atribuição automática da conta estava ligada; `null` se alguém ligou ou confirmou o vínculo, e sempre `null` sem `person`. Confirmar (`PATCH` com o mesmo `person_id`) o zera e só então reforça a impressão de voz.",
+          "description": "Score (normalized cosine, 0 to 1) with which the voice linked the speaker to the `person` at ingestion, when the account's automatic assignment was on; `null` if someone linked or confirmed the link, and always `null` without `person`. Confirming (`PATCH` with the same `person_id`) clears it and only then reinforces the voiceprint.",
           "type": ["number", "null"],
           "minimum": 0,
           "maximum": 1
         },
         "suggestions": {
-          "description": "Sugestões por voz ainda não confirmadas, da maior para a menor `score`.",
+          "description": "Voice suggestions not yet confirmed, from highest to lowest `score`.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/SpeakerSuggestion"
           }
         },
         "talk_ms": {
-          "description": "Tempo total de fala do locutor, em milissegundos.",
+          "description": "Total speaking time of the speaker, in milliseconds.",
           "type": "integer",
           "minimum": 0
         }
       }
     },
     "Word": {
-      "description": "Palavra com tempo do alinhamento. `start_ms` e `end_ms` são `null` quando o alinhador não conseguiu posicioná-la (números, siglas).",
+      "description": "Word with alignment timing. `start_ms` and `end_ms` are `null` when the aligner could not place it (numbers, acronyms).",
       "type": "object",
       "required": ["text", "start_ms", "end_ms"],
       "properties": {
@@ -240,17 +240,17 @@
       }
     },
     "Segment": {
-      "description": "Uma fala contínua de um locutor. `end_ms >= start_ms`.",
+      "description": "One continuous utterance by a speaker. `end_ms >= start_ms`.",
       "type": "object",
       "required": ["id", "speaker_id", "start_ms", "end_ms", "text"],
       "properties": {
         "id": {
-          "description": "Id do segmento, único dentro da transcrição.",
+          "description": "Segment id, unique within the transcript.",
           "type": "string",
           "minLength": 1
         },
         "speaker_id": {
-          "description": "Locutor da fala; aponta para `speakers[].id`.",
+          "description": "Speaker of the utterance; points to `speakers[].id`.",
           "type": "string",
           "pattern": "^S[0-9]+$"
         },
@@ -266,13 +266,13 @@
           "type": "string"
         },
         "confidence": {
-          "description": "Confiança média do ASR no segmento, de 0 a 1.",
+          "description": "Average ASR confidence in the segment, from 0 to 1.",
           "type": "number",
           "minimum": 0,
           "maximum": 1
         },
         "words": {
-          "description": "Palavras com tempo. Presente só com `?include=words`.",
+          "description": "Timed words. Present only with `?include=words`.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/Word"
@@ -281,7 +281,7 @@
       }
     },
     "TranscriptEngine": {
-      "description": "Proveniência: engine e modelos que produziram a transcrição.",
+      "description": "Provenance: engine and models that produced the transcript.",
       "type": "object",
       "required": ["name", "model"],
       "properties": {
@@ -290,7 +290,7 @@
           "type": "string"
         },
         "model": {
-          "description": "Modelo de ASR (`large-v3-turbo`).",
+          "description": "ASR model (`large-v3-turbo`).",
           "type": "string"
         },
         "diarization_model": {
