@@ -1,7 +1,7 @@
 ---
 type: standard
-title: Gravação no app desktop
-description: O app desktop grava mic e áudio do sistema mixados em Ogg/Opus mono 16 kHz (24 kbps), e a nota de voz só com o microfone e parada pelo silêncio; registra cada gravação numa fila SQLite local (v6, com natureza, origem da data, fonte, marcadores, título, tipo de agenda e idioma escolhidos ao parar e o título do servidor) com estados recording → pending → syncing → synced ou failed, retomada, backoff e retenção, e expõe os traits Uploader e MeetingDetector que o sync e a detecção implementam — este é o formato, o ciclo de vida, a pausa e o tempo de áudio, o detector de silêncio, os marcadores e os pontos de extensão; os crates são compartilhados com o app móvel.
+title: Recording in the desktop app
+description: The desktop app records mic and system audio mixed into Ogg/Opus mono 16 kHz (24 kbps), and the voice note with the microphone only, stopped by silence; it registers each recording in a local SQLite queue (v6, with kind, date origin, source, markers, title, agenda type and language chosen on stop, and the server title) with states recording → pending → syncing → synced or failed, resumption, backoff and retention, and exposes the Uploader and MeetingDetector traits that sync and detection implement — this is the format, the lifecycle, the pause and audio time, the silence detector, the markers and the extension points; the crates are shared with the mobile app.
 resource: desktop/crates/recorder/**, desktop/crates/audio-capture/**, desktop/src-tauri/src/**
 tags: [code, desktop, audio, opus, fila, sqlite, tauri]
 timestamp: 2026-10-05
@@ -11,300 +11,316 @@ source: holetz/eclume#6, holetz/eclume#28, holetz/eclume#40, holetz/eclume#41, h
 maintainer: holetz
 ---
 
-# Gravação no app desktop
+# Recording in the desktop app
 
-O app desktop grava reuniões na máquina do usuário e as guarda até o sync. Tudo que não depende
-de dispositivo vive no crate `eclume-recorder` (`desktop/crates/recorder`), testável com áudio
-sintético; a captura real vive em `eclume-audio-capture` (`desktop/crates/audio-capture`).
+The desktop app records meetings on the user's machine and keeps them until sync. Everything that
+does not depend on a device lives in the `eclume-recorder` crate (`desktop/crates/recorder`),
+testable with synthetic audio; the real capture lives in `eclume-audio-capture`
+(`desktop/crates/audio-capture`).
 
-## Fontes
+## Sources
 
-- Duas fontes por gravação: o **mic** (`cpal`) e o **áudio do sistema** (loopback) —
-  PipeWire no monitor de um sink, com fallback para o monitor do Pulse, no Linux; WASAPI loopback
-  num endpoint no Windows; Core Audio process tap no macOS (14.2+).
-- **Escolha em Configurações · Áudio**, cada fonte com "Nenhum":
+- Two sources per recording: the **mic** (`cpal`) and the **system audio** (loopback) —
+  PipeWire on a sink's monitor, falling back to the Pulse monitor, on Linux; WASAPI loopback
+  on an endpoint on Windows; Core Audio process tap on macOS (14.2+).
+- **Chosen in Settings · Audio**, each source with "Nenhum" (None):
 
-| Fonte | `config.json` | Valores |
+| Source | `config.json` | Values |
 |---|---|---|
-| Microfone | `mic` | `null` (padrão do sistema), o nome do dispositivo, ou `"none"` |
-| Áudio do sistema | `system_source` | `"follow"` (padrão: seguir a saída em uso), o id de uma saída, ou `"none"` |
+| Microphone | `mic` | `null` (system default), the device name, or `"none"` |
+| System audio | `system_source` | `"follow"` (default: follow the output in use), the id of an output, or `"none"` |
 
-  `list_input_devices()` lista os microfones e `MicSource::open_named` abre o escolhido;
-  `list_output_devices()` lista as saídas (Linux: o nome do sink, com a descrição como rótulo;
-  Windows: os endpoints ativos; macOS: vazia, o tap segue a saída em uso e ignora um id com
-  aviso) e `SystemSource::open_target` abre a escolhida. Uma escolha que sumiu cai no padrão, com
-  aviso na janela (`fell_back`). O booleano antigo `system_audio` ainda é lido (`false` vira
-  `"none"`) e não é mais gravado. As duas fontes em Nenhum são recusadas ("Escolha ao menos uma
-  fonte de áudio"); com o microfone em Nenhum, "Nova nota" e o atalho respondem "A nota precisa
-  de um microfone".
-- **Teste por fonte.** "Fale para testar" (microfone) e "Toque algo para testar" (sistema) abrem a
-  fonte por até 10 s só para o medidor, sem gravar (`source_test`, `source_test_meter`); um teste
-  por vez, e começar outro encerra o atual. O botão vira "Parar" (`source_test_stop`), que fecha a
-  fonte na hora, e fica desabilitado com a fonte em Nenhum. Trocar a fonte ou sair das
-  configurações também para o teste.
-- Toda fonte implementa `AudioSource`: `sample_rate()` e `read(timeout)`, que devolve amostras mono
-  `f32` na taxa nativa — `Some(vec![])` quando o prazo vence sem amostras, `None` quando a fonte
-  acabou. A taxa pode mudar no meio da gravação e é relida a cada leitura. Dois métodos com
-  padrão completam o trait: `state()` (`SourceState::Live` ou `Reconnecting { since }`) e
-  `dropped_samples()` (descartes por anel cheio); o `impl` para `Box<T>` repassa os dois.
-- **O microfone se reconecta.** `MicSource` é um `Reconnecting` (`audio-capture/src/reconnect.rs`)
-  sobre o abridor do `cpal`: quando o anel fecha (erro do stream, dispositivo tirado, perfil
-  Bluetooth trocando), a fonte solta o anel velho numa thread à parte e reabre, também numa thread
-  à parte, com espera de 0,5 s dobrando até 5 s, sem desistir enquanto a gravação existir. Enquanto
-  reconecta, `read` entrega **silêncio no ritmo do relógio**, na última taxa: a faixa não fica para
-  trás, e duração, marcadores e as duas faixas seguem alinhados com a reunião. Cada tentativa
-  resolve a escolha de novo (o nome, senão o padrão com `fell_back`). Um seguidor confere a cada
-  2 s o microfone que deveria estar em uso (com "padrão do sistema", o padrão do SO; com um nome,
-  ele quando reaparece) e pede a troca depois de duas leituras seguidas, o critério do
-  `EndpointFollower` do áudio do sistema no Windows. O `None` de `read` segue significando fim de
-  verdade.
-- O laço de gravação copia o estado de cada faixa e os descartes para o `Progress`
-  (`source_states()`, `dropped_samples()`) a cada volta; descartes novos vão ao log no máximo a cada
-  10 s, e o total entra na linha "gravação X fechada".
-- **Microfone fora:** o reaper (1 s) chama `AppState::watch_sources()`. Uma perda acima de 5 s (a
-  troca de perfil do Bluetooth leva de 1 a 3 s) põe "gravando sem microfone: tentando reconectar"
-  na janela, "sem microfone" na linha da bandeja e a notificação "Microfone perdido · gravando sem a
-  sua voz, tentando reconectar"; a volta limpa o aviso.
-- Grava-se com o que abrir: uma fonte que falha vira aviso na janela ("gravando sem …"), e só é
-  erro quando nenhuma abre.
+  `list_input_devices()` lists the microphones and `MicSource::open_named` opens the chosen one;
+  `list_output_devices()` lists the outputs (Linux: the sink name, with the description as label;
+  Windows: the active endpoints; macOS: empty, the tap follows the output in use and ignores an id
+  with a warning) and `SystemSource::open_target` opens the chosen one. A choice that disappeared
+  falls back to the default, with a warning in the window (`fell_back`). The old `system_audio`
+  boolean is still read (`false` becomes `"none"`) and is no longer written. Both sources set to
+  None are refused ("Escolha ao menos uma fonte de áudio"); with the microphone set to None,
+  "Nova nota" and the shortcut answer "A nota precisa de um microfone".
+- **Test per source.** "Fale para testar" (microphone) and "Toque algo para testar" (system) open
+  the source for up to 10 s for the meter only, without recording (`source_test`,
+  `source_test_meter`); one test at a time, and starting another ends the current one. The button
+  becomes "Parar" (`source_test_stop`), which closes the source at once, and is disabled with the
+  source set to None. Changing the source or leaving settings also stops the test.
+- Every source implements `AudioSource`: `sample_rate()` and `read(timeout)`, which returns mono
+  `f32` samples at the native rate — `Some(vec![])` when the timeout expires with no samples,
+  `None` when the source has ended. The rate can change mid-recording and is re-read on every
+  read. Two methods with defaults complete the trait: `state()` (`SourceState::Live` or
+  `Reconnecting { since }`) and `dropped_samples()` (drops due to a full ring); the `impl` for
+  `Box<T>` forwards both.
+- **The microphone reconnects.** `MicSource` is a `Reconnecting` (`audio-capture/src/reconnect.rs`)
+  over the `cpal` opener: when the ring closes (stream error, device unplugged, Bluetooth profile
+  switching), the source releases the old ring on a separate thread and reopens, also on a
+  separate thread, with a wait of 0.5 s doubling up to 5 s, never giving up while the recording
+  exists. While reconnecting, `read` delivers **silence at the pace of the clock**, at the last
+  rate: the track does not fall behind, and duration, markers and the two tracks stay aligned
+  with the meeting. Each attempt resolves the choice again (the name, else the default with
+  `fell_back`). A follower checks every 2 s which microphone should be in use (with "system
+  default", the OS default; with a name, that one when it reappears) and requests the switch
+  after two consecutive readings, the criterion of the Windows system audio's
+  `EndpointFollower`. The `None` of `read` still means a real end.
+- The recording loop copies each track's state and the drops into the `Progress`
+  (`source_states()`, `dropped_samples()`) on every turn; new drops go to the log at most every
+  10 s, and the total enters the "recording X closed" line.
+- **Microphone out:** the reaper (1 s) calls `AppState::watch_sources()`. A loss above 5 s (the
+  Bluetooth profile switch takes 1 to 3 s) puts "gravando sem microfone: tentando reconectar" in
+  the window, "sem microfone" in the tray line and the notification "Microfone perdido · gravando
+  sem a sua voz, tentando reconectar"; the return clears the warning.
+- Recording proceeds with whatever opens: a source that fails becomes a warning in the window
+  ("gravando sem …"), and it is only an error when none opens.
 
-## Formato do arquivo
+## File format
 
-| Item | Valor |
+| Item | Value |
 |---|---|
-| Contêiner | Ogg, um stream lógico, `OpusHead` e `OpusTags` em páginas próprias |
-| Codec | Opus, `Application::Voip`, 24 kbps, frames de 20 ms |
-| Canais e taxa | mono, 16 kHz (`input sample rate` = 16000 no `OpusHead`) |
-| Granule | em 48 kHz; o da última página é `pre-skip + amostras reais × 3`, então a duração é exata |
-| Páginas | uma a cada ~1 s de áudio, descarregada no disco ao fechar |
+| Container | Ogg, one logical stream, `OpusHead` and `OpusTags` on their own pages |
+| Codec | Opus, `Application::Voip`, 24 kbps, 20 ms frames |
+| Channels and rate | mono, 16 kHz (`input sample rate` = 16000 in the `OpusHead`) |
+| Granule | at 48 kHz; the last page's is `pre-skip + amostras reais × 3` (real samples), so the duration is exact |
+| Pages | one every ~1 s of audio, flushed to disk on close |
 
-É o mesmo formato que o navegador produz no upload
-([formato-audio-upload.md](formato-audio-upload.md)); só a taxa de bits difere (24 kbps aqui,
-pensando em reuniões longas). A mixagem reamostra cada fonte para 16 kHz (sinc, `rubato`), soma
-com limitador rígido em ±1,0 e, se uma fonte fica mais de 200 ms atrás das outras, completa-a com
-silêncio — assim um monitor de sink suspenso ou o loopback do WASAPI ocioso (que não entrega
-pacote nenhum enquanto nada toca) não travam a gravação. Esse silêncio vira uma dívida de no
-máximo 200 ms, descontada **só do excedente**: das amostras que a fonte entrega à frente da fila
-mais longa das outras, o caso de uma rajada atrasada. A fonte que volta a entregar em tempo real
-depois de um silêncio entra alinhada e inteira; descontar a dívida de toda amostra nova apagava o
-áudio do sistema depois da primeira pausa (holetz/eclume#28).
+It is the same format the browser produces on upload
+([formato-audio-upload.md](formato-audio-upload.md)); only the bitrate differs (24 kbps here,
+with long meetings in mind). The mix resamples each source to 16 kHz (sinc, `rubato`), sums with
+a hard limiter at ±1.0 and, if a source falls more than 200 ms behind the others, pads it with
+silence — so a suspended sink monitor or an idle WASAPI loopback (which delivers no packet at
+all while nothing plays) does not stall the recording. That silence becomes a debt of at most
+200 ms, deducted **only from the surplus**: from the samples the source delivers ahead of the
+longest queue among the others, the case of a delayed burst. The source that resumes delivering
+in real time after a silence comes in aligned and whole; deducting the debt from every new sample
+erased the system audio after the first pause (holetz/eclume#28).
 
-## Nota de voz e parada por silêncio
+## Voice note and silence stop
 
-- `AppState::start_note()` abre **só o microfone**, pelo mesmo `capture.rs` e com o dispositivo
-  escolhido: uma nota é fala de quem grava, e o áudio do sistema traria música e notificações. A
-  linha da fila nasce com `kind = 'note'`, e o upload leva `kind: note`.
-- **Detector** (`recorder/src/vad.rs`, puro), sobre as amostras mixadas a 16 kHz que o
-  `record_loop` já produz, em quadros de 20 ms (320 amostras):
+- `AppState::start_note()` opens **only the microphone**, through the same `capture.rs` and with
+  the chosen device: a note is the speech of whoever records, and the system audio would bring in
+  music and notifications. The queue row is born with `kind = 'note'`, and the upload carries
+  `kind: note`.
+- **Detector** (`recorder/src/vad.rs`, pure), over the mixed 16 kHz samples the `record_loop`
+  already produces, in 20 ms frames (320 samples):
 
-| Parâmetro | Valor |
+| Parameter | Value |
 |---|---|
-| Nível | RMS do quadro em dBFS |
-| Piso de ruído | o percentil 20 dos níveis dos últimos 3 s (150 quadros, só os anteriores ao quadro); um ventilador ligado no meio vira piso em cerca de 1 s. Silêncio digital (abaixo de −90 dBFS) entra na janela mas nunca vira piso: quando o percentil cai nele, valem só os limites absolutos, para as pausas zeradas de um supressor de ruído não levarem o piso até a própria fala |
-| Voz | entra com `nível > max(piso + 12 dB, −55 dBFS)` e se mantém com `nível > max(piso + 8 dB, −58 dBFS)` (histerese) |
-| Voz sustentada | o quadro atual é voz, e pelo menos 5 dos últimos 10, o atual incluído, também (100 ms em 200 ms): só ela zera o silêncio e conta como voz ouvida. Um clique, uma tecla ou uma porta batendo não reiniciam a contagem |
-| Gate da fala | depois da primeira voz sustentada, só zera o silêncio o quadro a no máximo 25 dB abaixo do pico recente da fala (o pico cai 2,5 dB/s). Uma respiração, um "hum" distante ou uma cadeira ficam de fora: numa nota real, uma respiração 30 dB abaixo da fala segurava a parada por 1,8 s a mais |
-| `Silence` | o silêncio, contado desde o último quadro de voz sustentada, passou do configurado (2, 4 ou 8 s; padrão 4 s), e só depois de ter havido voz sustentada. A contagem regressiva da janela só aparece depois de 300 ms sem voz, para não piscar entre as sílabas |
-| `NoSpeech` | nenhuma voz nos primeiros 10 s |
-| Medidor | os últimos 16 níveis, de −60 a 0 dBFS mapeados para 0 a 1 |
+| Level | the frame's RMS in dBFS |
+| Noise floor | the 20th percentile of the levels of the last 3 s (150 frames, only those before the frame); a fan switched on midway becomes the floor in about 1 s. Digital silence (below −90 dBFS) enters the window but never becomes the floor: when the percentile falls on it, only the absolute limits apply, so that the zeroed pauses of a noise suppressor do not drag the floor up to the speech itself |
+| Voice | enters with `nível > max(piso + 12 dB, −55 dBFS)` and holds with `nível > max(piso + 8 dB, −58 dBFS)` (hysteresis) |
+| Sustained voice | the current frame is voice, and at least 5 of the last 10, the current one included, are too (100 ms in 200 ms): only it resets the silence and counts as voice heard. A click, a key or a slamming door do not restart the count |
+| Speech gate | after the first sustained voice, only a frame at most 25 dB below the recent speech peak resets the silence (the peak falls 2.5 dB/s). A breath, a distant "hum" or a chair stay out: in a real note, a breath 30 dB below the speech held the stop for 1.8 s longer |
+| `Silence` | the silence, counted since the last frame of sustained voice, exceeded the configured value (2, 4 or 8 s; default 4 s), and only after there has been sustained voice. The window's countdown only appears after 300 ms without voice, so it does not flicker between syllables |
+| `NoSpeech` | no voice in the first 10 s |
+| Meter | the last 16 levels, from −60 to 0 dBFS mapped to 0 to 1 |
 
-- Com "Nunca" (`note_silence_s: null`), o detector só alimenta o medidor. Energia com piso
-  adaptativo basta para "a pessoa parou de falar" com um só locutor perto do microfone, sem
-  dependência nativa e testável com áudio sintético; um VAD treinado (WebRTC por FFI, Silero por
-  `onnxruntime`) não compensa.
-- **Sessão.** `session::start` recebe `StartOptions { kind, stop_after_silence }`. Um `Progress`
-  compartilhado expõe `position_ms()` (amostras gravadas ÷ 16), `meter()`, `level()` e
-  `stop_reason()`. O
-  `record_loop` encerra sozinho em `Silence` ou `NoSpeech`, e o reaper, que fecha as gravações
-  terminadas a cada 1 s, decide pelo motivo: `SourcesEnded` dá o aviso de sempre; `Silence`, a
-  notificação "Nota salva · 42 s · processando no servidor"; `NoSpeech` **descarta** a nota
-  (`queue.discard` e o arquivo apagado) com "Nota descartada · não ouvimos voz".
-- **Parada manual** pelo mesmo atalho, pelo botão ("Parar nota") ou pela bandeja; parada à mão
-  nunca é descartada. Com uma gravação em curso, "Nova nota" responde "Já há uma gravação em
-  andamento", e o atalho não abre outra captura.
-- A janela mostra o medidor (`note_meter`, a cada 100 ms) e "Silêncio · para em N s". Nada mais
-  abre (variante A): a bandeja troca o ícone e mostra o tempo — no título, no macOS e no Linux; na
-  dica, no Windows, cuja área de notificação não mostra texto.
+- With "Nunca" (Never; `note_silence_s: null`), the detector only feeds the meter. Energy with an
+  adaptive floor is enough for "the person stopped talking" with a single speaker close to the
+  microphone, with no native dependency and testable with synthetic audio; a trained VAD (WebRTC
+  via FFI, Silero via `onnxruntime`) does not pay off.
+- **Session.** `session::start` receives `StartOptions { kind, stop_after_silence }`. A shared
+  `Progress` exposes `position_ms()` (recorded samples ÷ 16), `meter()`, `level()` and
+  `stop_reason()`. The
+  `record_loop` ends on its own on `Silence` or `NoSpeech`, and the reaper, which closes finished
+  recordings every 1 s, decides by the reason: `SourcesEnded` gives the usual warning; `Silence`,
+  the notification "Nota salva · 42 s · processando no servidor"; `NoSpeech` **discards** the note
+  (`queue.discard` and the file deleted) with "Nota descartada · não ouvimos voz".
+- **Manual stop** by the same shortcut, by the button ("Parar nota") or by the tray; a stop by
+  hand is never discarded. With a recording in progress, "Nova nota" answers "Já há uma gravação
+  em andamento", and the shortcut does not open another capture.
+- The window shows the meter (`note_meter`, every 100 ms) and "Silêncio · para em N s". Nothing
+  else opens (variant A): the tray switches the icon and shows the time — in the title, on macOS
+  and Linux; in the tooltip, on Windows, whose notification area shows no text.
 
-## Pausa, tempo de áudio e nível
+## Pause, audio time and level
 
-- `ActiveRecording::set_paused(bool)` pausa sem fechar as fontes: o laço continua lendo e mixando,
-  e descarta o que lê. Reabrir o microfone em segundo plano esbarraria nas restrições do celular
-  (Android 14+), e o dispositivo aberto dá a retomada instantânea.
-- **Tempo de áudio** é o gravado sem as pausas: `audio_ms()` (o `position_ms()` do `Progress`) é o
-  `at_ms` dos marcadores e vira o `duration_ms` do upload. O relógio das telas mostra o tempo de
-  áudio.
-- `level()` é o RMS do último trecho gravado, de 0 a 1, e cai a 0 pausado: é o medidor contínuo que
-  a UI lê a cada 100 ms (o `meter()` da nota continua sendo o histórico em dBFS do detector).
-- `RecorderConfig` leva, além de `dir` e `bitrate`, a `source` gravada na fila (`desktop`, o
-  padrão, ou `mobile`) e `ask_details`: com ele, `stop` deixa a linha com `details_pending`.
+- `ActiveRecording::set_paused(bool)` pauses without closing the sources: the loop keeps reading
+  and mixing, and discards what it reads. Reopening the microphone in the background would run
+  into the phone's restrictions (Android 14+), and the open device gives instant resumption.
+- **Audio time** is the recorded time without the pauses: `audio_ms()` (the `Progress`'s
+  `position_ms()`) is the markers' `at_ms` and becomes the upload's `duration_ms`. The screens'
+  clock shows audio time.
+- `level()` is the RMS of the last recorded stretch, from 0 to 1, and drops to 0 when paused: it
+  is the continuous meter the UI reads every 100 ms (the note's `meter()` remains the detector's
+  dBFS history).
+- `RecorderConfig` carries, besides `dir` and `bitrate`, the `source` written to the queue
+  (`desktop`, the default, or `mobile`) and `ask_details`: with it, `stop` leaves the row with
+  `details_pending`.
 
-## Marcadores
+## Markers
 
-- `AppState::add_marker(note)` marca o `position_ms()` da gravação ativa — a posição no **áudio**,
-  e não o relógio, para um vazio de fonte não desalinhar o marcador — com um `client_id` UUID v4, na
-  tabela `markers` da fila. `set_marker_note` edita a nota (até 500 caracteres) enquanto a gravação
-  não subiu.
-- Entradas: o botão "Marcador" da janela (com a nota do último marcador), o item "Adicionar
-  marcador" da bandeja (só gravando) e o atalho global, que não abre nada nem notifica, para não
-  atrapalhar a reunião. A dica da bandeja diz "3 marcadores".
-- **Marcadores automáticos:** a perda do microfone acima de 5 s marca "microfone perdido" no
-  instante da queda (a posição no áudio menos o tempo fora), e a volta marca "microfone de volta".
-  No celular, também "silenciado pelo sistema" ([mobile-app.md](mobile-app.md)).
-- Os marcadores sobem **junto do upload** (`UploadCreate.markers`), idempotentes pelo `client_id`:
-  a retomada e o upload deduplicado reenviam os mesmos, e o servidor mescla sem duplicar
-  (holetz/eclume#34).
+- `AppState::add_marker(note)` marks the active recording's `position_ms()` — the position in the
+  **audio**, not the clock, so that a source gap does not misalign the marker — with a
+  `client_id` UUID v4, in the queue's `markers` table. `set_marker_note` edits the note (up to 500
+  characters) while the recording has not been uploaded.
+- Entry points: the window's "Marcador" button (with the last marker's note), the tray's
+  "Adicionar marcador" item (only while recording) and the global shortcut, which opens nothing
+  and does not notify, so as not to disturb the meeting. The tray tooltip says "3 marcadores".
+- **Automatic markers:** a microphone loss above 5 s marks "microfone perdido" at the instant of
+  the drop (the position in the audio minus the time out), and the return marks "microfone de
+  volta". On the phone, also "silenciado pelo sistema" ([mobile-app.md](mobile-app.md)).
+- Markers go up **with the upload** (`UploadCreate.markers`), idempotent by `client_id`:
+  resumption and the deduplicated upload resend the same ones, and the server merges them without
+  duplicating (holetz/eclume#34).
 
-## Arquivos e fila
+## Files and queue
 
-- Os dados ficam no diretório de dados do app (`app_data_dir`): `queue.sqlite` e `gravacoes/`.
-- A gravação nasce como `gravacoes/<id>.ogg.part` e vira `<id>.ogg` ao parar.
-- A fila é a tabela `recordings` (`id`, `path`, `started_at`, `ended_at`, `duration_ms`, `bytes`,
-  `status`, `interrupted`, `attempts`, `last_error`, `remote_id`), com instantes em milissegundos
-  Unix. O esquema v2 (`user_version = 2`) acrescenta `upload_id` e `sha256` (retomada do upload),
-  `next_attempt_at` (backoff), `synced_at` (confirmação do servidor), `purged_at` (arquivo local
-  apagado pela retenção) e `meeting_app` (app da reunião detectada, no vocabulário do contrato).
-  O esquema v3 (`user_version = 3`) acrescenta `kind` (`meeting|note`, padrão `meeting`),
-  `recorded_at_source` (`capture|file_metadata|user`, padrão `capture`), `source`
-  (`desktop|upload`, padrão `desktop`), `original_name` e `content_type` (nulo é
-  `audio/ogg; codecs=opus`), e a tabela `markers (client_id PRIMARY KEY, recording_id, at_ms,
-  note, created_at)`. O esquema v4 (`user_version = 4`) acrescenta `title` e `agenda_type_id`
-  (escolhidos ao parar e levados no `UploadCreate`), `details_pending` (0/1) e o valor `mobile` em
-  `source`. O esquema v5 (`user_version = 5`, holetz/eclume#118) acrescenta `server_title`, o
-  título que o servidor deu à gravação, lido da listagem por `?since=` (desktop) ou no ciclo de
-  rede e no detalhe (celular); a fila mostra o título dado ao parar, senão ele. O esquema v6
-  (`user_version = 6`, holetz/eclume#121) acrescenta `language`, o idioma da transcrição da
-  gravação (`auto` pede a detecção), que o upload manda antes do idioma do aparelho. Uma fila v1 a
-  v5 ganha as colunas na abertura, sem perder linhas.
-- Métodos da v3: `set_kind`, `begin_import` (a importação já nasce `pending`,
-  [desktop-importacao.md](desktop-importacao.md)), `discard`, `add_marker`, `set_marker_note` e
-  `markers(recording_id)`. Da v4: `set_source`, `set_details_pending`, `save_details(id, título,
-  tipo, idioma)` (vazios viram nulos; libera o sync; só antes do upload; o idioma desde a v6) e `release_details_pending`. Da
-  v5: `set_server_title(remote_id, título)`, que devolve se mudou alguma linha.
+- The data lives in the app's data directory (`app_data_dir`): `queue.sqlite` and `gravacoes/`.
+- The recording is born as `gravacoes/<id>.ogg.part` and becomes `<id>.ogg` on stop.
+- The queue is the `recordings` table (`id`, `path`, `started_at`, `ended_at`, `duration_ms`,
+  `bytes`, `status`, `interrupted`, `attempts`, `last_error`, `remote_id`), with instants in Unix
+  milliseconds. Schema v2 (`user_version = 2`) adds `upload_id` and `sha256` (upload resumption),
+  `next_attempt_at` (backoff), `synced_at` (server confirmation), `purged_at` (local file deleted
+  by retention) and `meeting_app` (the detected meeting's app, in the contract's vocabulary).
+  Schema v3 (`user_version = 3`) adds `kind` (`meeting|note`, default `meeting`),
+  `recorded_at_source` (`capture|file_metadata|user`, default `capture`), `source`
+  (`desktop|upload`, default `desktop`), `original_name` and `content_type` (null is
+  `audio/ogg; codecs=opus`), and the table `markers (client_id PRIMARY KEY, recording_id, at_ms,
+  note, created_at)`. Schema v4 (`user_version = 4`) adds `title` and `agenda_type_id` (chosen on
+  stop and carried in the `UploadCreate`), `details_pending` (0/1) and the `mobile` value in
+  `source`. Schema v5 (`user_version = 5`, holetz/eclume#118) adds `server_title`, the title the
+  server gave the recording, read from the listing by `?since=` (desktop) or in the network cycle
+  and in the detail (phone); the queue shows the title given on stop, else this one. Schema v6
+  (`user_version = 6`, holetz/eclume#121) adds `language`, the recording's transcription language
+  (`auto` requests detection), which the upload sends ahead of the device language. A v1 to v5
+  queue gains the columns on open, without losing rows.
+- v3 methods: `set_kind`, `begin_import` (the import is born `pending`,
+  [desktop-importacao.md](desktop-importacao.md)), `discard`, `add_marker`, `set_marker_note` and
+  `markers(recording_id)`. From v4: `set_source`, `set_details_pending`, `save_details(id, título,
+  tipo, idioma)` (empty values become null; releases the sync; only before the upload; the
+  language since v6) and `release_details_pending`. From
+  v5: `set_server_title(remote_id, título)`, which returns whether any row changed.
 
 ```
-recording ──parar──▶ pending ──claim_next──▶ syncing ──▶ synced ──retenção──▶ (purged_at)
+recording ──stop──▶ pending ──claim_next──▶ syncing ──▶ synced ──retention──▶ (purged_at)
     │                   ▲                        │
-    ├─crash / .part preso: recover_orphans ──┘   └──▶ failed ──retry_due / retry_failed──▶ pending
-    │    (abertura ou varredura a cada minuto; interrupted = 1)
-    └─falha ou pânico da gravação: parar fecha mesmo assim (interrupted = 1)
+    ├─crash / stuck .part: recover_orphans ──┘   └──▶ failed ──retry_due / retry_failed──▶ pending
+    │    (on open or a sweep every minute; interrupted = 1)
+    └─recording failure or panic: stop closes anyway (interrupted = 1)
 ```
 
-- **Parada que sempre fecha:** `ActiveRecording::stop` guarda o erro ou pânico da thread de
-  gravação no log em vez de abortar; o motivo vira `StopReason::Failed` (pânico sem motivo também).
-  O `.part` é renomeado com até 5 tentativas (200 ms dobrando, ~3 s: antivírus e indexador do
-  Windows seguram o arquivo por instantes) e a linha vira `pending` com a duração de
-  `Progress::position_ms` e, quando a gravação falhou, `interrupted = 1` (`Queue::mark_interrupted`).
-  `stop` só devolve erro quando a fila falha ou o `.part` segue preso; aí a linha fica em
-  `recording` para a varredura.
-- **Recuperação:** `session::recover_orphans(fila, vivas)` acerta cada linha em `recording` cujo
-  id não está em `vivas`: renomeia o `.part` (o Ogg é legível até a última página escrita) e a
-  passa a `pending` com `interrupted = 1`, uma linha por vez: um `rename` recusado deixa aquela
-  linha como está, no log, e segue. Ao abrir, o app chama `session::recover` (órfãs sem vivas,
-  mais o que ficou em `syncing` de volta a `pending` e todo `details_pending` caído: a folha que
-  segurava o sync já não existe); a abertura nunca falha por um `.part` preso. Com o app aberto,
-  o reaper chama `AppState::sweep_orphans` a cada minuto, com o id da gravação ativa lido e mantido
-  sob o lock de estado (ordem estado → fila), e nenhuma gravação começa no meio da varredura.
-  **Regra:** a varredura só toca linha `recording` cujo id não pertence a nenhuma sessão viva do
-  processo; uma sessão em parada também conta como viva.
-- `claim_next` reserva só `pending`, e pula a que tem `details_pending` até `DETAILS_WAIT_MS`
-  (10 min) depois do fim: a folha esquecida aberta não segura o sync para sempre. `mark_failed` agenda `next_attempt_at` por
-  `retry_backoff_ms` (30 s dobrando a cada tentativa, até 1 h); `retry_due(agora, max)` devolve à
-  fila as falhas cujo prazo venceu, e `retry_failed(max)` as devolve já.
-- `purge_candidates(até)` lista as `synced` com `remote_id` cujo arquivo ainda existe;
-  `mark_purged` registra a remoção. Nada que o servidor não confirmou sai do disco.
+- **A stop that always closes:** `ActiveRecording::stop` keeps the recording thread's error or
+  panic in the log instead of aborting; the reason becomes `StopReason::Failed` (a panic with no
+  reason too). The `.part` is renamed with up to 5 attempts (200 ms doubling, ~3 s: antivirus and
+  the Windows indexer hold the file for moments) and the row becomes `pending` with the duration
+  from `Progress::position_ms` and, when the recording failed, `interrupted = 1`
+  (`Queue::mark_interrupted`). `stop` only returns an error when the queue fails or the `.part`
+  stays stuck; then the row stays in `recording` for the sweep.
+- **Recovery:** `session::recover_orphans(fila, vivas)` settles each row in `recording` whose id
+  is not in `vivas`: it renames the `.part` (the Ogg is readable up to the last written page) and
+  moves it to `pending` with `interrupted = 1`, one row at a time: a refused `rename` leaves that
+  row as it is, in the log, and moves on. On open, the app calls `session::recover` (orphans with
+  no live ones, plus whatever stayed in `syncing` back to `pending`, and every `details_pending`
+  dropped: the sheet that held the sync no longer exists); opening never fails because of a stuck
+  `.part`. With the app open, the reaper calls `AppState::sweep_orphans` every minute, with the
+  active recording's id read and held under the state lock (order state → queue), and no
+  recording starts in the middle of the sweep.
+  **Rule:** the sweep only touches a `recording` row whose id belongs to no live session of the
+  process; a session being stopped also counts as live.
+- `claim_next` reserves only `pending`, and skips the one with `details_pending` until
+  `DETAILS_WAIT_MS` (10 min) after the end: a sheet left open and forgotten does not hold the sync
+  forever. `mark_failed` schedules `next_attempt_at` by
+  `retry_backoff_ms` (30 s doubling on each attempt, up to 1 h); `retry_due(agora, max)` returns
+  to the queue the failures whose time has come, and `retry_failed(max)` returns them at once.
+- `purge_candidates(até)` lists the `synced` ones with a `remote_id` whose file still exists;
+  `mark_purged` records the removal. Nothing the server has not confirmed leaves the disk.
 
-## Pontos de extensão
+## Extension points
 
-Implementados pela `holetz/eclume#13`; o detalhe está em
+Implemented by `holetz/eclume#13`; the detail is in
 [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md).
 
-- `Uploader::upload(&QueuedRecording) -> Result<String>` envia o arquivo e devolve o id remoto;
-  `sync_pending(&Mutex<Queue>, &dyn Uploader)` passa por todas as `pending`, isola cada falha na
-  própria linha e não segura a fila durante o upload. A implementação é o `HttpUploader` do
-  `eclume-sync`, que guarda o upload em curso na fila compartilhada (`AppState::shared_queue()`).
-- `MeetingDetector::poll() -> Option<MeetingEvent>` (`Started { app }` / `Ended`), consultado a
-  cada segundo; a implementação é o `DebouncedDetector` do `eclume-detect`. A gravação que ele
-  inicia usa `AppState::start_recording_as` com a origem (manual ou detecção, e o app), e a
-  manual continua por `start_recording`.
-- `AppState::set_syncing(bool)` liga o estado "Sincronizando" que a bandeja mostra.
+- `Uploader::upload(&QueuedRecording) -> Result<String>` sends the file and returns the remote id;
+  `sync_pending(&Mutex<Queue>, &dyn Uploader)` goes through every `pending`, isolates each failure
+  in its own row and does not hold the queue during the upload. The implementation is the
+  `eclume-sync` crate's `HttpUploader`, which keeps the upload in progress in the shared queue
+  (`AppState::shared_queue()`).
+- `MeetingDetector::poll() -> Option<MeetingEvent>` (`Started { app }` / `Ended`), polled every
+  second; the implementation is the `eclume-detect` crate's `DebouncedDetector`. The recording it
+  starts uses `AppState::start_recording_as` with the origin (manual or detection, and the app),
+  and the manual one still goes through `start_recording`.
+- `AppState::set_syncing(bool)` turns on the "Sincronizando" (Syncing) state the tray shows.
 
-## App e bandeja
+## App and tray
 
-- A janela nasce oculta e fechar só a esconde; o app vive na bandeja (AppIndicator no Linux, barra
-  de menus no macOS, área de notificação no Windows). No Linux o clique só abre o menu, então toda
-  ação mora nele, como o frame "Tray menu" do DS: a linha de status, "Iniciar gravação" ou "Parar
-  gravação", "Nova nota", "Adicionar marcador" (só gravando), "Importar arquivo…", "Abrir o
-  eclume", "Abrir a biblioteca na web" e "Sair" (que fecha a gravação em curso antes), com os
-  atalhos como acelerador. A pergunta de reunião entra como dois itens. A UI da janela está em
+- The window is born hidden and closing it only hides it; the app lives in the tray
+  (AppIndicator on Linux, menu bar on macOS, notification area on Windows). On Linux the click
+  only opens the menu, so every action lives in it, like the DS "Tray menu" frame: the status
+  line, "Iniciar gravação" or "Parar gravação", "Nova nota", "Adicionar marcador" (only while
+  recording), "Importar arquivo…", "Abrir o eclume", "Abrir a biblioteca na web" and "Sair" (which
+  closes the recording in progress first), with the shortcuts as accelerators. The meeting
+  question comes in as two items. The window's UI is in
   [desktop-interface.md](desktop-interface.md).
-- **Recentes no menu** (holetz/eclume#147): entre "Importar arquivo…" e "Abrir o eclume", para
-  não mover "Iniciar gravação", a seção Recentes com as `tray_recent_count` últimas gravações (1
-  por padrão; 0 a esconde): o cabeçalho desabilitado ("Recentes", ou "Recentes · N precisam de
-  você"), "Nenhuma gravação recente" quando vazia, e uma linha "Título · Estado" por gravação
-  ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md) §Painel de gravações recentes). A
-  linha com ação é um **submenu** com "Copiar resumo", "Abrir no web" e "Tentar agora", conforme
-  a fase; sem ação, um item que abre a janela. Os ids levam o que a ação usa (`recent-copy:<id
-  remoto>`, `recent-open:<id remoto>`, `recent-retry:<id local>`, `recent-show:<chave>`). Copiar
-  lê a API numa thread e avisa por notificação ("Resumo copiado" ou a falha), o único retorno que
-  a bandeja tem; Tentar agora chama `sync_now` numa thread.
-- **O menu só é reconstruído quando muda.** O `tray::apply` monta a seção a cada atualização e
-  só chama `set_menu` quando a pergunta, a gravação, os atalhos ou a seção Recentes mudaram; o
-  progresso não entra na seção, então o avanço da transcrição não reconstrói o menu.
-- **Limites do menu nativo.** Linux (libappindicator, pelo DBusMenu): o clique no ícone só abre o
-  menu; item não tem ícone nem dica; o texto é puro, sem negrito nem cor; cada `set_menu`
-  reexporta o menu inteiro e fecha o menu aberto, por isso nada que muda a cada leitura entra
-  nele; submenu funciona. Windows (menu popup Win32): o menu é montado ao abrir, então trocá-lo é
-  barato; submenu funciona; não há rótulo ao lado do ícone. Nos dois, `&` é mnemônico (o título
-  o escapa como `&&`; o `_` o muda escapa no GTK) e o estado vai sempre em texto.
-- O endereço do eclume web vem de `config.json` no diretório de config do app (`web_url`: o
-  servidor em que a pessoa entrou, [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md)) e
-  pode ser sobreposto por `ECLUME_WEB_URL`.
-- Abrir dispositivos pode levar segundos: iniciar/parar roda fora da thread da UI.
-- **Parada fora do lock:** `AppState::stop_recording` tira `active` sob o estado e guarda o id em
-  `stopping`; sem lock nenhum, `ActiveRecording::close` (sinal, join da thread de gravação,
-  desmontagem do driver, `fsync`, `rename`); com a fila, `Closed::deliver`; sob o estado, limpa
-  `stopping`. Enquanto `stopping` existe, o estado visível segue "Gravando", iniciar ou parar de
-  novo é `Busy` e a varredura de órfãs conta o id como vivo. "Sair" fecha a gravação numa thread e
-  chama `app.exit(0)` ao fim. Nenhum join de thread de captura espera sem prazo:
-  `join_with_deadline` (`eclume-audio-capture`, 3 s) solta a thread presa com aviso no log.
-- **Laços isolados de pânico:** o reaper, o sync, a pasta sincronizada, a detecção e o relógio da
-  nota rodam cada passada por `supervise::pass` (`catch_unwind`); um pânico fica no log (com o
-  backtrace do hook) e o laço espera 1 s dobrando até 60 s, zerada no sucesso. O updater roda cada
-  checagem numa subtarefa e trata o `JoinError` de pânico do mesmo jeito. Um mutex envenenado não
-  inutiliza o app: o estado e a fila seguem pelo `into_inner`, com o envenenamento no log.
-- **Flag de "em curso" só por guarda:** `syncing`, `mirror.running` e `importing` se desligam no
-  `Drop` de uma guarda (`AppState::syncing`, `mirror_running`, `import_guard`), que pega o estado
-  mesmo envenenado: "Sincronizando" e "Já há uma importação em andamento" não ficam presos depois
-  de um pânico.
-- **Comandos `#[tauri::command(async)]`:** comando síncrono só lê ou escreve memória e a fila
-  SQLite. Chaveiro, processo externo (`gsettings`), registro de início automático, arquivos fora
-  da fila e rede vão em `#[tauri::command(async)]` (hoje `settings`, `save_settings`, `sign_out`,
-  `storage_info`, `confirm_server`, `open_data_dir`, `open_log_dir`, além dos de rede). Abrir
-  Configurações não consulta o chaveiro: a origem da credencial fica em cache no estado,
-  atualizada ao entrar, sair e salvar. Um comando `async` nunca chama API do Tauri que despacha
-  para a thread principal (atalhos, bandeja, janela) com o estado ou a fila presos.
-- Quando a gravação para sozinha porque as fontes caíram ou porque a gravação falhou, o reaper
-  (a cada segundo) fecha a linha e sai uma notificação do SO: "A gravação parou" com "<tempo>
-  salvos · as fontes de áudio caíram" ou "<tempo> salvos · falha ao gravar"; a janela mostra o
-  mesmo aviso.
-- `config.json` é gravado por um temporário vizinho (`.config.json.tmp`) com `sync_all` e
-  renomeação; falhando, o temporário é apagado. A abertura só o grava quando a versão aberta muda
-  `last_version`. Um arquivo ilegível é renomeado para `config.json.ilegivel-<ms>` antes de o
-  padrão valer, e a janela avisa "A configuração estava ilegível e voltou ao padrão; a cópia está
-  em …".
-- A bandeja (menu, ícone, título e dica) só é tocada na thread principal. Os setters do Tauri
-  (`set_text`, `set_menu`, `set_icon`, `set_title`, `set_tooltip`) despacham para ela e bloqueiam
-  até a resposta: uma thread de fundo que os chamasse segurando um lock que a thread principal
-  também usa travaria o app (#83). Código de fundo pede a atualização por `tray::refresh` ou
-  `refresh_ui`, que roda na hora na thread principal e, de outra thread, só enfileira; quem roda lê
-  o estado do momento.
-- O log (`info`, ou o filtro de `RUST_LOG`) vai para o stderr e para `eclume.log` no diretório de
-  logs do app (`app_log_dir`: `%LOCALAPPDATA%\io.github.holetz.eclume\logs` no Windows,
-  `~/.local/share/io.github.holetz.eclume/logs` no Linux, `~/Library/Logs/io.github.holetz.eclume`
-  no macOS). Acima de 5 MB, o arquivo vira `eclume.log.1`, na abertura e também com o app aberto
-  (o `Tee` conta os bytes e gira sob o lock do `env_logger`). No Windows o release
-  não tem console, então o arquivo é o único registro de falhas de captura, sync e atualização.
-  A primeira linha de cada abertura traz a versão e o SO. Um panic vai para o mesmo log (hook
-  próprio) com a thread, o local e o backtrace: o hook padrão só escreve no stderr, que o app
-  aberto pelo menu do sistema não guarda onde a pessoa ache.
+- **Recent items in the menu** (holetz/eclume#147): between "Importar arquivo…" and "Abrir o
+  eclume", so as not to move "Iniciar gravação", the Recentes section with the last
+  `tray_recent_count` recordings (1 by default; 0 hides it): the disabled header ("Recentes", or
+  "Recentes · N precisam de você"), "Nenhuma gravação recente" when empty, and one "Título ·
+  Estado" line per recording ([desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md) §Recent
+  recordings panel). A line with an action is a **submenu** with "Copiar resumo", "Abrir no web"
+  and "Tentar agora", depending on the phase; with no action, an item that opens the window. The
+  ids carry what the action uses (`recent-copy:<id
+  remoto>`, `recent-open:<id remoto>`, `recent-retry:<id local>`, `recent-show:<chave>`). Copy
+  reads the API on a thread and reports through a notification ("Resumo copiado" or the failure),
+  the only feedback the tray has; Try now calls `sync_now` on a thread.
+- **The menu is only rebuilt when it changes.** `tray::apply` builds the section on every update
+  and only calls `set_menu` when the question, the recording, the shortcuts or the Recentes
+  section changed; progress does not enter the section, so transcription progress does not
+  rebuild the menu.
+- **Limits of the native menu.** Linux (libappindicator, through DBusMenu): clicking the icon only
+  opens the menu; an item has no icon or tooltip; the text is plain, with no bold or color; each
+  `set_menu` re-exports the whole menu and closes the open menu, which is why nothing that changes
+  on every read goes into it; submenus work. Windows (Win32 popup menu): the menu is built on
+  open, so replacing it is cheap; submenus work; there is no label beside the icon. On both, `&`
+  is a mnemonic (the title escapes it as `&&`; the `_` changes it, escaping in GTK) and state
+  always goes as text.
+- The eclume web address comes from `config.json` in the app's config directory (`web_url`: the
+  server the person signed in to, [desktop-deteccao-e-sync.md](desktop-deteccao-e-sync.md)) and
+  can be overridden by `ECLUME_WEB_URL`.
+- Opening devices can take seconds: start/stop runs off the UI thread.
+- **Stop outside the lock:** `AppState::stop_recording` takes `active` under the state and keeps
+  the id in `stopping`; with no lock at all, `ActiveRecording::close` (signal, join of the
+  recording thread, driver teardown, `fsync`, `rename`); with the queue, `Closed::deliver`; under
+  the state, clears `stopping`. While `stopping` exists, the visible state stays "Gravando"
+  (Recording), starting or stopping again is `Busy` and the orphan sweep counts the id as live.
+  "Sair" (Quit) closes the recording on a thread and calls `app.exit(0)` at the end. No join of a
+  capture thread waits without a deadline: `join_with_deadline` (`eclume-audio-capture`, 3 s)
+  releases the stuck thread with a warning in the log.
+- **Panic-isolated loops:** the reaper, the sync, the synced folder, the detection and the note
+  clock run each pass through `supervise::pass` (`catch_unwind`); a panic stays in the log (with
+  the hook's backtrace) and the loop waits 1 s doubling up to 60 s, reset on success. The updater
+  runs each check in a subtask and handles the panic `JoinError` the same way. A poisoned mutex
+  does not make the app unusable: the state and the queue carry on through `into_inner`, with the
+  poisoning in the log.
+- **"In progress" flag only through a guard:** `syncing`, `mirror.running` and `importing` turn
+  off in the `Drop` of a guard (`AppState::syncing`, `mirror_running`, `import_guard`), which takes
+  the state even when poisoned: "Sincronizando" and "Já há uma importação em andamento" do not stay
+  stuck after a panic.
+- **`#[tauri::command(async)]` commands:** a synchronous command only reads or writes memory and
+  the SQLite queue. Keyring, external process (`gsettings`), autostart registration, files outside
+  the queue and network go in `#[tauri::command(async)]` (today `settings`, `save_settings`,
+  `sign_out`, `storage_info`, `confirm_server`, `open_data_dir`, `open_log_dir`, plus the network
+  ones). Opening Settings does not query the keyring: the credential's origin is cached in the
+  state, updated on sign-in, sign-out and save. An `async` command never calls a Tauri API that
+  dispatches to the main thread (shortcuts, tray, window) with the state or the queue held.
+- When the recording stops on its own because the sources dropped or because the recording
+  failed, the reaper (every second) closes the row and an OS notification goes out: "A gravação
+  parou" with "<tempo>
+  salvos · as fontes de áudio caíram" or "<tempo> salvos · falha ao gravar"; the window shows the
+  same warning.
+- `config.json` is written through a neighboring temporary file (`.config.json.tmp`) with
+  `sync_all` and a rename; on failure, the temporary file is deleted. Opening only writes it when
+  the opened version changes `last_version`. An unreadable file is renamed to
+  `config.json.ilegivel-<ms>` before the default applies, and the window warns "A configuração
+  estava ilegível e voltou ao padrão; a cópia está em …".
+- The tray (menu, icon, title and tooltip) is only touched on the main thread. The Tauri setters
+  (`set_text`, `set_menu`, `set_icon`, `set_title`, `set_tooltip`) dispatch to it and block until
+  the reply: a background thread calling them while holding a lock the main thread also uses would
+  freeze the app (#83). Background code requests the update through `tray::refresh` or
+  `refresh_ui`, which runs at once on the main thread and, from another thread, only enqueues;
+  whoever runs reads the state of the moment.
+- The log (`info`, or the `RUST_LOG` filter) goes to stderr and to `eclume.log` in the app's log
+  directory (`app_log_dir`: `%LOCALAPPDATA%\io.github.holetz.eclume\logs` on Windows,
+  `~/.local/share/io.github.holetz.eclume/logs` on Linux, `~/Library/Logs/io.github.holetz.eclume`
+  on macOS). Above 5 MB, the file becomes `eclume.log.1`, on open and also with the app open
+  (the `Tee` counts the bytes and rotates under the `env_logger` lock). On Windows the release
+  has no console, so the file is the only record of capture, sync and update failures.
+  The first line of each open carries the version and the OS. A panic goes to the same log (its
+  own hook) with the thread, the location and the backtrace: the default hook only writes to
+  stderr, which an app opened from the system menu does not keep anywhere the person can find.

@@ -1,11 +1,11 @@
 # `standards/api/`
 
-**Como a API do eclume conversa com os clientes** — o contrato versionado em `contracts/`, as
-convenções de autenticação, erros, paginação e upload, e as regras de evolução.
+**How the eclume API talks to its clients** — the versioned contract in `contracts/`, the
+authentication, error, pagination and upload conventions, and the evolution rules.
 
-**Fronteira:** `api/` governa a interface HTTP pública. O layout e os comandos de cada pilar vivem
-em [../code/](../code/index.md). Um padrão por arquivo; cada um com `type: standard` e um
-`resource:` derivado.
+**Boundary:** `api/` governs the public HTTP interface. The layout and commands of each pillar live
+in [../code/](../code/index.md). One standard per file; each with `type: standard` and a derived
+`resource:`.
 
-* [contrato-v1.md](contrato-v1.md) — as convenções da API v1 (sessão e PAT com escopos, erros, paginação, upload multipart S3, transcrição) e a regra de evolução só aditiva
-* [jobs-transcricao.md](jobs-transcricao.md) — o contrato de jobs entre o server e o worker GPU: filas arq, `transcribe` com o pré-processamento do áudio, artefatos no bucket, `ingest_transcript`/`transcription_failed`, progresso e idempotência
+* [contrato-v1.md](contrato-v1.md) — the API v1 conventions (session and PAT with scopes, errors, pagination, S3 multipart upload, transcription) and the additive-only evolution rule
+* [jobs-transcricao.md](jobs-transcricao.md) — the job contract between the server and the GPU worker: arq queues, `transcribe` with audio preprocessing, artifacts in the bucket, `ingest_transcript`/`transcription_failed`, progress and idempotency

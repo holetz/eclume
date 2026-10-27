@@ -1,7 +1,7 @@
 ---
 type: standard
-title: Design System do eclume no web
-description: O web do eclume usa o Design System do eclume (versionado em design-system/) como base visual única — eclume.css gerado do styles.css pelo sincronizar.py, app.css só com o que o DS não tem, fontes Archivo e IBM Plex Mono servidas pelo build, ícones Lucide com ponta quadrada e tema escuro por data-theme — e este é o fluxo de uma mudança visual, o mapa dos tokens antigos e as classes de produto.
+title: eclume Design System on the web
+description: The eclume web uses the eclume Design System (versioned in design-system/) as its single visual base — eclume.css generated from styles.css by sincronizar.py, app.css with only what the DS lacks, the Archivo and IBM Plex Mono fonts served by the build, Lucide icons with square caps and a dark theme through data-theme — and this is the flow of a visual change, the map of the old tokens and the product classes.
 resource: web/src/styles/**, web/src/main.tsx, web/src/app/theme.ts, web/src/app/Brand.tsx, web/public/favicon.svg, web/index.html, web/src/**/*.module.css
 tags: [code, web, design-system, css, tema, acessibilidade]
 timestamp: 2026-10-01
@@ -11,156 +11,161 @@ source: holetz/eclume#36, holetz/eclume#122, holetz/eclume#130
 maintainer: holetz
 ---
 
-# Design System do eclume no web
+# eclume Design System on the web
 
-O **Design System do eclume** vive versionado em `design-system/`, na raiz do monorepo:
-`styles.css` com tokens e classes (a fonte única da interface), `foundations/`, `components/`,
-`examples/` (as telas do mapa v6), `templates/`, `assets/`, `theme.html`/`theme.json`, `readme.md`,
-`github.md` e `_ds_manifest.json`, como vieram do export do Claude Design. Ele é escrito em inglês; o produto fica em
-pt-BR, com as rotas de [frontend-web.md](frontend-web.md). O web não inventa visual: toma cor,
-fonte, espaçamento, raio e sombra dos tokens do DS e monta as telas com as classes dele.
+The **eclume Design System** lives versioned in `design-system/`, at the root of the monorepo:
+`styles.css` with tokens and classes (the single source of the interface), `foundations/`,
+`components/`, `examples/` (the screens of the v6 map), `templates/`, `assets/`,
+`theme.html`/`theme.json`, `readme.md`, `github.md` and `_ds_manifest.json`, as they came from the
+Claude Design export. It is written in English; the product stays in pt-BR, with the routes of
+[frontend-web.md](frontend-web.md). The web does not invent visuals: it takes color, font, spacing,
+radius and shadow from the DS tokens and builds the screens with its classes.
 
-## Camadas de CSS
+## CSS layers
 
-`web/src/styles/global.css` é só o ponto de entrada, importado pelo `main.tsx` **antes** do
-`App`. O `eclume.css` entra na cascade layer `ds` (`@import './eclume.css' layer(ds)`), e o resto
-(`app.css` e os CSS Modules) fica sem camada, então vence o DS com qualquer especificidade e em
-qualquer ordem de chunk. A ordem do bundle não basta: o Vite põe o CSS de um chunk compartilhado
-(o do `RequireSession`, com a moldura do shell) **antes** do CSS da entrada, e o menu compacto do
-shell deixava de valer no build de produção:
+`web/src/styles/global.css` is only the entry point, imported by `main.tsx` **before** the `App`.
+`eclume.css` goes into the `ds` cascade layer (`@import './eclume.css' layer(ds)`), and the rest
+(`app.css` and the CSS Modules) stays unlayered, so it beats the DS at any specificity and in any
+chunk order. Bundle order is not enough: Vite puts the CSS of a shared chunk (the
+`RequireSession` one, with the shell frame) **before** the entry's CSS, and the shell's compact menu
+stopped applying in the production build:
 
-| Arquivo | O que tem | Quem edita |
+| File | What it holds | Who edits it |
 |---|---|---|
-| `fonts.css` | `@fontsource/archivo` 400, 500, 600, 700 e 800 e `@fontsource/ibm-plex-mono` 400 e 500 | quem muda os pesos usados |
-| `eclume.css` | gerado de `design-system/styles.css`, menos o `@import` do Google Fonts | ninguém: só o `sincronizar.py` |
-| `app.css` | a camada de produto, só o que o DS não define | as specs do web |
+| `fonts.css` | `@fontsource/archivo` 400, 500, 600, 700 and 800 and `@fontsource/ibm-plex-mono` 400 and 500 | whoever changes the weights used |
+| `eclume.css` | generated from `design-system/styles.css`, minus the Google Fonts `@import` | nobody: only `sincronizar.py` |
+| `app.css` | the product layer, only what the DS does not define | the web specs |
 
-- **`eclume.css` não se edita.** Ajuste de produto vai em `app.css` ou no CSS Module da tela. O
-  cabeçalho fixo (sem data) registra a origem. A camada mobile do DS (`.phone`, `.m-*`) vem junto,
-  inerte: a cópia fiel vale mais que a poda.
-- **Uma mudança visual** muda `design-system/` — à mão ou pelo export do Claude Design, que
-  continua sendo onde se desenha, revisado como diff sobre a pasta — e regenera as três cópias
-  (`web/src/styles/eclume.css`, `desktop/ui/eclume.css`, `mobile/ui/src/styles/eclume.css`), no
-  mesmo commit da fonte:
+- **`eclume.css` is not edited.** A product adjustment goes in `app.css` or in the screen's CSS
+  Module. The fixed header (no date) records the origin. The DS mobile layer (`.phone`, `.m-*`)
+  comes along, inert: the faithful copy is worth more than the pruning.
+- **A visual change** changes `design-system/` — by hand or through the Claude Design export, which
+  remains where design happens, reviewed as a diff over the folder — and regenerates the three
+  copies (`web/src/styles/eclume.css`, `desktop/ui/eclume.css`, `mobile/ui/src/styles/eclume.css`),
+  in the same commit as the source:
 
   ```bash
   uv run python design-system/sincronizar.py          # escreve as três cópias
   uv run python design-system/sincronizar.py --check  # só confere (roda no uv run pytest)
   ```
 
-  O `design-system/test_sincronizar.py` falha quando uma cópia diverge da fonte; o `ui_assets` do
-  desktop e o `copia.test.ts` do celular conferem as cópias contra a do web. Depois, `npm --prefix
-  web run build` e os screenshots da verificação visual (abaixo) mostram o que mudou. Classe nova do
-  DS fica disponível sem mais nada; classe renomeada quebra a tela que a usava, e o E2E pega.
-- **Sem CDN.** O servidor é auto-hospedado: o Vite copia os `.woff2` do `@fontsource` para
-  `dist/assets` com hash e o Caddy os serve da mesma origem. O `@fontsource` declara as famílias
-  `"Archivo"` e `"IBM Plex Mono"`, os mesmos nomes de `--font-heading`, `--font-body` e
-  `--font-mono`; por isso o pacote variável (`"Archivo Variable"`) não serve. O peso 600 entra
-  porque o DS o usa em `.kicker`, `.badge`, `.nav-group-title` e outras 11 regras.
+  `design-system/test_sincronizar.py` fails when a copy diverges from the source; the desktop's
+  `ui_assets` and the phone's `copia.test.ts` check the copies against the web's. Then `npm --prefix
+  web run build` and the visual verification screenshots (below) show what changed. A new DS class
+  is available with nothing else; a renamed class breaks the screen that used it, and the E2E
+  catches it.
+- **No CDN.** The server is self-hosted: Vite copies the `@fontsource` `.woff2` files to
+  `dist/assets` with a hash and Caddy serves them from the same origin. `@fontsource` declares the
+  `"Archivo"` and `"IBM Plex Mono"` families, the same names as `--font-heading`, `--font-body` and
+  `--font-mono`; that is why the variable package (`"Archivo Variable"`) does not fit. Weight 600 is
+  included because the DS uses it in `.kicker`, `.badge`, `.nav-group-title` and 11 other rules.
 
-## Classes de produto (`app.css`)
+## Product classes (`app.css`)
 
-- `:root{color-scheme:light}` (o escuro do DS já declara o seu).
-- `.main{max-width:none}`: o conteúdo usa a largura toda ao lado da barra, sem o
-  `--content-width` do DS; texto corrido mantém a própria medida (`68ch`). Telas `.bleed` tiram
-  também o respiro do `.main`.
-- `.field` em grid, `.field-hint` (texto de ajuda do campo, 12px, `--color-text-muted`, com 4px
-  acima dentro de `.field`) e `.field-label` (o rótulo de 12px do DS para `<legend>` e rótulos
-  que não são `<label>` filho de `.field`). No DS, `.hint` é o botão `?` de 18px.
-- `.input[aria-invalid='true']` com a borda em `--color-danger`.
-- `.visually-hidden` e `.skip-link`, nos tokens do DS.
+- `:root{color-scheme:light}` (the DS dark theme already declares its own).
+- `.main{max-width:none}`: the content uses the full width beside the bar, without the DS
+  `--content-width`; running text keeps its own measure (`68ch`). `.bleed` screens also remove the
+  `.main` padding.
+- `.field` as a grid, `.field-hint` (the field's help text, 12px, `--color-text-muted`, with 4px
+  above inside `.field`) and `.field-label` (the DS 12px label for `<legend>` and labels that are not
+  a `<label>` child of `.field`). In the DS, `.hint` is the 18px `?` button.
+- `.input[aria-invalid='true']` with the border in `--color-danger`.
+- `.visually-hidden` and `.skip-link`, on the DS tokens.
 - `svg.lucide{stroke-linecap:square;stroke-linejoin:miter}`.
-- `.page-head-actions` (as ações do `.page-head`), `.help-section` (kicker sobre a lista na gaveta
-  de ajuda) e o ajuste das linhas da `.help-drawer` sem a `.help-search`.
-- `.auth-tagline` e `.auth-note` (linha do campo da marca e rodapé do formulário de acesso) e a
-  `.auth` em uma coluna abaixo de 56rem.
-- O `prefers-reduced-motion` global.
+- `.page-head-actions` (the `.page-head` actions), `.help-section` (kicker over the list in the help
+  drawer) and the adjustment of the `.help-drawer` rows without the `.help-search`.
+- `.auth-tagline` and `.auth-note` (the brand field line and the footer of the sign-in form) and the
+  `.auth` in one column below 56rem.
+- The global `prefers-reduced-motion`.
 
-## Classes antigas e tokens antigos
+## Old classes and old tokens
 
-As classes globais do web antes do DS foram trocadas assim, e não voltam:
+The web's global classes from before the DS were replaced as follows, and do not come back:
 
-| Antes | Agora |
+| Before | Now |
 |---|---|
-| `btn` sem variante | `btn btn-secondary` (no DS, `.btn` puro é transparente e sem borda) |
+| `btn` with no variant | `btn btn-secondary` (in the DS, plain `.btn` is transparent and borderless) |
 | `muted` | `text-muted` |
 | `hint` | `field-hint` |
-| `select`, `textarea` | `input` no próprio `<select>`/`<textarea>` |
-| `label` (em `<legend>`) | `field-label` |
-| `badge-neutral` | `badge` (o neutro do DS é o padrão) |
+| `select`, `textarea` | `input` on the `<select>`/`<textarea>` itself |
+| `label` (on `<legend>`) | `field-label` |
+| `badge-neutral` | `badge` (the DS neutral is the default) |
 
-Os tokens de `tokens.css`, que deixou de existir, seguem este mapa ao escrever CSS novo:
+The tokens of `tokens.css`, which no longer exists, follow this map when writing new CSS:
 
-| Antigo | No DS |
+| Old | In the DS |
 |---|---|
 | `--font-sans` | `--font-body` |
-| `--text-xs/-sm/-md/-lg/-xl` | `12px`/`14px`/`15px`/`20px`/`42px`: o DS usa escala fixa em px |
-| `--leading` | nada (o `body` tem `1.55`) |
+| `--text-xs/-sm/-md/-lg/-xl` | `12px`/`14px`/`15px`/`20px`/`42px`: the DS uses a fixed px scale |
+| `--leading` | nothing (the `body` has `1.55`) |
 | `--space-5`/`-6`/`-7` | `--space-6`/`--space-8`/`calc(var(--space-8) * 1.5)` |
-| `--radius-*`, `--radius` | nada: canto zero; só o ponto de gravação é redondo |
+| `--radius-*`, `--radius` | nothing: zero corners; only the recording dot is round |
 | `--color-surface-2` | `color-mix(in srgb, var(--color-text) 7%, transparent)` |
 | `--color-border`, `--color-border-strong` | `--color-divider` |
 | `--color-accent-hover`, `--color-accent-contrast` | `--color-accent-600`, `--color-bg` |
 | `--color-accent-soft`, `--color-{danger,success,warning}-soft` | `color-mix(in srgb, var(--color-…) 10%, transparent)` |
-| `--color-accent` como texto pequeno | `--color-accent-ink` |
+| `--color-accent` as small text | `--color-accent-ink` |
 | `--color-danger-hover`, `--color-focus`, `--shadow` | `--color-danger`, `--color-accent`, `--shadow-sm` |
 
-`--color-surface` mantém o nome, mas é o linho mais escuro, sem borda. Nas telas ainda não
-redesenhadas, a base do DS (`h1` a `h3` de 42/32/25px, `p` com margem) é contida no CSS Module da
-página com especificidade de elemento — `:where(.page) h2{font-size:20px;margin:0}`,
-`:where(.page) h3{font-size:17px}` e `:where(.page) p{margin:0}` — para as classes do módulo
-continuarem vencendo.
+`--color-surface` keeps its name, but it is the darkest linen, with no border. On screens not yet
+redesigned, the DS base (`h1` to `h3` at 42/32/25px, `p` with margin) is contained in the page's
+CSS Module with element specificity — `:where(.page) h2{font-size:20px;margin:0}`,
+`:where(.page) h3{font-size:17px}` and `:where(.page) p{margin:0}` — so the module's classes keep
+winning.
 
-## Tema
+## Theme
 
-O DS só tem o escuro sob `:root[data-theme='dark']`. `web/src/app/theme.ts` grava sempre o
-atributo no `<html>`: a escolha explícita (`light`/`dark`, lembrada em `eclume-tema`) ou, em "Do
-sistema", o resultado de `matchMedia('(prefers-color-scheme: dark)')` (sem `matchMedia`, claro).
-O `main.tsx` aplica a preferência antes do `render` e liga `watchSystemTheme()`, que acompanha a
-troca do sistema enquanto a preferência for "Do sistema". No shell, a escolha é o `.seg` "Tema"
-(Sistema, Claro, Escuro). Cor nova entra como token no DS, não no web.
+The DS only has the dark theme under `:root[data-theme='dark']`. `web/src/app/theme.ts` always writes
+the attribute on `<html>`: the explicit choice (`light`/`dark`, remembered in `eclume-tema`) or, under
+"Do sistema", the result of `matchMedia('(prefers-color-scheme: dark)')` (with no `matchMedia`,
+light). `main.tsx` applies the preference before `render` and turns on `watchSystemTheme()`, which
+follows the system's change while the preference is "Do sistema". In the shell, the choice is the
+"Tema" `.seg` (Sistema, Claro, Escuro). A new color goes in as a token in the DS, not in the web.
 
-## Marca e ícones
+## Brand and icons
 
-- `Brand.tsx` desenha a lockup `.brand`: as cinco barras em SVG inline (preenchidas pelo CSS) e
-  `eclume` em Archivo 800. Com `to`, é link.
-- `web/public/favicon.svg` é o `assets/app-icon.svg` do DS; o `index.html` declara o ícone e o
-  `theme-color` claro (`#f7f5f2`) e escuro (`#1e1c19`).
-- Ícones vêm de `lucide-react` por import nomeado, com `size={16}` e `aria-hidden`; o traço 2 é o
-  padrão do Lucide e a ponta quadrada vem do `app.css`.
+- `Brand.tsx` draws the `.brand` lockup: the five bars in inline SVG (filled by the CSS) and
+  `eclume` in Archivo 800. With `to`, it is a link.
+- `web/public/favicon.svg` is the DS `assets/app-icon.svg`; `index.html` declares the icon and the
+  light (`#f7f5f2`) and dark (`#1e1c19`) `theme-color`.
+- Icons come from `lucide-react` by named import, with `size={16}` and `aria-hidden`; stroke 2 is the
+  Lucide default and the square cap comes from `app.css`.
 
-## Verificação visual
+## Visual verification
 
-`web/e2e/visual.spec.ts` afirma o estilo computado (fundo `rgb(247, 245, 242)` no claro e
-`rgb(30, 28, 25)` no escuro, campo da marca `rgb(111, 90, 68)`, Archivo 800 carregada, canto zero
-no `.btn-primary`, nenhuma requisição fora da origem e `?` abrindo a gaveta de ajuda) e roda no
-E2E de sempre. Com `E2E_SCREENSHOTS=1`, salva as telas em claro e escuro, a 1440×900 e 390×844,
-em `web/test-results/screens/app-*.png`, e também, do `design-system/` (ou de `ECLUME_DS_DIR`), os
-quadros de `examples/access.html` como `ds-*.png`, para a comparação lado a lado. Não há diff
-de pixels: a comparação é revisada.
+`web/e2e/visual.spec.ts` asserts the computed style (background `rgb(247, 245, 242)` in light and
+`rgb(30, 28, 25)` in dark, brand field `rgb(111, 90, 68)`, Archivo 800 loaded, zero corners on
+`.btn-primary`, no request outside the origin and `?` opening the help drawer) and runs in the usual
+E2E. With `E2E_SCREENSHOTS=1`, it saves the screens in light and dark, at 1440×900 and 390×844, in
+`web/test-results/screens/app-*.png`, and also, from `design-system/` (or from `ECLUME_DS_DIR`), the
+frames of `examples/access.html` as `ds-*.png`, for the side-by-side comparison. There is no pixel
+diff: the comparison is reviewed.
 
-## Acessibilidade
+## Accessibility
 
-- **Estilo por classe.** `style` no JSX só leva custom property (`--s`, `--lane`, `--altura-visivel`);
-  o resto vai para o CSS Module ou o `app.css`. O `no-restricted-syntax` do `eslint.config.js` do
-  web e do celular barra o resto, a mesma regra que o `ui_assets` do desktop impõe à UI estática.
-- **Evento da semana.** A coluna do dia é `role="list"`, e cada evento é um `div role="listitem"`
-  com o `.cal-event` (posição por `--s`, `--d`, `--lane`, estado nos `data-*`) e o `Link` ocupando a
-  caixa, com o `aria-label` do evento; o foco aparece no item por `:focus-within` (CSS de produto).
-- **Foco na troca de rota.** Depois da primeira troca de `pathname` dentro da moldura
-  (`ShellFrame`, contexto `pageFocus.ts`), o `PageHead` foca o próprio `h1` (`tabIndex={-1}`, sem
-  rolar, sem anel de foco); a primeira carga e a troca só de busca não movem o foco.
-- **Menu compacto.** Abrir foca o primeiro link da barra; Esc fecha e devolve o foco ao botão
-  Menu; clicar no link da rota atual fecha. Vale para o app e o admin (`ShellFrame`).
-- **axe no E2E** (`web/e2e/a11y.spec.ts`, `@axe-core/playwright`): entrar, biblioteca, gravação,
-  Pessoas, Busca, Campos e, no admin, Usuários e Saúde, nos temas claro e escuro, sem violação
-  WCAG 2.1 A/AA e sem exceção.
-- **Contraste como teste** (`web/src/styles/contrast.test.ts`): lê `:root` e
-  `:root[data-theme='dark']` do `eclume.css`, resolve `var()` e `color-mix(... transparent)` sobre o
-  fundo e afirma, nos dois temas e sobre fundo e superfície, as bordas de controle (`.input`,
-  `.btn-secondary`, `.check .box`, `.switch .track`, todas em `--color-control-border`) com pelo
-  menos 3:1 (1.4.11, que o axe não mede) e os textos secundário, de aviso, de sucesso, de erro e do
-  cabeçalho de tabela com pelo menos 4,5:1. O valor muda na fonte (`design-system/styles.css`),
-  nunca numa cópia.
-- **Cópia fiel no celular.** `mobile/ui/src/styles/copia.test.ts` confere que o `eclume.css` do
-  celular é igual ao do web, como o `ui_assets` faz com o do desktop.
+- **Style by class.** `style` in JSX only carries a custom property (`--s`, `--lane`,
+  `--altura-visivel`); the rest goes to the CSS Module or to `app.css`. The `no-restricted-syntax`
+  of the web's and the phone's `eslint.config.js` bars the rest, the same rule the desktop's
+  `ui_assets` imposes on the static UI.
+- **Week event.** The day column is `role="list"`, and each event is a `div role="listitem"` with
+  the `.cal-event` (position through `--s`, `--d`, `--lane`, state in the `data-*`) and the `Link`
+  filling the box, with the event's `aria-label`; focus shows on the item through `:focus-within`
+  (product CSS).
+- **Focus on route change.** After the first `pathname` change inside the frame (`ShellFrame`,
+  `pageFocus.ts` context), the `PageHead` focuses its own `h1` (`tabIndex={-1}`, no scrolling, no
+  focus ring); the first load and a search-only change do not move focus.
+- **Compact menu.** Opening focuses the bar's first link; Esc closes it and returns focus to the
+  Menu button; clicking the current route's link closes it. It applies to the app and the admin
+  (`ShellFrame`).
+- **axe in the E2E** (`web/e2e/a11y.spec.ts`, `@axe-core/playwright`): sign-in, library, recording,
+  Pessoas, Busca, Campos and, in the admin, Usuários and Saúde, in the light and dark themes, with no
+  WCAG 2.1 A/AA violation and no exception.
+- **Contrast as a test** (`web/src/styles/contrast.test.ts`): reads `:root` and
+  `:root[data-theme='dark']` from `eclume.css`, resolves `var()` and `color-mix(... transparent)` over
+  the background and asserts, in both themes and over background and surface, the control borders
+  (`.input`, `.btn-secondary`, `.check .box`, `.switch .track`, all in `--color-control-border`) at
+  3:1 or more (1.4.11, which axe does not measure) and the secondary, warning, success, error and
+  table-header texts at 4.5:1 or more. The value changes at the source (`design-system/styles.css`),
+  never in a copy.
+- **Faithful copy on the phone.** `mobile/ui/src/styles/copia.test.ts` checks that the phone's
+  `eclume.css` equals the web's, as `ui_assets` does with the desktop's.

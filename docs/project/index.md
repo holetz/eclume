@@ -1,11 +1,11 @@
-# `project/` — o manual deste repositório
+# `project/` — this repository's manual
 
-A referência operacional do próprio repositório: soluções de mercado reaproveitadas, o runbook do
-host e outros fatos sobre o eclume como código mantido. Cada página tem `type: project`.
+The operational reference of the repository itself: market solutions reused, the host runbook and
+other facts about eclume as maintained code. Every page has `type: project`.
 
-* [calibracao-voz.md](calibracao-voz.md) — como o limiar de sugestão por voz foi escolhido: 33 leitores reais em reuniões sintéticas diarizadas, FPR e FNR por limiar, modo e fala, e a decisão (centroide, 0,55, 10 s)
-* [deploy-producao.md](deploy-producao.md) — o eclume em produção no host: compose com Caddy na 8443, deploy pelo contexto Docker, segredos, admin, CA nos clientes, backup e restauração
-* [estacao-windows.md](estacao-windows.md) — a estação Windows: SSH e contexto `gpu-host`, `remote-run` sem rsync, instalar e entrar no app sem PAT, dirigir a janela pelo CDP, log e binários Windows cruzados no host
-* [host-setup.md](host-setup.md) — como preparar o servidor `192.168.15.199` para receber os containers do eclume e do lumea
-* [referencias.md](referencias.md) — soluções de mercado avaliadas e como o eclume usa cada uma
-* [worker-gpu.md](worker-gpu.md) — o worker GPU na GTX 1660 SUPER: compute type, benchmark medido, imagem, cache de modelos, token do Hugging Face e operação
+* [calibracao-voz.md](calibracao-voz.md) — how the voice-suggestion threshold was chosen: 33 real readers in diarized synthetic meetings, FPR and FNR per threshold, mode and speech, and the decision (centroid, 0.55, 10 s)
+* [deploy-producao.md](deploy-producao.md) — eclume in production on the host: compose with Caddy on 8443, deploy through the Docker context, secrets, admin, CA on the clients, backup and restore
+* [estacao-windows.md](estacao-windows.md) — the Windows station: SSH and the `gpu-host` context, `remote-run` without rsync, installing and signing into the app without a PAT, driving the window over CDP, log and Windows binaries cross-built on the host
+* [host-setup.md](host-setup.md) — how to prepare the server `192.168.15.199` to receive the eclume and lumea containers
+* [referencias.md](referencias.md) — market solutions evaluated and how eclume uses each one
+* [worker-gpu.md](worker-gpu.md) — the GPU worker on the GTX 1660 SUPER: compute type, measured benchmark, image, model cache, Hugging Face token and operation

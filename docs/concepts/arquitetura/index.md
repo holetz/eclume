@@ -1,7 +1,7 @@
 # `concepts/arquitetura/`
 
-**Como o eclume é montado** — os componentes, as filas, o caminho de uma gravação, as fronteiras de
-confiança e os pontos de saída de dados. Explica e não vincula: cada parte aponta para a norma dona
-em [../../standards/](../../standards/index.md). Cada doc tem `type: concept`.
+**How eclume is put together** — the components, the queues, the path of a recording, the trust
+boundaries and the points where data can leave. It explains and does not bind: each part points to
+the owning standard in [../../standards/](../../standards/index.md). Every doc has `type: concept`.
 
-* [visao-geral.md](visao-geral.md) — os componentes com o diagrama, as filas `eclume:gpu`, `eclume:default` e `eclume:agents`, o caminho do upload retomável ao resumo, as fronteiras de confiança e o que pode sair do servidor, com a resposta por configuração em `GET /privacy`
+* [visao-geral.md](visao-geral.md) — the components with the diagram, the `eclume:gpu`, `eclume:default` and `eclume:agents` queues, the path from resumable upload to summary, the trust boundaries and what can leave the server, with the per-configuration answer in `GET /privacy`

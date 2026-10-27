@@ -554,29 +554,29 @@
     }
   ],
   "narrative": {
-    "northStar": "Norte: \"o arquivo de trabalho de uma instituição\".** O eclume é uma ferramenta que se usa por",
-    "overview": "**Norte: \"o arquivo de trabalho de uma instituição\".** O eclume é uma ferramenta que se usa por\nhoras para ler, revisar e reencontrar reuniões. A interface parece papel de linho bem organizado:\ntinta escura, fios retos de 2px separando a estrutura, nenhuma curva, e a cor gasta só no que\nsignifica algo.\n\n- **Sóbrio:** a hierarquia vem do peso do Archivo 800 e do espaço, não de ornamento.\n- **Estrutural:** fios de 2px desenham a moldura (cabeçalho de página, barra lateral, divisores);\n  sombras só separam camadas que flutuam.\n- **Honesto no estado:** a terracota aparece quando algo grava ou falha, e em nenhum outro lugar.",
+    "northStar": "North star: \"an institution's working file\".** eclume is a tool people use for hours to read,",
+    "overview": "**North star: \"an institution's working file\".** eclume is a tool people use for hours to read,\nreview and rediscover meetings. The interface looks like well-organized linen paper: dark ink,\nstraight 2px rules separating the structure, no curves, and color spent only on what means\nsomething.\n\n- **Sober:** hierarchy comes from the weight of Archivo 800 and from space, not from ornament.\n- **Structural:** 2px rules draw the frame (page head, sidebar, dividers); shadows only separate\n  layers that float.\n- **Honest about state:** terracotta appears when something is recording or failing, and nowhere\n  else.",
     "keyCharacteristics": [
-      "Sóbrio:: a hierarquia vem do peso do Archivo 800 e do espaço, não de ornamento.",
-      "Estrutural:: fios de 2px desenham a moldura (cabeçalho de página, barra lateral, divisores);",
-      "Honesto no estado:: a terracota aparece quando algo grava ou falha, e em nenhum outro lugar."
+      "Sober:: hierarchy comes from the weight of Archivo 800 and from space, not from ornament.",
+      "Structural:: 2px rules draw the frame (page head, sidebar, dividers); shadows only separate",
+      "Honest about state:: terracotta appears when something is recording or failing, and nowhere"
     ],
     "rules": [],
     "dos": [
-      "**Do** montar telas com as classes do `design-system/` e ajustar produto em `app.css` ou no CSS",
-      "**Do** usar fios de 2px para estrutura e manter o raio zero.",
-      "**Do** reservar a terracota para gravação e falha.",
-      "**Do** manter toda declaração primitiva em `/.design/tokens.json` e regenerar os adaptadores.",
-      "**Do** preservar pares de frente e fundo acessíveis e a ordem semântica dos títulos.",
-      "**Do** inspecionar o HTML, o deck ou o PDF de verdade depois de renderizar."
+      "**Do** assemble screens with the `design-system/` classes and adjust the product in `app.css` or",
+      "**Do** use 2px rules for structure and keep zero radius.",
+      "**Do** reserve terracotta for recording and failure.",
+      "**Do** keep every primitive declaration in `/.design/tokens.json` and regenerate the adapters.",
+      "**Do** preserve accessible foreground and background pairs and the semantic order of headings.",
+      "**Do** inspect the real HTML, deck or PDF after rendering."
     ],
     "donts": [
-      "**Don't** editar `web/src/styles/eclume.css`: ele é cópia fiel e só muda pelo sync.",
-      "**Don't** arredondar cantos, usar pílulas ou introduzir um segundo acento de cor.",
-      "**Don't** carregar fontes ou ícones de CDN: o servidor é auto-hospedado.",
-      "**Don't** copiar cor, tamanho de tipo, raio ou espaçamento para uma primitiva de mídia.",
-      "**Don't** usar um asset sem licença e papel registrados.",
-      "**Don't** tratar a projeção com perdas do `DESIGN.md` como a fonte DTCG inteira."
+      "**Don't** edit `web/src/styles/eclume.css`: it is a faithful copy and only changes through the",
+      "**Don't** round corners, use pills or introduce a second color accent.",
+      "**Don't** load fonts or icons from a CDN: the server is self-hosted.",
+      "**Don't** copy a color, type size, radius or spacing into a media primitive.",
+      "**Don't** use an asset without a recorded license and role.",
+      "**Don't** treat the lossy projection of `DESIGN.md` as the whole DTCG source."
     ]
   }
 }

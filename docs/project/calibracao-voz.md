@@ -1,9 +1,9 @@
 ---
 type: project
-title: Calibração do limiar de identificação por voz
-description: Como o limiar de sugestão por voz do eclume foi escolhido — 33 leitores reais do LibriVox em 127 reuniões sintéticas diarizadas pelo pyannote community-1 na GTX 1660 SUPER, taxas de falso positivo e falso negativo por limiar, por modo de comparação e por tempo de fala, e o limiar 0,55 com centroide normalizado.
+title: Voice identification threshold calibration
+description: How the eclume voice-suggestion threshold was chosen — 33 real LibriVox readers in 127 synthetic meetings diarized by pyannote community-1 on the GTX 1660 SUPER, false-positive and false-negative rates per threshold, per comparison mode and per speech duration, and the 0.55 threshold with a normalized centroid.
 resource: worker-gpu/scripts/voice_calibration.py, server/src/eclume_server/voice.py
-tags: [voz, calibracao, limiar, pyannote, lgpd, benchmark]
+tags: [voice, calibration, threshold, pyannote, lgpd, benchmark]
 timestamp: 2026-10-01
 audience: both
 authority: current
@@ -11,45 +11,45 @@ source: holetz/eclume#15
 maintainer: holetz
 ---
 
-# Calibração do limiar de identificação por voz
+# Voice identification threshold calibration
 
-A sugestão por voz ([identificacao-por-voz.md](/docs/standards/code/identificacao-por-voz.md))
-compara o embedding de cada locutor novo com a impressão das pessoas que consentiram. Este é o
-experimento que escolheu o modo de comparação, o limiar padrão e a fala mínima.
+The voice suggestion ([identificacao-por-voz.md](/docs/standards/code/identificacao-por-voz.md))
+compares the embedding of each new speaker with the fingerprint of the people who consented. This is the
+experiment that chose the comparison mode, the default threshold and the minimum speech.
 
-## Dados
+## Data
 
-- **Fala real em português**, do LibriVox (domínio público): 14 coleções com o leitor de cada
-  seção no catálogo. Entraram **33 leitores** com duas seções ou mais, até 4 seções por leitor, de
-  coleções diferentes quando possível. Cada seção é uma sessão de gravação diferente. Só os
-  primeiros 5 min de cada seção foram usados.
-- **Reuniões sintéticas**: 127 "reuniões" de 2 ou 3 leitores em turnos alternados de 6 a 25 s,
-  com 15, 30, 60, 120 ou 240 s de fala por leitor. Foram convertidas para o formato do upload
-  (Opus mono 16 kHz, 32 kbps) e diarizadas pelo `DiarizationPipeline` do WhisperX com
-  `return_embeddings=True`. É o mesmo caminho e o mesmo modelo do worker GPU
+- **Real speech in Portuguese**, from LibriVox (public domain): 14 collections with each
+  section's reader in the catalog. **33 readers** with two or more sections were included, up to 4 sections per reader, from
+  different collections when possible. Each section is a different recording session. Only the
+  first 5 min of each section were used.
+- **Synthetic meetings**: 127 "meetings" of 2 or 3 readers in alternating turns of 6 to 25 s,
+  with 15, 30, 60, 120 or 240 s of speech per reader. They were converted to the upload format
+  (mono Opus 16 kHz, 32 kbps) and diarized by WhisperX's `DiarizationPipeline` with
+  `return_embeddings=True`. It is the same path and the same model as the GPU worker
   (`pyannote/speaker-diarization-community-1`, embeddings
-  `pyannote/wespeaker-voxceleb-resnet34-LM`, 256 dimensões).
-- **O bench de 1 h** do worker (`/srv/eclume/bench/bench-1h.ogg`), com os turnos pelos contos:
-  Leni, Vicente Costa Filho e Pontedura.
-- **O locutor diarizado é casado com o leitor** pela sobreposição com os turnos conhecidos. Um
-  locutor com menos de 80% da fala de um leitor só foi descartado: 4 de 337, um deles o
-  Vicente do bench, que a diarização juntou com outro leitor.
-- Resultado: **333 locutores rotulados**, de 115 seções e 33 leitores; mediana de 49 s de fala
-  por locutor, mínimo de 5,5 s.
+  `pyannote/wespeaker-voxceleb-resnet34-LM`, 256 dimensions).
+- **The 1 h bench** of the worker (`/srv/eclume/bench/bench-1h.ogg`), with the turns taken from the stories
+  of three readers.
+- **The diarized speaker is matched to the reader** by overlap with the known turns. A
+  speaker with less than 80% of a reader's speech was simply discarded: 4 of 337, one of them a
+  bench reader, whom the diarization merged with another reader.
+- Result: **333 labeled speakers**, from 115 sections and 33 readers; median of 49 s of speech
+  per speaker, minimum of 5.5 s.
 
-## Protocolo
+## Protocol
 
-- **Teste**: cada locutor rotulado, comparado com a impressão de cada um dos 33 leitores.
-- **Impressão**: `k` amostras sorteadas do leitor, de reuniões e seções **diferentes** das do
-  teste. Assim o par genuíno nunca vem da mesma sessão de gravação.
-- **Pares**: 330 genuínos (mesmo leitor) e 10.656 impostores (leitor diferente), com `k = 3`.
-- **Modos de comparação**:
-  - `centroid`: cosseno com a média normalizada das amostras normalizadas, como o
-    `l2_normalize(avg(l2_normalize(...)))` do server;
-  - `max`: o maior cosseno com uma amostra;
-  - `mean`: a média dos cossenos.
-- **Falso positivo (FPR)** é o impostor acima do limiar. **Falso negativo (FNR)** é o genuíno
-  abaixo dele.
+- **Test**: each labeled speaker, compared with the fingerprint of each of the 33 readers.
+- **Fingerprint**: `k` samples drawn from the reader, from meetings and sections **different** from those of the
+  test. This way the genuine pair never comes from the same recording session.
+- **Pairs**: 330 genuine (same reader) and 10,656 impostor (different reader), with `k = 3`.
+- **Comparison modes**:
+  - `centroid`: cosine with the normalized mean of the normalized samples, like the server's
+    `l2_normalize(avg(l2_normalize(...)))`;
+  - `max`: the highest cosine with a sample;
+  - `mean`: the mean of the cosines.
+- **False positive (FPR)** is the impostor above the threshold. **False negative (FNR)** is the genuine
+  below it.
 
 ```bash
 python3 worker-gpu/scripts/voice_calibration.py manifest --out manifest.json
@@ -61,66 +61,66 @@ docker --context gpu-host run --rm --gpus all -v /srv/eclume/models:/models \
 python3 worker-gpu/scripts/voice_calibration.py analyze embeddings.json
 ```
 
-Custo no host: a diarização das 128 reuniões (~9 h de áudio) levou 25 min na GTX 1660 SUPER, com o
-worker de produção ocioso ao lado.
+Cost on the host: diarizing the 128 meetings (~9 h of audio) took 25 min on the GTX 1660 SUPER, with the
+production worker idle next to it.
 
-## Resultados
+## Results
 
-### Por modo, com a impressão de 3 amostras
+### Per mode, with the 3-sample fingerprint
 
-| Modo | EER | Limiar com FPR 1% | FNR nele | Limiar com FPR 0,1% | FNR nele |
+| Mode | EER | Threshold at FPR 1% | FNR there | Threshold at FPR 0.1% | FNR there |
 |---|---|---|---|---|---|
-| centroide, 1 amostra | 2,1% | 0,460 | 2,1% | 0,575 | 4,2% |
-| **centroide, 3 amostras** | **0,9%** | 0,460 | 0,9% | 0,565 | 3,6% |
-| máximo, 3 amostras | 0,9% | 0,485 | 0,9% | 0,605 | 2,7% |
-| média dos cossenos, 3 | 1,2% | 0,440 | 1,2% | 0,545 | 4,2% |
+| centroid, 1 sample | 2.1% | 0.460 | 2.1% | 0.575 | 4.2% |
+| **centroid, 3 samples** | **0.9%** | 0.460 | 0.9% | 0.565 | 3.6% |
+| max, 3 samples | 0.9% | 0.485 | 0.9% | 0.605 | 2.7% |
+| mean of cosines, 3 | 1.2% | 0.440 | 1.2% | 0.545 | 4.2% |
 
-### Centroide com 3 amostras, por limiar
+### Centroid with 3 samples, per threshold
 
-| Limiar | FPR | FNR |
+| Threshold | FPR | FNR |
 |---|---|---|
-| 0,40 | 2,99% | 0,91% |
-| 0,45 | 1,19% | 0,91% |
-| 0,50 | 0,44% | 0,91% |
-| **0,55** | **0,17%** | **3,64%** |
-| 0,60 | 0,07% | 3,94% |
-| 0,65 | 0,06% | 4,55% |
-| 0,70 | 0,05% | 5,76% |
+| 0.40 | 2.99% | 0.91% |
+| 0.45 | 1.19% | 0.91% |
+| 0.50 | 0.44% | 0.91% |
+| **0.55** | **0.17%** | **3.64%** |
+| 0.60 | 0.07% | 3.94% |
+| 0.65 | 0.06% | 4.55% |
+| 0.70 | 0.05% | 5.76% |
 
-### Centroide com 3 amostras, no limiar 0,55, pela fala do locutor testado
+### Centroid with 3 samples, at threshold 0.55, by the tested speaker's speech
 
-| Fala | FPR | FNR | Impostores | Genuínos |
+| Speech | FPR | FNR | Impostors | Genuine |
 |---|---|---|---|---|
-| < 20 s | 0,10% | 1,6% | 2.048 | 63 |
-| 20–45 s | 0,26% | 2,8% | 2.304 | 71 |
-| 45–90 s | 0,24% | 4,5% | 2.112 | 66 |
-| 90–180 s | 0,09% | 7,0% | 2.272 | 71 |
-| ≥ 180 s | 0,16% | 1,7% | 1.920 | 59 |
+| < 20 s | 0.10% | 1.6% | 2,048 | 63 |
+| 20–45 s | 0.26% | 2.8% | 2,304 | 71 |
+| 45–90 s | 0.24% | 4.5% | 2,112 | 66 |
+| 90–180 s | 0.09% | 7.0% | 2,272 | 71 |
+| ≥ 180 s | 0.16% | 1.7% | 1,920 | 59 |
 
-### Distribuições
+### Distributions
 
-- **Genuínos** (centroide, 3 amostras): p1 0,51, p5 0,68, mediana 0,88.
-- **Impostores**: mediana 0,14, p99 0,46, p99,9 0,56.
-- **Os raros impostores altos** (máximo 0,92) vêm de poucos pares de leitores próximos. Os
-  centroides mais parecidos são AlexOliveira75 e Rennê Luduvico, com 0,58. Há também ruído de
-  rótulo: um leitor do catálogo, Vicente Costa Filho, tem duas amostras com cosseno 0,15 entre
-  si, o que sugere uma seção lida por outra pessoa.
-- **As duas vozes sintéticas** do diálogo de teste da #8 (Piper, faber e cadu) ficam em 0,33.
+- **Genuine** (centroid, 3 samples): p1 0.51, p5 0.68, median 0.88.
+- **Impostors**: median 0.14, p99 0.46, p99.9 0.56.
+- **The rare high impostors** (maximum 0.92) come from a few pairs of similar readers. The most similar
+  centroids are two catalog readers, at 0.58. There is also label
+  noise: one catalog reader has two samples with a cosine of 0.15 between
+  them, which suggests a section read by another person.
+- **The two synthetic voices** of the test dialogue of #8 (Piper, faber and cadu) sit at 0.33.
 
-## Decisão
+## Decision
 
-- **Modo: centroide normalizado das amostras**, com o menor EER junto com o máximo. É uma
-  agregação só no SQL, estável quando uma amostra é ruim, e não cresce em custo com o número de
-  amostras. O "máximo" ganha pouco em FNR e perde em FPR.
-- **Limiar padrão: 0,55.** Com FPR de 0,17% por comparação, uma conta com 50 pessoas no
-  diretório tem ~8% de chance de uma sugestão errada para um locutor desconhecido. A sugestão
-  só propõe, e recusar custa um clique; a atribuição automática usa um limiar próprio, mais alto
-  (padrão 0,75, ~0,05% de FPR na tabela acima), que cada conta ajusta. Com FNR de ~4%, a pessoa certa quase sempre
-  aparece. Abaixo de 0,50 o FPR triplica; acima de 0,60 quase não ganha precisão.
-- **Fala mínima de 10 s** para comparar e para virar amostra. Nem o locutor mais curto (5,5 s)
-  piorou as taxas. O corte protege de fragmentos de diarização de 1–2 s, que o experimento não
-  tem.
-- **Audiolivro não é reunião.** Leitura limpa, sem sobreposição e com microfone próximo separa
-  melhor que uma sala real. Em reuniões, os genuínos devem cair mais que os impostores subir. Por
-  isso o limiar fica no ponto de FPR ≈ 0,1–0,2%, não no do EER, e o admin pode ajustá-lo em
-  Administração → Identificação por voz.
+- **Mode: normalized centroid of the samples**, with the lowest EER together with max. It is a
+  single aggregation in SQL, stable when a sample is bad, and its cost does not grow with the number of
+  samples. "Max" gains little in FNR and loses in FPR.
+- **Default threshold: 0.55.** With an FPR of 0.17% per comparison, an account with 50 people in the
+  directory has ~8% chance of a wrong suggestion for an unknown speaker. The suggestion
+  only proposes, and rejecting costs one click; automatic assignment uses its own, higher threshold
+  (default 0.75, ~0.05% FPR in the table above), which each account adjusts. With an FNR of ~4%, the right person almost always
+  shows up. Below 0.50 the FPR triples; above 0.60 precision barely improves.
+- **Minimum speech of 10 s** to compare and to become a sample. Not even the shortest speaker (5.5 s)
+  worsened the rates. The cut protects against diarization fragments of 1–2 s, which the experiment
+  does not have.
+- **An audiobook is not a meeting.** Clean reading, without overlap and with a close microphone separates
+  better than a real room. In meetings, genuines should drop more than impostors rise. That is
+  why the threshold sits at the FPR ≈ 0.1–0.2% point, not at the EER one, and the admin can adjust it in
+  Administration → Voice identification.

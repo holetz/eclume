@@ -10,33 +10,33 @@ web
 
 ## Users
 
-Quem grava reuniões de trabalho e precisa reencontrá-las (cada usuário com espaço próprio, cadastro aberto) e o admin da plataforma, que configura agentes de resumo e opera o host.
+People who record work meetings and need to find them again (each user with their own space, open sign-up) and the platform admin, who configures the summary agents and operates the host.
 
 ## Product Purpose
 
-Gravar reuniões, transcrever na GPU do próprio servidor, separar e reconhecer locutores, organizar por pessoa, localizar pela busca e resumir pelo tipo de agenda, com os agentes que o admin configura.
+Record meetings, transcribe them on the server's own GPU, separate and recognize speakers, organize by person, find through search and summarize by agenda type, with the agents the admin configures.
 
 ## Positioning
 
-Transcrição institucional auto-hospedada (open source no futuro), focada em organizar, localizar e reconhecer pessoas; integra-se ao lumea só por contrato de API versionado.
+Self-hosted institutional transcription (open source in the future), focused on organizing, finding and recognizing people; it integrates with lumea only through a versioned API contract.
 
 ## Operating Context
 
-Ferramenta de trabalho em desktop, na LAN, com sessões longas de leitura e revisão de transcrições; tema claro e escuro.
+A desktop work tool, on the LAN, with long sessions of reading and reviewing transcripts; light and dark theme.
 
 ## Brand Commitments
 
-Paleta linho e nogueira, Archivo + IBM Plex Mono, raio zero, fios de 2px, terracota só para gravação e falha; produto em pt-BR.
+Linen and walnut palette, Archivo + IBM Plex Mono, zero radius, 2px hairlines, terracotta only for recording and failure; product in pt-BR.
 
 ## Product Principles
 
-Regras que valem para qualquer tela; uma proposta que as contrarie está desenhando outro produto.
+Rules that hold for any screen; a proposal that goes against them is designing a different product.
 
-- **Conta isolada.** Cada conta vê só o que é dela; não há compartilhamento entre contas.
-- **Sem transcrição ao vivo.** O eclume trabalha sobre a gravação terminada.
-- **Nunca grava sem mostrar.** Toda gravação, em qualquer aparelho, tem indicação visível.
-- **O admin não vê conteúdo.** Quem administra cuida da configuração e da saúde da plataforma, sem
-  acesso às gravações, transcrições e resumos das contas.
-- **Quem grava responde pelo consentimento** de quem é gravado, pelo aceite do aviso no cadastro.
-- **O aparelho grava, o servidor processa.** O aparelho grava e envia; transcrever, classificar e
-  resumir é trabalho do servidor.
+- **Isolated account.** Each account sees only what is its own; there is no sharing between accounts.
+- **No live transcription.** eclume works on the finished recording.
+- **Never records without showing it.** Every recording, on any device, has a visible indication.
+- **The admin does not see content.** Whoever administers handles the platform's configuration and
+  health, with no access to the accounts' recordings, transcripts and summaries.
+- **Whoever records answers for the consent** of the people recorded, through accepting the notice at sign-up.
+- **The device records, the server processes.** The device records and uploads; transcribing,
+  classifying and summarizing is the server's work.
