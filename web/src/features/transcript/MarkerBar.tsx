@@ -2,7 +2,7 @@ import { commonDevice, hms, type Marker } from './markers'
 import { usePlayback } from './playback'
 import styles from './RecordingPage.module.css'
 
-/** A `.marker-bar`: uma ficha por marcador, que toca dali, e o dispositivo quando é um só. */
+/** The `.marker-bar`: one chip per marker, which plays from there, and the device when there is only one. */
 export function MarkerBar({ markers }: { markers: Marker[] }) {
   const { seek } = usePlayback()
   if (markers.length === 0) return null

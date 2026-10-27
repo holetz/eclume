@@ -1,5 +1,5 @@
-/* A transcrição recolhida (frame "Recording · transcript with markers"): falas e marcadores no
-   .segment e no .segment-marker do DS; aqui, só o que é de produto. */
+/* The collapsed transcript (frame "Recording · transcript with markers"): segments and markers in the
+   .segment and the .segment-marker of the DS; here, only what is product-specific. */
 .disclosure {
   border-bottom: 1px solid var(--color-divider);
   margin-bottom: 20px;
@@ -17,8 +17,8 @@
   color: var(--color-text-muted);
 }
 
-/* As falas rolam numa área própria, mais baixa que a janela: acompanhar o áudio rola só ela, e a
-   página (com o player) fica parada. No fim da lista, a roda do mouse não passa a rolar a página. */
+/* The segments scroll in their own area, shorter than the window: following the audio scrolls only it, and the
+   page (with the player) stays still. At the end of the list, the mouse wheel does not start scrolling the page. */
 .scroller {
   max-height: min(28rem, 55vh);
   overflow-y: auto;
@@ -26,8 +26,8 @@
   border-block: 1px solid var(--color-divider);
 }
 
-/* Fala fora da área não é pintada, mas fica no DOM: o Ctrl+F acha, o leitor de tela lê e o `?t=`
-   rola até ela. A altura intrínseca (lembrada depois da primeira pintura) evita a barra pular. */
+/* A segment outside the area is not painted, but stays in the DOM: Ctrl+F finds it, the screen reader reads it and `?t=`
+   scrolls to it. The intrinsic height (remembered after the first paint) keeps the bar from jumping. */
 .item {
   scroll-margin: var(--space-4) 0;
   content-visibility: auto;
@@ -38,7 +38,7 @@
   scroll-margin: var(--space-4) 0;
 }
 
-/* O tempo da fala é um botão que toca dali, no visual do .timecode. */
+/* The segment's time is a button that plays from there, in the .timecode look. */
 .timecode {
   justify-self: start;
   border: 0;

@@ -20,8 +20,8 @@ function composer(aside: HTMLElement) {
   return within(aside).getByRole('textbox', { name: 'Pedido de ajuste' })
 }
 
-describe('chat de ajuste do resumo', () => {
-  it('mostra o histórico, com as notas do que o agente leu da transcrição', async () => {
+describe('summary adjustment chat', () => {
+  it('shows the history, with the notes of what the agent read from the transcript', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const aside = await chat()
@@ -41,7 +41,7 @@ describe('chat de ajuste do resumo', () => {
     expect(aside).toHaveTextContent('Cada mudança vira uma versão')
   })
 
-  it('envia, acompanha a resposta até done e relê o resumo com a versão nova', async () => {
+  it('sends, follows the response until done and rereads the summary with the new version', async () => {
     const user = userEvent.setup()
     let polls = 0
     const http = mockTranscriptApi({
@@ -77,7 +77,7 @@ describe('chat de ajuste do resumo', () => {
     expect(within(aside).queryByLabelText('Trabalhando')).not.toBeInTheDocument()
   }, 15_000)
 
-  it('depois de um ajuste, leva o pedido ao rascunho das instruções do tipo, sem salvar', async () => {
+  it('after an adjustment, takes the request to the draft of the agenda type instructions, without saving', async () => {
     const http = mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const aside = await chat()
@@ -92,7 +92,7 @@ describe('chat de ajuste do resumo', () => {
     expect(http.requests('PATCH /api/v1/agenda-types/:id')).toHaveLength(0)
   })
 
-  it('sem ajuste que mudou o resumo, não oferece levar o pedido ao tipo', async () => {
+  it('with no adjustment that changed the summary, does not offer taking the request to the agenda type', async () => {
     const page = fixtures.summaryChatPage()
     page.items[1] = { ...page.items[1], summary_id: null }
     mockTranscriptApi({ 'GET /api/v1/recordings/:id/summary/chat': () => page })
@@ -101,7 +101,7 @@ describe('chat de ajuste do resumo', () => {
     expect(within(aside).queryByRole('link', { name: /Levar este pedido/ })).not.toBeInTheDocument()
   })
 
-  it('Ctrl+Enter envia; o resumo que mudou no meio e a falha viram nota e nova tentativa', async () => {
+  it('Ctrl+Enter sends; the summary that changed meanwhile and the failure become a note and a retry', async () => {
     const user = userEvent.setup()
     const page = fixtures.summaryChatPage()
     page.items.push(
@@ -146,7 +146,7 @@ describe('chat de ajuste do resumo', () => {
     })
   })
 
-  it('sem resumo, o composer espera; com pedido em aberto no servidor (409), avisa', async () => {
+  it('with no summary, the composer waits; with an open request on the server (409), it warns', async () => {
     const user = userEvent.setup()
     mockTranscriptApi({
       'POST /api/v1/recordings/:id/summary/chat': () =>
@@ -159,7 +159,7 @@ describe('chat de ajuste do resumo', () => {
     expect(within(aside).queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('sem resumo atual, o chat fica indisponível', async () => {
+  it('with no current summary, the chat is unavailable', async () => {
     mockTranscriptApi({
       'GET /api/v1/recordings/:id/summary': () => ({ current: null, generated: null, pending: null, version_count: 0 }),
     })

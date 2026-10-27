@@ -1,5 +1,5 @@
-/* A gravação centrada no resumo (frame "Recording"): o conteúdo e a coluna do chat, em largura total
-   (.bleed). Especificidade de elemento nos títulos: as classes deste módulo continuam vencendo. */
+/* The recording centred on the summary (frame "Recording"): the content and the chat column, at full width
+   (.bleed). Element specificity on the headings: this module's classes keep winning. */
 :where(.content) p {
   margin: 0;
 }
@@ -39,14 +39,14 @@
   min-width: 0;
 }
 
-/* O título da gravação no tamanho do h2 do DS, como no frame. */
+/* The recording's title at the DS h2 size, as in the frame. */
 .title {
   margin: 0;
   font-size: 32px;
 }
 
-/* A referência da gravação, discreta sob o título: é o sufixo do nome dos arquivos da pasta
-   sincronizada do desktop. */
+/* The recording's reference, discreet under the title: it is the suffix of the file names in the desktop's
+   synced folder. */
 .ref {
   justify-self: start;
   font-family: var(--font-mono);
@@ -82,7 +82,7 @@
   color: var(--color-text-muted);
 }
 
-/* O motivo de cada etapa pulada ou que falhou, em texto sob a barra (nunca só no `title`). */
+/* The reason for each step skipped or failed, in text under the bar (never only in `title`). */
 .pipelineReasons {
   margin: 0;
   padding: 0;
@@ -102,7 +102,7 @@
   color: var(--color-text-muted);
 }
 
-/* O player fica fixo logo abaixo do cabeçalho do shell enquanto a página rola, sobre o fundo. */
+/* The player stays fixed right below the shell header while the page scrolls, over the background. */
 .playerDock {
   position: sticky;
   top: var(--shell-header, 0px);
@@ -112,7 +112,7 @@
   background: var(--color-bg);
 }
 
-/* O documento e os campos, lado a lado. */
+/* The document and the fields, side by side. */
 .docGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 270px;
@@ -120,7 +120,7 @@
   align-items: start;
 }
 
-/* O chat acompanha a rolagem na altura da tela, abaixo do cabeçalho do shell. */
+/* The chat follows the scroll at screen height, below the shell header. */
 .chat:global(.chat) {
   position: sticky;
   top: var(--shell-header, 0px);
@@ -151,7 +151,7 @@
   }
 }
 
-/* O `range` transparente sobre a barra do player: arrastar e teclado; os ticks ficam por cima. */
+/* The transparent `range` over the player bar: drag and keyboard; the ticks sit on top. */
 .seek {
   position: absolute;
   inset: 0;
@@ -180,7 +180,7 @@
   margin-top: var(--space-2);
 }
 
-/* O resumo pode abrir com um título (# Ata ...): vira h2 (o h1 da página é o título da gravação). */
+/* The summary may open with a heading (# Ata ...): it becomes h2 (the page's h1 is the recording's title). */
 .docTitle {
   font-size: 25px;
   margin: 0 0 var(--space-3);
@@ -204,7 +204,7 @@
   gap: var(--space-3);
 }
 
-/* A edição do Markdown na tipografia do documento (16px, 1,65, mesma largura). */
+/* Markdown editing in the document's typography (16px, 1.65, same width). */
 .editor {
   display: block;
   width: 100%;
@@ -235,7 +235,7 @@
   margin-top: var(--space-2);
 }
 
-/* A comparação linha a linha: removidas e incluídas com fundo e sinal, para quem não enxerga cor. */
+/* The line-by-line comparison: removed and added lines with background and sign, for those who cannot see color. */
 .diff {
   display: grid;
   font-size: 15px;
@@ -265,7 +265,7 @@
   color: var(--color-text-muted);
 }
 
-/* O painel de campos (componente "Filled fields"). */
+/* The fields panel (component "Filled fields"). */
 .fields {
   display: grid;
   align-content: start;
@@ -315,7 +315,7 @@
   color: var(--color-danger);
 }
 
-/* "Trabalhando..." com os pontos em passos, como o piscar do DS. */
+/* "Trabalhando..." with the dots in steps, like the DS blink. */
 .working::after {
   content: '...';
   display: inline-block;

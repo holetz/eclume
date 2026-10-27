@@ -25,8 +25,8 @@ async function openSamples() {
   return screen.findByRole('tabpanel')
 }
 
-describe('aba Amostras de voz', () => {
-  it('lista as amostras com duração e data, sem aceite por pessoa nem exportação', async () => {
+describe('Amostras de voz tab', () => {
+  it('lists the samples with duration and date, with no per-person consent and no export', async () => {
     mockVoice()
     const panel = await openSamples()
     const samples = await within(panel).findByRole('list', { name: 'Amostras de voz' })
@@ -39,17 +39,17 @@ describe('aba Amostras de voz', () => {
       'href',
       '/ajuda/sugestoes-por-voz',
     )
-    // O aceite do aviso no cadastro substitui o termo de cada pessoa.
+    // Accepting the notice at registration replaces each person's consent term.
     expect(within(panel).queryByRole('checkbox')).not.toBeInTheDocument()
     expect(within(panel).queryByRole('button', { name: /Exportar/ })).not.toBeInTheDocument()
   })
 
-  it('ouve o trecho de uma amostra e remove só aquela amostra', async () => {
+  it('plays the excerpt of a sample and removes only that sample', async () => {
     const http = mockVoice({ 'DELETE /api/v1/people/:id/voice-samples/:tid/:sid': () => empty() })
     const panel = await openSamples()
     const samples = await within(panel).findByRole('list', { name: 'Amostras de voz' })
     const [first, deleted] = within(samples).getAllByRole('listitem')
-    // Sem gravação não há trecho para ouvir, mas a amostra ainda sai da impressão.
+    // With no recording there is no excerpt to play, but the sample still leaves the voiceprint.
     expect(within(deleted).queryByRole('button', { name: /Ouvir/ })).not.toBeInTheDocument()
     const play = within(first).getByRole('button', { name: 'Ouvir a amostra de Alinhamento do programa de lideranças' })
     await userEvent.click(play)
@@ -59,7 +59,7 @@ describe('aba Amostras de voz', () => {
     expect(http.requests('DELETE /api/v1/people/:id/voice-samples/:tid/:sid')).toHaveLength(1)
   })
 
-  it('esquece a voz com confirmação em diálogo', async () => {
+  it('forgets the voice with confirmation in a dialog', async () => {
     const http = mockVoice({ 'DELETE /api/v1/people/:id/voiceprint': () => empty() })
     const panel = await openSamples()
     await userEvent.click(await within(panel).findByRole('button', { name: 'Esquecer a voz' }))
@@ -73,7 +73,7 @@ describe('aba Amostras de voz', () => {
     expect(http.requests('DELETE /api/v1/people/:id/voiceprint')).toHaveLength(1)
   })
 
-  it('avisa quando a identificação por voz está desligada', async () => {
+  it('warns when voice identification is off', async () => {
     mockVoice({
       'GET /api/v1/people/:id/voiceprint': () => ({ ...fixtures.voiceprint(), enabled: false, sample_count: 0, samples: [] }),
     })

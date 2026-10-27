@@ -78,7 +78,7 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
       setEditing(false)
     },
   })
-  // Ligar ou desligar muda contagens, falas e impressões de voz no diretório de pessoas.
+  // Linking or unlinking changes counts, segments and voiceprints in the people directory.
   const link = useMutation({
     mutationFn: (personId: string | null) => patch({ person_id: personId }),
     onSuccess: (updated) => {

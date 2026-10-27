@@ -1,4 +1,4 @@
-/* A biblioteca no tempo ocupa a largura toda (.bleed): o respiro é o do frame "Library · week". */
+/* The library in time takes the full width (.bleed): the spacing is that of the "Library · week" frame. */
 .layout {
   min-height: calc(100vh - var(--shell-header, 0px));
 }
@@ -33,8 +33,8 @@
   font-size: 14px;
 }
 
-/* No mês e na semana a agenda ocupa a altura que sobra na tela: o conteúdo vira uma coluna flex e
-   o mês cresce até o fim; a semana mede a própria altura (useViewportHeight) e rola por dentro. */
+/* In the month and the week the agenda takes the height left on screen: the content becomes a flex column and
+   the month grows to the end; the week measures its own height (useViewportHeight) and scrolls inside. */
 .fill {
   display: flex;
   flex-direction: column;
@@ -48,21 +48,21 @@
   flex: 1 0 auto;
 }
 
-/* As semanas do mês dividem a altura por igual, sem descer do mínimo de célula do DS. */
+/* The weeks of the month split the height evenly, without going below the DS minimum cell. */
 .month {
   grid-template-rows: auto;
   grid-auto-rows: minmax(96px, 1fr);
 }
 
-/* A semana rola dentro do próprio contêiner em tela estreita; a página não rola de lado. */
-/* A altura da janela da semana vem medida do componente (`--altura-visivel`); sem medida, a natural. */
+/* The week scrolls inside its own container on a narrow screen; the page does not scroll sideways. */
+/* The height of the week window comes measured from the component (`--altura-visivel`); without a measure, the natural one. */
 .weekScroll {
   height: var(--altura-visivel, auto);
   overflow: auto;
   overscroll-behavior: contain;
 }
 
-/* O cabeçalho dos dias fica no topo enquanto as horas rolam. */
+/* The day header stays on top while the hours scroll. */
 .week :global(.cal-head) {
   position: sticky;
   top: 0;
@@ -70,7 +70,7 @@
   background: var(--color-bg);
 }
 
-/* O canto vazio sobre as horas guarda o zoom. */
+/* The empty corner above the hours holds the zoom. */
 .zoom:global(.cal-head) {
   display: flex;
   align-items: end;
@@ -84,15 +84,15 @@
   height: 24px;
 }
 
-/* O expediente (--work-start a --work-end) ganha o fundo de superfície em cada dia, por baixo dos
-   eventos; os rótulos dessas horas ficam na tinta principal. */
+/* The working hours (--work-start to --work-end) get the surface background on each day, under the
+   events; the labels of those hours stay in the main ink. */
 .week :global(.cal-col)::before {
   content: '';
   position: absolute;
   inset-inline: 0;
   top: calc(var(--work-start) * var(--cal-hour));
   height: calc((var(--work-end) - var(--work-start)) * var(--cal-hour));
-  /* As linhas de hora são o fundo da .cal-col no DS: a faixa as redesenha por cima da superfície. */
+  /* The hour lines are the .cal-col background in the DS: the band redraws them over the surface. */
   background:
     repeating-linear-gradient(
       to bottom,
@@ -107,7 +107,7 @@
   color: var(--color-text);
 }
 
-/* A linha da meia-noite do fim do dia também tem rótulo. */
+/* The midnight line at the end of the day also has a label. */
 .hours {
   position: relative;
 }
@@ -122,8 +122,8 @@
   min-width: 720px;
 }
 
-/* O evento é um item de lista com o link ocupando a caixa: o DS desenha o `.cal-event` no item, e o
-   link herda a grade dele; o foco do teclado aparece no item. */
+/* The event is a list item with the link filling the box: the DS draws `.cal-event` on the item, and the
+   link inherits its grid; keyboard focus shows on the item. */
 .event:global(.cal-event) {
   padding: 0;
 }
@@ -145,14 +145,14 @@
   outline: none;
 }
 
-/* Eventos sobrepostos dividem a coluna em faixas (o DS não trata sobreposição). */
+/* Overlapping events split the column into lanes (the DS does not handle overlap). */
 .laned:global(.cal-event) {
   left: calc(3px + (100% - 6px) * var(--lane) / var(--lanes));
   right: auto;
   width: calc((100% - 6px) / var(--lanes));
 }
 
-/* A nota é um bloco baixo: o título fica numa linha, com reticências. */
+/* The note is a short block: the title stays on one line, with an ellipsis. */
 .week :global(.cal-event[data-kind='note']) strong {
   overflow: hidden;
   white-space: nowrap;
@@ -163,7 +163,7 @@
   font-size: 10.5px;
 }
 
-/* O número do dia no mês é um botão que abre a semana. */
+/* The day number in the month is a button that opens the week. */
 .dayButton {
   padding: 0;
   border: 0;
@@ -208,7 +208,7 @@
   margin: 0;
 }
 
-/* O painel de filtros acompanha a altura da tela, abaixo do cabeçalho do shell, e rola por dentro. */
+/* The filter panel follows the screen height, below the shell header, and scrolls inside. */
 .layout :global(.filters) {
   position: sticky;
   top: var(--shell-header, 0px);

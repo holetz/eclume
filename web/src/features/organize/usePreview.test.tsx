@@ -15,7 +15,7 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={createQueryClient({ retry: false })}>{children}</QueryClientProvider>
 }
 
-/** Avança o relógio falso e deixa as promessas (fetch, React Query) andarem. */
+/** Advances the fake clock and lets the promises (fetch, React Query) run. */
 async function advance(ms: number) {
   await act(() => vi.advanceTimersByTimeAsync(ms))
 }
@@ -26,7 +26,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-/** O job passa por `queued`, `running` e termina como a fixture do contrato. */
+/** The job goes through `queued`, `running` and ends as the contract fixture. */
 function mockJob(done: Preview, steps: Preview['status'][] = ['queued', 'running']) {
   let polls = 0
   return mockFetch({
@@ -40,7 +40,7 @@ function mockJob(done: Preview, steps: Preview['status'][] = ['queued', 'running
 }
 
 describe('usePreview', () => {
-  it('fica em espera no POST e consulta a cada 1,5 s até o job terminar', async () => {
+  it('waits on the POST and polls every 1.5 s until the job finishes', async () => {
     const http = mockJob(fixtures.previewFieldRule())
     const { result } = renderHook(() => usePreview(startFieldPreview), { wrapper })
     expect(result.current.state).toBe('idle')
@@ -65,7 +65,7 @@ describe('usePreview', () => {
     expect(http.requests('GET /api/v1/previews/:id')).toHaveLength(polls)
   })
 
-  it('para no `failed` e expõe o erro do job', async () => {
+  it('stops at `failed` and exposes the job error', async () => {
     const failed: Preview = {
       ...fixtures.previewFieldRule(),
       status: 'failed',
@@ -81,7 +81,7 @@ describe('usePreview', () => {
     expect(result.current.preview?.error?.code).toBe('no_provider')
   })
 
-  it('trata o 404 da consulta como pré-visualização expirada', async () => {
+  it('treats the poll 404 as an expired preview', async () => {
     mockFetch({
       'POST /api/v1/fields/preview': () => ({ ...fixtures.previewFieldRule(), status: 'queued', items: [] }),
       'GET /api/v1/previews/:id': () => problem('not_found', 404),
@@ -94,7 +94,7 @@ describe('usePreview', () => {
     expect(result.current.error).toBeNull()
   })
 
-  it('um erro no POST é falha, com o erro da API', async () => {
+  it('an error on the POST is a failure, with the API error', async () => {
     mockFetch({ 'POST /api/v1/fields/preview': () => problem('rate_limited', 429) })
     const { result } = renderHook(() => usePreview(startFieldPreview), { wrapper })
     act(() => result.current.run(FIELD_DRAFT))
@@ -103,13 +103,13 @@ describe('usePreview', () => {
     expect(result.current.error).toMatchObject({ status: 429 })
   })
 
-  it('um run novo descarta o anterior, e a resposta atrasada do antigo é ignorada', async () => {
+  it('a new run discards the previous one, and the late response of the old one is ignored', async () => {
     const done = fixtures.previewFieldRule()
     let posts = 0
     const http = mockFetch({
       'POST /api/v1/fields/preview': async () => {
         const id = ++posts === 1 ? 'antigo' : 'novo'
-        // O primeiro POST demora mais que o segundo.
+        // The first POST takes longer than the second.
         if (id === 'antigo') await new Promise((resolve) => setTimeout(resolve, 3000))
         return { ...done, id, status: 'queued', items: [] }
       },
@@ -129,7 +129,7 @@ describe('usePreview', () => {
     expect(polled).not.toContain('antigo')
   })
 
-  it('reset volta ao estado inicial', async () => {
+  it('reset returns to the initial state', async () => {
     mockJob(fixtures.previewAgendaType(), [])
     const { result } = renderHook(() => usePreview(startAgendaTypePreview), { wrapper })
     act(() =>
@@ -146,8 +146,8 @@ describe('usePreview', () => {
   })
 })
 
-describe('adaptadores dos resultados', () => {
-  it('fieldTestRows dá gravação → valor, com vazio como null e lista unida por vírgula', () => {
+describe('result adapters', () => {
+  it('fieldTestRows gives recording → value, with empty as null and a list joined by comma', () => {
     expect(fieldTestRows(fixtures.previewFieldRule())).toEqual([
       { recordingId: '01928f3a-1c00-7a00-8000-000000000201', recordingTitle: 'Revisão do contrato', value: 'Serra Azul' },
       { recordingId: '01928f3a-1c00-7a00-8000-000000000202', recordingTitle: 'Planejamento interno', value: null },
@@ -160,7 +160,7 @@ describe('adaptadores dos resultados', () => {
     expect(fieldTestRows(fixtures.previewAgendaType())).toEqual([])
   })
 
-  it('agendaPreviewResult dá detecção, título, tags e resumo da gravação', () => {
+  it('agendaPreviewResult gives the detection, title, tags and summary of the recording', () => {
     expect(agendaPreviewResult(fixtures.previewAgendaType())).toMatchObject({
       detected: true,
       detected_type_name: 'Mentoria',

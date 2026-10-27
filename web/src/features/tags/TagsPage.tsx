@@ -22,7 +22,7 @@ type Editing =
   | { mode: 'mesclar'; tag: Tag }
   | { mode: 'excluir'; tag: Tag }
 
-/** O erro de uma gravação de tag: o nome repetido ganha a saída certa, que é mesclar. */
+/** The error of a tag save: the duplicate name gets the right way out, which is merging. */
 function tagError(error: unknown): string {
   if (error instanceof ApiError && error.code === 'tag_exists') {
     return 'Já existe uma tag com esse nome. Para juntar as duas, use Mesclar.'
@@ -98,7 +98,7 @@ function TagRow({
 }: {
   tag: Tag
   onEdit: () => void
-  /** Sem outra tag, não há onde mesclar. */
+  /** With no other tag, there is nowhere to merge. */
   onMerge?: () => void
   onDelete: () => void
 }) {
@@ -162,7 +162,7 @@ function CreateDialog({ onClose }: { onClose: () => void }) {
 function EditDialog({ tag, onClose }: { tag: Tag; onClose: () => void }) {
   const refresh = useRefreshTags()
   const save = useMutation({
-    // Só o que mudou; renomear troca o nome nas gravações também.
+    // Only what changed; renaming also changes the name in the recordings.
     mutationFn: (values: TagValues) => {
       const body = {
         ...(values.name !== tag.name && { name: values.name }),

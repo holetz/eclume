@@ -4,8 +4,8 @@ import { apiQuery, filtersFromParams, isSearchable, paramsFromFilters, periodSta
 import { groupHits, totalLabel } from './group'
 import { parseHighlight } from './highlight'
 
-describe('destaque', () => {
-  it('separa os termos marcados e desfaz o escape sem aceitar outro HTML', () => {
+describe('highlight', () => {
+  it('splits the marked terms and undoes the escaping without accepting other HTML', () => {
     expect(parseHighlight('Três <mark>turmas</mark> de 12')).toEqual([
       { text: 'Três ', marked: false },
       { text: 'turmas', marked: true },
@@ -20,8 +20,8 @@ describe('destaque', () => {
   })
 })
 
-describe('filtros', () => {
-  it('vão e voltam da URL em pt-BR e viram a consulta da API', () => {
+describe('filters', () => {
+  it('go to and come back from the pt-BR URL and become the API query', () => {
     const filters = filtersFromParams(
       new URLSearchParams('q=turmas&pessoa=p1&de=2026-09-01&ate=2026-09-18&tag=a&campo=f1:Serra&campo=sem'),
     )
@@ -47,7 +47,7 @@ describe('filtros', () => {
     expect(isSearchable(filtersFromParams(new URLSearchParams('pessoa=p1')))).toBe(true)
   })
 
-  it('o período rápido vira só o `from`, na meia-noite local', () => {
+  it('the quick period becomes only `from`, at local midnight', () => {
     const now = new Date(2026, 8, 26, 15, 30)
     expect(periodStart('7d', now)).toBe(new Date(2026, 8, 20).toISOString())
     expect(periodStart('30d', now)).toBe(new Date(2026, 7, 28).toISOString())
@@ -59,8 +59,8 @@ describe('filtros', () => {
   })
 })
 
-describe('grupos da busca', () => {
-  it('junta só os acertos consecutivos da mesma gravação e conta trechos e gravações', () => {
+describe('search groups', () => {
+  it('joins only the consecutive hits of the same recording and counts excerpts and recordings', () => {
     const [a, b] = fixtures.searchPage().items
     const other = { ...a, transcript: { ...a.transcript, id: 't2', recording_id: 'r2', title: 'Outra' } }
     const groups = groupHits([a, b, other, a])

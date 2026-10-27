@@ -1,4 +1,4 @@
-// Funções puras da transcrição: tipos, segmento corrente pelo tempo e relógio.
+// Pure transcript functions: types, current segment by time and clock.
 import type { operations } from '../../api/schema.gen'
 
 export type Transcript = operations['getTranscript']['responses'][200]['content']['application/json']
@@ -6,9 +6,9 @@ export type Segment = Transcript['segments'][number]
 export type Speaker = Transcript['speakers'][number]
 
 /**
- * Índice do segmento corrente no instante `ms`: o último que já começou. Entre duas falas o
- * destaque fica na anterior até a próxima começar. Antes da primeira, -1. Os segmentos vêm em
- * ordem de `start_ms` (contrato).
+ * Index of the current segment at instant `ms`: the last one that has already started. Between two segments the
+ * highlight stays on the previous one until the next starts. Before the first, -1. The segments come in
+ * `start_ms` order (contract).
  */
 export function findSegmentAt(segments: readonly Pick<Segment, 'start_ms'>[], ms: number): number {
   let low = 0
@@ -26,19 +26,19 @@ export function findSegmentAt(segments: readonly Pick<Segment, 'start_ms'>[], ms
   return found
 }
 
-/** Nome exibido do locutor: a pessoa ligada ou, sem pessoa, o rótulo. */
+/** The speaker's displayed name: the linked person or, without a person, the label. */
 export function speakerName(speaker: Pick<Speaker, 'label' | 'person'> | undefined): string {
   if (!speaker) return 'Locutor desconhecido'
   return speaker.person?.name ?? speaker.label
 }
 
-/** Cor estável por locutor (1..6), pela posição na lista de locutores. */
+/** Stable color per speaker (1..6), by position in the speakers list. */
 export function speakerColorIndex(speakers: readonly Pick<Speaker, 'id'>[], speakerId: string): number {
   const index = speakers.findIndex((s) => s.id === speakerId)
   return index < 0 ? 0 : (index % 6) + 1
 }
 
-/** `?t=` da URL (milissegundos inteiros), ou `null` se ausente ou inválido. */
+/** `?t=` from the URL (whole milliseconds), or `null` if absent or invalid. */
 export function parseStart(value: string | null): number | null {
   if (value === null || !/^\d+$/.test(value)) return null
   return Number(value)

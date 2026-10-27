@@ -11,7 +11,7 @@ import { recordingKey } from "./queries";
 type Recording = Schemas["Recording"];
 type RetranscribeBody = Schemas["RetranscribeRequest"];
 
-/** Retranscrever (uma revisão acima), com o idioma pedido ou o da gravação. */
+/** Retranscribe (one revision up), with the requested language or the recording's. */
 function useRetranscribe(recording: Recording) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -29,7 +29,7 @@ function useRetranscribe(recording: Recording) {
   });
 }
 
-/** O 409 do pedido duplicado dito em palavras; o resto pelo `errorMessage`. */
+/** The duplicate-request 409 put into words; the rest through `errorMessage`. */
 function retranscribeError(error: unknown): string {
   return error instanceof ApiError && error.status === 409
     ? "Já há uma transcrição em andamento."
@@ -37,9 +37,9 @@ function retranscribeError(error: unknown): string {
 }
 
 /**
- * Retentar a transcrição que falhou (retranscrever, uma revisão acima). Toda gravação que a conta
- * vê é dela (o `owner` do contrato é obsoleto); a falha passageira (worker perdido, job sumido,
- * falta de VRAM) é dita como tal, e um 403/404 da rota aparece pelo `errorMessage`.
+ * Retry the transcription that failed (retranscribe, one revision up). Every recording the account
+ * sees is its own (the contract's `owner` is obsolete); the transient failure (lost worker, vanished job,
+ * lack of VRAM) is stated as such, and a 403/404 from the route shows through `errorMessage`.
  */
 export function RetryTranscription({ recording }: { recording: Recording }) {
   const retry = useRetranscribe(recording);
@@ -78,8 +78,8 @@ export function RetryTranscription({ recording }: { recording: Recording }) {
 }
 
 /**
- * Transcrever de novo em…: o dono escolhe o idioma a qualquer momento (sem job em aberto), e a
- * confirmação diz o que muda na revisão nova.
+ * Transcrever de novo em…: the owner picks the language at any time (with no open job), and the
+ * confirmation says what changes in the new revision.
  */
 export function RetranscribeAction({ recording }: { recording: Recording }) {
   const id = useId();
@@ -176,8 +176,8 @@ export function RetranscribeAction({ recording }: { recording: Recording }) {
 }
 
 /**
- * No lugar do player e das ações de transcrever de novo quando a retenção apagou o áudio: a
- * transcrição, o resumo e o chat continuam, e o aviso diz o que deixou de existir.
+ * In place of the player and the transcribe-again actions when retention deleted the audio: the
+ * transcript, the summary and the chat remain, and the notice says what ceased to exist.
  */
 export function AudioDeletedNotice() {
   return (

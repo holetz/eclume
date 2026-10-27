@@ -1,5 +1,5 @@
-// A biblioteca no tempo: semanas de segunda a domingo e grade do mês, em datas locais do navegador,
-// e a posição de cada gravação na agenda (hora de início e duração, em horas).
+// The library in time: weeks from Monday to Sunday and the month grid, in the browser's local dates,
+// and the position of each recording on the agenda (start hour and duration, in hours).
 import type { Schemas } from '../../api/client'
 import { markersLabel, MONTHS, recordingState, timeLabel, weekdayIndex } from '../../shared/format'
 
@@ -11,7 +11,7 @@ function startOfDay(day: Date): Date {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate())
 }
 
-/** Soma dias no calendário local (atravessa o horário de verão sem somar horas). */
+/** Adds days on the local calendar (crosses daylight saving time without adding hours). */
 export function addDays(day: Date, days: number): Date {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate() + days)
 }
@@ -24,13 +24,13 @@ export function sameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
-/** `AAAA-MM-DD` do dia local, o formato do parâmetro `data`. */
+/** `YYYY-MM-DD` of the local day, the format of the `data` parameter. */
 export function dayKey(day: Date): string {
   const month = String(day.getMonth() + 1).padStart(2, '0')
   return `${day.getFullYear()}-${month}-${String(day.getDate()).padStart(2, '0')}`
 }
 
-/** Lê `AAAA-MM-DD` como dia local; valor inválido vira `null`. */
+/** Reads `YYYY-MM-DD` as a local day; an invalid value becomes `null`. */
 export function parseDayKey(value: string | null): Date | null {
   const match = value ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null
   if (!match) return null
@@ -43,7 +43,7 @@ export interface Range {
   to: Date
 }
 
-/** A semana do dia: de segunda 00:00 à segunda seguinte 00:00, com os sete dias. */
+/** The week of the day: from Monday 00:00 to the following Monday 00:00, with the seven days. */
 export function weekRange(day: Date): Range & { days: Date[] } {
   const from = addDays(startOfDay(day), -weekdayIndex(day))
   const days = Array.from({ length: 7 }, (_, index) => addDays(from, index))
@@ -55,7 +55,7 @@ export interface MonthCell {
   outside: boolean
 }
 
-/** A grade do mês em semanas de segunda a domingo (5 ou 6), com `outside` nos dias de fora do mês. */
+/** The month grid in weeks from Monday to Sunday (5 or 6), with `outside` on the days outside the month. */
 export function monthGrid(day: Date): Range & { cells: MonthCell[] } {
   const first = new Date(day.getFullYear(), day.getMonth(), 1)
   const from = addDays(first, -weekdayIndex(first))
@@ -89,7 +89,7 @@ export function monthTitle(day: Date): string {
   return `${month[0].toUpperCase()}${month.slice(1)} de ${day.getFullYear()}`
 }
 
-/** "58 min", "1 h 40", "2 h"; sem duração, "—". */
+/** "58 min", "1 h 40", "2 h"; without a duration, "—". */
 export function shortDuration(ms: number | null): string {
   if (!ms) return '—'
   const minutes = Math.round(ms / 60_000)
@@ -98,12 +98,12 @@ export function shortDuration(ms: number | null): string {
   return rest ? `${Math.floor(minutes / 60)} h ${String(rest).padStart(2, '0')}` : `${minutes / 60} h`
 }
 
-/** "Nota · Rascunho da pauta" para notas; o título como está para reuniões. */
+/** "Nota · Rascunho da pauta" for notes; the title as it is for meetings. */
 export function recordingTitle(recording: Pick<Recording, 'title' | 'kind'>): string {
   return recording.kind === 'note' ? `Nota · ${recording.title}` : recording.title
 }
 
-/** O rótulo completo de uma gravação na agenda: título, hora, duração, estado e marcadores. */
+/** The full label of a recording on the agenda: title, time, duration, status and markers. */
 export function eventLabel(recording: Recording): string {
   const state = recordingState(recording)
   const parts = [recordingTitle(recording), timeLabel(new Date(recording.recorded_at))]
@@ -114,28 +114,28 @@ export function eventLabel(recording: Recording): string {
 }
 
 interface EventBox {
-  /** Hora de início (9.5 = 09:30). */
+  /** Start hour (9.5 = 09:30). */
   s: number
-  /** Duração em horas. */
+  /** Duration in hours. */
   d: number
 }
 
 const MIN_HOURS = 0.1
 
-/** Posição na agenda: início pela hora local e altura pela duração; nota e duração nula ficam mínimas. */
+/** Position on the agenda: start by local time and height by duration; a note and a null duration stay minimal. */
 export function eventBox(recording: Pick<Recording, 'recorded_at' | 'duration_ms' | 'kind'>): EventBox {
   const start = new Date(recording.recorded_at)
   const s = start.getHours() + start.getMinutes() / 60
   const hours = recording.kind === 'note' || !recording.duration_ms ? MIN_HOURS : recording.duration_ms / 3_600_000
-  // Um evento que passa da meia-noite é cortado no fim do dia.
+  // An event that runs past midnight is cut at the end of the day.
   return { s, d: Math.max(MIN_HOURS, Math.min(hours, 24 - s)) }
 }
 
 type Laned<T> = T & { lane: number; lanes: number }
 
 /**
- * Faixas de sobreposição de um dia: guloso por início; cada grupo de eventos que se tocam divide a
- * largura pelo número de faixas que usou.
+ * Overlap lanes of a day: greedy by start; each group of events that touch splits the
+ * width by the number of lanes it used.
  */
 export function lanes<T extends EventBox>(boxes: T[]): Laned<T>[] {
   const sorted = [...boxes].sort((a, b) => a.s - b.s || b.d - a.d)

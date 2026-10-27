@@ -1,11 +1,11 @@
-/* O bloco Locutores, recolhido fora da transcrição (frame "Recording"). O player fixo cobre o topo
-   da janela: a margem deixa o bloco à vista quando algo rola até ele. */
+/* The Locutores block, collapsed outside the transcript (frame "Recording"). The fixed player covers the top
+   of the window: the margin keeps the block in view when something scrolls to it. */
 .disclosure {
   border-bottom: 1px solid var(--color-divider);
   scroll-margin-top: 4rem;
 }
 
-/* Recolhido: os locutores em linha, na horizontal, cada um na cor dele. */
+/* Collapsed: the speakers inline, horizontally, each in its color. */
 .inline {
   display: flex;
   flex-wrap: wrap;
@@ -28,7 +28,7 @@
   outline: none;
 }
 
-/* Aberto: um card por locutor, em grade que ocupa a largura com quantos couberem. */
+/* Open: one card per speaker, in a grid that fills the width with as many as fit. */
 .list {
   list-style: none;
   margin: 0;

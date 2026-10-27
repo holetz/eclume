@@ -21,8 +21,8 @@ function linkedTo(person: { id: string; name: string } | null, label = 'Locutor 
   return { ...fixtures.transcript().speakers[2], label: person ? person.name : label, person }
 }
 
-describe('vínculo de locutor com pessoa', () => {
-  it('liga um locutor a uma pessoa escolhida no combobox, pelo teclado', async () => {
+describe('linking a speaker to a person', () => {
+  it('links a speaker to a person chosen in the combobox, by keyboard', async () => {
     const http = mockTranscriptApi({
       'GET /api/v1/people': (request) => {
         const q = new URL(request.url).searchParams.get('q') ?? ''
@@ -38,18 +38,18 @@ describe('vínculo de locutor com pessoa', () => {
     await userEvent.type(combo, 'raf')
     const listbox = within(panel).getByRole('listbox', { name: 'Pessoa para Locutor 3' })
     expect(await within(listbox).findByRole('option', { name: /Rafael Lima/ })).toHaveAttribute('aria-selected', 'true')
-    expect(within(listbox).getAllByRole('option')).toHaveLength(2) // Rafael e "Cadastrar “raf”"
+    expect(within(listbox).getAllByRole('option')).toHaveLength(2) // Rafael and "Cadastrar “raf”"
     await userEvent.keyboard('{Enter}')
 
     expect(await within(panel).findByRole('link', { name: 'Rafael Lima' })).toHaveAttribute('href', `/pessoas/${RAFAEL.id}`)
     const request = http.requests('PATCH /api/v1/transcripts/:id/speakers/:speaker')[0]
     expect(new URL(request.url).pathname).toMatch(/\/speakers\/S3$/)
     expect(await request.json()).toEqual({ person_id: RAFAEL.id })
-    const falas = screen.getByRole('list', { name: 'Falas' })
-    expect(within(falas).getAllByText('Rafael Lima')).toHaveLength(3)
+    const segmentList = screen.getByRole('list', { name: 'Falas' })
+    expect(within(segmentList).getAllByText('Rafael Lima')).toHaveLength(3)
   })
 
-  it('cadastra a pessoa na hora e liga', async () => {
+  it('registers the person on the spot and links', async () => {
     const created = { ...fixtures.person(), id: 'nova-pessoa', name: 'Joana Prado' }
     const http = mockTranscriptApi({
       'GET /api/v1/people': () => ({ items: [], next_cursor: null }),
@@ -68,7 +68,7 @@ describe('vínculo de locutor com pessoa', () => {
     })
   })
 
-  it('desliga a pessoa e Esc cancela a escolha', async () => {
+  it('unlinks the person and Esc cancels the choice', async () => {
     const transcript = fixtures.transcript()
     transcript.speakers[2] = linkedTo(RAFAEL)
     const http = mockTranscriptApi({
@@ -85,7 +85,7 @@ describe('vínculo de locutor com pessoa', () => {
     expect(within(panel).queryByRole('combobox')).not.toBeInTheDocument()
   })
 
-  it('aceita a sugestão por voz com um clique', async () => {
+  it('accepts the voice suggestion with one click', async () => {
     const transcript = fixtures.transcript()
     transcript.speakers[1].suggestions = [{ person: RAFAEL, score: 0.82 }]
     const http = mockTranscriptApi({
@@ -102,7 +102,7 @@ describe('vínculo de locutor com pessoa', () => {
     })
   })
 
-  it('mostra o vínculo feito pela voz e o confirma com um clique', async () => {
+  it('shows the link made by voice and confirms it with one click', async () => {
     const transcript = fixtures.transcript()
     transcript.speakers[1] = { ...transcript.speakers[1], label: RAFAEL.name, person: RAFAEL, auto_score: 0.91 }
     const http = mockTranscriptApi({
@@ -118,7 +118,7 @@ describe('vínculo de locutor com pessoa', () => {
     })
   })
 
-  it('recusa uma sugestão e mostra as outras em ordem', async () => {
+  it('rejects a suggestion and shows the others in order', async () => {
     const transcript = fixtures.transcript()
     const JULIANA = { id: '01928f3a-1c00-7a00-8000-000000000303', name: 'Juliana Prado' }
     transcript.speakers[1].suggestions = [

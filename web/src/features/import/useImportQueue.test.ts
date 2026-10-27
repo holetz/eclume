@@ -72,8 +72,8 @@ async function ready() {
   return view
 }
 
-describe('fila de importação', () => {
-  it('lê a data e a duração de cada arquivo, e a edição vira origem "user"', async () => {
+describe('import queue', () => {
+  it('reads the date and the duration of each file, and an edit becomes source "user"', async () => {
     const { result } = await ready()
     const [m4a, mkv] = result.current.items
     expect(m4a.date).toEqual({ value: toLocalInput(METADATA), source: 'metadata', detail: 'mvhd' })
@@ -87,7 +87,7 @@ describe('fila de importação', () => {
     expect(recordedAtSource(m4a.date)).toBe('file_metadata')
   })
 
-  it('converte e envia um arquivo por vez, com recorded_at e a origem, sem título', async () => {
+  it('converts and uploads one file at a time, with recorded_at and the source, without a title', async () => {
     const { result } = await ready()
     const first = deferred<ReturnType<typeof converted>>()
     const upload = deferred<{ recordingId: string; deduplicated: boolean }>()
@@ -105,7 +105,7 @@ describe('fila de importação', () => {
 
     await act(async () => first.resolve(converted('m4a')))
     await waitFor(() => expect(result.current.items[0].state.kind).toBe('uploading'))
-    // Enquanto o primeiro sobe, o segundo espera.
+    // While the first one uploads, the second waits.
     expect(convertAudio).toHaveBeenCalledTimes(1)
     const [sent] = vi.mocked(runUpload).mock.calls[0]
     expect(sent).toMatchObject({
@@ -127,7 +127,7 @@ describe('fila de importação', () => {
     expect(result.current.items).toHaveLength(0)
   })
 
-  it('cancela o envio em curso, apaga o upload e segue para o próximo', async () => {
+  it('cancels the ongoing upload, deletes the upload and moves on to the next', async () => {
     const { result } = await ready()
     vi.mocked(convertAudio).mockResolvedValue(converted('x'))
     let signal: AbortSignal | undefined
@@ -148,7 +148,7 @@ describe('fila de importação', () => {
     await waitFor(() => expect(result.current.items[1].state.kind).toBe('done'))
   })
 
-  it('tenta de novo retomando o upload, sem converter outra vez', async () => {
+  it('retries by resuming the upload, without converting again', async () => {
     const { result } = await ready()
     act(() => result.current.remove(result.current.items[1].id))
     expect(result.current.items).toHaveLength(1)
@@ -170,7 +170,7 @@ describe('fila de importação', () => {
     expect(vi.mocked(runUpload).mock.calls[1][1]?.uploadId).toBe('upload-9')
   })
 
-  it('não tira da fila o arquivo que está subindo', async () => {
+  it('does not remove from the queue the file that is uploading', async () => {
     const { result } = await ready()
     vi.mocked(convertAudio).mockResolvedValue(converted('m4a'))
     vi.mocked(runUpload).mockImplementation(() => new Promise(() => {}))

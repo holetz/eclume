@@ -342,7 +342,7 @@ export function SearchPage() {
   const query = apiQuery(filters)
   const [text, setText] = useState(filters.q)
   const [lastQ, setLastQ] = useState(filters.q)
-  // A URL manda: um termo novo vindo dela (voltar, link) substitui o digitado.
+  // The URL rules: a new term coming from it (back, link) replaces what was typed.
   if (filters.q !== lastQ) {
     setLastQ(filters.q)
     setText(filters.q)

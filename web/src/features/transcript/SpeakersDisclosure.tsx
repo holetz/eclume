@@ -8,14 +8,14 @@ interface SpeakersDisclosureProps {
   transcript: Transcript
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** O que vem antes dos cards, aberto: um aviso sobre os locutores, por exemplo. */
+  /** What comes before the cards, when open: a notice about the speakers, for example. */
   children?: ReactNode
 }
 
 /**
- * Os locutores num bloco recolhido próprio (`details.disclosure`), fora da transcrição. Recolhido, o
- * resumo mostra cada locutor em linha, na cor dele; aberto, um card por locutor em grade, com
- * renomear, ligar pessoa, sugestões por voz e mesclar.
+ * The speakers in their own collapsed block (`details.disclosure`), outside the transcript. Collapsed, the
+ * summary shows each speaker inline, in its color; open, one card per speaker in a grid, with
+ * rename, link person, voice suggestions and merge.
  */
 export function SpeakersDisclosure({ transcript, open, onOpenChange, children }: SpeakersDisclosureProps) {
   const { speakers } = transcript

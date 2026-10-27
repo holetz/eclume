@@ -26,8 +26,8 @@ async function card() {
   return screen.findByRole('region', { name: 'Primeiros passos' })
 }
 
-describe('Primeiros passos', () => {
-  it('conta nova vê os três passos pendentes, com os caminhos da primeira gravação', async () => {
+describe('First steps', () => {
+  it('a new account sees the three pending steps, with the paths to the first recording', async () => {
     mockAccount({ recordings: false, people: false })
     renderApp(WEEK)
     const steps = within(await card()).getAllByRole('listitem')
@@ -42,7 +42,7 @@ describe('Primeiros passos', () => {
     )
   })
 
-  it('marca os passos cumpridos pelos dados da conta e pelo navegador', async () => {
+  it('marks the steps fulfilled by the account data and by the browser', async () => {
     window.localStorage.setItem('eclume-tipos-de-agenda-visto', '1')
     mockAccount({ recordings: true, people: false })
     renderApp(WEEK)
@@ -53,7 +53,7 @@ describe('Primeiros passos', () => {
     expect(steps[2]).not.toHaveAttribute('data-done')
   })
 
-  it('some sozinho com os três passos feitos', async () => {
+  it('goes away on its own once the three steps are done', async () => {
     window.localStorage.setItem('eclume-tipos-de-agenda-visto', '1')
     const http = mockAccount()
     renderApp(WEEK)
@@ -62,7 +62,7 @@ describe('Primeiros passos', () => {
     expect(screen.queryByRole('region', { name: 'Primeiros passos' })).toBeNull()
   })
 
-  it('dispensar esconde o cartão neste navegador, e Restaurar os padrões o traz de volta', async () => {
+  it('dismissing hides the card in this browser, and Restore defaults brings it back', async () => {
     mockAccount({ recordings: false, people: false })
     const first = renderApp(WEEK)
     await userEvent.click(within(await card()).getByRole('button', { name: 'Dispensar' }))

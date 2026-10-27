@@ -1,5 +1,5 @@
-// O resumo da gravação com versões: o estado (atual, gerada de referência e geração em andamento) e as
-// mutações — editar à mão, voltar à gerada, excluir, gerar e trocar o tipo de agenda.
+// The recording summary with versions: the state (current, reference generated one and generation in progress) and the
+// mutations — edit by hand, revert to the generated one, delete, generate and switch the agenda type.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { ApiError, unwrap } from '../../api/problem'
@@ -22,14 +22,14 @@ export function useSummaryState(recordingId: string, enabled = true) {
   })
 }
 
-/** "Do tipo de agenda", "Editado por você", "Voltou à gerada" ou "Ajustado pelo chat". */
+/** "Do tipo de agenda", "Editado por você", "Voltou à gerada" or "Ajustado pelo chat". */
 export function originLabel(summary: Pick<Summary, 'origin' | 'restored_from_id'>): string {
   if (summary.origin === 'generated') return 'Do tipo de agenda'
   if (summary.origin === 'chat') return 'Ajustado pelo chat'
   return summary.restored_from_id ? 'Voltou à gerada' : 'Editado por você'
 }
 
-/** O 422 de gerar sem tipo de agenda (nem o pedido nem o da gravação). */
+/** The 422 of generating with no agenda type (neither the requested one nor the recording's). */
 export function isMissingType(error: unknown): boolean {
   return (
     error instanceof ApiError &&
@@ -38,7 +38,7 @@ export function isMissingType(error: unknown): boolean {
   )
 }
 
-/** O 422 de gerar o resumo sem agente de resumo configurado (`provider_id`). */
+/** The 422 of generating the summary with no summary agent configured (`provider_id`). */
 export function isMissingProvider(error: unknown): boolean {
   return (
     error instanceof ApiError &&
@@ -47,7 +47,7 @@ export function isMissingProvider(error: unknown): boolean {
   )
 }
 
-/** O 409 de uma edição cuja versão de base já não é a atual. */
+/** The 409 of an edit whose base version is no longer the current one. */
 export function isSummaryChanged(error: unknown): boolean {
   return error instanceof ApiError && error.code === 'summary_changed'
 }

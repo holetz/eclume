@@ -1,5 +1,5 @@
-// Pré-visualização assíncrona: o POST devolve 202 com o job, e a tela consulta GET /previews/{id}
-// até ele terminar. O estado vive 1 h no servidor (Redis): um 404 é uma pré-visualização expirada.
+// Asynchronous preview: the POST returns 202 with the job, and the screen polls GET /previews/{id}
+// until it finishes. The state lives 1 h on the server (Redis): a 404 is an expired preview.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Schemas } from '../../api/client'
@@ -17,7 +17,7 @@ export interface PreviewRun<TBody> {
   state: PreviewState
   preview: Preview | null
   elapsedMs: number
-  /** O erro da chamada (POST ou consulta); a falha do job vem em `preview.error`. */
+  /** The call error (POST or poll); the job failure comes in `preview.error`. */
   error: unknown
 }
 
@@ -29,7 +29,7 @@ export function usePreview<TBody>(start: (body: TBody) => Promise<Preview>): Pre
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
-  // Cada run recebe um número; a resposta de um run anterior chega tarde e é ignorada.
+  // Each run gets a number; the response of an earlier run arrives late and is ignored.
   const runSeq = useRef(0)
 
   const mutation = useMutation({ mutationFn: start })
@@ -100,14 +100,14 @@ type AgendaTypePreviewItem = Schemas['AgendaTypePreviewItem']
 interface FieldTestRow {
   recordingId: string
   recordingTitle: string
-  /** O valor em texto (a lista unida por ", "), ou `null` quando a regra deixaria vazio. */
+  /** The value as text (the list joined by ", "), or `null` when the rule would leave it empty. */
   value: string | null
 }
 
 const isFieldItem = (item: Preview['items'][number]): item is FieldPreviewItem => 'value' in item
 const isAgendaTypeItem = (item: Preview['items'][number]): item is AgendaTypePreviewItem => 'detected' in item
 
-/** As linhas "gravação → valor" do teste de uma regra de campo. */
+/** The "recording → value" rows of a field rule test. */
 export function fieldTestRows(preview: Preview): FieldTestRow[] {
   if (preview.kind !== 'field_rule') return []
   return preview.items.filter(isFieldItem).map((item) => {
@@ -116,7 +116,7 @@ export function fieldTestRows(preview: Preview): FieldTestRow[] {
   })
 }
 
-/** O resultado da pré-visualização de um tipo de agenda (uma gravação por pedido). */
+/** The result of an agenda type preview (one recording per request). */
 export function agendaPreviewResult(preview: Preview): AgendaTypePreviewItem | null {
   if (preview.kind !== 'agenda_type') return null
   return preview.items.find(isAgendaTypeItem) ?? null

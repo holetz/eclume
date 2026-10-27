@@ -4,13 +4,13 @@ import { DEFAULT_PERSON_COLUMNS, readPersonColumns, savePersonColumns } from './
 
 afterEach(() => window.localStorage.clear())
 
-describe('colunas de Pessoas', () => {
-  it('começa no padrão, sem o e-mail', () => {
+describe('People columns', () => {
+  it('starts at the default, without the e-mail', () => {
     expect(readPersonColumns()).toEqual(DEFAULT_PERSON_COLUMNS)
     expect(readPersonColumns()).not.toContain('email')
   })
 
-  it('guarda a escolha na ordem da tabela e apaga a chave ao voltar ao padrão', () => {
+  it('stores the choice in table order and deletes the key on returning to the default', () => {
     savePersonColumns(['email', 'company'])
     expect(window.localStorage.getItem(STORAGE_KEYS.peopleColumns)).toBe('company,email')
     expect(readPersonColumns()).toEqual(['company', 'email'])
@@ -18,7 +18,7 @@ describe('colunas de Pessoas', () => {
     expect(window.localStorage.getItem(STORAGE_KEYS.peopleColumns)).toBeNull()
   })
 
-  it('aceita só o nome e ignora valor guardado sem sentido', () => {
+  it('accepts only the name and ignores a meaningless stored value', () => {
     savePersonColumns([])
     expect(readPersonColumns()).toEqual([])
     window.localStorage.setItem(STORAGE_KEYS.peopleColumns, 'lixo,outro')

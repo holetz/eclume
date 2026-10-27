@@ -21,8 +21,8 @@ async function panel() {
 
 const prop = (section: HTMLElement, name: string) => within(section).getByRole('group', { name })
 
-describe('painel de campos', () => {
-  it('mostra cada valor com o selo de origem, o tipo, as coleções e os dados antigos, sem os locutores', async () => {
+describe('fields panel', () => {
+  it('shows each value with the origin badge, the type, the collections and the legacy data, without the speakers', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const section = await panel()
@@ -49,10 +49,10 @@ describe('painel de campos', () => {
 
     expect(within(prop(section, 'Cliente')).getByText('Nada encontrado')).toHaveClass('text-muted')
 
-    // Editar a regra leva ao dono: o campo em Campos personalizados, o título ao tipo, as tags a Tags.
+    // Editing the rule leads to the owner: the field in Campos personalizados, the title to the type, the tags to Tags.
     const rule = (name: string) => within(prop(section, name)).getByRole('link', { name: `Editar a regra de ${name}` })
-    const cliente = fixtures.fieldPage().items.find((field) => field.name === 'Cliente')
-    expect(rule('Cliente')).toHaveAttribute('href', `/config/campos?campo=${cliente?.id}`)
+    const clientField = fixtures.fieldPage().items.find((field) => field.name === 'Cliente')
+    expect(rule('Cliente')).toHaveAttribute('href', `/config/campos?campo=${clientField?.id}`)
     expect(rule('Título')).toHaveAttribute('href', '/config/agendas?tipo=01928f3a-1c00-7a00-8000-000000000901')
     expect(rule('Tags')).toHaveAttribute('href', '/tags')
     expect(within(prop(section, 'Projeto')).getByText('Editado')).toHaveClass('origin', 'origin-edited')
@@ -65,7 +65,7 @@ describe('painel de campos', () => {
     expect(legacy).toHaveTextContent('Da organização antiga; crie um campo em Campos personalizados para usar de novo.')
   })
 
-  it('aceita um valor e aceita tudo', async () => {
+  it('accepts one value and accepts all', async () => {
     const user = userEvent.setup()
     const accepted = () => {
       const values = fixtures.recordingFieldValues()
@@ -87,7 +87,7 @@ describe('painel de campos', () => {
     expect(within(section).getByRole('button', { name: 'Aceitar tudo' })).toBeDisabled()
   })
 
-  it('edita pelo tipo do campo: escolha, lista e texto, e relê a gravação quando é embutido', async () => {
+  it('edits by the field type: choice, list and text, and re-reads the recording when it is built-in', async () => {
     const user = userEvent.setup()
     const http = mockTranscriptApi({
       'PUT /api/v1/recordings/:id/fields/:field': () => fixtures.recordingFieldValues(),
@@ -126,7 +126,7 @@ describe('painel de campos', () => {
     expect(within(prop(section, 'Título')).queryByRole('textbox')).not.toBeInTheDocument()
   }, 15_000)
 
-  it('Trocar abre o diálogo do tipo de agenda', async () => {
+  it('Trocar opens the agenda type dialog', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const section = await panel()
@@ -136,7 +136,7 @@ describe('painel de campos', () => {
     expect(screen.getByRole('dialog', { name: 'Trocar o tipo de agenda' })).toBeInTheDocument()
   })
 
-  it('edita as coleções, com a criação de uma nova na hora', async () => {
+  it('edits the collections, creating a new one on the spot', async () => {
     const user = userEvent.setup()
     const created = {
       ...fixtures.collectionPage().items[0],

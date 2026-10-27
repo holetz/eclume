@@ -14,7 +14,7 @@ const DRAFT_WRITE_DELAY_MS = 500
 
 const PREFIX = { same: ' ', removed: '−', added: '+' } as const
 
-/** As linhas de duas versões lado a lado no tempo: removidas em `<del>` e incluídas em `<ins>`. */
+/** The lines of two versions side by side in time: removed in `<del>` and added in `<ins>`. */
 export function SummaryDiff({ before, after, label }: { before: string; after: string; label: string }) {
   return (
     <div className={`doc ${styles.diff}`} role="region" aria-label={label}>
@@ -42,15 +42,15 @@ interface SummaryEditorProps {
 }
 
 /**
- * A edição do resumo (frame "editing the summary"): o Markdown na tipografia do documento, salvo como
- * versão nova sobre a versão aberta. Se outra versão entrou nesse meio-tempo (409), o rascunho fica e
- * a pessoa escolhe ver a nova ou salvar sobre ela.
+ * The summary edit (frame "editing the summary"): the Markdown in the document typography, saved as a
+ * new version on top of the open version. If another version came in meanwhile (409), the draft stays and
+ * the person chooses to see the new one or to save over it.
  */
 export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) {
   const { edit, revert } = useSummaryMutations(recording)
   const latest = useSummaryState(recording.id)
   const opened = state.current
-  // O rascunho guardado volta ao reabrir; se a versão andou desde então, volta com o aviso de conflito.
+  // The stored draft comes back on reopening; if the version moved since then, it comes back with the conflict notice.
   const [saved] = useState(() => readSummaryDraft(recording.id))
   const [draft, setDraft] = useState(saved?.content_md ?? opened?.content_md ?? '')
   const [base, setBase] = useState(saved?.base_version ?? opened?.version ?? 0)
@@ -69,7 +69,7 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
     onDiscard: () => writeSummaryDraft(recording.id, null),
   })
 
-  // A área cresce com o conteúdo, como o documento.
+  // The area grows with the content, like the document.
   useLayoutEffect(() => {
     const text = textRef.current
     if (!text) return
@@ -89,7 +89,7 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
     return () => window.clearTimeout(timer)
   }, [recording.id, draft, base, opened])
 
-  // Salvar, descartar ou voltar à gerada encerram a edição e apagam o rascunho guardado.
+  // Saving, discarding or reverting to the generated one ends the edit and deletes the stored draft.
   function finish() {
     writeSummaryDraft(recording.id, null)
     onDone()

@@ -3,23 +3,23 @@ import styles from './SearchPage.module.css'
 
 interface FilterChipProps {
   label: string
-  /** O valor em palavras ("qualquer", "Ana Ribeiro", "Últimos 30 dias"). */
+  /** The value in words ("qualquer", "Ana Ribeiro", "Últimos 30 dias"). */
   value: string
   active: boolean
-  /** O controle do filtro; `close` fecha o popover depois de aplicar. */
+  /** The filter control; `close` closes the popover after applying. */
   children: (close: () => void) => ReactNode
 }
 
 /**
- * A ficha de filtro da busca: `tag tag-neutral` (ou `tag-accent` quando ativa) com "Rótulo: valor",
- * que abre um popover no estilo do `.menu` com o controle e Aplicar. Esc e o clique fora fecham.
+ * The search filter chip: `tag tag-neutral` (or `tag-accent` when active) with "Rótulo: valor",
+ * which opens a popover in the `.menu` style with the control and Aplicar. Esc and a click outside close it.
  */
 export function FilterChip({ label, value, active, children }: FilterChipProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const popoverId = useId()
-  // Fechar pelo Aplicar ou pelo Esc devolve o foco à ficha; o clique fora deixa o foco onde foi.
+  // Closing through Aplicar or Esc returns focus to the chip; a click outside leaves the focus where it went.
   const wasOpen = useRef(false)
   const clickedOutside = useRef(false)
 

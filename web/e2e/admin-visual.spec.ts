@@ -1,16 +1,16 @@
-// Verificação visual do painel de administração contra o Design System, com o mock (Prism):
-// - afirma o estilo computado do painel (marca em tinta, selo Admin, cinco etapas, `.split`, quatro
-//   `.stat`, canto zero, nenhuma requisição externa, Saúde relida em 15 s);
-// - com E2E_SCREENSHOTS=1, salva as oito telas em claro e escuro, a 1440×900 e a 390×844, em
-//   test-results/screens/admin-<rota>-<claro|escuro>-<largura>.png;
-// - com E2E_SCREENSHOTS=1, salva também, do design-system/ (ou de ECLUME_DS_DIR), os quadros de
-//   examples/admin.html (ds-admin-<quadro>.png e ds-admin-<quadro>-escuro.png), para a revisão lado a lado.
+// Visual check of the administration panel against the Design System, with the mock (Prism):
+// - asserts the panel's computed style (ink brand, Admin badge, five steps, `.split`, four
+//   `.stat`, zero radius, no external request, Saúde re-read every 15 s);
+// - with E2E_SCREENSHOTS=1, saves the eight screens in light and dark, at 1440×900 and 390×844, in
+//   test-results/screens/admin-<route>-<claro|escuro>-<width>.png;
+// - with E2E_SCREENSHOTS=1, also saves, from design-system/ (or from ECLUME_DS_DIR), the frames of
+//   examples/admin.html (ds-admin-<frame>.png and ds-admin-<frame>-escuro.png), for the side-by-side review.
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 
 const SCREENS = process.env.E2E_SCREENSHOTS ? 'test-results/screens' : null
-// O Design System versionado em design-system/; ECLUME_DS_DIR aponta para outro export, se preciso.
+// The Design System versioned in design-system/; ECLUME_DS_DIR points at another export, if needed.
 const DS_DIR = process.env.ECLUME_DS_DIR ?? fileURLToPath(new URL('../../design-system', import.meta.url))
 const DESKTOP = { width: 1440, height: 900 }
 const MOBILE = { width: 390, height: 844 }
@@ -19,7 +19,7 @@ const THEMES = [
   { scheme: 'dark', suffix: 'escuro' },
 ] as const
 
-// Cada rota do painel, o h1 que prova que ela carregou e o quadro de examples/admin.html.
+// Each panel route, the h1 that proves it loaded and the frame of examples/admin.html.
 const SCREENS_BY_ROUTE = [
   { route: 'usuarios', heading: 'Usuários', frame: 'users' },
   { route: 'audio', heading: 'Pré-processamento de áudio', frame: 'audio' },
@@ -31,7 +31,7 @@ const SCREENS_BY_ROUTE = [
 ] as const
 
 test.beforeEach(async ({ page, baseURL }) => {
-  // O mock não emite cookies: o login bem-sucedido ganha os cookies que o servidor real poria.
+  // The mock sets no cookies: a successful login gets the cookies the real server would set.
   await page.route('**/api/v1/admin/auth/login', async (route) => {
     const response = await route.fetch()
     if (response.status() === 204) {
@@ -53,7 +53,7 @@ async function adminLogin(page: Page) {
   await expect(page).toHaveURL(/\/admin\/usuarios$/)
 }
 
-/** Troca o tema do sistema e espera o app gravar o `data-theme` correspondente. */
+/** Switches the system theme and waits for the app to write the matching `data-theme`. */
 async function applyScheme(page: Page, scheme: 'light' | 'dark') {
   await page.emulateMedia({ colorScheme: scheme })
   await expect(page.locator('html')).toHaveAttribute('data-theme', scheme)
@@ -74,7 +74,7 @@ const computed = (page: Page, selector: string, property: string) =>
     .first()
     .evaluate((element, name) => getComputedStyle(element).getPropertyValue(name), property)
 
-test('o painel no Design System: marca em tinta, selo, etapas, split, indicadores e nada externo', async ({
+test('the panel in the Design System: ink brand, badge, steps, split, indicators and nothing external', async ({
   page,
   baseURL,
 }) => {
@@ -106,7 +106,7 @@ test('o painel no Design System: marca em tinta, selo, etapas, split, indicadore
   expect(external).toEqual([])
 })
 
-test('a Saúde relê a cada 15 s', async ({ page }) => {
+test('Saúde re-reads every 15 s', async ({ page }) => {
   await page.clock.install()
   await page.setViewportSize(DESKTOP)
   await adminLogin(page)
@@ -122,7 +122,7 @@ test('a Saúde relê a cada 15 s', async ({ page }) => {
 })
 
 for (const viewport of [DESKTOP, MOBILE]) {
-  test(`screenshots do painel a ${viewport.width}×${viewport.height}`, async ({ page }) => {
+  test(`panel screenshots at ${viewport.width}×${viewport.height}`, async ({ page }) => {
     test.skip(!SCREENS, 'só com E2E_SCREENSHOTS=1')
     await page.setViewportSize(viewport)
     await page.goto('/admin/entrar')
@@ -133,14 +133,14 @@ for (const viewport of [DESKTOP, MOBILE]) {
     for (const { route, heading } of SCREENS_BY_ROUTE) {
       await page.goto(`/admin/${route}`)
       await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible()
-      // A tela carregada, sem o "Carregando…" do primeiro quadro.
+      // The loaded screen, without the first frame's "Carregando…".
       await expect(page.getByRole('status').filter({ hasText: /^Carregando/ })).toHaveCount(0)
       await shoot(page, route, viewport.width)
     }
   })
 }
 
-test('quadros de referência do Design System (examples/admin.html)', async ({ page }) => {
+test('Design System reference frames (examples/admin.html)', async ({ page }) => {
   test.skip(!SCREENS, 'só com E2E_SCREENSHOTS=1')
   await page.setViewportSize({ width: 4700, height: 3200 })
   await page.goto(pathToFileURL(path.join(DS_DIR, 'examples', 'admin.html')).href)

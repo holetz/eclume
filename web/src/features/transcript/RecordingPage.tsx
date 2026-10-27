@@ -20,7 +20,7 @@ import { SpeakersDisclosure } from './SpeakersDisclosure'
 import { ChangeTypeDialog, SummaryDoc } from './SummaryDoc'
 import { TranscriptDisclosure } from './TranscriptDisclosure'
 
-/** A URL da biblioteca de onde a pessoa veio (calendário, lista ou busca); sem ela, a biblioteca. */
+/** The library URL the person came from (calendar, list or search); without it, the library. */
 function useBackTo(): string {
   const { state } = useLocation()
   const from = (state as { from?: unknown } | null)?.from
@@ -36,18 +36,18 @@ export function RecordingPage() {
   const startMs = parseStart(params.get('t'))
   const recording = useRecording(id)
   const transcript = useTranscript(recording.data?.transcript_id ?? null)
-  // Com `?t=` (vindo da busca), a transcrição já abre na fala.
+  // With `?t=` (coming from search), the transcript opens already at the segment.
   const [transcriptOpen, setTranscriptOpen] = useState(startMs !== null)
   const [speakersOpen, setSpeakersOpen] = useState(false)
   const [changingType, setChangingType] = useState(false)
   const summary = useSummaryState(id, Boolean(recording.data?.transcript_id))
   const markers = useMarkers(id, (recording.data?.marker_count ?? 0) > 0)
   useRefreshOnPipeline(recording.data)
-  // Parada à espera dos nomes (etapa `speakers` em `waiting`), o bloco Locutores abre sozinho, e o
-  // link do aviso "Aguardando locutores" (`#locutores`) o reabre se a pessoa o tiver recolhido.
+  // Stopped waiting for the names (`speakers` step in `waiting`), the Locutores block opens by itself, and the
+  // link in the "Aguardando locutores" notice (`#locutores`) reopens it if the person has collapsed it.
   const awaitingSpeakers =
     recording.data?.pipeline.some((step) => step.step === 'speakers' && step.state === 'waiting') ?? false
-  // Ajuste durante o render (não num efeito): ao entrar na espera, o bloco abre uma vez.
+  // Adjusted during render (not in an effect): on entering the wait, the block opens once.
   const [wasAwaiting, setWasAwaiting] = useState(false)
   if (awaitingSpeakers !== wasAwaiting) {
     setWasAwaiting(awaitingSpeakers)
@@ -100,7 +100,7 @@ export function RecordingPage() {
         >
           {data.transcript_id !== null && (
             <>
-              {/* Fixo abaixo do cabeçalho: pausar fica a um clique em qualquer ponto da página. */}
+              {/* Fixed below the header: pausing is one click away from anywhere on the page. */}
               <div className={styles.playerDock}>
                 {data.audio_deleted_at ? <AudioDeletedNotice /> : <Player markers={markers.data ?? []} />}
               </div>

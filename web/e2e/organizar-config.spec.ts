@@ -1,6 +1,6 @@
-// Organizar, Minhas configurações e Central de ajuda contra o Prism. Como no app.spec.ts, o login
-// ganha os cookies de sessão que o servidor real emitiria. O mock serve o primeiro exemplo de cada
-// resposta: a pré-visualização de tipo pede o exemplo "tipo" de GET /previews/{id}.
+// Organizar, Minhas configurações and Central de ajuda against Prism. As in app.spec.ts, the login
+// gets the session cookies the real server would set. The mock serves the first example of each
+// response: the type preview asks for the "tipo" example of GET /previews/{id}.
 import { expect, test, type Page } from '@playwright/test'
 
 test.beforeEach(async ({ page, baseURL }) => {
@@ -22,7 +22,7 @@ test.beforeEach(async ({ page, baseURL }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Biblioteca' })).toBeVisible()
 })
 
-/** O mock só tem o exemplo "usado" do estado do código: aqui o código continua pendente. */
+/** The mock only has the "usado" example of the code state: here the code stays pending. */
 async function keepPairingPending(page: Page) {
   await page.route('**/api/v1/devices/pairing-codes/*', async (route) => {
     const response = await route.fetch()
@@ -30,7 +30,7 @@ async function keepPairingPending(page: Page) {
   })
 }
 
-/** O exemplo do mock vence numa data fixa: o código criado passa a vencer daqui a 10 minutos. */
+/** The mock example expires on a fixed date: the created code now expires 10 minutes from now. */
 async function freshPairingCodes(page: Page) {
   await page.route('**/api/v1/devices/pairing-codes', async (route) => {
     if (route.request().method() !== 'POST') return route.continue()
@@ -40,7 +40,7 @@ async function freshPairingCodes(page: Page) {
   })
 }
 
-/** Vai a uma tela: pela barra lateral ou, para configurações e ajuda, pelos menus do cabeçalho. */
+/** Goes to a screen: through the sidebar or, for settings and help, through the header menus. */
 async function navTo(page: Page, name: string) {
   const link = page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name, exact: true })
   if (await link.count()) return link.click()
@@ -49,11 +49,11 @@ async function navTo(page: Page, name: string) {
   await page.getByRole('menuitem', { name, exact: true }).click()
 }
 
-test('campos personalizados: lista, painel e testar a regra', async ({ page }) => {
+test('custom fields: list, panel and testing the rule', async ({ page }) => {
   await navTo(page, 'Campos personalizados')
   await expect(page.getByRole('heading', { level: 1, name: 'Campos personalizados' })).toBeVisible()
   const fields = page.getByRole('list', { name: 'Campos' })
-  // O título vem dos tipos de agenda e as tags, da tela Tags: a lista tem só os campos do usuário.
+  // The title comes from the agenda types and the tags from the Tags screen: the list has only the user's fields.
   await expect(fields.getByRole('button', { name: 'Título' })).toHaveCount(0)
   await expect(fields.getByRole('button', { name: 'Cliente' })).toBeVisible()
   await expect(page.getByRole('heading', { level: 4, name: 'Cliente' })).toBeVisible()
@@ -63,12 +63,12 @@ test('campos personalizados: lista, painel e testar a regra', async ({ page }) =
   await expect(result).toContainText('Serra Azul')
 })
 
-test('tipos de agenda: painel e pré-visualizar numa gravação', async ({ page }) => {
+test('agenda types: panel and preview on a recording', async ({ page }) => {
   await page.route('**/api/v1/previews/*', (route) =>
     route.continue({ headers: { ...route.request().headers(), prefer: 'example=tipo' } }),
   )
   await navTo(page, 'Tipos de agenda')
-  // O tipo padrão abre primeiro, no topo da lista.
+  // The fallback type opens first, at the top of the list.
   await expect(page.getByRole('heading', { level: 4, name: /^Geral/ })).toBeVisible()
   await page.getByRole('button', { name: 'Pré-visualizar numa gravação' }).click()
   const dialog = page.getByRole('dialog', { name: 'Pré-visualizar numa gravação' })
@@ -79,7 +79,7 @@ test('tipos de agenda: painel e pré-visualizar numa gravação', async ({ page 
   await expect(preview).toContainText('82%')
 })
 
-test('tags: o cadastro com o selo do agente e a configuração', async ({ page }) => {
+test('tags: the catalog with the agent badge and the settings', async ({ page }) => {
   await navTo(page, 'Tags')
   await expect(page.getByRole('heading', { level: 1, name: 'Tags' })).toBeVisible()
   const tags = page.getByRole('list', { name: 'Tags' })
@@ -87,7 +87,7 @@ test('tags: o cadastro com o selo do agente e a configuração', async ({ page }
   await expect(tags).toContainText('Criada pelo agente')
 })
 
-test('conexão MCP: endereço do descritor e token do assistente', async ({ page }) => {
+test('MCP connection: descriptor address and assistant token', async ({ page }) => {
   await navTo(page, 'Conexão MCP')
   await expect(page.getByText('https://192.168.15.199:8443/mcp', { exact: true })).toBeVisible()
   const panel = page.getByRole('region', { name: 'Novo token para um assistente' })
@@ -97,7 +97,7 @@ test('conexão MCP: endereço do descritor e token do assistente', async ({ page
   await expect(panel).toContainText(/claude mcp add --transport http eclume https:\/\/192\.168\.15\.199:8443\/mcp/)
 })
 
-test('tokens de acesso: tabela com aparelho e revogar com confirmação', async ({ page }) => {
+test('access tokens: table with device and revoke with confirmation', async ({ page }) => {
   await navTo(page, 'Tokens de acesso')
   const table = page.getByRole('table')
   await expect(table.getByText('Aparelho · Windows')).toBeVisible()
@@ -109,16 +109,16 @@ test('tokens de acesso: tabela com aparelho e revogar com confirmação', async 
   await expect(dialog).toHaveCount(0)
 })
 
-test('app desktop: sem instaladores publicados no mock, avisa; o código de vínculo vira Pareado', async ({ page }) => {
+test('desktop app: with no installers published in the mock, warns; the pairing code turns Pareado', async ({ page }) => {
   await navTo(page, 'App desktop')
   await expect(page.getByText('Os instaladores ainda não foram publicados neste servidor.')).toHaveCount(3)
-  // O estado do código no mock é o exemplo "usado": a tela troca para Pareado na primeira consulta.
+  // The code state in the mock is the "usado" example: the screen switches to Pareado on the first poll.
   await page.getByRole('button', { name: 'Gerar código de vínculo' }).click()
   await expect(page.getByRole('region', { name: 'Instalou de outro lugar?' }).locator('.alert-success')).toHaveText('Pareado')
   await expect(page.getByRole('region', { name: 'Computadores vinculados' })).toContainText('Desktop — notebook da Mariana')
 })
 
-test('app móvel: o QR aparece com os passos e a página pública de pareamento', async ({ page }) => {
+test('mobile app: the QR shows with the steps and the public pairing page', async ({ page }) => {
   await keepPairingPending(page)
   await navTo(page, 'App móvel')
   const qr = page.getByRole('img', { name: 'Código QR para parear o celular' })
@@ -131,7 +131,7 @@ test('app móvel: o QR aparece com os passos e a página pública de pareamento'
   await expect(page.getByText('K7Q-4MX')).toBeVisible()
 })
 
-test('central de ajuda: busca, artigo e a gaveta com "Nesta página"', async ({ page }) => {
+test('help center: search, article and the drawer with "Nesta página"', async ({ page }) => {
   await navTo(page, 'Central de ajuda')
   await expect(page.getByRole('heading', { level: 1, name: 'Central de ajuda' })).toBeVisible()
   await page.getByLabel('Buscar na ajuda').fill('token')

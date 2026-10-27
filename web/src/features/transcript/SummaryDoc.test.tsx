@@ -19,14 +19,14 @@ async function summarySection() {
   return screen.findByRole('region', { name: 'Resumo' })
 }
 
-describe('documento do resumo', () => {
-  it('mostra o tipo, a origem e a versão, e o Markdown da versão atual', async () => {
+describe('summary document', () => {
+  it('shows the agenda type, the origin and the version, and the Markdown of the current version', async () => {
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
     const section = await summarySection()
     const bar = section.querySelector('.doc-bar') as HTMLElement
     expect(within(bar).getByText('Tipo · Reunião de equipe')).toHaveClass('tag', 'tag-neutral')
-    // O selo leva ao tipo em Tipos de agenda, para ajustar o modelo do resumo.
+    // The badge leads to the agenda type in Tipos de agenda, to adjust the summary template.
     expect(
       await within(bar).findByRole('link', { name: 'Tipo · Reunião de equipe: ajustar o modelo deste tipo' }),
     ).toHaveAttribute('href', '/config/agendas?tipo=01928f3a-1c00-7a00-8000-000000000901')
@@ -34,12 +34,12 @@ describe('documento do resumo', () => {
     const doc = section.querySelector('.doc') as HTMLElement
     expect(within(doc).getByRole('heading', { name: 'Decisões' })).toBeInTheDocument()
     expect(within(doc).getByText(/Três turmas de 12 gestores cada/)).toBeInTheDocument()
-    // Com resumo atual, o MD do Exportar fica habilitado.
+    // With a current summary, the Exportar MD is enabled.
     await userEvent.click(screen.getByRole('button', { name: 'Exportar' }))
     expect(screen.getByRole('menuitem', { name: /^Resumo/ })).not.toHaveAttribute('aria-disabled')
   })
 
-  it('avisa quando o resumo é de uma revisão anterior da transcrição e não avisa quando coincidem', async () => {
+  it('warns when the summary is from an earlier transcript revision and does not warn when they match', async () => {
     mockTranscriptApi()
     const { unmount } = renderApp(`/gravacoes/${RECORDING}`)
     const section = await summarySection()
@@ -58,14 +58,14 @@ describe('documento do resumo', () => {
     expect(stale.closest('.alert')).toHaveClass('alert-warning')
   })
 
-  it('não avisa enquanto a transcrição não carregou', async () => {
+  it('does not warn while the transcript has not loaded', async () => {
     mockTranscriptApi({ 'GET /api/v1/transcripts/:id': () => new Promise<Response>(() => {}) })
     renderApp(`/gravacoes/${RECORDING}`)
     const section = await summarySection()
     expect(within(section).queryByText('Resumo de uma versão anterior da transcrição')).not.toBeInTheDocument()
   })
 
-  it('o selo de um tipo que não existe mais fica sem link', async () => {
+  it('the badge of an agenda type that no longer exists has no link', async () => {
     const http = mockTranscriptApi({ 'GET /api/v1/agenda-types': () => ({ items: [], next_cursor: null }) })
     renderApp(`/gravacoes/${RECORDING}`)
     const section = await summarySection()
@@ -75,7 +75,7 @@ describe('documento do resumo', () => {
     expect(within(bar).queryByRole('link', { name: /ajustar o modelo/ })).not.toBeInTheDocument()
   })
 
-  it('copia o título e o resumo em HTML e texto, com os títulos em negrito, e avisa quando o navegador não deixa', async () => {
+  it('copies the title and the summary as HTML and text, with the headings in bold, and warns when the browser does not allow it', async () => {
     const user = userEvent.setup()
     const write = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { write }, configurable: true })
@@ -110,7 +110,7 @@ describe('documento do resumo', () => {
     expect(await within(section).findByRole('alert')).toHaveTextContent('Não deu para copiar')
   })
 
-  it('sem ClipboardItem, copia o texto puro sem as hashtags dos títulos', async () => {
+  it('without ClipboardItem, copies the plain text without the heading hashes', async () => {
     const user = userEvent.setup()
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
@@ -125,7 +125,7 @@ describe('documento do resumo', () => {
     expect(copied).not.toMatch(/^#/m)
   })
 
-  it('regenera o resumo só depois de confirmar, pelo tipo da gravação, e espera a geração', async () => {
+  it('regenerates the summary only after confirming, from the recording agenda type, and waits for the generation', async () => {
     const user = userEvent.setup()
     let pending = false
     const http = mockTranscriptApi({
@@ -160,7 +160,7 @@ describe('documento do resumo', () => {
     expect(within(section).getByRole('button', { name: 'Regenerar' })).toBeDisabled()
   })
 
-  it('regenerar sem tipo de agenda abre o diálogo de trocar o tipo', async () => {
+  it('regenerating with no agenda type opens the switch agenda type dialog', async () => {
     const user = userEvent.setup()
     mockTranscriptApi({
       'POST /api/v1/transcripts/:id/summaries': () =>
@@ -183,7 +183,7 @@ describe('documento do resumo', () => {
     expect(screen.queryByRole('dialog', { name: 'Regenerar o resumo?' })).not.toBeInTheDocument()
   })
 
-  it('troca o tipo de agenda num diálogo e relê o resumo, que volta em geração', async () => {
+  it('switches the agenda type in a dialog and rereads the summary, which comes back generating', async () => {
     const user = userEvent.setup()
     let pending = false
     const http = mockTranscriptApi({
@@ -215,7 +215,7 @@ describe('documento do resumo', () => {
     expect(await within(section).findByText('Gerando uma versão nova…')).toBeInTheDocument()
   })
 
-  it('exclui o resumo com confirmação', async () => {
+  it('deletes the summary with confirmation', async () => {
     const user = userEvent.setup()
     let deleted = false
     const http = mockTranscriptApi({
@@ -235,7 +235,7 @@ describe('documento do resumo', () => {
     expect(http.requests('DELETE /api/v1/recordings/:id/summary')).toHaveLength(1)
   })
 
-  it('em geração sem versão, diz o tipo; sem resumo, gera, e sem tipo pede um', async () => {
+  it('while generating with no version, says the agenda type; with no summary, generates, and with no agenda type asks for one', async () => {
     const user = userEvent.setup()
     let state: unknown = {
       current: null,
@@ -260,7 +260,7 @@ describe('documento do resumo', () => {
     renderApp(`/gravacoes/${RECORDING}`)
     const busy = await screen.findByText('Resumindo pelas instruções de Reunião de equipe…')
     expect(busy).toHaveAttribute('aria-busy', 'true')
-    // O Exportar não oferece o MD sem versão atual.
+    // Exportar does not offer the MD with no current version.
     await user.click(screen.getByRole('button', { name: 'Exportar' }))
     expect(screen.getByRole('menuitem', { name: /^Resumo/ })).toHaveAttribute('aria-disabled', 'true')
     await user.keyboard('{Escape}')
@@ -273,7 +273,7 @@ describe('documento do resumo', () => {
     expect(http.requests('POST /api/v1/transcripts/:id/summaries')).toHaveLength(1)
   }, 15_000)
 
-  it('geração que falhou mostra a mensagem e tenta de novo', async () => {
+  it('a failed generation shows the message and retries', async () => {
     const user = userEvent.setup()
     const recording = fixtures.recordingTranscribed()
     recording.pipeline = recording.pipeline.map((step) =>
@@ -294,7 +294,7 @@ describe('documento do resumo', () => {
     expect(await http.requests('POST /api/v1/transcripts/:id/summaries')[0].json()).toEqual({})
   })
 
-  it('sem agente de resumo, diz o motivo e tenta de novo como ação secundária, sem 422 cru', async () => {
+  it('with no summary agent, says the reason and retries as a secondary action, without a raw 422', async () => {
     const user = userEvent.setup()
     const recording = fixtures.recordingTranscribed()
     recording.pipeline = recording.pipeline.map((step) =>
@@ -328,14 +328,14 @@ describe('documento do resumo', () => {
   })
 })
 
-describe('edição do resumo', () => {
+describe('summary editing', () => {
   async function openEditor() {
     const section = await summarySection()
     await userEvent.click(within(section).getByRole('button', { name: 'Editar' }))
     return screen.getByRole('region', { name: 'Editando o resumo' })
   }
 
-  it('edita o Markdown e salva sobre a versão aberta', async () => {
+  it('edits the Markdown and saves over the open version', async () => {
     const user = userEvent.setup()
     const http = mockTranscriptApi({
       'PUT /api/v1/recordings/:id/summary': async (request) => ({
@@ -361,7 +361,7 @@ describe('edição do resumo', () => {
     })
   })
 
-  it('Ctrl+Enter salva; Esc sem mudança cancela e com mudança pede confirmação', async () => {
+  it('Ctrl+Enter saves; Esc with no change cancels and with a change asks for confirmation', async () => {
     const user = userEvent.setup()
     const http = mockTranscriptApi({
       'PUT /api/v1/recordings/:id/summary': () => fixtures.summaryState().current,
@@ -381,7 +381,7 @@ describe('edição do resumo', () => {
     await waitFor(() => expect(http.requests('PUT /api/v1/recordings/:id/summary')).toHaveLength(1))
   })
 
-  it('quando o resumo muda enquanto edita, guarda o rascunho, mostra a nova e salva sobre ela', async () => {
+  it('when the summary changes while editing, keeps the draft, shows the new one and saves over it', async () => {
     const user = userEvent.setup()
     let changed = false
     const http = mockTranscriptApi({
@@ -421,7 +421,7 @@ describe('edição do resumo', () => {
     expect(bodies[1].content_md).toBe('# Meu rascunho')
   })
 
-  it('guarda o rascunho na aba, reencontra depois de recarregar e apaga ao descartar', async () => {
+  it('keeps the draft in the tab, finds it again after reloading and deletes it on discarding', async () => {
     const user = userEvent.setup()
     mockTranscriptApi()
     const first = renderApp(`/gravacoes/${RECORDING}`)
@@ -447,7 +447,7 @@ describe('edição do resumo', () => {
     expect(window.sessionStorage.getItem(key)).toBeNull()
   })
 
-  it('rascunho guardado sobre uma versão antiga volta com o aviso de conflito', async () => {
+  it('a draft stored on an old version comes back with the conflict notice', async () => {
     window.sessionStorage.setItem(
       `eclume-resumo-rascunho:${RECORDING}`,
       JSON.stringify({ base_version: 1, content_md: '# Rascunho antigo' }),
@@ -460,7 +460,7 @@ describe('edição do resumo', () => {
     expect(within(editor).getByRole('button', { name: 'Salvar sobre a versão 2' })).toBeInTheDocument()
   })
 
-  it('sair pela barra com rascunho pede confirmação, e continuar editando mantém o texto', async () => {
+  it('leaving through the bar with a draft asks for confirmation, and continuing to edit keeps the text', async () => {
     const user = userEvent.setup()
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)
@@ -476,7 +476,7 @@ describe('edição do resumo', () => {
     expect(text).toHaveValue(`${fixtures.summaryState().current!.content_md} mais`)
   })
 
-  it('volta à gerada com confirmação', async () => {
+  it('reverts to the generated one with confirmation', async () => {
     const user = userEvent.setup()
     const http = mockTranscriptApi({
       'POST /api/v1/recordings/:id/summary/revert': () =>
@@ -491,7 +491,7 @@ describe('edição do resumo', () => {
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Editando o resumo' })).not.toBeInTheDocument())
   })
 
-  it('compara a atual com a gerada por linha, com sinal para quem não vê cor', async () => {
+  it('compares the current one with the generated one by line, with a cue for those who cannot see colour', async () => {
     const user = userEvent.setup()
     mockTranscriptApi()
     renderApp(`/gravacoes/${RECORDING}`)

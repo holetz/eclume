@@ -23,8 +23,8 @@ export function useRecording(id: string) {
     queryFn: () =>
       unwrap(api.GET('/api/v1/recordings/{recording_id}', { params: { path: { recording_id: id } } })),
     refetchOnWindowFocus: true,
-    // Também relê enquanto a gravação espera os nomes dos locutores: alguém pode nomeá-los por outro
-    // aparelho ou soltar a gravação, e a cadeia segue sozinha no servidor.
+    // Also re-reads while the recording waits for the speakers' names: someone may name them from another
+    // device or release the recording, and the chain carries on by itself on the server.
     refetchInterval: pollWhile((data: Schemas['Recording'] | undefined) => {
       const state = data ? recordingState(data).state : null
       return state === 'busy' || state === 'waiting'
@@ -32,7 +32,7 @@ export function useRecording(id: string) {
   })
 }
 
-/** "Seguir sem nomear": solta a gravação parada à espera dos nomes dos locutores. */
+/** "Seguir sem nomear": releases the recording stopped waiting for the speakers' names. */
 export function useContinueWithoutNames(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -47,8 +47,8 @@ export function useContinueWithoutNames(id: string) {
 }
 
 /**
- * Quando o preenchimento, a detecção do tipo ou o resumo terminam no servidor (a etapa passa a
- * `done` numa releitura), relê os campos e o resumo da gravação.
+ * When the filling, the type detection or the summary finishes on the server (the step moves to
+ * `done` on a re-read), re-reads the recording's fields and summary.
  */
 export function useRefreshOnPipeline(recording: Schemas['Recording'] | undefined) {
   const queryClient = useQueryClient()
@@ -68,7 +68,7 @@ export function useRefreshOnPipeline(recording: Schemas['Recording'] | undefined
   }, [queryClient, recording])
 }
 
-/** Cancela a transcrição em curso ou na fila; a gravação volta como o servidor a deixou (`failed`). */
+/** Cancels the transcription in progress or in the queue; the recording comes back as the server left it (`failed`). */
 export function useCancelTranscription(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -81,7 +81,7 @@ export function useCancelTranscription(id: string) {
   })
 }
 
-/** Exclui a gravação: tira do cache tudo o que é dela e relê a biblioteca. */
+/** Deletes the recording: removes from the cache everything that belongs to it and re-reads the library. */
 export function useDeleteRecording(recording: Pick<Schemas['Recording'], 'id' | 'transcript_id'>) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -106,7 +106,7 @@ export function useTranscript(id: string | null) {
   })
 }
 
-/** Aplica ao cache uma edição que a API já confirmou. */
+/** Applies to the cache an edit the API has already confirmed. */
 export function updateTranscriptCache(
   client: QueryClient,
   id: string,

@@ -13,8 +13,8 @@ afterEach(() => vi.unstubAllGlobals())
 type Tag = Schemas['Tag']
 type Assignment = Schemas['TagAssignment']
 
-const CLIENTE = '01928f3a-1c00-7a00-8000-000000000b01'
-const LIDERANCAS = '01928f3a-1c00-7a00-8000-000000000b02'
+const CLIENT = '01928f3a-1c00-7a00-8000-000000000b01'
+const LEADERSHIP = '01928f3a-1c00-7a00-8000-000000000b02'
 
 const ASSIGNMENT: Assignment = {
   auto_fill: true,
@@ -25,7 +25,7 @@ const ASSIGNMENT: Assignment = {
   catalog_limit: 200,
 }
 
-/** API de tags com estado, como o servidor: o mesmo nome (sem caixa) é 409, e o cadastro vem em ordem. */
+/** Stateful tags API, like the server: the same name (case-insensitive) is 409, and the registry comes in order. */
 function mockTags(
   initial: Tag[] = fixtures.tagList().items,
   start: Assignment = ASSIGNMENT,
@@ -78,8 +78,8 @@ const card = () => screen.findByRole('region', { name: 'Atribuição automática
 const list = () => screen.findByRole('list', { name: 'Tags' })
 const rowOf = (name: string) => within(screen.getByRole('list', { name: 'Tags' })).getByText(name).closest('li')!
 
-describe('tags: a tela', () => {
-  it('abre pelo menu Organizar, com o cabeçalho do DS e o texto', async () => {
+describe('tags: the screen', () => {
+  it('opens from the Organizar menu, with the DS header and the text', async () => {
     mockTags()
     renderApp('/tags')
     expect(await screen.findByRole('heading', { level: 1, name: 'Tags' })).toBeInTheDocument()
@@ -91,7 +91,7 @@ describe('tags: a tela', () => {
     expect(within(nav).getByRole('link', { name: 'Tags' })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('lista com o selo, a descrição, a contagem e o link para as gravações', async () => {
+  it('lists with the badge, the description, the count and the link to the recordings', async () => {
     const [cliente, liderancas] = fixtures.tagList().items
     mockTags([cliente, liderancas, { ...cliente, id: 'reuniao', name: 'reunião semanal', description: '', count: 3 }])
     renderApp('/tags')
@@ -111,7 +111,7 @@ describe('tags: a tela', () => {
     expect(within(third).getByRole('link', { name: 'Ver gravações' })).toHaveAttribute('href', '/?tag=reuni%C3%A3o%20semanal')
   })
 
-  it('sem tags, explica como começar', async () => {
+  it('with no tags, explains how to start', async () => {
     mockTags([])
     renderApp('/tags')
     expect(await screen.findByText(/Nenhuma tag ainda\. Crie uma com Nova tag/)).toBeInTheDocument()
@@ -119,8 +119,8 @@ describe('tags: a tela', () => {
   })
 })
 
-describe('tags: a configuração do agente', () => {
-  it('mostra a configuração e grava o interruptor na hora', async () => {
+describe('tags: the agent configuration', () => {
+  it('shows the configuration and saves the switch at once', async () => {
     const http = mockTags()
     renderApp('/tags')
     const region = await card()
@@ -132,7 +132,7 @@ describe('tags: a configuração do agente', () => {
     expect(await http.requests('PATCH /api/v1/me/tag-assignment')[0].json()).toEqual({ auto_fill: false })
   })
 
-  it('salva a regra geral só pelo Salvar, com o que mudou', async () => {
+  it('saves the general rule only through Salvar, with what changed', async () => {
     const http = mockTags()
     renderApp('/tags')
     const region = await card()
@@ -149,7 +149,7 @@ describe('tags: a configuração do agente', () => {
     expect(rule).toHaveValue('Use no máximo 3 tags.')
   })
 
-  it('escolhe o modo na hora e, com o agente criando, o limite por gravação', async () => {
+  it('chooses the mode at once and, with the agent creating, the limit per recording', async () => {
     const http = mockTags()
     renderApp('/tags')
     const region = await card()
@@ -184,7 +184,7 @@ describe('tags: a configuração do agente', () => {
     expect(await http.requests('PATCH /api/v1/me/tag-assignment')[2].json()).toEqual({ mode: 'fixed' })
   })
 
-  it('mostra o erro quando o servidor recusa a mudança', async () => {
+  it('shows the error when the server refuses the change', async () => {
     mockTags(undefined, undefined, { 'PATCH /api/v1/me/tag-assignment': () => problem('forbidden', 403) })
     renderApp('/tags')
     const region = await card()
@@ -194,8 +194,8 @@ describe('tags: a configuração do agente', () => {
   })
 })
 
-describe('tags: nova, editar, mesclar e excluir', () => {
-  it('cria uma tag com a descrição; o nome repetido mostra a saída pela mesclagem', async () => {
+describe('tags: new, edit, merge and delete', () => {
+  it('creates a tag with the description; the duplicate name shows the way out through merging', async () => {
     const http = mockTags()
     renderApp('/tags')
     await userEvent.click(await screen.findByRole('button', { name: 'Nova tag' }))
@@ -222,7 +222,7 @@ describe('tags: nova, editar, mesclar e excluir', () => {
     })
   })
 
-  it('renomeia mandando só o que mudou, e o nome repetido é recusado', async () => {
+  it('renames sending only what changed, and the duplicate name is refused', async () => {
     const http = mockTags()
     renderApp('/tags')
     await list()
@@ -246,11 +246,11 @@ describe('tags: nova, editar, mesclar e excluir', () => {
     expect(within(screen.getByRole('list', { name: 'Tags' })).queryByText('cliente-metalurgica')).not.toBeInTheDocument()
     const patches = http.requests('PATCH /api/v1/tags/:id')
     expect(patches).toHaveLength(2)
-    expect(new URL(patches[1].url).pathname).toBe(`/api/v1/tags/${CLIENTE}`)
+    expect(new URL(patches[1].url).pathname).toBe(`/api/v1/tags/${CLIENT}`)
     expect(await patches[1].json()).toEqual({ name: 'serra-azul' })
   })
 
-  it('muda só a descrição sem mexer no nome', async () => {
+  it('changes only the description without touching the name', async () => {
     const http = mockTags()
     renderApp('/tags')
     await list()
@@ -264,7 +264,7 @@ describe('tags: nova, editar, mesclar e excluir', () => {
     })
   })
 
-  it('mescla uma tag em outra escolhida, e com uma tag só não oferece mesclar', async () => {
+  it('merges a tag into another chosen one, and with a single tag does not offer merging', async () => {
     const http = mockTags()
     renderApp('/tags')
     await list()
@@ -272,16 +272,16 @@ describe('tags: nova, editar, mesclar e excluir', () => {
     const dialog = screen.getByRole('dialog', { name: 'Mesclar cliente-metalurgica' })
     expect(within(dialog).getByText(/Onde havia cliente-metalurgica, passa a haver a tag escolhida, nas gravações e nas tags padrão dos tipos de agenda\./)).toBeInTheDocument()
     expect(within(dialog).getByText(/cliente-metalurgica sai do cadastro/)).toBeInTheDocument()
-    expect(within(dialog).getByLabelText('Mesclar em')).toHaveValue(LIDERANCAS)
+    expect(within(dialog).getByLabelText('Mesclar em')).toHaveValue(LEADERSHIP)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Mesclar em programa-liderancas' }))
     await waitFor(() => expect(http.requests('POST /api/v1/tags/:id/merge')).toHaveLength(1))
-    expect(await http.requests('POST /api/v1/tags/:id/merge')[0].json()).toEqual({ into: LIDERANCAS })
+    expect(await http.requests('POST /api/v1/tags/:id/merge')[0].json()).toEqual({ into: LEADERSHIP })
     await waitFor(() => expect(screen.queryByText('cliente-metalurgica')).not.toBeInTheDocument())
     expect(within(rowOf('programa-liderancas')).getByText('2 gravações')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Mesclar .* em outra tag/ })).not.toBeInTheDocument()
   })
 
-  it('exclui depois de confirmar, avisando o que sai', async () => {
+  it('deletes after confirming, warning what goes away', async () => {
     const http = mockTags()
     renderApp('/tags')
     await list()
@@ -290,12 +290,12 @@ describe('tags: nova, editar, mesclar e excluir', () => {
     expect(dialog).toHaveTextContent('A tag sai do cadastro, de todas as gravações e das tags padrão dos tipos de agenda.')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Excluir tag' }))
     await waitFor(() => expect(http.requests('DELETE /api/v1/tags/:id')).toHaveLength(1))
-    expect(new URL(http.requests('DELETE /api/v1/tags/:id')[0].url).pathname).toBe(`/api/v1/tags/${LIDERANCAS}`)
+    expect(new URL(http.requests('DELETE /api/v1/tags/:id')[0].url).pathname).toBe(`/api/v1/tags/${LEADERSHIP}`)
     await waitFor(() => expect(screen.queryByText('programa-liderancas')).not.toBeInTheDocument())
     expect(screen.getByText('cliente-metalurgica')).toBeInTheDocument()
   })
 
-  it('Manter fecha o diálogo de exclusão sem apagar', async () => {
+  it('Manter closes the delete dialog without deleting', async () => {
     const http = mockTags()
     renderApp('/tags')
     await list()

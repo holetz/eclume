@@ -1,5 +1,5 @@
-// Os campos da gravação (título, tags e os campos do usuário) com a origem de cada valor, e as
-// mutações de editar e aceitar o preenchimento automático.
+// The recording's fields (title, tags and the user's fields) with the origin of each value, and the
+// mutations to edit and to accept the automatic filling.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
@@ -7,7 +7,7 @@ import { fieldsKey, recordingKey } from './queries'
 
 export type FieldValue = Schemas['RecordingFieldValue']
 
-/** "a, b,, a " → ["a", "b"]: sem vazios nem repetidos, na ordem digitada. */
+/** "a, b,, a " → ["a", "b"]: no empty or repeated entries, in the typed order. */
 export function parseTags(value: string): string[] {
   return [
     ...new Set(
@@ -19,7 +19,7 @@ export function parseTags(value: string): string[] {
   ]
 }
 
-/** Os embutidos (título e tags) primeiro, depois os do usuário, na ordem da lista. */
+/** The built-ins (title and tags) first, then the user's, in list order. */
 export function sortFields(items: readonly FieldValue[]): FieldValue[] {
   const rank = (item: FieldValue) => (item.field.builtin === 'title' ? 0 : item.field.builtin === 'tags' ? 1 : 2)
   return [...items].sort((a, b) => rank(a) - rank(b) || a.field.position - b.field.position)
@@ -38,7 +38,7 @@ export function useFieldMutations(recordingId: string) {
   const path = { recording_id: recordingId }
   const store = (values: Schemas['RecordingFieldValues'], touchedBuiltin: boolean) => {
     queryClient.setQueryData(fieldsKey(recordingId), values)
-    // Título e tags vivem também na gravação: relê a gravação e a biblioteca.
+    // Title and tags also live on the recording: re-reads the recording and the library.
     if (touchedBuiltin) {
       void queryClient.invalidateQueries({ queryKey: recordingKey(recordingId), exact: true })
       void queryClient.invalidateQueries({ queryKey: ['recordings'] })

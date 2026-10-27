@@ -1,5 +1,5 @@
-// Comparação de duas versões do resumo por linha (LCS), no cliente: a gerada contra a atual, ou o
-// rascunho contra a versão que mudou enquanto a pessoa editava.
+// Line-by-line comparison of two summary versions (LCS), on the client: the generated one against the current one, or the
+// draft against the version that changed while the person was editing.
 
 interface DiffLine {
   kind: 'same' | 'removed' | 'added'
@@ -10,11 +10,11 @@ function lines(text: string): string[] {
   return text.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n')
 }
 
-/** As linhas de `before` e `after` alinhadas pela maior subsequência comum: iguais, removidas e incluídas. */
+/** The lines of `before` and `after` aligned by the longest common subsequence: equal, removed and added. */
 export function diffLines(before: string, after: string): DiffLine[] {
   const a = lines(before)
   const b = lines(after)
-  // lengths[i][j] = LCS de a[i..] e b[j..].
+  // lengths[i][j] = LCS of a[i..] and b[j..].
   const lengths = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0))
   for (let i = a.length - 1; i >= 0; i--) {
     for (let j = b.length - 1; j >= 0; j--) {

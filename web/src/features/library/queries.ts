@@ -14,22 +14,22 @@ const POLL_MS = 3000
 const RANGE_LIMIT = 200
 export const RANGE_MAX_PAGES = 5
 const LIST_LIMIT = 50
-/** Folga do `?since=` sobre a última alteração conhecida, como no observador de desfechos. */
+/** Slack of `?since=` over the last known change, as in the outcome watcher. */
 export const SINCE_MARGIN_MS = 60_000
-/** A cada tantas leituras incrementais, uma releitura completa pega o que o `?since=` não vê (exclusões). */
+/** Every so many incremental reads, a full re-read catches what `?since=` does not see (deletions). */
 export const FULL_EVERY = 20
 
 function anyBusy(items: Recording[] | undefined): boolean {
   return items?.some((item) => recordingState(item).state === 'busy') ?? false
 }
 
-/** O `?since=` da leitura incremental: a última alteração conhecida menos a folga; `null` sem nenhuma. */
+/** The `?since=` of the incremental read: the last known change minus the slack; `null` with none. */
 export function sinceOf(items: Recording[]): string | null {
   const times = items.map((item) => Date.parse(item.updated_at)).filter((at) => !Number.isNaN(at))
   return times.length > 0 ? new Date(Math.max(...times) - SINCE_MARGIN_MS).toISOString() : null
 }
 
-/** Troca no cache as gravações que mudaram (por id); `add` diz se as que ainda não estão entram. */
+/** Replaces in the cache the recordings that changed (by id); `add` says whether the ones not there yet go in. */
 export function mergeChanged(items: Recording[], changed: Recording[], add: boolean): Recording[] {
   const byId = new Map(changed.map((item) => [item.id, item]))
   const merged = items.map((item) => byId.get(item.id) ?? item)
@@ -41,10 +41,10 @@ export function mergeChanged(items: Recording[], changed: Recording[], add: bool
 }
 
 /**
- * Enquanto `busy`, mantém a consulta em dia por leituras incrementais (`?since=`) que se mesclam no
- * cache com `setQueryData`, no ritmo de `pollDelay` (3 s de início), em vez de reler o período inteiro.
- * A releitura completa fica para o foco, a volta da rede (o React Query) e a cada `FULL_EVERY`
- * leituras. Pausa com a aba sem foco ou sem rede.
+ * While `busy`, keeps the query up to date through incremental reads (`?since=`) that merge into the
+ * cache with `setQueryData`, at the `pollDelay` pace (3 s at first), instead of re-reading the whole period.
+ * The full re-read is left to focus, the network coming back (React Query) and every `FULL_EVERY`
+ * reads. It pauses with the tab unfocused or offline.
  */
 function useDeltaRefresh<T>(options: {
   queryKey: readonly unknown[]
@@ -100,7 +100,7 @@ function useDeltaRefresh<T>(options: {
         try {
           await refresh()
         } catch {
-          // Falha de rede ou sessão: a próxima volta tenta de novo.
+          // Network or session failure: the next round tries again.
         }
       }
       if (!stopped) schedule()
@@ -116,14 +116,14 @@ function useDeltaRefresh<T>(options: {
 
 interface RangeResult {
   items: Recording[]
-  /** Passou do teto de páginas: há mais gravações no período do que as mostradas. */
+  /** Past the page ceiling: there are more recordings in the period than those shown. */
   truncated: boolean
 }
 
 /**
- * As gravações de um período (semana ou grade do mês), por início crescente, seguindo o cursor até o
- * fim ou até o teto. Enquanto alguma está em andamento, lê só o que mudou (`?since=`), no ritmo de
- * `pollDelay` (3 s de início).
+ * The recordings of a period (week or month grid), by ascending start, following the cursor to the
+ * end or to the ceiling. While any is in progress, it reads only what changed (`?since=`), at the
+ * `pollDelay` pace (3 s at first).
  */
 export function useLibraryRange(range: Range, filters: LibraryFilters, enabled = true) {
   const from = range.from.toISOString()
@@ -158,7 +158,7 @@ export function useLibraryRange(range: Range, filters: LibraryFilters, enabled =
     queryKey,
     enabled,
     queryFn: () => readPages(),
-    // Uma gravação feita no desktop ou no celular aparece ao voltar para a aba.
+    // A recording made on the desktop or the phone shows up when returning to the tab.
     refetchOnWindowFocus: true,
   })
   useDeltaRefresh<RangeResult>({
@@ -174,7 +174,7 @@ export function useLibraryRange(range: Range, filters: LibraryFilters, enabled =
   return query
 }
 
-/** Os campos do usuário (embutidos e próprios), para os filtros e o painel de campos. */
+/** The user's fields (built-in and own), for the filters and the fields panel. */
 export function useUserFields() {
   return useQuery({
     queryKey: ['fields'],
@@ -183,7 +183,7 @@ export function useUserFields() {
   })
 }
 
-/** A lista corrida, da mais recente para a mais antiga, com "Carregar mais". */
+/** The running list, from newest to oldest, with "Carregar mais". */
 export function useLibraryList(filters: LibraryFilters, enabled = true) {
   const queryKey = ['recordings', 'list', filters]
   const query = useInfiniteQuery({
@@ -204,7 +204,7 @@ export function useLibraryList(filters: LibraryFilters, enabled = true) {
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
-    // Uma gravação feita no desktop ou no celular aparece ao voltar para a aba.
+    // A recording made on the desktop or the phone shows up when returning to the tab.
     refetchOnWindowFocus: true,
   })
   type Pages = { pages: Schemas['RecordingPage'][]; pageParams: unknown[] }
@@ -234,7 +234,7 @@ export function useLibraryList(filters: LibraryFilters, enabled = true) {
       } while (cursor)
       return items
     },
-    // Só troca o que já está na lista; o que é novo aparece na releitura completa.
+    // Replaces only what is already in the list; what is new shows up in the full re-read.
     merge: (data, changed) => ({
       ...data,
       pages: data.pages.map((page) => ({ ...page, items: mergeChanged(page.items, changed, false) })),

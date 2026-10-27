@@ -12,16 +12,16 @@ const percent = new Intl.NumberFormat('pt-BR', {
   maximumFractionDigits: 0,
 })
 
-/** Liga o locutor à pessoa sozinho, pela voz, a partir de uma pontuação que o usuário escolhe. */
+/** Links the speaker to the person on its own, by voice, from a score the user chooses. */
 export function AutoAssignCard() {
   const assignment = useVoiceAssignment()
-  // Sem identificação por voz na plataforma, a preferência não tem efeito: nem aparece.
+  // With no voice identification on the platform, the preference has no effect: it does not even show.
   if (!assignment.data?.platform_enabled) return null
   if (!assignment.data.keep_samples) return <NoSamplesNotice />
   return <AutoAssignForm assignment={assignment.data} />
 }
 
-/** A conta não guarda amostras de voz: nada é ligado nem sugerido pela voz. */
+/** The account does not keep voice samples: nothing is linked or suggested by voice. */
 function NoSamplesNotice() {
   return (
     <section className={styles.autoAssign} aria-label="Atribuição automática de locutores">

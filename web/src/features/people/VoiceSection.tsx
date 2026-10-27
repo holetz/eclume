@@ -9,7 +9,7 @@ import { useDeleteVoiceSample, useDeleteVoiceprint, useVoiceprint, type Voicepri
 import styles from './VoiceSection.module.css'
 import { formatDate, formatDuration } from '../../shared/format'
 
-/** A aba "Amostras de voz" da pessoa: ouvir e remover cada amostra da impressão de voz, e "Esquecer a voz". */
+/** The person's "Amostras de voz" tab: listen to and remove each sample of the voiceprint, and "Esquecer a voz". */
 export function VoiceSection({ person }: { person: Person }) {
   const voiceprint = useVoiceprint(person.id)
   return (

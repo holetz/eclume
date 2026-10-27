@@ -28,9 +28,9 @@ function Segments({
   const [follow, setFollow] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const { segments, speakers } = transcript
-  // Só a troca de fala ativa renderiza a lista; o tick que não a troca não chega aqui.
+  // Only changing the active segment renders the list; a tick that does not change it never reaches here.
   const active = usePlaybackSelect((ms) => findSegmentAt(segments, ms))
-  // Nome e cor do locutor e os marcadores de cada fala, calculados uma vez por transcrição.
+  // The speaker's name and color and each segment's markers, computed once per transcript.
   const who = useMemo(
     () =>
       segments.map((segment) => ({
@@ -49,8 +49,8 @@ function Segments({
 
   const anchored = useRef(false)
 
-  // Aberta pela URL com `?t=` (busca, fonte do chat, marcador): uma vez, traz a lista à janela e
-  // centra nela a fala do instante.
+  // Opened by the URL with `?t=` (search, chat source, marker): once, brings the list into the window and
+  // centers the instant's segment in it.
   useEffect(() => {
     const list = listRef.current
     if (anchored.current || anchorMs === null || !list) return
@@ -61,8 +61,8 @@ function Segments({
     scrollWithin(list, list.children[index], 'center')
   }, [anchorMs, segments])
 
-  // Acompanhar o áudio rola só a lista, que é o contêiner com rolagem própria: `scrollIntoView` na
-  // fala rolaria também a página e tiraria o player da tela.
+  // Following the audio scrolls only the list, which is the container with its own scroll: `scrollIntoView` on the
+  // segment would also scroll the page and take the player off screen.
   useEffect(() => {
     const list = listRef.current
     if (!follow || active < 0 || !list?.children[active]) return
@@ -108,16 +108,16 @@ interface TranscriptDisclosureProps {
   transcript: Transcript
   markers: Marker[]
   recordingId: string
-  /** O instante do `?t=` da URL, para a rolagem única até a fala dele. */
+  /** The instant of the URL's `?t=`, for the one-time scroll to its segment. */
   anchorMs?: number | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
 /**
- * A transcrição recolhida (`details.disclosure`): o resumo diz locutores, falas e marcadores; aberta,
- * traz as falas com os marcadores, numa área com rolagem própria. Os locutores ficam no bloco deles
- * (`SpeakersDisclosure`). As falas só renderizam com ela aberta.
+ * The collapsed transcript (`details.disclosure`): the summary states speakers, segments and markers; open,
+ * it brings the segments with the markers, in an area with its own scroll. The speakers stay in their own block
+ * (`SpeakersDisclosure`). The segments only render while it is open.
  */
 export function TranscriptDisclosure({
   transcript,

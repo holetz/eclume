@@ -1,6 +1,6 @@
-// O rascunho do resumo editado à mão sobrevive a recarregar a aba: fica no `sessionStorage` por
-// gravação, com a versão sobre a qual foi escrito. Ler e gravar nunca quebram a tela (padrão de
-// `app/storage.ts`); sem armazenamento, o rascunho vale só enquanto a edição está aberta.
+// The draft of the hand-edited summary survives reloading the tab: it stays in `sessionStorage` per
+// recording, with the version it was written on. Reading and writing never break the screen (pattern of
+// `app/storage.ts`); with no storage, the draft only lasts while the edit is open.
 
 export interface SummaryDraft {
   base_version: number
@@ -21,12 +21,12 @@ export function readSummaryDraft(recordingId: string): SummaryDraft | null {
   }
 }
 
-/** Grava o rascunho; `null` apaga. */
+/** Saves the draft; `null` deletes it. */
 export function writeSummaryDraft(recordingId: string, draft: SummaryDraft | null): void {
   try {
     if (draft === null) window.sessionStorage.removeItem(key(recordingId))
     else window.sessionStorage.setItem(key(recordingId), JSON.stringify(draft))
   } catch {
-    // Sem armazenamento, o rascunho não sobrevive à recarga.
+    // With no storage, the draft does not survive the reload.
   }
 }
