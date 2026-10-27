@@ -126,7 +126,7 @@ have. A repeated name: 409 on `POST`, 422 on `name` in the `PATCH`.
   `null` is no limit. Merged field by field by the same `PATCH /admin/settings`, with integers
   `>= 0` or `null`. The owner's account is not known to the migration: she overrides it through the panel
   after the deploy. Usage rules in [server-nucleo.md](server-nucleo.md#upload-and-audio) and
-  [server-agentes.md](server-agentes.md#cota-de-pedidos-ao-agente).
+  [server-agentes.md](server-agentes.md#agent-request-quota).
 
 ## Users (`/admin/users`)
 

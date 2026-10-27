@@ -118,7 +118,7 @@ em `<ECLUME_DATA_DIR>/secrets/admin-password` (600), e nunca passa pela estaçã
 A transcrição não precisa de provider; o resumo precisa. Cadastre um em **Admin → Agentes**. Os
 tipos e o que cada um exige — chave de API, um servidor compatível com a API da OpenAI na sua rede,
 ou a CLI do Claude, que só entra na imagem com `ECLUME_CLAUDE_CLI=1` — estão na matriz de
-[server-agentes.md](../standards/code/server-agentes.md#o-que-cada-provider-exige). Com
+[server-agentes.md](../standards/code/server-agentes.md#what-each-provider-requires). Com
 `ECLUME_CLAUDE_CLI=0`, a imagem do server fica só com software livre.
 
 ## 6. Clientes na rede local

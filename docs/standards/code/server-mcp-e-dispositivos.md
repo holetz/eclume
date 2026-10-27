@@ -78,7 +78,7 @@ handlers das rotas; o que vivia só no handler desce para o módulo de domínio.
   `request_summary` sem instrução chama `regenerate_summary`, o `PATCH /recordings/{id}` chama
   `change_agenda_type`, e o job `agent_action` chama as quatro, sempre sob a RLS do dono e com os
   mesmos escopos. O Agente não chama o `/mcp` por HTTP
-  ([agentes](server-agentes.md#agente)).
+  ([agentes](server-agentes.md#agent)).
 
 ## Grupos da tela "Conexão MCP"
 

@@ -272,7 +272,7 @@ sessão próprios em `/admin/entrar`, que só alcançam `/admin/*`
 O provider desta produção é o `claude-cli` ("Claude (servidor)", modelo `sonnet`), uma escolha
 deste host e não do produto: ele roda o `claude -p` no worker de agentes, na imagem construída com
 `ECLUME_CLAUDE_CLI=1`, com o token entregue pelo painel ou pelo env, sem montar a credencial do
-host. A matriz do que cada tipo exige está em [server-agentes.md](../standards/code/server-agentes.md#o-que-cada-provider-exige).
+host. A matriz do que cada tipo exige está em [server-agentes.md](../standards/code/server-agentes.md#what-each-provider-requires).
 O smoke não cadastra provider: prova o resumo com o que estiver cadastrado para `summaries`, de
 qualquer tipo, ou com o de `--provider <id>`.
 
