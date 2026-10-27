@@ -3,7 +3,7 @@ import { applyThemePreference, readThemePreference, watchSystemTheme } from './t
 
 type Listener = () => void
 
-/** `matchMedia` falso: o tema do sistema começa em `dark` e muda por `setDark`. */
+/** Fake `matchMedia`: the system theme starts at `dark` and changes through `setDark`. */
 function fakeMatchMedia(dark: boolean) {
   const listeners = new Set<Listener>()
   const query = {
@@ -28,13 +28,13 @@ afterEach(() => {
   document.documentElement.removeAttribute('data-theme')
 })
 
-describe('tema', () => {
-  it('"Do sistema" sem matchMedia grava o claro', () => {
+describe('theme', () => {
+  it('"Do sistema" without matchMedia writes light', () => {
     applyThemePreference('system')
     expect(document.documentElement).toHaveAttribute('data-theme', 'light')
   })
 
-  it('"Do sistema" resolve pelo matchMedia e acompanha a mudança', () => {
+  it('"Do sistema" resolves through matchMedia and follows the change', () => {
     const media = fakeMatchMedia(true)
     applyThemePreference('system')
     const stop = watchSystemTheme()
@@ -47,7 +47,7 @@ describe('tema', () => {
     expect(media.listeners.size).toBe(0)
   })
 
-  it('a escolha explícita grava eclume-tema e não segue o sistema', () => {
+  it('the explicit choice writes eclume-tema and does not follow the system', () => {
     const media = fakeMatchMedia(false)
     const stop = watchSystemTheme()
     applyThemePreference('dark')

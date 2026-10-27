@@ -42,8 +42,8 @@ async function ask(text: string) {
   await userEvent.click(screen.getByRole('button', { name: 'Enviar' }))
 }
 
-describe('Agente', () => {
-  it('abre a conversa nova com exemplos e as conversas recentes ao lado', async () => {
+describe('Agent', () => {
+  it('opens the new conversation with examples and the recent conversations beside it', async () => {
     mockAgent()
     renderApp('/agente')
     expect(await screen.findByRole('heading', { level: 1, name: 'Nova conversa' })).toBeInTheDocument()
@@ -56,13 +56,13 @@ describe('Agente', () => {
     expect(within(recent).getByRole('link', { name: 'Todas as conversas' })).toHaveAttribute('href', '/agente/conversas')
   })
 
-  it('a rota antiga /perguntas leva ao Agente', async () => {
+  it('the old /perguntas route leads to the Agent', async () => {
     mockAgent()
     renderApp('/perguntas')
     expect(await screen.findByRole('heading', { level: 1, name: 'Nova conversa' })).toBeInTheDocument()
   })
 
-  it('a primeira pergunta abre a conversa, espera a resposta e mostra o arquivo gerado e as fontes', async () => {
+  it('the first question opens the conversation, waits for the answer and shows the generated file and the sources', async () => {
     const running = { ...fixtures.agentTurn().answer, status: 'running' as const }
     let polls = 0
     const http = mockAgent({
@@ -94,7 +94,7 @@ describe('Agente', () => {
     expect(within(log).getByText('Fez 3 consultas')).toBeInTheDocument()
   })
 
-  it('retoma uma conversa guardada com o histórico e os anexos', async () => {
+  it('resumes a saved conversation with its history and attachments', async () => {
     mockAgent({ 'GET /api/v1/agent/sessions/:id': () => fixtures.agentSessionDetail() })
     renderApp(`/agente/${SESSION}`)
     expect(
@@ -106,7 +106,7 @@ describe('Agente', () => {
     expect(await within(log).findByRole('link', { name: 'prazos.csv' })).toBeInTheDocument()
   })
 
-  it('anexa um arquivo, mostra antes de enviar e o manda junto com a pergunta', async () => {
+  it('attaches a file, shows it before sending and sends it along with the question', async () => {
     const http = mockAgent()
     renderApp(`/agente/${SESSION}`)
     const picker = await screen.findByLabelText('Arquivos para anexar')
@@ -115,7 +115,7 @@ describe('Agente', () => {
     const next = await screen.findByRole('list', { name: 'Anexos da próxima pergunta' })
     expect(within(next).getByRole('link', { name: 'ata-kickoff.pdf' })).toBeInTheDocument()
     const form = http.requests('POST /api/v1/agent/sessions/:id/files')[0]
-    // O FormData relido pelo mock vem de outro realm (o File do Node, não o do jsdom): confere o conteúdo.
+    // The FormData the mock reads back comes from another realm (Node's File, not jsdom's): check the content.
     expect((await form.formData()).get('file')).toMatchObject({ size: 8, type: 'application/pdf' })
 
     await ask('Resuma a ata')
@@ -127,7 +127,7 @@ describe('Agente', () => {
     await waitFor(() => expect(screen.queryByRole('list', { name: 'Anexos da próxima pergunta' })).not.toBeInTheDocument())
   })
 
-  it('tira um anexo antes de enviar', async () => {
+  it('removes an attachment before sending', async () => {
     const http = mockAgent({
       'GET /api/v1/agent/sessions/:id': () => ({ ...emptyDetail(), pending_files: [fixtures.agentFileInput()] }),
     })
@@ -137,7 +137,7 @@ describe('Agente', () => {
     await waitFor(() => expect(screen.queryByRole('list', { name: 'Anexos da próxima pergunta' })).not.toBeInTheDocument())
   })
 
-  it('recusa arquivo grande demais sem enviar', async () => {
+  it('rejects a file that is too large without sending', async () => {
     const http = mockAgent()
     renderApp(`/agente/${SESSION}`)
     const big = new File(['x'], 'enorme.pdf', { type: 'application/pdf' })
@@ -147,13 +147,13 @@ describe('Agente', () => {
     expect(http.requests('POST /api/v1/agent/sessions/:id/files')).toHaveLength(0)
   })
 
-  it('mostra a recusa do tipo de arquivo pelo servidor', async () => {
+  it('shows the server rejecting the file type', async () => {
     mockAgent({
       'POST /api/v1/agent/sessions/:id/files': () =>
         problem('unsupported_media_type', 415, { detail: 'Tipo não aceito. Anexe .txt, .md, .csv, .pdf, .docx.' }),
     })
     renderApp(`/agente/${SESSION}`)
-    // O `accept` do campo filtraria um .png antes do envio: a recusa aqui é a do servidor.
+    // The field's `accept` would filter a .png before sending: the rejection here is the server's.
     await userEvent.upload(
       await screen.findByLabelText('Arquivos para anexar'),
       new File(['x'], 'foto.pdf', { type: 'application/pdf' }),
@@ -161,7 +161,7 @@ describe('Agente', () => {
     expect(await screen.findByRole('alert')).toBeInTheDocument()
   })
 
-  it('explica a falta de modelo e deixa tentar de novo', async () => {
+  it('explains the missing model and allows a retry', async () => {
     const failed = {
       ...fixtures.agentTurn().answer,
       status: 'failed' as const,
@@ -175,7 +175,7 @@ describe('Agente', () => {
     await waitFor(() => expect(http.requests('POST /api/v1/agent/sessions/:id/messages')).toHaveLength(2))
   })
 
-  it('mostra o limite de perguntas em aberto', async () => {
+  it('shows the limit on open questions', async () => {
     mockAgent({
       'POST /api/v1/agent/sessions/:id/messages': () =>
         problem('rate_limited', 429, { detail: 'Já há 2 perguntas em andamento.' }),
@@ -185,13 +185,13 @@ describe('Agente', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/Muitas requisições seguidas/)
   })
 
-  it('avisa quando a conversa não existe mais', async () => {
+  it('warns when the conversation no longer exists', async () => {
     mockAgent({ 'GET /api/v1/agent/sessions/:id': () => problem('not_found', 404) })
     renderApp(`/agente/${SESSION}`)
     expect(await screen.findByText(/Esta conversa não existe mais/)).toBeInTheDocument()
   })
 
-  it('escolhe a habilidade no seletor e mostra o nome dela na pergunta', async () => {
+  it('picks the skill in the selector and shows its name on the question', async () => {
     const skill = {
       id: '01928f3a-1c00-7a00-8000-000000000b01',
       name: 'ata',
@@ -222,7 +222,7 @@ describe('Agente', () => {
     expect(await within(log).findByText('/ata')).toBeInTheDocument()
   })
 
-  it('com /nome digitado, o texto vai como está e o seletor não manda habilidade', async () => {
+  it('with /name typed, the text goes as is and the selector sends no skill', async () => {
     const http = mockAgent()
     renderApp(`/agente/${SESSION}`)
     await ask('/ata do kickoff')
@@ -233,7 +233,7 @@ describe('Agente', () => {
     })
   })
 
-  it('mostra o cartão da ação proposta e confirma', async () => {
+  it('shows the proposed action card and confirms', async () => {
     const proposed = fixtures.agentActionProposed()
     const answer = { ...fixtures.agentMessageDone(), actions: [proposed] }
     const done = {
@@ -265,7 +265,7 @@ describe('Agente', () => {
     expect(within(card).queryByRole('button', { name: 'Confirmar' })).not.toBeInTheDocument()
   })
 
-  it('descarta a proposta sem executar', async () => {
+  it('discards the proposal without running it', async () => {
     const proposed = fixtures.agentActionProposed()
     const answer = { ...fixtures.agentMessageDone(), actions: [proposed] }
     const http = mockAgent({

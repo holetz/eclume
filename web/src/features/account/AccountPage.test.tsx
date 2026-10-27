@@ -19,8 +19,8 @@ const base = {
   'GET /api/v1/me/audio-retention': () => fixtures.audioRetention(),
 }
 
-describe('conta', () => {
-  it('escolhe o idioma da transcrição, com o padrão do servidor nomeado', async () => {
+describe('account', () => {
+  it('chooses the transcription language, with the server default named', async () => {
     const http = mockFetch({
       ...base,
       'PATCH /api/v1/me/transcription': () => ({ language: null, platform_default: 'pt' }),
@@ -36,7 +36,7 @@ describe('conta', () => {
     await waitFor(() => expect(select).toHaveValue(''))
   })
 
-  it('define a retenção do áudio, mostrando o teto e o aviso de irreversibilidade', async () => {
+  it('sets the audio retention, showing the ceiling and the irreversibility warning', async () => {
     const http = mockFetch({
       ...base,
       'GET /api/v1/me/audio-retention': () => ({ days: null, max_days: 90, effective_days: null }),
@@ -59,7 +59,7 @@ describe('conta', () => {
     expect(await http.requests('PATCH /api/v1/me/audio-retention')[0].json()).toEqual({ days: 45 })
   })
 
-  it('desliga a retenção enviando days nulo', async () => {
+  it('turns retention off by sending null days', async () => {
     const http = mockFetch({
       ...base,
       'PATCH /api/v1/me/audio-retention': () => ({ days: null, max_days: 90, effective_days: null }),
@@ -74,7 +74,7 @@ describe('conta', () => {
     expect(await http.requests('PATCH /api/v1/me/audio-retention')[0].json()).toEqual({ days: null })
   })
 
-  it('mostra a conta e troca a senha, conferindo a repetição', async () => {
+  it('shows the account and changes the password, checking the repetition', async () => {
     const http = mockFetch({
       ...base,
       'POST /api/v1/me/password': () => empty(),
@@ -102,7 +102,7 @@ describe('conta', () => {
     expect(within(form).getByLabelText('Senha atual')).toHaveValue('')
   })
 
-  it('troca a senha mantendo aparelhos e tokens quando a caixa é desmarcada', async () => {
+  it('changes the password keeping devices and tokens when the box is unchecked', async () => {
     const http = mockFetch({
       ...base,
       'POST /api/v1/me/password': () => empty(),
@@ -120,7 +120,7 @@ describe('conta', () => {
     expect(await http.requests('POST /api/v1/me/password')[0].json()).toMatchObject({ revoke_tokens: false })
   })
 
-  it('mostra a senha atual errada no campo', async () => {
+  it('shows the wrong current password on the field', async () => {
     mockFetch({
       ...base,
       'POST /api/v1/me/password': () =>
@@ -136,7 +136,7 @@ describe('conta', () => {
     expect(within(form).getByLabelText('Senha atual')).toHaveAccessibleDescription('A senha atual não confere.')
   })
 
-  it('exclui a conta só com a senha e a confirmação marcada, e volta à entrada com o aviso', async () => {
+  it('deletes the account only with the password and the confirmation checked, and returns to the sign-in with the notice', async () => {
     const http = mockFetch({
       ...base,
       'GET /api/v1/me': () => (http.requests('POST /api/v1/me/delete').length ? problem('unauthorized', 401) : fixtures.me()),
@@ -167,7 +167,7 @@ describe('conta', () => {
     expect(http.requests('POST /api/v1/me/delete')).toHaveLength(2)
   })
 
-  it('mostra para onde vai cada dado e quanta voz a conta guarda', async () => {
+  it('shows where each piece of data goes and how much voice the account keeps', async () => {
     mockFetch(base)
     renderApp('/config/conta')
     const section = await screen.findByRole('region', { name: 'Privacidade e dados' })
@@ -182,7 +182,7 @@ describe('conta', () => {
     expect(within(section).getByRole('switch', { name: 'Guardar amostras de voz desta conta' })).toBeChecked()
   })
 
-  it('deixar de guardar amostras pede confirmação antes de apagar', async () => {
+  it('stopping keeping samples asks for confirmation before deleting', async () => {
     const http = mockFetch({
       ...base,
       'PATCH /api/v1/me/voice-assignment': () => ({
@@ -209,7 +209,7 @@ describe('conta', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('sem identificação por voz na plataforma, mostra as contagens sem o interruptor', async () => {
+  it('without voice identification on the platform, shows the counts without the switch', async () => {
     mockFetch({
       ...base,
       'GET /api/v1/me/voice-assignment': () => ({ ...fixtures.voiceAssignment(), platform_enabled: false }),

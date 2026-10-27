@@ -7,8 +7,8 @@ function preloadError() {
   return new Event('vite:preloadError', { cancelable: true })
 }
 
-describe('recarga por chunk', () => {
-  it('recarrega uma vez e deixa o segundo erro seguir para a tela', () => {
+describe('chunk reload', () => {
+  it('reloads once and lets the second error go on to the screen', () => {
     const reload = vi.fn()
     const first = preloadError()
     handlePreloadError(first, 1_000_000, reload)
@@ -21,7 +21,7 @@ describe('recarga por chunk', () => {
     expect(second.defaultPrevented).toBe(false)
   })
 
-  it('volta a recarregar depois da janela de 60 s, para um segundo deploy na mesma aba', () => {
+  it('reloads again after the 60 s window, for a second deploy in the same tab', () => {
     const reload = vi.fn()
     handlePreloadError(preloadError(), 1_000_000, reload)
     handlePreloadError(preloadError(), 1_061_000, reload)

@@ -24,8 +24,8 @@ function mockSessions(extra: Parameters<typeof mockFetch>[0] = {}) {
   })
 }
 
-describe('Conversas', () => {
-  it('lista as conversas com link, data e mais páginas, e está no grupo Agente do menu', async () => {
+describe('Conversations', () => {
+  it('lists the conversations with link, date and more pages, and sits in the Agente menu group', async () => {
     mockSessions()
     renderApp('/agente/conversas')
     expect(await screen.findByRole('heading', { level: 1, name: 'Conversas' })).toBeInTheDocument()
@@ -42,7 +42,7 @@ describe('Conversas', () => {
     expect(within(nav).getByRole('link', { name: 'Agente' })).not.toHaveAttribute('aria-current')
   })
 
-  it('renomeia a conversa', async () => {
+  it('renames the conversation', async () => {
     const http = mockSessions()
     renderApp('/agente/conversas')
     await userEvent.click(await screen.findByRole('button', { name: 'Renomear Prazos do kickoff' }))
@@ -54,7 +54,7 @@ describe('Conversas', () => {
     expect(await http.requests('PATCH /api/v1/agent/sessions/:id')[0].json()).toEqual({ title: 'Prazos de março' })
   })
 
-  it('exclui a conversa depois de confirmar', async () => {
+  it('deletes the conversation after confirming', async () => {
     const http = mockSessions()
     renderApp('/agente/conversas')
     await userEvent.click(await screen.findByRole('button', { name: 'Excluir Prazos do kickoff' }))
@@ -64,7 +64,7 @@ describe('Conversas', () => {
     await waitFor(() => expect(http.requests('DELETE /api/v1/agent/sessions/:id')).toHaveLength(1))
   })
 
-  it('sem conversa, convida a perguntar', async () => {
+  it('with no conversation, invites a question', async () => {
     mockSessions({ 'GET /api/v1/agent/sessions': () => ({ items: [], next_cursor: null }) })
     renderApp('/agente/conversas')
     expect(await screen.findByText(/Nenhuma conversa ainda/)).toBeInTheDocument()

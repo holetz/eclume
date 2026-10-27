@@ -12,8 +12,8 @@ const INVALID = 'Este link venceu ou já foi usado. Peça outro a quem administr
 export const RESET_DONE = 'Senha redefinida. Entre com a nova.'
 
 /**
- * Redefinir a senha (`/redefinir-senha#<segredo>`), pelo link que o admin gerou. O segredo vem no
- * fragmento, que não chega ao servidor nem aos logs: a página o lê ao montar, fora da sessão.
+ * Reset the password (`/redefinir-senha#<secret>`), through the link the admin generated. The secret comes in the
+ * fragment, which reaches neither the server nor the logs: the page reads it on mount, outside the session.
  */
 export function ResetPasswordPage() {
   usePageTitle('Redefinir a senha')
@@ -44,7 +44,7 @@ export function ResetPasswordPage() {
     setSubmitting(true)
     try {
       await unwrap(api.POST('/api/v1/auth/password-reset', { body: { token, new_password: password } }))
-      // As sessões da conta acabaram, inclusive uma aberta neste navegador.
+      // The account's sessions ended, including one open in this browser.
       await refreshSession(queryClient)
       navigate('/entrar', { replace: true, state: { notice: RESET_DONE } })
     } catch (caught) {

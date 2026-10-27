@@ -1,6 +1,6 @@
-// Catálogo da central de ajuda: os artigos Markdown de ./articles, lidos no build. Só a central e o
-// corpo da gaveta importam este módulo, e os dois são chunks sob demanda: os artigos não pesam no
-// bundle inicial.
+// Help center catalog: the Markdown articles in ./articles, read at build time. Only the center and
+// the drawer body import this module, and both are on-demand chunks: the articles add no weight to
+// the initial bundle.
 import { parseFrontmatter, type FrontmatterValue } from './frontmatter'
 import { isHelpPageKey, type HelpPageKey } from './pages'
 import perguntas from './perguntas.md?raw'
@@ -31,10 +31,10 @@ export interface Article {
   related: string[]
   terms: string[]
   order: number
-  /** Data da última revisão, `AAAA-MM-DD`. */
+  /** Date of the last review, `YYYY-MM-DD`. */
   updated: string
   body: string
-  /** O corpo sem a marcação do Markdown, para a busca. */
+  /** The body without Markdown markup, for search. */
   plain: string
   headings: Heading[]
   minutes: number
@@ -45,12 +45,12 @@ interface Question {
   answer: string
 }
 
-/** O `id` de um título `##`: o texto normalizado, com hífens. */
+/** The `id` of a `##` heading: the normalized text, with hyphens. */
 export function headingId(text: string): string {
   return normalize(text).trim().split(/\s+/).join('-')
 }
 
-/** O texto de um trecho Markdown sem a marcação: links viram o rótulo, ênfase e código somem. */
+/** The text of a Markdown snippet without markup: links become their label, emphasis and code go away. */
 function plainText(markdown: string): string {
   return markdown
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
@@ -74,7 +74,7 @@ function list(data: Record<string, FrontmatterValue>, key: string, file: string)
 
 const KNOWN_KEYS = new Set(['titulo', 'topico', 'paginas', 'relacionados', 'termos', 'ordem', 'atualizado'])
 
-/** Lê e valida um artigo; lança com o nome do arquivo no primeiro problema. */
+/** Reads and validates an article; throws with the file name on the first problem. */
 export function parseArticle(file: string, raw: string): Article {
   const slug = file.replace(/^.*\//, '').replace(/\.md$/, '')
   const { data, body } = parseFrontmatter(raw, file)
@@ -115,14 +115,14 @@ export function parseArticle(file: string, raw: string): Article {
 
 const topicRank = (topic: TopicKey) => TOPICS.findIndex((t) => t.key === topic)
 
-/** Os artigos em ordem de tópico e, dentro dele, de `ordem`. */
+/** The articles in topic order and, within a topic, by `ordem`. */
 export function buildCatalog(files: Record<string, string>): Article[] {
   return Object.entries(files)
     .map(([file, raw]) => parseArticle(file, raw))
     .sort((a, b) => topicRank(a.topic) - topicRank(b.topic) || a.order - b.order || a.slug.localeCompare(b.slug))
 }
 
-/** As perguntas frequentes: cada `##` é uma pergunta, e o texto até o próximo é a resposta. */
+/** The frequently asked questions: each `##` is a question, and the text up to the next one is the answer. */
 export function parseQuestions(markdown: string): Question[] {
   return markdown
     .replace(/\r\n?/g, '\n')

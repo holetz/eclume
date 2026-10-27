@@ -34,8 +34,8 @@ function mockAutomation(overrides: Record<string, Parameters<typeof mockFetch>[0
 
 const rows = () => within(screen.getByRole('list', { name: 'Etapas do processamento automático' })).getAllByRole('listitem')
 
-describe('Processamento automático', () => {
-  it('mostra as etapas na ordem do pipeline, com o estado de cada uma', async () => {
+describe('Automatic processing', () => {
+  it('shows the steps in pipeline order, with the state of each', async () => {
     mockAutomation()
     renderApp('/config/automacao')
     expect(await screen.findByRole('heading', { name: 'Processamento automático' })).toBeInTheDocument()
@@ -51,14 +51,14 @@ describe('Processamento automático', () => {
       '8. Resumo',
     ])
     expect(await screen.findByText('3 tipos de agenda')).toBeInTheDocument()
-    // Título e Tags são campos de sistema: contam só os do usuário.
+    // Título and Tags are system fields: only the user's ones count.
     expect(screen.getByText('2 campos preenchidos pelo agente')).toBeInTheDocument()
     expect(screen.getByText('Tags: só as cadastradas (12)')).toBeInTheDocument()
     expect(screen.getByText('1 coleção com regra')).toBeInTheDocument()
     expect(screen.getByText('3 tipos com instruções de resumo')).toBeInTheDocument()
   })
 
-  it('leva a etapa à tela que a configura; a da plataforma não tem link', async () => {
+  it('links each step to the screen that configures it; the platform one has no link', async () => {
     mockAutomation()
     renderApp('/config/automacao')
     await screen.findByText('Voz: liga sozinho a partir de 75%')
@@ -74,7 +74,7 @@ describe('Processamento automático', () => {
     )
   })
 
-  it('diz quando a chave está desligada e mostra o erro da etapa sem derrubar as outras', async () => {
+  it('says when the switch is off and shows the step error without bringing the others down', async () => {
     mockAutomation({
       'GET /api/v1/me/tag-assignment': () => ({ ...TAGS, mode: 'auto' }),
       'GET /api/v1/me/voice-assignment': () => ({ ...fixtures.voiceAssignment(), enabled: false }),
@@ -87,7 +87,7 @@ describe('Processamento automático', () => {
     expect(screen.getByText('3 tipos de agenda')).toBeInTheDocument()
   })
 
-  it('liga a marcação obrigatória dos locutores aqui mesmo e mostra quantas gravações esperam', async () => {
+  it('switches on mandatory speaker labelling right here and shows how many recordings are waiting', async () => {
     const http = mockAutomation({
       'PATCH /api/v1/me/speaker-naming': () => ({ required: true, waiting_count: 0 }),
     })
@@ -101,7 +101,7 @@ describe('Processamento automático', () => {
     expect(await http.requests('PATCH /api/v1/me/speaker-naming')[0].json()).toEqual({ required: true })
   })
 
-  it('com a marcação exigida, conta as gravações que esperam você', async () => {
+  it('with labelling required, counts the recordings waiting for you', async () => {
     mockAutomation({ 'GET /api/v1/me/speaker-naming': () => ({ required: true, waiting_count: 2 }) })
     renderApp('/config/automacao')
     expect(await screen.findByText('Exigida · 2 gravações esperando você')).toBeInTheDocument()

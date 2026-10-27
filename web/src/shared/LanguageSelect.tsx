@@ -3,18 +3,18 @@ import { AUTO_LANGUAGE, languageLabel, whisperLanguages } from '../lib/languages
 
 interface Props {
   id?: string
-  /** Rótulo acessível, quando não há `<label>` (a linha de uma tabela). */
+  /** Accessible label, when there is no `<label>` (a table row). */
   label?: string
   className?: string
-  /** O idioma escolhido; `''` é o padrão, nomeado por `defaultLabel`. */
+  /** The chosen language; `''` is the default, named by `defaultLabel`. */
   value: string
   onChange: (value: string) => void
-  /** O rótulo do padrão ("Padrão da conta: Português"); sem ele, não há a opção do padrão. */
+  /** The default's label ("Padrão da conta: Português"); without it, there is no default option. */
   defaultLabel?: string
   disabled?: boolean
 }
 
-/** O seletor de idioma da transcrição: o padrão nomeado, Detectar automaticamente e os idiomas do Whisper. */
+/** The transcription language picker: the named default, Detectar automaticamente and the Whisper languages. */
 export function LanguageSelect({ id, label, className, value, onChange, defaultLabel, disabled }: Props) {
   const languages = useMemo(() => whisperLanguages(), [])
   const unknown = value !== '' && value !== AUTO_LANGUAGE && !languages.some((option) => option.value === value)

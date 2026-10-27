@@ -7,12 +7,12 @@ interface HelpSearchProps {
   onChange: (value: string) => void
   inputRef?: Ref<HTMLInputElement>
   placeholder?: string
-  /** Mostra o `.kbd` "/" do atalho que põe o foco na busca. */
+  /** Shows the "/" `.kbd` of the shortcut that focuses search. */
   shortcut?: boolean
   className?: string
 }
 
-/** O `.help-search` do Design System: ícone, campo de busca e, opcionalmente, o atalho "/". */
+/** The Design System `.help-search`: icon, search field and, optionally, the "/" shortcut. */
 export function HelpSearch({ value, onChange, inputRef, placeholder, shortcut, className }: HelpSearchProps) {
   return (
     <label className={className ? `help-search ${className}` : 'help-search'}>
@@ -34,7 +34,7 @@ export function HelpSearch({ value, onChange, inputRef, placeholder, shortcut, c
   )
 }
 
-/** O trecho de um resultado da busca, com os termos em `<mark>`. */
+/** The snippet of a search result, with the terms in `<mark>`. */
 export function Snippet({ snippet }: { snippet: NonNullable<SearchHit['snippet']> }) {
   const parts: ReactNode[] = []
   let at = 0

@@ -5,37 +5,37 @@ import { NavigatedPathContext } from './pageFocus'
 import styles from './ShellFrame.module.css'
 
 interface ShellFrameProps {
-  /** A marca: no cabeçalho, ou no topo da barra lateral quando não há cabeçalho. */
+  /** The brand: in the header, or at the top of the sidebar when there is no header. */
   brand: ReactNode
-  /** O resto da barra lateral: navegação e rodapé. */
+  /** The rest of the sidebar: navigation and footer. */
   sidebar: ReactNode
   /**
-   * A conta, à direita de um cabeçalho estreito em qualquer largura (o app do usuário). Sem ela
-   * (o painel admin), a marca fica na barra lateral e o cabeçalho só aparece em tela estreita.
+   * The account, on the right of a narrow header at any width (the user app). Without it
+   * (the admin panel), the brand stays in the sidebar and the header only shows on a narrow screen.
    */
   account?: ReactNode
   children: ReactNode
 }
 
 /**
- * A moldura `.shell` do Design System, comum ao app e ao painel admin: barra lateral fixa e, abaixo
- * de 56rem, o botão Menu no cabeçalho, que abre a barra lateral por cima. A altura do cabeçalho fixo
- * fica em `--shell-header`, para as telas que grudam elementos no topo.
+ * The Design System's `.shell` frame, shared by the app and the admin panel: fixed sidebar and, below
+ * 56rem, the Menu button in the header, which opens the sidebar on top. The fixed header's height
+ * lives in `--shell-header`, for the screens that stick elements to the top.
  */
 export function ShellFrame({ brand, sidebar, account, children }: ShellFrameProps) {
   const { pathname } = useLocation()
-  // A partir da primeira troca de rota, o `PageHead` da página nova leva o foco ao título.
+  // From the first route change on, the new page's `PageHead` moves focus to the title.
   const [firstPath] = useState(pathname)
   const [navigated, setNavigated] = useState(false)
   if (!navigated && pathname !== firstPath) setNavigated(true)
-  // O menu compacto vale para a rota em que foi aberto: navegar o fecha.
+  // The compact menu holds for the route it was opened on: navigating closes it.
   const [menuOpenAt, setMenuOpenAt] = useState<string | null>(null)
   const menuOpen = menuOpenAt === pathname
   const navId = useId()
   const menuButton = useRef<HTMLButtonElement>(null)
   const sidebarRef = useRef<HTMLElement>(null)
 
-  // Aberto, o menu compacto leva o foco ao primeiro link; Esc fecha e devolve o foco ao botão Menu.
+  // Open, the compact menu moves focus to the first link; Esc closes it and returns focus to the Menu button.
   useEffect(() => {
     if (!menuOpen) return
     sidebarRef.current?.querySelector<HTMLElement>('a[href]')?.focus()
@@ -48,7 +48,7 @@ export function ShellFrame({ brand, sidebar, account, children }: ShellFrameProp
     return () => document.removeEventListener('keydown', onKey)
   }, [menuOpen])
 
-  // O link da rota em que já se está não navega: fecha o menu, como os outros fariam.
+  // The link of the route you are already on does not navigate: it closes the menu, as the others would.
   function closeOnCurrentLink(event: MouseEvent<HTMLElement>) {
     const link = (event.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null
     if (menuOpen && link && new URL(link.href).pathname === pathname) setMenuOpenAt(null)

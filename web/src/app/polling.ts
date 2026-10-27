@@ -1,14 +1,14 @@
-// Um ritmo de polling para toda espera de job (biblioteca, gravação, resumo, chats, pré-visualização,
-// código de vínculo): o intervalo inicial nos primeiros 2 min, depois dobrando a cada minuto até 30 s,
-// e nada com a leitura em erro. Voltar para a aba ou a rede voltar recomeça do ritmo inicial; a
-// releitura no foco e o `refetchOnReconnect` retomam a consulta que parou no erro.
+// One polling pace for every job wait (library, recording, summary, chats, preview, link code):
+// the initial interval for the first 2 min, then doubling every minute up to 30 s, and nothing
+// while the read is in error. Returning to the tab or the network coming back restarts from the
+// initial pace; the refetch on focus and `refetchOnReconnect` resume the query that stopped on error.
 import { focusManager, onlineManager } from '@tanstack/react-query'
 
 export const GROW_AFTER_MS = 2 * 60_000
 const STEP_MS = 60_000
 export const MAX_POLL_MS = 30_000
 
-/** O que o helper lê da consulta: a mesma forma do `Query` do React Query. */
+/** What the helper reads from the query: the same shape as React Query's `Query`. */
 interface PolledQuery<T> {
   queryHash: string
   state: { data: T | undefined; status: string }
@@ -23,7 +23,7 @@ function restart() {
 focusManager.subscribe((focused) => focused && restart())
 onlineManager.subscribe((online) => online && restart())
 
-/** O intervalo depois de `elapsed` ms de espera, a partir de `initialMs`. */
+/** The interval after `elapsed` ms of waiting, starting from `initialMs`. */
 export function pollDelay(initialMs: number, elapsed: number): number {
   if (elapsed < GROW_AFTER_MS) return initialMs
   const doublings = 1 + Math.floor((elapsed - GROW_AFTER_MS) / STEP_MS)
@@ -31,8 +31,8 @@ export function pollDelay(initialMs: number, elapsed: number): number {
 }
 
 /**
- * O `refetchInterval` de uma consulta que espera um job: relê enquanto `isWaiting(data)` vale,
- * no ritmo de `pollDelay`, e para com a consulta em `error`.
+ * The `refetchInterval` of a query waiting on a job: re-reads while `isWaiting(data)` holds,
+ * at the `pollDelay` pace, and stops with the query in `error`.
  */
 export function pollWhile<T>(isWaiting: (data: T | undefined) => boolean, initialMs: number) {
   return (query: PolledQuery<T>): number | false => {
@@ -47,7 +47,7 @@ export function pollWhile<T>(isWaiting: (data: T | undefined) => boolean, initia
   }
 }
 
-/** O recuo exponencial: `baseMs` dobrando a cada leitura sem mudança, até `maxMs`. */
+/** The exponential backoff: `baseMs` doubling on each unchanged read, up to `maxMs`. */
 export function backoffDelay(baseMs: number, maxMs: number, unchanged: number): number {
   return Math.min(maxMs, baseMs * 2 ** unchanged)
 }
@@ -58,9 +58,9 @@ interface WatchedQuery<T> {
 }
 
 /**
- * O `refetchInterval` de uma consulta de estado de serviço (Saúde do admin): `baseMs` enquanto a
- * `signature` dos dados muda, dobrando a cada leitura igual até `maxMs`. A `signature` deixa de fora o
- * que oscila sempre (relógio, latência). Voltar para a aba ou a rede voltar recomeça do `baseMs`.
+ * The `refetchInterval` of a service status query (admin Health): `baseMs` while the data's
+ * `signature` changes, doubling on each identical read up to `maxMs`. The `signature` leaves out what
+ * always fluctuates (clock, latency). Returning to the tab or the network coming back restarts from `baseMs`.
  */
 export function backoffWhileUnchanged<T>(baseMs: number, maxMs: number, signature: (data: T) => string) {
   const seen = new Map<string, { at: number; sig: string; unchanged: number }>()
@@ -75,7 +75,7 @@ export function backoffWhileUnchanged<T>(baseMs: number, maxMs: number, signatur
     if (data === undefined) return baseMs
     const known = seen.get(query.queryHash)
     if (known?.at === dataUpdatedAt) {
-      // Mesma leitura (reagendamento sem dado novo): o intervalo não muda.
+      // Same read (rescheduling with no new data): the interval does not change.
       return backoffDelay(baseMs, maxMs, dataUpdatedAt < resetAt ? 0 : known.unchanged)
     }
     const sig = signature(data)

@@ -12,7 +12,7 @@ function clearCookies() {
   }
 }
 
-describe('cliente da API', () => {
+describe('API client', () => {
   beforeEach(() => {
     clearCookies()
     document.cookie = 'eclume_csrf=tok%2B1; path=/'
@@ -22,13 +22,13 @@ describe('cliente da API', () => {
     clearCookies()
   })
 
-  it('lê cookies pelo nome, decodificando o valor', () => {
+  it('reads cookies by name, decoding the value', () => {
     expect(readCookie('eclume_csrf')).toBe('tok+1')
     expect(readCookie('ausente')).toBeNull()
     expect(readCookie('b', 'a=1; b=x=y')).toBe('x=y')
   })
 
-  it('ecoa o CSRF só em método mutável', async () => {
+  it('echoes the CSRF only on a mutating method', async () => {
     const http = mockFetch({
       'GET /api/v1/me': () => me,
       'DELETE /api/v1/tokens/:id': () => empty(),
@@ -41,7 +41,7 @@ describe('cliente da API', () => {
     expect(http.calls[0].credentials).toBe('same-origin')
   })
 
-  it('no painel admin ecoa o CSRF da sessão de admin', async () => {
+  it('echoes the admin session CSRF in the admin panel', async () => {
     document.cookie = 'eclume_admin_csrf=adm; path=/'
     const http = mockFetch({
       'PATCH /api/v1/admin/settings': () => ({}),
@@ -56,7 +56,7 @@ describe('cliente da API', () => {
     expect(isAdminUrl('http://x/api/v1/me')).toBe(false)
   })
 
-  it('o 401 do painel admin não derruba a sessão do usuário', async () => {
+  it('a 401 from the admin panel does not drop the user session', async () => {
     mockFetch({ 'GET /api/v1/admin/me': () => problem('unauthorized', 401) })
     const listener = vi.fn()
     const off = onUnauthorized(listener)
@@ -65,7 +65,7 @@ describe('cliente da API', () => {
     off()
   })
 
-  it('o 401 do painel avisa só a guarda do admin, fora do login do admin', async () => {
+  it('a 401 from the panel notifies only the admin guard, outside the admin login', async () => {
     mockFetch({
       'GET /api/v1/admin/users': () => problem('unauthorized', 401),
       'POST /api/v1/admin/auth/login': () => problem('unauthorized', 401),
@@ -80,7 +80,7 @@ describe('cliente da API', () => {
     off()
   })
 
-  it('avisa o 401 fora do login', async () => {
+  it('notifies the 401 outside the login', async () => {
     mockFetch({
       'GET /api/v1/me': () => problem('unauthorized', 401),
       'POST /api/v1/auth/login': () => problem('unauthorized', 401),
@@ -95,7 +95,7 @@ describe('cliente da API', () => {
     off()
   })
 
-  it('unwrap devolve os dados ou lança ApiError com o code', async () => {
+  it('unwrap returns the data or throws ApiError with the code', async () => {
     mockFetch({
       'GET /api/v1/me': () => json(me),
       'GET /api/v1/recordings/:id': () => problem('not_found', 404),
@@ -112,7 +112,7 @@ describe('cliente da API', () => {
 })
 
 describe('errorMessage', () => {
-  it('traduz por code, detalha validação e cai no detail', () => {
+  it('translates by code, details validation and falls back to the detail', () => {
     expect(errorMessage(new ApiError(403, { type: 'x', title: 't', status: 403, code: 'forbidden' }))).toMatch(
       /permissão/,
     )
@@ -131,7 +131,7 @@ describe('errorMessage', () => {
     expect(errorMessage(new TypeError('Failed to fetch'))).toMatch(/Sem conexão/)
   })
 
-  it('explica a cota estourada pela cota e pelo limite', () => {
+  it('explains the exceeded quota by the quota and the limit', () => {
     const quota = (name: NonNullable<Problem['quota']>, limit: number) =>
       errorMessage(
         new ApiError(403, { type: 'x', title: 't', status: 403, code: 'quota_exceeded', quota: name, limit }),

@@ -11,7 +11,7 @@ import { useAllUsers, useCreatePasswordReset, useSetUserActive } from './queries
 
 type User = Schemas['AdminUser']
 
-/** Contas de usuário da plataforma: quantas gravações cada uma tem, desativar ou reativar e o link de senha. */
+/** Platform user accounts: recordings per account, deactivate or reactivate, password link. */
 export function UsersPage() {
   const users = useAllUsers()
   const setActive = useSetUserActive()
@@ -153,8 +153,8 @@ export function UsersPage() {
 }
 
 /**
- * Gera o link de redefinição de senha depois de confirmar e o mostra uma vez para copiar. Gerar outro
- * vence o anterior; o admin entrega o link por fora, depois de confirmar quem pede.
+ * Generates the password reset link after confirming and shows it once to copy. Generating another
+ * expires the previous one; the admin hands the link over out of band, after confirming who asks.
  */
 function PasswordResetDialog({ user, onClose }: { user: User; onClose: () => void }) {
   const create = useCreatePasswordReset()

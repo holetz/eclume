@@ -50,13 +50,13 @@ const outcome = (rec: Recording) => {
   return ended && [ended.outcome, ended.reason]
 }
 
-describe('desfecho (os mesmos casos de desktop/crates/sync/src/outcome.rs)', () => {
-  it('os quatro desfechos e os que não avisam', () => {
+describe('outcome (the same cases as desktop/crates/sync/src/outcome.rs)', () => {
+  it('the four outcomes and the ones that do not notify', () => {
     expect(outcome(recording('a', 'transcribed', ['done', null, T]))).toEqual(['summary_ready', null])
     expect(outcome(recording('b', 'transcribed', ['failed', null, T]))).toEqual(['summary_failed', null])
     expect(outcome(recording('c', 'transcribed', ['skipped', 'no_provider', T]))).toEqual(['no_summary', 'no_provider'])
     expect(outcome(failedJob('d', 'failed', T))).toEqual(['transcription_failed', null])
-    // Cancelar, apagar o resumo durante a geração e a gravação em curso não avisam.
+    // Cancelling, deleting the summary during generation and a recording in progress do not notify.
     expect(outcome(failedJob('e', 'cancelled', T))).toBeNull()
     expect(outcome(recording('f', 'transcribed', ['skipped', 'summary_deleted', T]))).toBeNull()
     expect(outcome(recording('g', 'transcribed', ['skipped', 'cancelled', T]))).toBeNull()
@@ -64,7 +64,7 @@ describe('desfecho (os mesmos casos de desktop/crates/sync/src/outcome.rs)', () 
     expect(outcome(recording('i', 'processing'))).toBeNull()
   })
 
-  it('a gravação parada à espera dos nomes dos locutores avisa uma vez', () => {
+  it('the recording stopped waiting for the speakers names notifies once', () => {
     const base = recording('j', 'transcribed')
     const waiting: Recording = {
       ...base,
@@ -84,28 +84,28 @@ describe('desfecho (os mesmos casos de desktop/crates/sync/src/outcome.rs)', () 
     const mark = startWatermark(new Date('2026-10-01T11:59:30Z'))
     expect(takeOutcomes(mark, [waiting])).toHaveLength(1)
     expect(takeOutcomes(mark, [waiting])).toEqual([])
-    // Solta (concluída), não é mais desfecho da espera.
+    // Released (completed), it is no longer a waiting outcome.
     expect(outcome({ ...waiting, pipeline: [{ ...waiting.pipeline[0], state: 'done', reason: null }] })).toBeNull()
   })
 
-  it("marca d'água avisa uma vez e nada anterior", () => {
+  it('the watermark notifies once and nothing earlier', () => {
     const mark = startWatermark(new Date(T))
     expect(mark.since).toBe('2026-10-01T11:59:00.000Z')
     const old = recording('velho', 'transcribed', ['done', null, '2026-10-01T11:00:00Z'])
     const fresh = recording('novo', 'transcribed', ['failed', null, '2026-10-01T12:00:05Z'])
     expect(takeOutcomes(mark, [old, fresh]).map((e) => e.recordingId)).toEqual(['novo'])
-    // Reaparecer (título editado) não repete o aviso.
+    // Reappearing (title edited) does not repeat the notice.
     expect(takeOutcomes(mark, [fresh])).toEqual([])
-    // Um desfecho que confirma atrasado, dentro da folga, ainda avisa.
+    // An outcome that confirms late, within the slack, still notifies.
     expect(takeOutcomes(mark, [recording('atrasado', 'transcribed', ['done', null, '2026-10-01T12:00:02Z'])])).toHaveLength(1)
-    // O resumo refeito depois é outro desfecho.
+    // The summary redone later is another outcome.
     expect(takeOutcomes(mark, [recording('novo', 'transcribed', ['done', null, '2026-10-01T12:30:00Z'])])).toHaveLength(1)
     expect(mark.since).toBe('2026-10-01T12:29:00.000Z')
     expect(mark.mark).toBe('2026-10-01T12:29:00.000Z')
     expect(takeOutcomes(mark, [fresh])).toEqual([])
   })
 
-  it('textos dos avisos', () => {
+  it('notice texts', () => {
     const text = (e: Partial<Ended>) => {
       const { title, body } = outcomeText({ recordingId: 'r', title: 'Kickoff', reason: null, at: T, outcome: 'summary_ready', ...e })
       return `${title} · ${body}`
@@ -123,7 +123,7 @@ describe('desfecho (os mesmos casos de desktop/crates/sync/src/outcome.rs)', () 
   })
 })
 
-describe('observador na aba', () => {
+describe('watcher in the tab', () => {
   let hidden = false
   const shown: { title: string; options?: NotificationOptions; onclick: (() => void) | null }[] = []
 
@@ -172,7 +172,7 @@ describe('observador na aba', () => {
     act(() => void document.dispatchEvent(new Event('visibilitychange')))
   }
 
-  it('não lê com a aba oculta; ao reaparecer lê logo e recupera o que terminou, só notificando com o aviso ligado', async () => {
+  it('does not read with the tab hidden; on reappearing reads right away and recovers what finished, notifying only with the notice on', async () => {
     const ready = recording('r1', 'transcribed', ['done', null, '2026-10-01T12:00:10Z'])
     const failed = failedJob('r2', 'failed', '2026-10-01T12:00:20Z')
     const { http } = watch([[ready], [failed]])
@@ -195,7 +195,7 @@ describe('observador na aba', () => {
     expect(shown.map((n) => [n.title, n.options?.tag])).toEqual([['A transcrição falhou', 'r2']])
   })
 
-  it('com a aba visível lê a cada 30 s e volta a ler só depois de reaparecer', async () => {
+  it('with the tab visible reads every 30 s and reads again only after reappearing', async () => {
     const { http } = watch([[], [], []])
     await tick()
     expect(http.calls).toHaveLength(1)
@@ -204,7 +204,7 @@ describe('observador na aba', () => {
     expect(http.calls).toHaveLength(1)
   })
 
-  it('com Web Locks, uma aba por vez: a segunda espera o lock da primeira', async () => {
+  it('with Web Locks, one tab at a time: the second waits for the first one lock', async () => {
     const queue: { name: string; granted: () => Promise<void>; release: () => void; signal?: AbortSignal }[] = []
     const request = vi.fn((name: string, options: { signal?: AbortSignal }, callback: () => Promise<void>) => {
       return new Promise<void>((resolve) => {
@@ -215,10 +215,10 @@ describe('observador na aba', () => {
     const { http } = watch([[], []])
     expect(request).toHaveBeenCalledOnce()
     expect(request.mock.calls[0][0]).toBe('eclume-processing-watch')
-    // Sem o lock concedido, nada é lido.
+    // Without the lock granted, nothing is read.
     await tick()
     expect(http.calls).toHaveLength(0)
-    // Concedido: lê a cada 30 s; ao ocultar, solta o lock.
+    // Granted: reads every 30 s; on hiding, releases the lock.
     const held = queue[0].granted()
     await tick()
     expect(http.calls).toHaveLength(1)
@@ -228,7 +228,7 @@ describe('observador na aba', () => {
     expect(http.calls).toHaveLength(1)
   })
 
-  it('sem permissão do navegador, nada de notificação mesmo ligado', async () => {
+  it('without browser permission, no notification even when on', async () => {
     saveNotifyOutcomes(true)
     ;(Notification as unknown as { permission: string }).permission = 'denied'
     watch([[recording('r1', 'transcribed', ['done', null, '2026-10-01T12:00:10Z'])]])

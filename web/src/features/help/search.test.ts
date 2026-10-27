@@ -25,41 +25,41 @@ const CATALOG = buildCatalog(
 
 const slugs = (query: string) => searchArticles(query, CATALOG).map((hit) => hit.article.slug)
 
-describe('normalização', () => {
-  it('tira acento, pontuação e caixa, sem mudar o tamanho', () => {
+describe('normalization', () => {
+  it('removes accents, punctuation and case, without changing the length', () => {
     expect(normalize('Remoção: já É!')).toBe('remocao  ja e ')
     expect(normalize('Remoção: já É!')).toHaveLength('Remoção: já É!'.length)
     expect(queryTerms('  O token, é?  token ')).toEqual(['token'])
   })
 })
 
-describe('busca na ajuda', () => {
-  it('casa sem acento e por prefixo de palavra', () => {
+describe('help search', () => {
+  it('matches without accents and by word prefix', () => {
     expect(slugs('sugestoes')).toEqual(['sugestoes'])
     expect(slugs('SUGEST')).toEqual(['sugestoes'])
     expect(slugs('biometr')).toEqual(['sugestoes'])
     expect(slugs('ometrico')).toEqual([])
   })
 
-  it('exige todos os termos', () => {
+  it('requires every term', () => {
     expect(slugs('token revogar')).toEqual(['revogar-token'])
     expect(slugs('token girafa')).toEqual([])
   })
 
-  it('pesa título acima de termos, títulos ## e corpo; empate pela ordem do catálogo', () => {
-    // "token" está no título de dois artigos (5 + corpo 1) e só no corpo de um (1).
+  it('weighs title above terms, ## headings and body; ties go by catalog order', () => {
+    // "token" is in the title of two articles (5 + body 1) and only in the body of one (1).
     expect(slugs('token')).toEqual(['criar-token', 'revogar-token', 'sugestoes'])
     const [hit] = searchArticles('lgpd', CATALOG)
     expect(hit.score).toBe(4)
     expect(searchArticles('remocao', CATALOG)[0].score).toBe(3 + 1)
   })
 
-  it('consulta curta ou vazia não busca', () => {
+  it('a short or empty query does not search', () => {
     expect(slugs('')).toEqual([])
     expect(slugs('a')).toEqual([])
   })
 
-  it('devolve o trecho do corpo em volta da ocorrência, com o termo marcado', () => {
+  it('returns the body snippet around the occurrence, with the term marked', () => {
     const [hit] = searchArticles('limiar', CATALOG)
     const { text, marks } = hit.snippet!
     expect(text.length).toBeLessThanOrEqual(162)
@@ -72,11 +72,11 @@ describe('busca na ajuda', () => {
     expect(accent.snippet!.text.slice(...accent.snippet!.marks[0])).toBe('biométrico')
   })
 
-  it('sem ocorrência no corpo, não há trecho', () => {
+  it('with no occurrence in the body, there is no snippet', () => {
     expect(searchArticles('lgpd', CATALOG)[0].snippet).toBeNull()
   })
 
-  it('respeita o limite', () => {
+  it('respects the limit', () => {
     expect(searchArticles('token', CATALOG, 2)).toHaveLength(2)
   })
 })

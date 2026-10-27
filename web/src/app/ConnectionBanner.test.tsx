@@ -19,8 +19,8 @@ function mockShell(me: () => unknown) {
   return mockFetch({ 'GET /api/v1/me': me })
 }
 
-describe('faixa de conexão', () => {
-  it('aparece sem rede e some sozinha quando a rede volta', async () => {
+describe('connection banner', () => {
+  it('appears without network and goes away on its own when the network returns', async () => {
     mockShell(() => fixtures.me())
     renderApp('/ajuda')
     await screen.findByRole('navigation', { name: 'Principal' })
@@ -32,7 +32,7 @@ describe('faixa de conexão', () => {
     expect(screen.queryByText(BANNER)).not.toBeInTheDocument()
   })
 
-  it('aparece quando /me falha sobre a sessão em cache e some quando volta', async () => {
+  it('appears when /me fails over the cached session and goes away when it returns', async () => {
     let down = false
     mockShell(() => (down ? problem('unavailable', 503) : fixtures.me()))
     const { client } = renderApp('/ajuda')
@@ -46,7 +46,7 @@ describe('faixa de conexão', () => {
     await waitFor(() => expect(screen.queryByText(BANNER)).not.toBeInTheDocument())
   })
 
-  it('com o servidor fora, tenta de novo a cada 10 s e dobra até 60 s', async () => {
+  it('with the server down, retries every 10 s and doubles up to 60 s', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       let down = false

@@ -58,8 +58,8 @@ function matroska(iso: string | null): Uint8Array<ArrayBuffer> {
 
 const noTags = async () => null
 
-describe('creation_time do MP4', () => {
-  it('lê o mvhd versão 0 e 1, com o moov no fim e depois de um mdat de 64 bits', async () => {
+describe('MP4 creation_time', () => {
+  it('reads mvhd versions 0 and 1, with the moov at the end and after a 64-bit mdat', async () => {
     const mdat = box('mdat', new Uint8Array(4096), { large: true })
     const late = concat(ftyp, mdat, box('moov', concat(box('trak', new Uint8Array(8)), mvhd('2026-09-19T14:02:00Z'))))
     expect(await readMp4CreationTime(file(late))).toEqual(new Date('2026-09-19T14:02:00Z'))
@@ -67,26 +67,26 @@ describe('creation_time do MP4', () => {
     expect(await readMp4CreationTime(file(v1))).toEqual(new Date('2026-09-24T19:30:00Z'))
   })
 
-  it('não inventa data: zero, arquivo que não é MP4 ou caixa truncada', async () => {
+  it('invents no date: zero, a file that is not MP4 or a truncated box', async () => {
     expect(await readMp4CreationTime(file(concat(ftyp, box('moov', mvhd(null)))))).toBeNull()
-    expect(await readMp4CreationTime(file(new TextEncoder().encode('ID3 não é mp4 de jeito nenhum')))).toBeNull()
+    expect(await readMp4CreationTime(file(new TextEncoder().encode('ID3 is not an mp4 file at all')))).toBeNull()
     expect(await readMp4CreationTime(file(concat(ftyp, box('moov', mvhd('2026-09-19T14:02:00Z'))).slice(0, 30)))).toBeNull()
   })
 })
 
-describe('DateUTC do Matroska', () => {
-  it('lê o DateUTC do Info', async () => {
+describe('Matroska DateUTC', () => {
+  it('reads the Info DateUTC', async () => {
     expect(await readMatroskaDate(file(matroska('2026-09-23T16:00:00Z')))).toEqual(new Date('2026-09-23T16:00:00Z'))
   })
 
-  it('sem o elemento ou sem o EBML, não há data', async () => {
+  it('without the element or without the EBML, there is no date', async () => {
     expect(await readMatroskaDate(file(matroska(null)))).toBeNull()
     expect(await readMatroskaDate(file(concat(ftyp)))).toBeNull()
   })
 })
 
 describe('readRecordedAt', () => {
-  it('prefere os metadados, em UTC', async () => {
+  it('prefers the metadata, in UTC', async () => {
     const mp4 = file(concat(ftyp, box('moov', mvhd('2026-09-19T14:02:00Z'))))
     expect(await readRecordedAt(mp4, { now: NOW, readTags: noTags })).toEqual({
       at: new Date('2026-09-19T14:02:00Z'),
@@ -98,7 +98,7 @@ describe('readRecordedAt', () => {
     expect(mkv).toMatchObject({ at: new Date('2026-09-23T16:00:00Z'), source: 'metadata', detail: 'DateUTC' })
   })
 
-  it('descarta datas zeradas, anteriores a 1990 ou no futuro e cai na data de modificação', async () => {
+  it('discards zeroed dates, dates before 1990 or in the future and falls back to the modification date', async () => {
     const modified = Date.parse('2026-09-20T18:30:00Z')
     for (const iso of ['1970-01-01T00:00:00Z', '1989-12-31T23:00:00Z', '2026-09-29T12:00:00Z']) {
       const result = await readRecordedAt(file(concat(ftyp, box('moov', mvhd(iso))), modified), {
@@ -109,7 +109,7 @@ describe('readRecordedAt', () => {
     }
   })
 
-  it('usa as tags do arquivo: hora local sem fuso, com fuso e só o dia', async () => {
+  it('uses the file tags: local time without a zone, with a zone and day only', async () => {
     const tag = (raw: string, key = 'TDRC') => async (): Promise<DateTag> => ({ key, raw, date: null })
     const empty = file(new Uint8Array(16), new Date(2026, 8, 19, 9, 41).getTime())
 
@@ -122,14 +122,14 @@ describe('readRecordedAt', () => {
     })
     expect(zoned.at).toEqual(new Date('2026-09-18T18:20:00Z'))
 
-    // Só o dia, o mesmo da modificação: a hora vem da modificação.
+    // Day only, the same as the modification: the time comes from the modification.
     const sameDay = await readRecordedAt(empty, { now: NOW, readTags: tag('2026-09-19', 'DATE') })
     expect(sameDay).toEqual({ at: new Date(2026, 8, 19, 9, 41), source: 'metadata', precision: 'day', detail: 'DATE' })
-    // Só o dia, outro dia: meio-dia.
+    // Day only, another day: noon.
     const otherDay = await readRecordedAt(empty, { now: NOW, readTags: tag('2026-09-15', 'ICRD') })
     expect(otherDay).toMatchObject({ at: new Date(2026, 8, 15, 12), precision: 'day' })
 
-    // Sem texto, vale o Date que o demuxer interpretou.
+    // Without text, the Date the demuxer parsed applies.
     const parsed = await readRecordedAt(empty, {
       now: NOW,
       readTags: async () => ({ key: 'date', raw: null, date: new Date('2026-09-10T10:00:00Z') }),
@@ -137,12 +137,12 @@ describe('readRecordedAt', () => {
     expect(parsed).toMatchObject({ at: new Date('2026-09-10T10:00:00Z'), source: 'metadata', precision: 'minute' })
   })
 
-  it('tag ilegível ou leitura que falha vira a data de modificação', async () => {
+  it('an unreadable tag or a failing read becomes the modification date', async () => {
     const modified = new Date(2026, 8, 19, 9, 41)
     const blank = file(new Uint8Array(16), modified.getTime())
     const unreadable = await readRecordedAt(blank, {
       now: NOW,
-      readTags: async () => ({ key: 'TYER', raw: 'ano passado', date: null }),
+      readTags: async () => ({ key: 'TYER', raw: 'last year', date: null }),
     })
     expect(unreadable).toMatchObject({ at: modified, source: 'file_date' })
     const failing = await readRecordedAt(blank, {

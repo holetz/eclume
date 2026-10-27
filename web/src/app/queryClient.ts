@@ -5,7 +5,7 @@ export function createQueryClient(options: { retry?: boolean } = {}) {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        // Erro do cliente (4xx) não melhora com nova tentativa; falha de rede e 5xx, sim.
+        // A client error (4xx) does not improve on retry; a network failure and a 5xx do.
         retry:
           options.retry === false
             ? false

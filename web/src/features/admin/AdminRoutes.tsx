@@ -9,7 +9,7 @@ import { SpeakersPage } from './SpeakersPage'
 import { TranscriptionPage } from './TranscriptionPage'
 import { UsersPage } from './UsersPage'
 
-/** Rotas de /admin/*, dentro da guarda da sessão de admin e da moldura do painel. */
+/** Routes of /admin/*, inside the admin session guard and the panel frame. */
 export function AdminRoutes() {
   return (
     <Routes>
@@ -24,7 +24,7 @@ export function AdminRoutes() {
         <Route path="saude" element={<HealthPage />} />
         <Route path="templates" element={<Navigate to="/admin/tipos-de-agenda" replace />} />
         <Route path="voz" element={<Navigate to="/admin/locutores" replace />} />
-        {/* O token do Hugging Face trava a transcrição; a chave da Anthropic está em Agentes. */}
+        {/* The Hugging Face token gates transcription; the Anthropic key is in Agentes. */}
         <Route path="segredos" element={<Navigate to="/admin/locutores" replace />} />
         <Route path="*" element={<NotFound />} />
       </Route>

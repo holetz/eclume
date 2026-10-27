@@ -1,6 +1,6 @@
-// Preferências do ambiente (tela Ambiente): valem só neste navegador, no localStorage, sem conta nem
-// servidor. O tema tem módulo próprio (theme.ts); densidade e movimento viram atributos no <html>,
-// que o app.css lê, e expediente e abertura da biblioteca são lidos pelas telas que os usam.
+// Environment preferences (Environment screen): they apply only in this browser, in localStorage, with
+// neither account nor server. The theme has its own module (theme.ts); density and motion become
+// attributes on <html>, which app.css reads, and work hours and library opening are read by the screens that use them.
 import { readStored, STORAGE_KEYS, writeStored } from './storage'
 
 export type DensityPreference = 'comfortable' | 'compact'
@@ -12,7 +12,7 @@ export interface WorkHours {
   end: number
 }
 
-/** O expediente padrão: a faixa destacada na semana e a que ela enquadra ao abrir. */
+/** The default work hours: the band highlighted in the week view and the one it frames on opening. */
 export const DEFAULT_WORK_HOURS: WorkHours = { start: 8, end: 18 }
 
 const OPENINGS: readonly LibraryOpening[] = ['ultima', 'semana', 'mes', 'lista']
@@ -25,7 +25,7 @@ export function readMotion(): MotionPreference {
   return readStored(STORAGE_KEYS.motion) === 'reduce' ? 'reduce' : 'system'
 }
 
-/** O aviso do navegador no fim do processamento: ligado só por gesto, e só com a permissão dada. */
+/** The browser notification at the end of processing: enabled only by a gesture, and only with permission granted. */
 export function readNotifyOutcomes(): boolean {
   return readStored(STORAGE_KEYS.notifyOutcomes) === 'on'
 }
@@ -36,19 +36,19 @@ export function saveNotifyOutcomes(on: boolean): void {
 
 export type NotifyPermission = NotificationPermission | 'unsupported'
 
-/** A permissão de notificação deste site; `unsupported` sem a API (navegador antigo, http). */
+/** This site's notification permission; `unsupported` without the API (old browser, http). */
 export function notifyPermission(): NotifyPermission {
   return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
 }
 
-/** O aviso está valendo: ligado aqui e com a permissão dada. */
+/** The notification is in effect: enabled here and with permission granted. */
 export function notifyOutcomesOn(): boolean {
   return readNotifyOutcomes() && notifyPermission() === 'granted'
 }
 
 /**
- * Liga o aviso do navegador: pede a permissão (chamar só num gesto da pessoa, nunca ao carregar) e
- * grava a escolha se ela for dada. Devolve a permissão resultante.
+ * Enables the browser notification: asks for permission (call only on a user gesture, never on load) and
+ * saves the choice if it is granted. Returns the resulting permission.
  */
 export async function enableNotifyOutcomes(): Promise<NotifyPermission> {
   if (notifyPermission() === 'unsupported') return 'unsupported'
@@ -62,7 +62,7 @@ export function readLibraryOpening(): LibraryOpening {
   return OPENINGS.find((opening) => opening === value) ?? 'ultima'
 }
 
-/** O expediente guardado, ou o padrão quando falta ou não faz sentido (fim antes do início). */
+/** The saved work hours, or the default when missing or nonsensical (end before start). */
 export function readWorkHours(): WorkHours {
   const match = /^(\d{1,2})-(\d{1,2})$/.exec(readStored(STORAGE_KEYS.workHours) ?? '')
   if (!match) return DEFAULT_WORK_HOURS
@@ -71,7 +71,7 @@ export function readWorkHours(): WorkHours {
   return start >= 0 && end <= 24 && start < end ? { start, end } : DEFAULT_WORK_HOURS
 }
 
-/** Grava a densidade e a aplica; o padrão apaga a chave. */
+/** Saves the density and applies it; the default removes the key. */
 export function saveDensity(value: DensityPreference): void {
   writeStored(STORAGE_KEYS.density, value === 'comfortable' ? null : value)
   applyEnvironment()
@@ -91,7 +91,7 @@ export function saveWorkHours({ start, end }: WorkHours): void {
   writeStored(STORAGE_KEYS.workHours, isDefault ? null : `${start}-${end}`)
 }
 
-/** O cartão Primeiros passos foi dispensado neste navegador. */
+/** The "Primeiros passos" card was dismissed in this browser. */
 export function readFirstStepsDismissed(): boolean {
   return readStored(STORAGE_KEYS.firstStepsDismissed) === '1'
 }
@@ -100,7 +100,7 @@ export function dismissFirstSteps(): void {
   writeStored(STORAGE_KEYS.firstStepsDismissed, '1')
 }
 
-/** O passo "confira os tipos de agenda": a pessoa abriu Tipos de agenda neste navegador. */
+/** The "confira os tipos de agenda" step: the user opened "Tipos de agenda" in this browser. */
 export function readAgendaTypesSeen(): boolean {
   return readStored(STORAGE_KEYS.agendaTypesSeen) === '1'
 }
@@ -110,8 +110,8 @@ export function markAgendaTypesSeen(): void {
 }
 
 /**
- * Volta densidade, movimento, expediente, abertura da biblioteca, o aviso do navegador e o cartão
- * Primeiros passos ao padrão (o tema é do theme.ts).
+ * Resets density, motion, work hours, library opening, the browser notification and the
+ * "Primeiros passos" card to the default (the theme belongs to theme.ts).
  */
 export function resetEnvironment(): void {
   for (const key of [
@@ -128,7 +128,7 @@ export function resetEnvironment(): void {
   applyEnvironment()
 }
 
-/** Leva densidade e movimento para o <html>: `data-density="compact"` e `data-motion="reduce"`. */
+/** Carries density and motion to <html>: `data-density="compact"` and `data-motion="reduce"`. */
 export function applyEnvironment(): void {
   const root = document.documentElement
   if (readDensity() === 'compact') root.setAttribute('data-density', 'compact')

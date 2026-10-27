@@ -17,8 +17,8 @@ function mockMcpApi(extra: Parameters<typeof mockFetch>[0] = {}) {
   })
 }
 
-describe('conexão MCP', () => {
-  it('mostra o endereço MCP do descritor para copiar e os passos', async () => {
+describe('MCP connection', () => {
+  it('shows the descriptor MCP address to copy and the steps', async () => {
     const writeText = vi.fn(() => Promise.resolve())
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     mockMcpApi()
@@ -32,7 +32,7 @@ describe('conexão MCP', () => {
     expect(writeText).toHaveBeenCalledWith('https://192.168.15.199:8443/mcp')
   })
 
-  it('sugere o token do assistente sem excluir gravações e com 90 dias', async () => {
+  it('suggests the assistant token without deleting recordings and with 90 days', async () => {
     mockMcpApi()
     renderApp('/config/mcp')
     const panel = await screen.findByRole('region', { name: 'Novo token para um assistente' })
@@ -49,7 +49,7 @@ describe('conexão MCP', () => {
     )
   })
 
-  it('cria o token e mostra o segredo e o comando do Claude Code', async () => {
+  it('creates the token and shows the secret and the Claude Code command', async () => {
     const created = fixtures.tokenCreated()
     created.token.name = 'Claude Desktop'
     const http = mockMcpApi({ 'POST /api/v1/tokens': () => json(created, 201) })

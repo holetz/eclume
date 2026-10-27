@@ -14,7 +14,7 @@ const MESSAGES: Record<MediaConvertErrorCode, string> = {
   failed: 'A conversão falhou.',
 }
 
-/** O único tipo de erro que sai da API pública; `code` diz o que aconteceu. */
+/** The only error type that leaves the public API; `code` says what happened. */
 export class MediaConvertError extends Error {
   readonly code: MediaConvertErrorCode
 
@@ -25,7 +25,7 @@ export class MediaConvertError extends Error {
   }
 }
 
-/** Normaliza qualquer falha para `MediaConvertError`; um sinal abortado vence a causa. */
+/** Normalizes any failure to `MediaConvertError`; an aborted signal wins over the cause. */
 export function toMediaConvertError(error: unknown, signal?: AbortSignal): MediaConvertError {
   if (error instanceof MediaConvertError) return error
   if (signal?.aborted) return new MediaConvertError('aborted', undefined, { cause: error })

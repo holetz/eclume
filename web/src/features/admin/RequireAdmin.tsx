@@ -8,20 +8,20 @@ import { AdminShell } from './AdminShell'
 import { ADMIN_LOGIN_PATH, ADMIN_ME_KEY, useAdminMe } from './adminSession'
 
 /**
- * Guarda do painel pela sessão de admin (`GET /admin/me`): sem ela, leva ao login do admin com a
- * rota de volta. Esconder link não é controle de acesso: a fronteira é o cookie de admin no server.
+ * Guards the panel by the admin session (`GET /admin/me`): without it, goes to the admin sign-in
+ * with the return route. Hiding a link is not access control: the admin cookie on the server is.
  */
 export function RequireAdmin() {
   const me = useAdminMe()
   const location = useLocation()
   const queryClient = useQueryClient()
 
-  // Um 401 durante o uso (sessão expirada) zera a sessão local, e a guarda leva ao login.
+  // A 401 while in use (expired session) clears the local session, and the guard sends to sign-in.
   useEffect(() => onAdminUnauthorized(() => queryClient.setQueryData(ADMIN_ME_KEY, null)), [queryClient])
 
   if (me.isPending) return <PageStatus>Carregando…</PageStatus>
-  // Um refetch que falha com a sessão já carregada não derruba o shell: o React Query mantém o
-  // dado, e a falha vira a faixa de conexão. A tela de erro só aparece sem sessão nenhuma em cache.
+  // A refetch failing with the session already loaded keeps the shell up: React Query keeps the
+  // data, and the failure becomes the connection banner. The error screen needs no cached session.
   if (me.isError && !me.data) {
     return (
       <PageStatus>
@@ -33,8 +33,8 @@ export function RequireAdmin() {
     )
   }
   if (!me.data) {
-    const volta = encodeURIComponent(location.pathname + location.search)
-    return <Navigate to={`${ADMIN_LOGIN_PATH}?volta=${volta}`} replace />
+    const returnPath = encodeURIComponent(location.pathname + location.search)
+    return <Navigate to={`${ADMIN_LOGIN_PATH}?volta=${returnPath}`} replace />
   }
   return (
     <AdminShell admin={me.data}>

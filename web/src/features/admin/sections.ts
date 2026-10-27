@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-// Seções do painel, na ordem da barra lateral "Plataforma". Os caminhos são relativos a /admin.
+// Panel sections, in the order of the "Plataforma" sidebar. Paths are relative to /admin.
 interface AdminSection {
   path: string
   label: string
@@ -18,7 +18,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
 
 export const ADMIN_KICKER = 'Painel de administração'
 
-/** Põe o título da aba do painel: "<título> — Admin eclume". */
+/** Sets the panel tab title: "<title> — Admin eclume". */
 export function useAdminTitle(title: string): void {
   useEffect(() => {
     document.title = `${title} — Admin eclume`

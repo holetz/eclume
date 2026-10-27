@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 export interface MenuAction {
   key: string
   label: ReactNode
-  /** Texto curto à direita (`<kbd>`), como o formato de exportação. */
+  /** Short text on the right (`<kbd>`), such as the export format. */
   kbd?: string
   disabled?: boolean
   onSelect: () => void
@@ -12,24 +12,24 @@ export interface MenuAction {
 export type MenuEntry =
   | MenuAction
   | 'separator'
-  /** Rótulo de uma parte do menu: não focável, separa e nomeia os itens que vêm abaixo. */
+  /** Label of a part of the menu: not focusable, it separates and names the items below it. */
   | { heading: string }
 
 interface MenuButtonProps {
-  /** Conteúdo do botão (ícone e rótulo). */
+  /** Button content (icon and label). */
   children: ReactNode
   items: MenuEntry[]
   className?: string
-  /** Rótulo acessível do menu; sem ele, o menu é rotulado pelo botão. */
+  /** Accessible label of the menu; without it, the menu is labelled by the button. */
   label?: string
-  /** Nome do botão quando o conteúdo é só um ícone (vira também a dica do mouse). */
+  /** Button name when the content is only an icon (also becomes the mouse tooltip). */
   buttonLabel?: string
 }
 
 /**
- * Botão que abre um `.menu` do DS, com o teclado do padrão ARIA de menu: setas, Home/End, Enter ou
- * Espaço e Esc; o clique fora fecha. O item focado leva `data-active`. Um `{ heading }` rotula a parte
- * que começa nele, como separador com nome: o teclado passa por cima dele.
+ * Button that opens a DS `.menu`, with the keyboard of the ARIA menu pattern: arrows, Home/End, Enter or
+ * Space and Esc; a click outside closes it. The focused item carries `data-active`. A `{ heading }` labels
+ * the part that starts at it, as a named separator: the keyboard skips over it.
  */
 export function MenuButton({ children, items, className = 'btn btn-secondary', label, buttonLabel }: MenuButtonProps) {
   const [open, setOpen] = useState(false)

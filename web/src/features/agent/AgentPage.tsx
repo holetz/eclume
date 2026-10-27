@@ -48,7 +48,7 @@ function failure(message: AgentMessage): string {
   return message.error?.message ?? 'A resposta falhou.'
 }
 
-/** Um arquivo da conversa: o nome com link para baixar e o tamanho. */
+/** One conversation file: the name with a download link, and the size. */
 function FileChip({ file, onRemove, busy }: { file: AgentFile; onRemove?: () => void; busy?: boolean }) {
   const unreadable = file.direction === 'input' && file.text_chars === 0
   return (
@@ -132,7 +132,7 @@ function Answer({ message, onRetry }: { message: AgentMessage; onRetry: () => vo
   )
 }
 
-/** As conversas recentes, ao lado: a atual acesa, a nova e o atalho para todas. */
+/** The recent conversations, alongside: the current one lit, the new one and the shortcut to all. */
 function RecentSessions({ current }: { current?: string }) {
   const recent = useRecentSessions()
   const items = recent.data?.items ?? []
@@ -162,8 +162,8 @@ function RecentSessions({ current }: { current?: string }) {
 }
 
 /**
- * A tela Agente: uma conversa guardada sobre as gravações e os arquivos anexados, com as conversas
- * recentes ao lado. Sem conversa na rota, a primeira pergunta (ou o primeiro anexo) abre uma.
+ * The Agente screen: a stored conversation about the recordings and attached files, with the recent
+ * conversations alongside. With no conversation in the route, the first question (or attachment) opens one.
  */
 export function AgentPage() {
   useHelpTopic('agente')
@@ -206,12 +206,12 @@ export function AgentPage() {
     if (!question || busy) return
     try {
       const id = await ensureSession()
-      // `/nome` digitado vale mais que o seletor: o servidor lê o prefixo.
+      // A typed `/name` wins over the picker: the server reads the prefix.
       const chosen = question.startsWith('/') ? undefined : skill || undefined
       await ask.mutateAsync({ sessionId: id, message: question, attachments, skill: chosen })
       setText('')
     } catch {
-      // O erro aparece no alerta do compositor.
+      // The error shows in the composer's alert.
     }
   }
 
@@ -241,7 +241,7 @@ export function AgentPage() {
     void submit(text)
   }
 
-  // "Tentar de novo" repete a pergunta que veio antes da resposta, sem reenviar anexos.
+  // "Tentar de novo" repeats the question that came before the answer, without resending attachments.
   const questionBefore = (index: number) => {
     const previous = messages[index - 1]
     return previous?.role === 'user' ? previous.content : ''
