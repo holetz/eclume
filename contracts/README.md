@@ -73,7 +73,7 @@ or `failed`. Resuming: `GET /api/v1/uploads/{id}` and `POST /api/v1/uploads/{id}
 ### The mapping to lumea's `transcricao.md`
 
 The v1 JSON generates the frontmatter of `transcricao.md` (`lumea/assets/meet/transcribe/store.py`,
-`models.py`) without loss. The test `test_json_v1_gera_o_frontmatter_do_lumea_sem_perda` proves
+`models.py`) without loss. The test `test_v1_json_produces_the_lumea_frontmatter_without_loss` proves
 the mapping with the 3-speaker fixture.
 
 | `transcricao.md` | v1 JSON |
