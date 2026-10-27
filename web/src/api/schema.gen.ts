@@ -2622,7 +2622,7 @@ export interface components {
             email: string;
             password: string;
         };
-        /** @description Notice the account accepts at creation ("I am responsible for asking the people I record for their consent"). */
+        /** @description Notice the account accepts at creation ("Sou responsável por pedir o consentimento das pessoas que gravo"). */
         Notice: {
             version: string;
             text: string;

@@ -5477,7 +5477,7 @@ components:
           writeOnly: true
 
     Notice:
-      description: Notice the account accepts at creation ("I am responsible for asking the people I record for their consent").
+      description: Notice the account accepts at creation ("Sou responsável por pedir o consentimento das pessoas que gravo").
       type: object
       required: [version, text]
       properties:
