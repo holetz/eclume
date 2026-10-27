@@ -1,4 +1,4 @@
-"""Tipos de agenda: os do usuário (`/agenda-types`), o tipo da gravação e os padrão do admin."""
+"""Agenda types: the user's (`/agenda-types`), the recording's type and the admin's defaults."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 URL = "/api/v1/agenda-types"
-# O tipo padrão (de reserva) vem primeiro; depois, os tipos padrão do admin.
+# The (fallback) default type comes first; then the admin's default types.
 DEFAULT_TYPES = ["Geral", "Reunião de equipe", "1:1", "Conversa com cliente", "Nota de voz"]
 DRAFT = {
     "name": "Mentoria",
@@ -40,7 +40,7 @@ def _names(api: Api) -> list[str]:
     return [item["name"] for item in response.json()["items"]]
 
 
-def test_a_conta_lista_os_tipos_padrao_na_ordem(user: Api):
+def test_account_lists_the_default_types_in_order(user: Api):
     assert _names(user) == DEFAULT_TYPES
     first = user.get(URL, params={"limit": 3}).json()
     assert [item["name"] for item in first["items"]] == DEFAULT_TYPES[:3]
@@ -49,28 +49,34 @@ def test_a_conta_lista_os_tipos_padrao_na_ordem(user: Api):
     assert user.get(URL, params={"cursor": "lixo"}).status_code == 422
 
 
-def test_o_tipo_padrao_nao_sai_e_leva_a_regra_do_titulo(user: Api):
+def test_fallback_type_is_not_removed_and_carries_the_title_rule(user: Api):
     items = user.get(URL).json()["items"]
     fallback = [item for item in items if item["fallback"]]
     assert [item["name"] for item in fallback] == ["Geral"]
-    geral = fallback[0]
-    assert (geral["title_pattern"], geral["identify"], geral["position"]) == ("{assunto}", "", 0)
-    assert geral["title_instructions"].startswith("Um título curto")
+    fallback_type = fallback[0]
+    assert (fallback_type["title_pattern"], fallback_type["identify"], fallback_type["position"]) == (
+        "{assunto}",
+        "",
+        0,
+    )
+    assert fallback_type["title_instructions"].startswith("Um título curto")
     assert all(item["title_instructions"] == "" for item in items if not item["fallback"])
 
-    refused = user.delete(f"{URL}/{geral['id']}")
+    refused = user.delete(f"{URL}/{fallback_type['id']}")
     assert (refused.status_code, refused.json()["code"]) == (409, "fallback_agenda_type")
-    renamed = user.patch(f"{URL}/{geral['id']}", json={"name": "Outros assuntos", "title_instructions": "Curto."})
+    renamed = user.patch(
+        f"{URL}/{fallback_type['id']}", json={"name": "Outros assuntos", "title_instructions": "Curto."}
+    )
     assert renamed.status_code == 200, renamed.text
     assert (renamed.json()["name"], renamed.json()["fallback"], renamed.json()["title_instructions"]) == (
         "Outros assuntos",
         True,
         "Curto.",
     )
-    assert user.patch(f"{URL}/{geral['id']}", json={"title_instructions": None}).status_code == 422
+    assert user.patch(f"{URL}/{fallback_type['id']}", json={"title_instructions": None}).status_code == 422
 
 
-def test_criar_editar_e_excluir_um_tipo(user: Api):
+def test_create_edit_and_delete_a_type(user: Api):
     created = user.post(URL, json=DRAFT)
     assert created.status_code == 201, created.text
     body = created.json()
@@ -99,14 +105,14 @@ def test_criar_editar_e_excluir_um_tipo(user: Api):
     assert user.delete(f"{URL}/{first['id']}").status_code == 404
 
 
-def test_textos_do_tipo_tem_teto(user: Api):
+def test_type_texts_have_a_cap(user: Api):
     for field in ("identify", "summary_instructions"):
         assert user.post(URL, json={**DRAFT, field: "x" * 4001}).status_code == 422, field
     body = user.post(URL, json={**DRAFT, "identify": "x" * 4000}).json()
     assert user.patch(f"{URL}/{body['id']}", json={"summary_instructions": "x" * 4001}).status_code == 422
 
 
-def test_tipo_de_outra_conta_nao_existe(
+def test_another_accounts_type_does_not_exist(
     user: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     mine = user.post(URL, json=DRAFT).json()
@@ -115,19 +121,19 @@ def test_tipo_de_outra_conta_nao_existe(
     assert other.get(f"{URL}/{mine['id']}").status_code == 404
     assert other.patch(f"{URL}/{mine['id']}", json={"name": "x"}).status_code == 404
     assert other.delete(f"{URL}/{mine['id']}").status_code == 404
-    # O mesmo nome em outra conta não conflita.
+    # The same name in another account does not conflict.
     assert other.post(URL, json=DRAFT).status_code == 201
 
 
-def test_escopos_do_pat(user: Api):
+def test_pat_scopes(user: Api):
     reader = user.pat("summaries:read")
     assert reader.get(URL).status_code == 200
     assert reader.post(URL, json=DRAFT).json()["code"] == "insufficient_scope"
     assert user.pat("summaries:read", "summaries:write").post(URL, json=DRAFT).status_code == 201
 
 
-def test_a_lista_aceita_recordings_read(user: Api):
-    # A credencial de dispositivo (só `recordings:*`) lê a lista para a folha "Gravação salva".
+def test_list_accepts_recordings_read(user: Api):
+    # The device credential (only `recordings:*`) reads the list for the "Gravação salva" sheet.
     device = user.pat("recordings:read", "recordings:write")
     assert _names(device) == DEFAULT_TYPES
     one = device.get(URL).json()["items"][0]
@@ -142,7 +148,7 @@ def _recording(api: Api) -> dict[str, Any]:
     return upload_file(api, audio_bytes(1500), title="Reunião de segunda")
 
 
-def test_o_usuario_escolhe_o_tipo_da_gravacao(
+def test_user_chooses_the_recording_type(
     user: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     recording = _recording(user)
@@ -162,20 +168,20 @@ def test_o_usuario_escolhe_o_tipo_da_gravacao(
     cleared = user.patch(url, json={"agenda_type_id": None})
     assert cleared.json()["agenda_type"] is None
 
-    # Excluir o tipo passa a gravação para o tipo padrão.
+    # Deleting the type moves the recording to the fallback type.
     user.patch(url, json={"agenda_type_id": types["Nota de voz"]["id"]})
     assert user.delete(f"{URL}/{types['Nota de voz']['id']}").status_code == 204
     assert user.get(url).json()["agenda_type"] == {"id": types["Geral"]["id"], "name": "Geral", "origin": "auto"}
 
 
-# --- tipos padrão do admin ------------------------------------------------------------------------
+# --- admin default types -------------------------------------------------------------------------
 
 ADMIN_URL = "/api/v1/admin/default-agenda-types"
 
 
 @pytest.fixture
 def defaults(services: Services) -> Iterator[None]:
-    """Tipos padrão como a migration os deixou, antes e depois: a plataforma é uma só na sessão."""
+    """Default types as the migration left them, before and after: the platform is one per session."""
 
     async def snapshot(conn: Any) -> list[dict[str, Any]]:  # noqa: ANN401
         return [dict(row) for row in (await conn.execute(select(t.default_agenda_types))).mappings()]
@@ -190,17 +196,17 @@ def defaults(services: Services) -> Iterator[None]:
     run(services.sql(restore))
 
 
-def test_so_a_sessao_de_admin_mantem_os_tipos_padrao(user: Api):
+def test_only_the_admin_session_maintains_default_types(user: Api):
     assert user.get(ADMIN_URL).status_code == 401
     assert user.post(ADMIN_URL, json=DRAFT).status_code == 401
 
 
-def test_tipos_padrao_valem_para_contas_novas(
+def test_default_types_apply_to_new_accounts(
     admin: Api, defaults: None, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     del defaults
     listed = admin.get(ADMIN_URL).json()["items"]
-    # O tipo padrão de reserva é de cada conta; o admin gere só os que distribui.
+    # The fallback default type belongs to each account; the admin manages only the ones it distributes.
     assert [item["name"] for item in listed] == DEFAULT_TYPES[1:]
     assert all("fallback" not in item for item in listed)
     assert all(item["include_for_new_users"] for item in listed)
@@ -223,7 +229,7 @@ def test_tipos_padrao_valem_para_contas_novas(
     assert _names(after) == [*DEFAULT_TYPES[:4], "Mentoria"]
     (copied,) = [item for item in after.get(URL).json()["items"] if item["name"] == "Reunião de equipe"]
     assert copied["identify"] == "Reunião interna."
-    # Quem já tinha conta fica com as cópias dela.
+    # Whoever already had an account keeps its own copies.
     assert _names(before) == DEFAULT_TYPES
 
     assert admin.delete(f"{ADMIN_URL}/{created.json()['id']}").status_code == 204

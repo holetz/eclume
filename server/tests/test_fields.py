@@ -1,4 +1,4 @@
-"""Campos do usuário (`/fields`): embutidos, CRUD, chave, validação por tipo e isolamento."""
+"""User fields (`/fields`): built-ins, CRUD, key, validation by kind and isolation."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def _fields(api: Api) -> dict[str, dict]:
     return {item["key"]: item for item in response.json()["items"]}
 
 
-def test_a_conta_nasce_com_titulo_e_tags(user: Api):
+def test_account_starts_with_title_and_tags(user: Api):
     fields = _fields(user)
     assert list(fields) == ["titulo", "tags"]
     title, tags = fields["titulo"], fields["tags"]
@@ -49,7 +49,7 @@ def test_a_conta_nasce_com_titulo_e_tags(user: Api):
     assert "Prefira as tags que você já usa" in tags["instructions"]
 
 
-def test_criar_editar_e_excluir_um_campo(user: Api):
+def test_create_edit_and_delete_a_field(user: Api):
     created = user.post(URL, json=CLIENT)
     assert created.status_code == 201, created.text
     field = created.json()
@@ -59,7 +59,7 @@ def test_criar_editar_e_excluir_um_campo(user: Api):
         None,
         3,
     )
-    # A chave não repete, não encobre os marcadores do título e tira os acentos.
+    # The key does not repeat, does not shadow the title placeholders and strips accents.
     assert user.post(URL, json=CLIENT).json()["key"] == "cliente_2"
     assert user.post(URL, json={"name": "Data", "kind": "text"}).json()["key"] == "data_2"
     assert user.post(URL, json={"name": "Próxima ação!", "kind": "list"}).json()["key"] == "proxima_acao"
@@ -85,7 +85,7 @@ def test_criar_editar_e_excluir_um_campo(user: Api):
     assert user.get(f"{URL}/{field['id']}").status_code == 404
 
 
-def test_embutidos_nao_saem_nem_mudam_de_tipo(user: Api):
+def test_builtins_are_not_removed_nor_change_kind(user: Api):
     fields = _fields(user)
     title = fields["titulo"]
     refused = user.delete(f"{URL}/{title['id']}")
@@ -95,7 +95,7 @@ def test_embutidos_nao_saem_nem_mudam_de_tipo(user: Api):
     assert rule.json()["instructions"] == "Até 5 palavras."
 
 
-def test_campo_de_outra_conta_nao_existe(
+def test_another_accounts_field_does_not_exist(
     user: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     mine = user.post(URL, json=CLIENT).json()
@@ -104,11 +104,11 @@ def test_campo_de_outra_conta_nao_existe(
     assert other.get(f"{URL}/{mine['id']}").status_code == 404
     assert other.patch(f"{URL}/{mine['id']}", json={"name": "x"}).status_code == 404
     assert other.delete(f"{URL}/{mine['id']}").status_code == 404
-    # A mesma chave em outra conta é outra chave.
+    # The same key in another account is another key.
     assert other.post(URL, json=CLIENT).json()["key"] == "cliente"
 
 
-def test_escopos_e_paginacao(user: Api):
+def test_scopes_and_pagination(user: Api):
     reader = user.pat("recordings:read")
     assert reader.get(URL).status_code == 200
     assert reader.post(URL, json=CLIENT).json()["code"] == "insufficient_scope"
@@ -117,7 +117,7 @@ def test_escopos_e_paginacao(user: Api):
     assert [item["key"] for item in first["items"] + rest["items"]] == ["titulo", "tags"]
 
 
-# --- valores por gravação ------------------------------------------------------------------------
+# --- values per recording -----------------------------------------------------------------------
 
 
 def _values(api: Api, recording_id: str) -> dict[str, dict[str, Any]]:
@@ -127,7 +127,7 @@ def _values(api: Api, recording_id: str) -> dict[str, dict[str, Any]]:
 
 
 def _auto(services: Services, recording_id: str, field_id: str, value: Any) -> None:  # noqa: ANN401
-    """Valor automático, como o `fill_fields` grava (papel de conexão)."""
+    """An automatic value, as `fill_fields` writes it (connection role)."""
 
     async def go(conn: Any) -> None:  # noqa: ANN401
         field = (await conn.execute(select(t.fields).where(t.fields.c.id == field_id))).mappings().one()
@@ -136,14 +136,14 @@ def _auto(services: Services, recording_id: str, field_id: str, value: Any) -> N
     run(services.sql(go))
 
 
-def test_valores_com_origem_editar_e_aceitar(user: Api, services: Services):
+def test_values_with_origin_edit_and_accept(user: Api, services: Services):
     client = user.post(URL, json=CLIENT).json()
     notes = user.post(URL, json={"name": "Pendências", "kind": "list"}).json()
     recording = upload_file(user, audio_bytes(1200))
     rid = recording["id"]
     values = _values(user, rid)
     assert list(values) == ["titulo", "tags", "cliente", "pendencias"]
-    # Sem título no upload, o nome do arquivo não tem origem: o automático pode trocá-lo.
+    # With no title on upload, the file name has no origin: the automatic value may replace it.
     assert (values["titulo"]["value"], values["titulo"]["origin"]) == ("reuniao", None)
     assert (values["cliente"]["value"], values["cliente"]["origin"], values["cliente"]["updated_at"]) == (None,) * 3
 
@@ -185,7 +185,7 @@ def test_valores_com_origem_editar_e_aceitar(user: Api, services: Services):
     assert (cleared[2]["value"], cleared[2]["origin"]) == (None, "edited")
 
 
-def test_titulo_e_tags_do_usuario_viram_edited(user: Api):
+def test_user_title_and_tags_become_edited(user: Api):
     recording = upload_file(user, audio_bytes(1300), title="Kickoff", tags=["cliente"])
     values = _values(user, recording["id"])
     assert (values["titulo"]["value"], values["titulo"]["origin"]) == ("Kickoff", "edited")
@@ -204,24 +204,24 @@ def test_titulo_e_tags_do_usuario_viram_edited(user: Api):
     put = user.put(f"/api/v1/recordings/{plain['id']}/fields/{tags_id}", json={"value": ["a", "b"]})
     assert put.status_code == 200
     assert user.get(f"/api/v1/recordings/{plain['id']}").json()["tags"] == ["a", "b"]
-    # A tag tem o teto das tags padrão de um tipo.
+    # A tag has the cap of an agenda type's default tags.
     too_long = user.put(f"/api/v1/recordings/{plain['id']}/fields/{tags_id}", json={"value": ["t" * 65]})
     assert too_long.status_code == 422
 
 
-def test_regra_do_campo_tem_teto(user: Api):
+def test_field_instructions_have_a_cap(user: Api):
     assert user.post(URL, json={**CLIENT, "instructions": "x" * 4001}).status_code == 422
     field = user.post(URL, json={**CLIENT, "instructions": "x" * 4000}).json()
     assert user.patch(f"{URL}/{field['id']}", json={"instructions": "x" * 4001}).status_code == 422
 
 
-def test_automatico_nao_sobrescreve_o_que_o_usuario_escreveu(user: Api, services: Services):
+def test_automatic_does_not_overwrite_what_the_user_wrote(user: Api, services: Services):
     notes = user.post(URL, json={"name": "Pendências", "kind": "list"}).json()
     recording = upload_file(user, audio_bytes(1500), title="Kickoff")
     rid = recording["id"]
     user.put(f"/api/v1/recordings/{rid}/fields/{notes['id']}", json={"value": ["ligar"]})
     title_id = _values(user, rid)["titulo"]["field"]["id"]
-    # Como o `fill_fields` que chega depois da edição: a gravação do valor não passa por cima.
+    # Like a `fill_fields` arriving after the edit: writing the value does not override it.
     _auto(services, rid, title_id, "Outro título")
     _auto(services, rid, notes["id"], ["automático"])
     values = _values(user, rid)
@@ -230,7 +230,7 @@ def test_automatico_nao_sobrescreve_o_que_o_usuario_escreveu(user: Api, services
     assert user.get(f"/api/v1/recordings/{rid}").json()["title"] == "Kickoff"
 
 
-def test_valores_de_outra_conta_nao_existem(
+def test_another_accounts_values_do_not_exist(
     user: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     recording = upload_file(user, audio_bytes(1100))
@@ -241,6 +241,6 @@ def test_valores_de_outra_conta_nao_existem(
     assert other.post(f"{base}/accept").status_code == 404
     assert other.put(f"{base}/{field['id']}", json={"value": "Serra Azul"}).status_code == 404
     own = upload_file(other, audio_bytes(1000))
-    # O campo de outra conta não existe para esta, nem numa gravação dela.
+    # Another account's field does not exist for this one, not even on one of its recordings.
     assert other.put(f"/api/v1/recordings/{own['id']}/fields/{field['id']}", json={"value": "x"}).status_code == 404
     assert user.pat("recordings:read").post(f"{base}/accept").json()["code"] == "insufficient_scope"
