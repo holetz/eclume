@@ -1,4 +1,4 @@
-/* A busca no frame "Search": barra de termos, fichas de filtro e os trechos agrupados por gravação. */
+/* Search in the "Search" frame: terms bar, filter chips and the excerpts grouped by recording. */
 :where(.page) p {
   margin: 0;
 }
@@ -35,7 +35,7 @@
   font-family: inherit;
 }
 
-/* O popover da ficha, no estilo do .menu do DS. */
+/* The chip popover, in the style of the DS .menu. */
 .popover {
   position: absolute;
   top: calc(100% + 4px);

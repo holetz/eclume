@@ -29,8 +29,8 @@ interface FilterProps {
 }
 
 /**
- * Marca ou desmarca num grupo em que "nada na URL" é "tudo marcado" (tipo e situação): tudo marcado
- * volta a não mandar o parâmetro, e o último marcado não sai.
+ * Checks or unchecks in a group where "nothing in the URL" is "everything checked" (kind and status): everything checked
+ * goes back to not sending the parameter, and the last checked one does not leave.
  */
 function toggleAll<T extends string>(selected: T[], all: T[], value: T): T[] {
   const current = selected.length === 0 ? all : selected
@@ -39,7 +39,7 @@ function toggleAll<T extends string>(selected: T[], all: T[], value: T): T[] {
   return next.length === all.length ? [] : all.filter((item) => next.includes(item))
 }
 
-/** Marca ou desmarca num grupo em que nada marcado é "qualquer um" (tags, coleções, opções). */
+/** Checks or unchecks in a group where nothing checked is "any" (tags, collections, options). */
 function toggle(selected: string[], value: string): string[] {
   return selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]
 }
@@ -106,8 +106,8 @@ function FieldFilter({ field, filters, onChange }: FilterProps & { field: Field 
 type ParticipantKey = 'personCompany' | 'personDepartment' | 'personTag'
 
 /**
- * Participantes: empresa, área e tag de pessoa de quem falou na gravação, com os valores em uso
- * no diretório. Combinados, valem para uma mesma pessoa.
+ * Participants: company, department and person tag of whoever spoke in the recording, with the values in use
+ * in the directory. Combined, they apply to one same person.
  */
 function ParticipantFilter({ filters, onChange }: FilterProps) {
   const facets = usePersonFacets()
@@ -122,7 +122,7 @@ function ParticipantFilter({ filters, onChange }: FilterProps) {
     <Group title="Participantes">
       <p className={`field-hint ${styles.participantHint}`}>Alguém que falou na gravação e tem tudo o que você marcar.</p>
       {visible.map(({ key, title, values }) => {
-        // Um valor marcado que saiu do diretório continua na lista, para poder desmarcar.
+        // A checked value that left the directory stays in the list, so it can be unchecked.
         const all = [...values, ...filters[key].filter((value) => !values.includes(value))]
         return (
           <div key={key} className={styles.participantSection} role="group" aria-label={title}>
@@ -142,7 +142,7 @@ function ParticipantFilter({ filters, onChange }: FilterProps) {
   )
 }
 
-/** Os grupos de filtro da biblioteca: no painel à direita ou, em tela estreita, num diálogo. */
+/** The library filter groups: in the right-hand panel or, on a narrow screen, in a dialog. */
 export function FilterGroups({ filters, onChange }: FilterProps) {
   const tags = useTags()
   const collections = useCollections()
@@ -152,7 +152,7 @@ export function FilterGroups({ filters, onChange }: FilterProps) {
   const statuses = Object.keys(STATUS_GROUPS) as StatusParam[]
   const personName = (id: string) => people.data?.items.find((person) => person.id === id)?.name ?? 'Pessoa'
   const own = (fields.data?.items ?? []).filter((field) => field.builtin === null)
-  // Depois de escolher, o combobox volta vazio (é remontado) para a próxima pessoa.
+  // After choosing, the combobox comes back empty (it is remounted) for the next person.
   const [personPick, setPersonPick] = useState(0)
 
   return (
@@ -270,7 +270,7 @@ interface LibraryFiltersProps extends FilterProps {
   onClear: () => void
 }
 
-/** O painel `.filters` à direita, recolhível até a faixa de 48px do DS. */
+/** The `.filters` panel on the right, collapsible down to the DS 48px strip. */
 export function LibraryFilters({ id, collapsed, onToggle, onClear, filters, onChange }: LibraryFiltersProps) {
   const count = activeFilterCount(filters)
   return (
@@ -290,7 +290,7 @@ export function LibraryFilters({ id, collapsed, onToggle, onClear, filters, onCh
           <PanelRight size={16} aria-hidden />
         </button>
       </div>
-      {/* Recolhido, o CSS do DS esconde tudo menos o botão; o conteúdo fica montado. */}
+      {/* Collapsed, the DS CSS hides everything but the button; the content stays mounted. */}
       <div id={`${id}-grupos`} className={styles.groups}>
         {count > 0 && (
           <button type="button" className={`btn btn-ghost btn-sm ${styles.clear}`} onClick={onClear}>

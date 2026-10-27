@@ -12,7 +12,7 @@ import { fraseDaEspera } from '../../lib/vocabulario.js'
 
 type Recording = Schemas['Recording']
 
-/** "Cancelar transcrição", com confirmação: a GPU para e a gravação fica sem texto. */
+/** "Cancelar transcrição", with confirmation: the GPU stops and the recording is left without text. */
 function CancelTranscription({ recording }: { recording: Recording }) {
   const cancel = useCancelTranscription(recording.id)
   const [confirming, setConfirming] = useState(false)
@@ -42,8 +42,8 @@ function CancelTranscription({ recording }: { recording: Recording }) {
 }
 
 /**
- * Na fila, por que a gravação espera (`job.queue`); andando, o progresso do worker: etapa e %, no
- * `.progress-row` do DS.
+ * In the queue, why the recording waits (`job.queue`); running, the worker's progress: step and %, in
+ * the DS `.progress-row`.
  */
 function TranscriptionProgress({ recording }: { recording: Recording }) {
   const job = recording.job
@@ -73,9 +73,9 @@ function TranscriptionProgress({ recording }: { recording: Recording }) {
 }
 
 /**
- * O `ol.pipeline` com as sete etapas, cada uma com o estado em palavra; embaixo, o motivo de cada
- * etapa pulada, em espera ou que falhou em texto visível, o aviso da espera pelos locutores, o
- * progresso da transcrição ou a falha com o retentar.
+ * The `ol.pipeline` with the seven steps, each with its state in words; below, the reason for each
+ * step skipped, waiting or failed in visible text, the notice of the wait for the speakers, the
+ * transcription progress or the failure with the retry.
  */
 export function Pipeline({ recording }: { recording: Recording }) {
   const notes = recording.pipeline

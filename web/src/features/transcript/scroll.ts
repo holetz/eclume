@@ -1,23 +1,23 @@
-/** Uma faixa vertical na tela: o topo e a altura, como em `getBoundingClientRect()`. */
+/** A vertical band on screen: the top and the height, as in `getBoundingClientRect()`. */
 export interface Band {
   top: number
   height: number
 }
 
-/** A folga entre a fala e a borda do contêiner quando a rolagem a traz para dentro. */
+/** The gap between the segment and the container's edge when scrolling brings it inside. */
 export const SCROLL_GAP = 16
 
 /**
- * O `scrollTop` que põe o item à vista dentro do contêiner que rola, sem rolar a página.
- * `nearest` só rola quando o item está fora (devolve `null` se já está inteiro à vista) e o encosta na
- * borda mais próxima, com a folga; `center` sempre centra o item. Nunca devolve valor negativo.
+ * The `scrollTop` that brings the item into view inside the scrolling container, without scrolling the page.
+ * `nearest` only scrolls when the item is outside (returns `null` if it is already fully in view) and rests it against the
+ * nearest edge, with the gap; `center` always centers the item. Never returns a negative value.
  */
 export function scrollTopFor(
   view: Band & { scrollTop: number },
   item: Band,
   block: 'nearest' | 'center',
 ): number | null {
-  // Onde o item começa no conteúdo do contêiner, independente da rolagem atual.
+  // Where the item starts in the container's content, regardless of the current scroll.
   const offset = item.top - view.top + view.scrollTop
   if (block === 'center') return Math.max(0, Math.round(offset - (view.height - item.height) / 2))
   if (item.top < view.top) return Math.max(0, Math.round(offset - SCROLL_GAP))
@@ -27,7 +27,7 @@ export function scrollTopFor(
   return null
 }
 
-/** Rola o contêiner até o item, só por dentro dele: a janela e os outros ancestrais ficam onde estão. */
+/** Scrolls the container to the item, only inside it: the window and the other ancestors stay where they are. */
 export function scrollWithin(
   container: HTMLElement,
   item: Element,

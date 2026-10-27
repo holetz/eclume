@@ -3,7 +3,7 @@ import { recordingState } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 
-/** O estado da gravação em palavra (`recordingState`), com o aviso "Sem resumo" quando a etapa falhou. */
+/** The recording status in a word (`recordingState`), with the "Sem resumo" notice when the step failed. */
 export function StatusBadge({ recording }: { recording: Pick<Recording, 'status' | 'pipeline'> }) {
   const { label, tone, noSummary } = recordingState(recording)
   return (

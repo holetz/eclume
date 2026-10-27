@@ -1,5 +1,5 @@
-// Marcadores da gravação (vindos do desktop e do celular): leitura, nota, exclusão e o lugar de cada
-// um entre as falas da transcrição.
+// The recording's markers (from the desktop and the phone): reading, note, deletion and the place of each
+// one among the transcript's segments.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
@@ -28,7 +28,7 @@ export function useMarkerMutations(recordingId: string) {
   const queryClient = useQueryClient()
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: markersKey(recordingId) })
-    // O `marker_count` da gravação (e da biblioteca) muda com a exclusão.
+    // The recording's `marker_count` (and the library's) changes with the deletion.
     void queryClient.invalidateQueries({ queryKey: recordingKey(recordingId), exact: true })
     void queryClient.invalidateQueries({ queryKey: ['recordings'] })
   }
@@ -46,8 +46,8 @@ export function useMarkerMutations(recordingId: string) {
 }
 
 /**
- * Para cada marcador, o índice da primeira fala que começa nele ou depois (`start_ms >= at_ms`), ou o
- * fim da lista quando o marcador vem depois da última fala.
+ * For each marker, the index of the first segment that starts at it or later (`start_ms >= at_ms`), or the
+ * end of the list when the marker comes after the last segment.
  */
 export function placeMarkers(
   segments: readonly { start_ms: number }[],
@@ -59,14 +59,14 @@ export function placeMarkers(
   })
 }
 
-/** O marcador corrente no instante: o último já passado; nenhum antes do primeiro. */
+/** The current marker at the instant: the last one already passed; none before the first. */
 export function currentMarkerId(markers: readonly Marker[], ms: number): string | null {
   let current: string | null = null
   for (const marker of markers) if (marker.at_ms <= ms) current = marker.id
   return current
 }
 
-/** O dispositivo comum a todos os marcadores, ou `null` quando vieram de mais de um (ou de nenhum). */
+/** The device common to all markers, or `null` when they came from more than one (or from none). */
 export function commonDevice(markers: readonly Pick<Marker, 'device_name'>[]): string | null {
   const devices = new Set(markers.map((marker) => marker.device_name))
   const [only] = devices

@@ -12,7 +12,7 @@
   color: var(--color-text-muted);
 }
 
-/* A `.list` do DS logo abaixo das abas: sem a borda de cima, como no quadro Person. */
+/* The DS `.list` right below the tabs: without the top border, as in the Person board. */
 .samples {
   list-style: none;
   margin: 0;

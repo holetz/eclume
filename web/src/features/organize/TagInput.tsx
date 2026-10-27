@@ -5,15 +5,15 @@ interface TagInputProps {
   id: string
   value: string[]
   onChange: (value: string[]) => void
-  /** O nome da lista ("Opções"), para quem usa leitor de tela. */
+  /** The name of the list ("Opções"), for screen-reader users. */
   listLabel: string
-  /** Um item, no singular e feminino ("opção", "tag"): vira "Remover <item> …" e o texto do campo. */
+  /** One item, singular and feminine ("opção", "tag"): it becomes "Remover <item> …" and the field text. */
   itemLabel: string
   invalid?: boolean
   describedBy?: string
 }
 
-/** Uma lista de valores curtos como `.tag`: Enter acrescenta, e o × de cada um remove. */
+/** A list of short values as `.tag`: Enter appends, and the × on each one removes it. */
 export function TagInput({ id, value, onChange, listLabel, itemLabel, invalid, describedBy }: TagInputProps) {
   const [text, setText] = useState('')
 

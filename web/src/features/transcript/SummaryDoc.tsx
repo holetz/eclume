@@ -16,7 +16,7 @@ import { motivo } from '../../lib/vocabulario.js'
 
 type Recording = Schemas['Recording']
 
-// O `# Ata ...` do resumo vira h2: a página já tem o título da gravação como h1.
+// The summary's `# Ata ...` becomes h2: the page already has the recording title as h1.
 const MARKDOWN = safeMarkdown({
   h1: ({ children }) => <h2 className={styles.docTitle}>{children}</h2>,
 })
@@ -26,7 +26,7 @@ interface ChangeTypeDialogProps {
   onClose: () => void
 }
 
-/** Trocar o tipo de agenda da gravação: gera um resumo novo pelas instruções do tipo escolhido. */
+/** Switching the recording's agenda type: generates a new summary from the instructions of the chosen agenda type. */
 export function ChangeTypeDialog({ recording, onClose }: ChangeTypeDialogProps) {
   const types = useAgendaTypes()
   const { changeType } = useSummaryMutations(recording)
@@ -89,7 +89,7 @@ interface RegenerateDialogProps {
   onClose: () => void
 }
 
-/** Confirma gerar outra versão pelo tipo de agenda da gravação: a nova passa a ser a atual. */
+/** Confirms generating another version from the recording's agenda type: the new one becomes the current one. */
 function RegenerateDialog({ typeName, current, busy, error, onConfirm, onClose }: RegenerateDialogProps) {
   return (
     <Dialog
@@ -126,12 +126,12 @@ const NO_PROVIDER = `Sem resumo: ${motivo('no_provider')}.`
 
 interface SummaryDocProps {
   recording: Recording
-  /** A `revision` da transcrição já carregada; `undefined` enquanto ela não chegou. */
+  /** The `revision` of the transcript already loaded; `undefined` while it has not arrived. */
   transcriptRevision?: number
   onChangeType: () => void
 }
 
-/** O documento do resumo com a `.doc-bar` (tipo, origem e versão, e as ações) e os estados da geração. */
+/** The summary document with the `.doc-bar` (agenda type, origin and version, and the actions) and the generation states. */
 export function SummaryDoc({ recording, transcriptRevision, onChangeType }: SummaryDocProps) {
   const state = useSummaryState(recording.id, recording.transcript_id !== null)
   const { remove, generate } = useSummaryMutations(recording)
@@ -154,18 +154,18 @@ export function SummaryDoc({ recording, transcriptRevision, onChangeType }: Summ
   const { current, pending } = state.data
   const typeName = pending?.agenda_type?.name ?? recording.agenda_type?.name ?? null
   const summaryStep = recording.pipeline.find((step) => step.step === 'summary')
-  // Sem agente de resumo, o motivo no lugar do "Gerar resumo" primário; o retentar fica para depois que alguém configurar um.
+  // With no summary agent, the reason in place of the primary "Gerar resumo"; the retry waits until someone configures one.
   const noProvider = summaryStep?.state === 'skipped' && summaryStep.reason === 'no_provider'
 
   async function copy() {
     setCopied(null)
     try {
       const content = summaryClipboard(recording.title, current?.content_md ?? '')
-      // Sem `ClipboardItem` (navegador antigo), só o texto; o Teams cola o HTML em negrito.
+      // Without `ClipboardItem` (old browser), only the text; Teams pastes the HTML in bold.
       if (typeof ClipboardItem === 'undefined') await navigator.clipboard.writeText((await content).text)
       else {
-        // O item nasce ainda no clique, com o conteúdo como promessa: o Safari recusa a escrita
-        // começada depois de um `await`.
+        // The item is created still within the click, with the content as a promise: Safari refuses a write
+        // started after an `await`.
         await navigator.clipboard.write([
           new ClipboardItem({
             'text/html': content.then(({ html }) => new Blob([html], { type: 'text/html' })),
@@ -179,7 +179,7 @@ export function SummaryDoc({ recording, transcriptRevision, onChangeType }: Summ
     }
   }
 
-  // Só avisa com a revisão da transcrição em mãos e sem uma versão nova a caminho.
+  // Only warns with the transcript revision in hand and with no new version on the way.
   const stale =
     current != null && pending === null && transcriptRevision !== undefined && current.transcript_revision < transcriptRevision
 
@@ -245,7 +245,7 @@ export function SummaryDoc({ recording, transcriptRevision, onChangeType }: Summ
 
   const { generated } = state.data
   const comparable = generated !== null && generated.id !== current.id
-  // O selo é o instantâneo do tipo no resumo: só vira link se o tipo ainda existe.
+  // The badge is the snapshot of the agenda type in the summary: it only becomes a link if the agenda type still exists.
   const typeLabel = `Tipo · ${current.agenda_type?.name ?? typeName ?? 'sem tipo'}`
   const liveTypeId = agendaTypes.data?.items.find((type) => type.id === current.agenda_type?.id)?.id
 

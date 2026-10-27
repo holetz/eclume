@@ -8,7 +8,7 @@ import styles from './TranscriptView.module.css'
 
 const MAX_NOTE = 500
 
-/** A `.segment-marker` antes da fala: tempo, nota e dispositivo, com editar a nota e excluir. */
+/** The `.segment-marker` before the segment: time, note and device, with edit note and delete. */
 export function SegmentMarker({ marker, recordingId }: { marker: Marker; recordingId: string }) {
   const { editNote, remove } = useMarkerMutations(recordingId)
   const [editing, setEditing] = useState(false)
@@ -97,7 +97,7 @@ interface SegmentRowProps {
   segment: Segment
   name: string
   color: number
-  /** Os marcadores antes desta fala (o mesmo array entre renders, para o `memo`). */
+  /** The markers before this segment (the same array across renders, for `memo`). */
   markers: Marker[]
   active: boolean
   editing: boolean
@@ -108,8 +108,8 @@ interface SegmentRowProps {
 }
 
 /**
- * Uma fala no `.segment` do DS, com os marcadores antes dela. Memoizada com props estáveis: um tick
- * do áudio não a renderiza, e a troca de fala ativa renderiza só a que sai e a que entra.
+ * A segment in the DS `.segment`, with the markers before it. Memoized with stable props: an audio
+ * tick does not render it, and changing the active segment renders only the outgoing and the incoming one.
  */
 export const SegmentRow = memo(function SegmentRow({
   segment,
@@ -126,7 +126,7 @@ export const SegmentRow = memo(function SegmentRow({
   const clock = hms(segment.start_ms)
 
   function onSegmentClick(event: MouseEvent<HTMLDivElement>) {
-    // Botões e campos dentro da fala têm ação própria; a fala em edição não toca.
+    // Buttons and fields inside the segment have their own action; the segment being edited does not play.
     if (editing || (event.target as HTMLElement).closest('button, textarea, input, a')) return
     onSeek(segment.start_ms, true)
   }

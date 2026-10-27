@@ -11,7 +11,7 @@
   margin-bottom: var(--space-2);
 }
 
-/* O .split do DS vira uma coluna em telas estreitas, com o painel depois da lista. */
+/* The DS .split becomes one column on narrow screens, with the panel after the list. */
 @media (max-width: 56rem) {
   .split {
     grid-template-columns: minmax(0, 1fr);
@@ -25,7 +25,7 @@
   padding: 0;
 }
 
-/* A linha escolhida recebe o fundo do painel, estendido 12px para os lados, como no quadro do DS. */
+/* The chosen row gets the panel background, extended 12px to each side, as in the DS board. */
 .selected {
   background: var(--color-surface);
   box-shadow:
@@ -65,7 +65,7 @@
   min-width: 0;
 }
 
-/* O rótulo divide a linha com a dica: repete o estilo de `.field > label` do DS, que não o alcança. */
+/* The label shares the row with the hint: it repeats the DS `.field > label` style, which does not reach it. */
 .labelRow {
   display: flex;
   align-items: center;
@@ -78,7 +78,7 @@
   color: color-mix(in srgb, var(--color-text) 70%, transparent);
 }
 
-/* O .seg do DS tem a largura das opções, não a do campo. */
+/* The DS .seg takes the width of its options, not that of the field. */
 .fieldset :global(.seg) {
   justify-self: start;
 }
@@ -143,8 +143,8 @@
   column-gap: var(--space-3);
 }
 
-/* Rótulo, campo e dica dividem as linhas entre os dois lados: um rótulo mais alto (com o "?" ou
-   quebrado em duas linhas) não desce o campo vizinho. */
+/* Label, field and hint split the rows between the two sides: a taller label (with the "?" or
+   wrapped onto two lines) does not push the neighbouring field down. */
 .pair > :global(.field) {
   grid-row: span 3;
   grid-template-rows: subgrid;
@@ -207,7 +207,7 @@
   justify-items: start;
 }
 
-/* O selo "Padrão" do tipo de reserva, ao lado do nome na lista e no painel. */
+/* The "Padrão" badge of the fallback agenda type, beside the name in the list and in the panel. */
 .badge {
   margin-left: var(--space-2);
   vertical-align: middle;

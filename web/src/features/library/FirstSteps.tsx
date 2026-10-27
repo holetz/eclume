@@ -1,6 +1,6 @@
-// O cartão Primeiros passos da biblioteca. Os passos saem do que a API já entrega (a conta tem
-// gravação, a conta tem pessoa) e, o de conferir os tipos de agenda, deste navegador; a dispensa
-// também é deste navegador, como as preferências de Ambiente.
+// The library's First steps card. The steps come from what the API already delivers (the account has a
+// recording, the account has a person) and, the one about reviewing the agenda types, from this browser; the dismissal
+// is also from this browser, like the Environment preferences.
 import { Check } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'

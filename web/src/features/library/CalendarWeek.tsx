@@ -10,18 +10,18 @@ import { recordingState, timeLabel, weekdayShort } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 
-/** A altura da hora quando a janela não dá medida (o jsdom, por exemplo). */
+/** The hour height when the window gives no measure (jsdom, for example). */
 const HOUR_PX = 54
-/** O zoom máximo: uma hora com altura para ler reuniões de poucos minutos. */
+/** The maximum zoom: an hour tall enough to read meetings of a few minutes. */
 const MAX_HOUR_PX = 480
 const ZOOM_STEP = 1.25
-/** O respiro de baixo da página (.content), que a semana não ocupa. */
+/** The bottom spacing of the page (.content), which the week does not take. */
 const BOTTOM_PX = 32
-/** A semana nunca fica mais baixa que isto, mesmo numa janela curta. */
+/** The week is never shorter than this, even in a short window. */
 const MIN_HEIGHT_PX = 320
 const HOURS = 24
 
-/** A hora de agora, relida a cada `intervalMs`. */
+/** The current time, re-read every `intervalMs`. */
 function useNow(intervalMs: number): Date {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
@@ -31,7 +31,7 @@ function useNow(intervalMs: number): Date {
   return now
 }
 
-/** A altura do contêiner da semana: da posição dele até o fim da janela, relida no resize. */
+/** The height of the week container: from its position to the end of the window, re-read on resize. */
 function useViewportHeight() {
   const ref = useRef<HTMLDivElement>(null)
   const [height, setHeight] = useState(0)
@@ -56,10 +56,10 @@ interface CalendarWeekProps {
 }
 
 /**
- * A semana como agenda: o dia inteiro (0–24) numa grade que rola por dentro e ocupa a altura da
- * tela, com o expediente (8–18, ou o da tela Ambiente) destacado e enquadrado ao abrir. O resto do dia fica a um pan ou a um
- * zoom out: o zoom muda a altura da hora, pelos botões do canto ou por Ctrl + roda sobre a grade, e o
- * mínimo é o dia inteiro na tela.
+ * The week as an agenda: the whole day (0–24) in a grid that scrolls inside and takes the height of the
+ * screen, with the working hours (8–18, or those of the Environment screen) highlighted and framed on open. The rest of the day is a pan or a
+ * zoom out away: zoom changes the hour height, through the corner buttons or Ctrl + wheel over the grid, and the
+ * minimum is the whole day on screen.
  */
 export function CalendarWeek({ days, recordings, busy = false }: CalendarWeekProps) {
   const now = useNow(60_000)
@@ -89,7 +89,7 @@ export function CalendarWeek({ days, recordings, busy = false }: CalendarWeekPro
     setHeadPx(scrollRef.current?.querySelector<HTMLElement>('.cal-head')?.offsetHeight ?? 0)
   }, [scrollRef, height])
 
-  // Abre cada semana (e a primeira medida) no começo do expediente, logo abaixo do cabeçalho.
+  // Opens each week (and the first measure) at the start of working hours, just below the header.
   const weekKey = days[0]?.toISOString()
   const openedFor = useRef<string | null>(null)
   useLayoutEffect(() => {
@@ -99,7 +99,7 @@ export function CalendarWeek({ days, recordings, busy = false }: CalendarWeekPro
     box.scrollTop = focus.start * hourPx
   }, [scrollRef, measured, weekKey, focus.start, hourPx])
 
-  // O zoom mantém parada a hora sob o cursor (ou no meio da tela, pelos botões).
+  // Zoom keeps still the hour under the cursor (or at the middle of the screen, through the buttons).
   const anchor = useRef<{ hour: number; offset: number } | null>(null)
   const hourPxRef = useRef(hourPx)
   useLayoutEffect(() => {
@@ -195,7 +195,7 @@ export function CalendarWeek({ days, recordings, busy = false }: CalendarWeekPro
               const state = recordingState(recording)
               const style = { '--s': s, '--d': d, '--lane': lane, '--lanes': laneCount } as CSSProperties
               return (
-                // O item da lista leva a posição e o estado; o link ocupa a caixa e leva o nome.
+                // The list item carries the position and the status; the link fills the box and carries the name.
                 <div
                   key={recording.id}
                   role="listitem"

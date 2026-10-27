@@ -5,7 +5,7 @@ import { fieldTestRows, type PreviewRun } from './usePreview'
 
 const NO_PROVIDER = 'Nenhum agente está configurado para preencher campos. Peça a quem administra o servidor.'
 
-/** O resultado de "Testar numa gravação": a regra em rascunho nas últimas gravações transcritas. */
+/** The result of "Testar numa gravação": the draft rule on the latest transcribed recordings. */
 export function FieldTest({ test }: { test: PreviewRun<Schemas['FieldPreviewRequest']> }) {
   const { state, preview, elapsedMs, error } = test
   if (state === 'idle') return null

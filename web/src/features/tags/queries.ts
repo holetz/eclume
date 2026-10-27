@@ -1,5 +1,5 @@
-// Cadastro de tags do usuário e como o agente as atribui. Poucas por usuário (o teto do cadastro é
-// 200): a lista inteira cabe numa resposta só.
+// The user's tag registry and how the agent assigns them. Few per user (the registry cap is
+// 200): the whole list fits in a single response.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
@@ -10,12 +10,12 @@ export type TagAssignment = Schemas['TagAssignment']
 export const TAGS_KEY = ['tags'] as const
 const TAG_ASSIGNMENT_KEY = ['me', 'tag-assignment'] as const
 
-/** O cadastro, em ordem alfabética; o filtro da biblioteca e da busca também lê daqui. */
+/** The registry, in alphabetical order; the library and search filter also reads from here. */
 export function useTags() {
   return useQuery({ queryKey: TAGS_KEY, queryFn: () => unwrap(api.GET('/api/v1/tags')) })
 }
 
-/** A configuração do agente: automático, regra geral, modo e limite, com o tamanho do cadastro. */
+/** The agent configuration: automatic, general rule, mode and limit, with the registry size. */
 export function useTagAssignment() {
   return useQuery({
     queryKey: TAG_ASSIGNMENT_KEY,
@@ -32,9 +32,9 @@ export function useUpdateTagAssignment() {
 }
 
 /**
- * Atualiza o que muda com o cadastro: a lista, o tamanho dele (mostrado no cartão) e os tipos de
- * agenda, que levam tags padrão. Renomear, mesclar e excluir também mexem nas gravações, abertas ou
- * nas listas.
+ * Updates what changes with the registry: the list, its size (shown on the card) and the agenda
+ * types, which carry default tags. Renaming, merging and deleting also touch the recordings, open or
+ * in the lists.
  */
 export function useRefreshTags() {
   const queryClient = useQueryClient()

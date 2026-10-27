@@ -1,5 +1,5 @@
-// Identificação por voz na página da pessoa: a impressão, remover uma amostra e esquecer a voz.
-// As chaves ficam sob ['people', id]: esquecer a voz muda também a pessoa e o diretório.
+// Voice identification on the person page: the voiceprint, removing a sample and forgetting the voice.
+// The keys live under ['people', id]: forgetting the voice also changes the person and the directory.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'

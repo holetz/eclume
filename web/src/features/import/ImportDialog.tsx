@@ -30,7 +30,7 @@ function clockDuration(seconds: number | null | undefined): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
 }
 
-// O que o leitor de tela anuncia: só a troca de estado, não cada ponto de progresso.
+// What the screen reader announces: only the state change, not every progress point.
 const ANNOUNCED: Partial<Record<ImportItem['state']['kind'], string>> = {
   converting: 'convertendo',
   uploading: 'enviando',
@@ -40,8 +40,8 @@ const ANNOUNCED: Partial<Record<ImportItem['state']['kind'], string>> = {
 }
 
 /**
- * Na linha enviada, a oferta de ligar o aviso do navegador (um gesto, nunca ao carregar). Some com o
- * aviso já ligado ou sem a API; negada, diz onde liberar.
+ * On the uploaded row, the offer to turn on the browser notification (a gesture, never on load). It goes away
+ * when the notification is already on or the API is missing; when denied, it says where to allow it.
  */
 function NotifyOffer() {
   const [permission, setPermission] = useState<NotifyPermission | 'on'>(() =>
@@ -106,7 +106,7 @@ function Row({ item, defaultLanguage }: { item: ImportItem; defaultLanguage: str
   const queue = useImportContext()
   const sourceId = useId()
   const busy = item.state.kind === 'converting' || item.state.kind === 'uploading'
-  // A data e o idioma vão só na criação do upload: depois de criado, retentar retoma o mesmo e não os reenvia.
+  // The date and the language go only when the upload is created: once created, retrying resumes the same one and does not resend them.
   const editable =
     item.state.kind === 'reading' || item.state.kind === 'ready' || (item.state.kind === 'error' && !item.state.resumable)
   const removable = editable || item.state.kind === 'error'
@@ -169,8 +169,8 @@ function Row({ item, defaultLanguage }: { item: ImportItem; defaultLanguage: str
 }
 
 /**
- * O modal Importar sobre a biblioteca (frame "Import files"): zona de soltar e a tabela com o início
- * da gravação e o idioma de cada arquivo, confirmados antes do envio. Fechar durante o envio só esconde o modal.
+ * The Import modal over the library (frame "Import files"): the drop zone and the table with the start
+ * of the recording and the language of each file, confirmed before upload. Closing during upload only hides the modal.
  */
 export function ImportDialog({ onClose }: { onClose: () => void }) {
   const queue = useImportContext()
@@ -190,7 +190,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
     if (!blocked && event.dataTransfer.files.length > 0) queue.add(event.dataTransfer.files)
   }
 
-  /** Cancelar descarta o que não foi enviado; depois do envio, Fechar só esconde o modal. */
+  /** Cancel discards what was not uploaded; after the upload, Close only hides the modal. */
   function close() {
     if (!started) {
       for (const item of queue.items) queue.remove(item.id)

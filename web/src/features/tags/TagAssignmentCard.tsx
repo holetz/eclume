@@ -17,10 +17,10 @@ const MODES = [
   },
 ] as const
 
-/** De 1 a 5, como o contrato. */
+/** From 1 to 5, like the contract. */
 const LIMITS = [1, 2, 3, 4, 5]
 
-/** Como o agente atribui as tags depois da transcrição: liga-desliga, regra geral, modo e limite. */
+/** How the agent assigns the tags after transcription: toggle, general rule, mode and limit. */
 export function TagAssignmentCard() {
   const assignment = useTagAssignment()
   if (assignment.isPending) return <p role="status">Carregando a configuração das tags…</p>

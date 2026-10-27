@@ -3,12 +3,12 @@ import { useSearchParams } from 'react-router'
 import { Dialog } from '../../app/Dialog'
 import { useLeaveGuard } from '../../app/useLeaveGuard'
 
-/** O valor da seleção para o rascunho de um item novo. */
+/** The selection value for the draft of a new item. */
 export const NEW = 'novo'
 
 /**
- * A seleção vive na URL (`?<param>=<id>` ou `novo`); com alterações não salvas, trocar de item pede
- * confirmação, e sair da rota ou fechar a aba também (o guarda de saída).
+ * The selection lives in the URL (`?<param>=<id>` or `novo`); with unsaved changes, switching items asks
+ * for confirmation, and so does leaving the route or closing the tab (the exit guard).
  */
 export function useGuardedSelection(param: string) {
   const [params, setParams] = useSearchParams()

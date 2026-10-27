@@ -70,7 +70,7 @@ function PersonDetail({ person }: { person: Person }) {
   )
 }
 
-/** O cadastro: onde a pessoa trabalha, as tags, os contatos e as notas; só o que foi preenchido. */
+/** The record: where the person works, the tags, the contacts and the notes; only what was filled in. */
 function PersonIdentity({ person }: { person: Person }) {
   const role = [person.job_title, person.department, person.company].filter(Boolean).join(' · ')
   const contacts = [person.email, person.phone].filter(Boolean).join(' · ')

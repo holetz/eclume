@@ -21,7 +21,7 @@ interface PersonFormProps {
   error: unknown
   onSubmit: (fields: PersonFields) => void
   onCancel: () => void
-  /** Ação destrutiva à esquerda do rodapé (Excluir pessoa). */
+  /** Destructive action on the left of the footer (Excluir pessoa). */
   danger?: ReactNode
 }
 
@@ -36,9 +36,9 @@ const TEXTS: { key: Exclude<TextKey, 'name' | 'notes'>; label: string; type?: st
 ]
 
 /**
- * Edição do cadastro de uma pessoa, no diálogo "Editar": nome, empresa, área, cargo, e-mail,
- * telefone, tags de pessoa e notas. Empresa e área sugerem os valores já usados; campos vazios
- * viram `null`.
+ * Editing of a person's record, in the "Editar" dialog: name, company, department, role, e-mail,
+ * phone, person tags and notes. Company and department suggest the values already used; empty fields
+ * become `null`.
  */
 export function PersonForm({ initial, pending, error, onSubmit, onCancel, danger }: PersonFormProps) {
   const [draft, setDraft] = useState<Record<TextKey, string>>(() => ({

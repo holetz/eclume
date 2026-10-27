@@ -21,8 +21,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('filtros na URL', () => {
-  it('lê os filtros em pt-BR, repetíveis, e descarta valores estranhos', () => {
+describe('filters in the URL', () => {
+  it('reads the filters in pt-BR, repeatable, and discards unknown values', () => {
     const params = new URLSearchParams(
       'visao=semana&data=2026-09-21&tipo=nota&tipo=xyz&situacao=falhou&situacao=pronta&tag=backlog&tag=backlog' +
         '&pessoa=p1&colecao=c1&campo=f1:Serra%20Azul&campo=sem-valor&empresa=Agro%20Sul&area=RH&tag-pessoa=cliente',
@@ -44,14 +44,14 @@ describe('filtros na URL', () => {
     expect(activeFilterCount(readFilters(params))).toBe(10)
   })
 
-  it('escreve os filtros sem mexer na visão, na data nem no modal', () => {
+  it('writes the filters without touching the view, the date or the modal', () => {
     const params = new URLSearchParams('visao=mes&data=2026-09-21&importar=1&tag=antiga')
     const next = writeFilters(params, { ...NO_FILTERS, kind: ['reuniao'], field: ['f1:a', 'f1:b'] })
     expect(next.toString()).toBe('visao=mes&data=2026-09-21&importar=1&tipo=reuniao&campo=f1%3Aa&campo=f1%3Ab')
     expect(rememberedSearch(next)).toBe('visao=mes&data=2026-09-21&tipo=reuniao&campo=f1%3Aa&campo=f1%3Ab')
   })
 
-  it('precisam de você: lê e escreve precisa=locutores e manda awaiting=speakers', () => {
+  it('need you: reads and writes precisa=locutores and sends awaiting=speakers', () => {
     const filters = readFilters(new URLSearchParams('precisa=locutores&precisa=outra'))
     expect(filters.needs).toEqual(['locutores'])
     expect(activeFilterCount(filters)).toBe(1)
@@ -59,7 +59,7 @@ describe('filtros na URL', () => {
     expect(filtersToQuery(filters)).toEqual({ awaiting: ['speakers'] })
   })
 
-  it('traduz para a query de GET /recordings pelo enum do contrato', () => {
+  it('translates to the GET /recordings query through the contract enum', () => {
     expect(filtersToQuery(NO_FILTERS)).toEqual({})
     expect(
       filtersToQuery({
@@ -84,7 +84,7 @@ describe('filtros na URL', () => {
       person_company: ['Agro Sul'],
       person_tag: ['cliente'],
     })
-    // Tudo marcado num grupo não manda o parâmetro.
+    // Everything checked in a group does not send the parameter.
     expect(
       filtersToQuery({ ...NO_FILTERS, kind: ['reuniao', 'nota'], status: ['pronta', 'processando', 'falhou'] }),
     ).toEqual({})
@@ -95,10 +95,10 @@ function wrapper({ children }: { children: ReactNode }) {
   return createElement(QueryClientProvider, { client: createQueryClient({ retry: false }) }, children)
 }
 
-describe('consultas da biblioteca', () => {
+describe('library queries', () => {
   const week = weekRange(new Date(2026, 8, 24))
 
-  it('pede o período em ordem de início, segue o cursor e para no teto', async () => {
+  it('requests the period in start order, follows the cursor and stops at the ceiling', async () => {
     let calls = 0
     const http = mockFetch({
       'GET /api/v1/recordings': () => {
@@ -123,7 +123,7 @@ describe('consultas da biblioteca', () => {
     expect(requests[1].get('cursor')).toBe('c1')
   })
 
-  it('termina no fim do cursor e relê enquanto algo está em andamento', async () => {
+  it('ends at the end of the cursor and re-reads while something is in progress', async () => {
     const page = fixtures.recordingWeekPage()
     let calls = 0
     mockFetch({
@@ -144,7 +144,7 @@ describe('consultas da biblioteca', () => {
     expect(calls).toBe(2)
   }, 12_000)
 
-  it('a lista pede da mais recente para a mais antiga, 50 por página', async () => {
+  it('the list requests from newest to oldest, 50 per page', async () => {
     const http = mockFetch({
       'GET /api/v1/recordings': () => ({ items: [fixtures.recordingTranscribed()], next_cursor: null }),
     })

@@ -5,8 +5,8 @@ import { rateLabel, usePlayback, usePlaybackTime } from './playback'
 import styles from './RecordingPage.module.css'
 
 /**
- * O player compacto do DS: tocar/pausar, o tempo, a trilha (arrastar ou teclado pelo `range`) com um
- * tick por marcador, a duração e a velocidade.
+ * The DS compact player: play/pause, the time, the track (drag or keyboard through the `range`) with one
+ * tick per marker, the duration and the speed.
  */
 export function Player({ markers }: { markers: Marker[] }) {
   const { durationMs, playing, rate, seek, toggle, cycleRate, error, retry } = usePlayback()

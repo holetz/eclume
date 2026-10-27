@@ -15,7 +15,7 @@ interface CalendarMonthProps {
   busy?: boolean
 }
 
-/** O mês em grade: até três gravações por dia, e o número do dia abre a semana dele. */
+/** The month as a grid: up to three recordings per day, and the day number opens its week. */
 export function CalendarMonth({ cells, recordings, onOpenWeek, busy = false }: CalendarMonthProps) {
   const location = useLocation()
   const from = `${location.pathname}${location.search}`

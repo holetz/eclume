@@ -2,7 +2,7 @@
 import type { TestCase, TestResult } from '@playwright/test/reporter'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import FlakyReporter, { tituloFlaky } from '../e2e/flaky-reporter'
+import FlakyReporter, { flakyTitle } from '../e2e/flaky-reporter'
 
 const testCase = (project: string, path: string[]) =>
   ({ parent: { project: () => ({ name: project }) }, titlePath: () => path }) as unknown as TestCase
@@ -33,10 +33,10 @@ describe('FlakyReporter', () => {
     expect(log).not.toHaveBeenCalled()
     r.onTestEnd(testCase('webkit', ['', 'a.spec.ts', 't']), result('passed', 1))
     r.onEnd()
-    expect(log.mock.calls.some((c) => String(c[0]).startsWith('::warning title=Teste flaky::[webkit]'))).toBe(true)
+    expect(log.mock.calls.some((c) => String(c[0]).startsWith('::warning title=Flaky test::[webkit]'))).toBe(true)
   })
 
   it('the title ignores the root of the path', () => {
-    expect(tituloFlaky('firefox', ['', 'x.spec.ts', 'a', 'b'])).toBe('[firefox] x.spec.ts > a > b')
+    expect(flakyTitle('firefox', ['', 'x.spec.ts', 'a', 'b'])).toBe('[firefox] x.spec.ts > a > b')
   })
 })

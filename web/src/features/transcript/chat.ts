@@ -1,5 +1,5 @@
-// O chat "Ajustar o resumo": o histórico da gravação, o envio (202 com o pedido e a resposta na fila)
-// e a consulta da resposta até terminar. O agente trabalha sobre o resumo e cada mudança vira versão.
+// The "Ajustar o resumo" chat: the recording history, the send (202 with the request and the response queued)
+// and polling the response until it finishes. The agent works on the summary and each change becomes a version.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { api, type Schemas } from '../../api/client'
@@ -18,7 +18,7 @@ export function isOpen(message: Pick<ChatMessage, 'status'>): boolean {
   return message.status === 'queued' || message.status === 'running'
 }
 
-/** "Leu a transcrição, 00:03:20–00:04:20 (cortado)" ou "Buscou “orçamento” na transcrição · 3 trechos". */
+/** "Leu a transcrição, 00:03:20–00:04:20 (cortado)" or "Buscou “orçamento” na transcrição · 3 trechos". */
 export function readNote(read: Schemas['ChatRead']): string {
   if (read.tool === 'search_transcript') {
     const hits = read.hits ?? 0
@@ -42,7 +42,7 @@ export function useChat(recordingId: string, enabled = true) {
   })
 }
 
-/** Troca ou acrescenta mensagens no histórico em cache. */
+/** Replaces or appends messages in the cached history. */
 function merge(page: ChatPage | undefined, messages: ChatMessage[]): ChatPage | undefined {
   if (!page) return page
   const items = [...page.items]
@@ -68,7 +68,7 @@ export function useSendChat(recordingId: string) {
       queryClient.setQueryData<ChatPage>(chatKey(recordingId), (page) =>
         merge(page, [exchange.message, exchange.reply]),
       ),
-    // Outro pedido em aberto (em outra aba, por exemplo): relê o histórico para acompanhá-lo.
+    // Another open request (in another tab, for example): rereads the history to follow it.
     onError: (error) => {
       if (error instanceof ApiError && error.code === 'chat_busy')
         void queryClient.invalidateQueries({ queryKey: chatKey(recordingId) })
@@ -77,8 +77,8 @@ export function useSendChat(recordingId: string) {
 }
 
 /**
- * Consulta a resposta em aberto a cada 2 s até `done` ou `failed`, atualizando o histórico. Quando a
- * resposta criou uma versão, relê o resumo.
+ * Polls the open response every 2 s until `done` or `failed`, updating the history. When the
+ * response created a version, rereads the summary.
  */
 export function useChatReply(recordingId: string, messageId: string | null) {
   const queryClient = useQueryClient()
