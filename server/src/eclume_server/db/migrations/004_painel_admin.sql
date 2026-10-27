@@ -1,17 +1,17 @@
--- 004_painel_admin — painel de administração (holetz/eclume#12): escrita de `users` só por admin
--- na própria RLS, convites por link e segredos da organização cifrados.
+-- 004_painel_admin — admin panel (holetz/eclume#12): writing `users` by admins only
+-- in the RLS itself, invitations by link and encrypted organization secrets.
 --
--- Padrão do núcleo (docs/standards/code/server-nucleo.md): `org_id` em toda tabela, políticas por
--- comando lendo `eclume_org()`/`eclume_user()`/`eclume_admin()`, `ENABLE` + `FORCE ROW LEVEL
--- SECURITY`. O aceite do convite e o enfileiramento leem com o papel de sistema.
--- (A numeração pula a 003, que é da holetz/eclume#11; o runner aplica em ordem de nome.)
+-- Core pattern (docs/standards/code/server-nucleo.md): `org_id` in every table, per-command
+-- policies reading `eclume_org()`/`eclume_user()`/`eclume_admin()`, `ENABLE` + `FORCE ROW LEVEL
+-- SECURITY`. Accepting the invitation and enqueueing read with the system role.
+-- (The numbering skips 003, which belongs to holetz/eclume#11; the runner applies in name order.)
 
--- --- users: leitura da organização, escrita só de admin -----------------------------------------
+-- --- users: read by the organization, written by admins only ------------------------------------
 
--- A política da 001 valia para todo comando: sob a RLS, qualquer membro atualizaria outro usuário
--- da organização, e só a checagem da rota impedia. `eclume_admin()` lê `users` sob a política de
--- SELECT, que não chama a função: não há recursão. O `WITH CHECK` não pede admin para que um admin
--- possa se rebaixar (a rota garante que sobra outro admin ativo).
+-- The policy from 001 applied to every command: under RLS, any member could update another user
+-- of the organization, and only the route's check prevented it. `eclume_admin()` reads `users` under the
+-- SELECT policy, which does not call the function: there is no recursion. The `WITH CHECK` does not require admin so that an admin
+-- can demote themselves (the route guarantees another active admin remains).
 DROP POLICY users_org ON users;
 CREATE POLICY users_read ON users FOR SELECT
     USING (org_id = eclume_org());
@@ -19,9 +19,9 @@ CREATE POLICY users_admin_update ON users FOR UPDATE
     USING (org_id = eclume_org() AND eclume_admin())
     WITH CHECK (org_id = eclume_org());
 
--- --- convites -----------------------------------------------------------------------------------
+-- --- invitations --------------------------------------------------------------------------------
 
--- O token do link (`ecli_` + 32 base62) só existe na resposta da criação; o banco guarda o SHA-256.
+-- The link token (`ecli_` + 32 base62) only exists in the creation response; the database keeps the SHA-256.
 CREATE TABLE invitations (
     id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id            uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
@@ -38,9 +38,9 @@ CREATE TABLE invitations (
 CREATE INDEX invitations_org_idx ON invitations (org_id, created_at DESC, id DESC);
 CREATE INDEX invitations_email_idx ON invitations (org_id, lower(email)) WHERE accepted_at IS NULL;
 
--- --- segredos -----------------------------------------------------------------------------------
+-- --- secrets ------------------------------------------------------------------------------------
 
--- `crypto.encrypt` (AES-GCM); a API devolve só `is_set` e `updated_at`.
+-- `crypto.encrypt` (AES-GCM); the API only returns `is_set` and `updated_at`.
 CREATE TABLE org_secrets (
     org_id           uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
     name             text NOT NULL CHECK (name ~ '^[a-z][a-z0-9_]{1,63}$'),

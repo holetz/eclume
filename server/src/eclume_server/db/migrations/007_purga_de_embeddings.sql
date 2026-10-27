@@ -1,12 +1,12 @@
--- 007_purga_de_embeddings — desligar o opt-in de identificação por voz apaga a impressão de voz
--- por gravação (LGPD): `speaker_embeddings` guarda o vetor de todo locutor diarizado, inclusive de
--- quem nunca consentiu. As amostras (`voice_samples`) são de quem consentiu e ficam: revogá-las é o
--- fluxo de consentimento. Regras em docs/standards/code/identificacao-por-voz.md §Purga ao desligar.
+-- 007_purga_de_embeddings — turning off the voice identification opt-in deletes the voiceprint
+-- per recording (LGPD): `speaker_embeddings` keeps the vector of every diarized speaker, including
+-- those who never consented. The samples (`voice_samples`) belong to those who consented and stay: revoking them is the
+-- consent flow. Rules in docs/standards/code/identificacao-por-voz.md `§Purga ao desligar`.
 --
--- SECURITY DEFINER: a purga atravessa a visibilidade de gravação do admin (gravações privadas de
--- outros membros), restrita a `eclume_org()` e a admin, no molde de `eclume_voice_forget`.
--- Devolve `(embeddings, sugestões)` apagados; os `speaker_embeddings.json` do bucket saem pelo job
--- `purge_embedding_objects` do worker CPU.
+-- SECURITY DEFINER: the purge crosses the admin's recording visibility (private recordings of
+-- other members), restricted to `eclume_org()` and to admins, on the model of `eclume_voice_forget`.
+-- Returns the deleted `(embeddings, suggestions)`; the bucket's `speaker_embeddings.json` leave through the CPU
+-- worker's `purge_embedding_objects` job.
 CREATE FUNCTION eclume_purge_speaker_embeddings(OUT embeddings bigint, OUT suggestions bigint)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path = public, pg_temp
