@@ -971,9 +971,9 @@ export interface paths {
         /**
          * Export the recording
          * @description - `txt`: title, date (America/Sao_Paulo time), duration, participants and one
-         *       `[HH:MM:SS] Name: text` line per segment.
-         *     - `srt`: one subtitle per segment, `HH:MM:SS,mmm --> HH:MM:SS,mmm` and `Name: text`.
-         *     - `md`: `# Title`, one line with the date and the agenda type, and the current summary. With
+         *       `[HH:MM:SS] Nome: texto` line per segment.
+         *     - `srt`: one subtitle per segment, `HH:MM:SS,mmm --> HH:MM:SS,mmm` and `Nome: texto`.
+         *     - `md`: `# Título`, one line with the date and the agenda type, and the current summary. With
          *       no summary, 409 `summary_missing`.
          *     - `docx`: title, date, duration and participants, the summary (Markdown headings and lists
          *       become Word styles) and the transcript; with no summary, only the transcript.
@@ -1136,7 +1136,7 @@ export interface paths {
         /**
          * Export the transcript
          * @description `md`: YAML frontmatter (`id`, `title`, `recorded_at`, `language`, `duration_ms`,
-         *     `source`, `revision`, `speakers`) and one line per segment, `**Name** [HH:MM:SS]: text`,
+         *     `source`, `revision`, `speakers`) and one line per segment, `**Nome** [HH:MM:SS]: texto`,
          *     separated by a blank line. The name is that of the linked person or, with no person, the `label`.
          */
         get: operations["exportTranscript"];
@@ -1685,7 +1685,7 @@ export interface paths {
          *     session, a device credential or a PAT with `transcripts:read`), reads the attachments and may generate
          *     files (.md, .txt, .csv, .docx). One open answer per conversation (409), two per account
          *     (429); each question counts toward the 24 h quota of Agent requests (403 `quota_exceeded`).
-         *     Since 2.24.0, `skill` or `/name` at the start of the message picks a skill (422 if
+         *     Since 2.24.0, `skill` or `/nome` at the start of the message picks a skill (422 if
          *     nonexistent or disabled; the prefix is removed from the stored text), and the answer may carry
          *     action proposals in `actions`, which only run after `POST /agent/actions/{id}/confirm`.
          */
@@ -2468,7 +2468,7 @@ export interface paths {
         put?: never;
         /**
          * Generate a password reset link for a user
-         * @description Since 2.18.0. Single-use link, valid for 24 hours, that the admin hands over out of band to whoever asked: `<public url>/redefinir-senha#<secret>`, with the secret in the fragment (it reaches neither logs nor the `Referer`). The server stores only the hash, and `url` comes back only here. A new link expires the account's earlier unused ones; deactivating the account voids the pending link. Deactivated account, 409 `conflict`. The admin never sees nor sets the password.
+         * @description Since 2.18.0. Single-use link, valid for 24 hours, that the admin hands over out of band to whoever asked: `<url pública>/redefinir-senha#<segredo>`, with the secret in the fragment (it reaches neither logs nor the `Referer`). The server stores only the hash, and `url` comes back only here. A new link expires the account's earlier unused ones; deactivating the account voids the pending link. Deactivated account, 409 `conflict`. The admin never sees nor sets the password.
          */
         post: operations["createPasswordReset"];
         delete?: never;
@@ -2611,7 +2611,7 @@ export interface components {
         PasswordResetLink: {
             /**
              * Format: uri
-             * @description `<public url>/redefinir-senha#<secret>`.
+             * @description `<url pública>/redefinir-senha#<segredo>`.
              */
             url: string;
             /** Format: date-time */
@@ -6035,7 +6035,7 @@ export interface operations {
                 collection?: string[];
                 /** @description Person linked to a speaker of the transcript; repeatable. */
                 person?: string[];
-                /** @description Value of a user field, `<field_id>:<value>`; repeatable. Each field is a filter: values of the same field combine with OR, different fields with AND. In a list field, it is enough for the value to be one of the items; title and tags count as the built-in ones. */
+                /** @description Value of a user field, `<field_id>:<valor>`; repeatable. Each field is a filter: values of the same field combine with OR, different fields with AND. In a list field, it is enough for the value to be one of the items; title and tags count as the built-in ones. */
                 field?: string[];
                 /** @description Company of a participant (a person linked to a speaker), ignoring accents and case; repeatable. The `person_*` attributes apply to one and the same person: with `person_company` and `person_tag`, someone from the company and with the tag spoke in the recording. */
                 person_company?: string[];
@@ -8361,7 +8361,7 @@ export interface operations {
     search: {
         parameters: {
             query?: {
-                /** @description Search terms (`websearch_to_tsquery` syntax, accepts "exact phrase" and -exclusion). */
+                /** @description Search terms (`websearch_to_tsquery` syntax, accepts "frase exata" and -exclusion). */
                 q?: string;
                 /** @description Person id; only transcripts (or excerpts) in which a speaker is linked to that person. */
                 person?: components["parameters"]["PersonFilter"];
@@ -8373,7 +8373,7 @@ export interface operations {
                 tag?: components["parameters"]["TagFilter"];
                 /** @description Only recordings in this collection. */
                 collection?: components["parameters"]["CollectionFilter"];
-                /** @description Value of a user field, `<field_id>:<value>`; repeatable, as in `GET /api/v1/recordings`: values of the same field combine with OR, different fields with AND. On a list field, the value need only be one of the items; title and tags work like the built-in ones. */
+                /** @description Value of a user field, `<field_id>:<valor>`; repeatable, as in `GET /api/v1/recordings`: values of the same field combine with OR, different fields with AND. On a list field, the value need only be one of the items; title and tags work like the built-in ones. */
                 field?: string[];
                 /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];

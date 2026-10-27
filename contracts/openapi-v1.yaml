@@ -1381,7 +1381,7 @@ paths:
         - name: field
           in: query
           description: >-
-            Value of a user field, `<field_id>:<value>`; repeatable. Each field is a filter:
+            Value of a user field, `<field_id>:<valor>`; repeatable. Each field is a filter:
             values of the same field combine with OR, different fields with AND. In a list field,
             it is enough for the value to be one of the items; title and tags count as the
             built-in ones.
@@ -1936,9 +1936,9 @@ paths:
       summary: Export the recording
       description: |
         - `txt`: title, date (America/Sao_Paulo time), duration, participants and one
-          `[HH:MM:SS] Name: text` line per segment.
-        - `srt`: one subtitle per segment, `HH:MM:SS,mmm --> HH:MM:SS,mmm` and `Name: text`.
-        - `md`: `# Title`, one line with the date and the agenda type, and the current summary. With
+          `[HH:MM:SS] Nome: texto` line per segment.
+        - `srt`: one subtitle per segment, `HH:MM:SS,mmm --> HH:MM:SS,mmm` and `Nome: texto`.
+        - `md`: `# Título`, one line with the date and the agenda type, and the current summary. With
           no summary, 409 `summary_missing`.
         - `docx`: title, date, duration and participants, the summary (Markdown headings and lists
           become Word styles) and the transcript; with no summary, only the transcript.
@@ -2200,7 +2200,7 @@ paths:
       summary: Export the transcript
       description: |
         `md`: YAML frontmatter (`id`, `title`, `recorded_at`, `language`, `duration_ms`,
-        `source`, `revision`, `speakers`) and one line per segment, `**Name** [HH:MM:SS]: text`,
+        `source`, `revision`, `speakers`) and one line per segment, `**Nome** [HH:MM:SS]: texto`,
         separated by a blank line. The name is that of the linked person or, with no person, the `label`.
       security:
         - sessionCookie: []
@@ -3328,7 +3328,7 @@ paths:
         session, a device credential or a PAT with `transcripts:read`), reads the attachments and may generate
         files (.md, .txt, .csv, .docx). One open answer per conversation (409), two per account
         (429); each question counts toward the 24 h quota of Agent requests (403 `quota_exceeded`).
-        Since 2.24.0, `skill` or `/name` at the start of the message picks a skill (422 if
+        Since 2.24.0, `skill` or `/nome` at the start of the message picks a skill (422 if
         nonexistent or disabled; the prefix is removed from the stored text), and the answer may carry
         action proposals in `actions`, which only run after `POST /agent/actions/{id}/confirm`.
       security:
@@ -4008,7 +4008,7 @@ paths:
       parameters:
         - name: q
           in: query
-          description: Search terms (`websearch_to_tsquery` syntax, accepts "exact phrase" and -exclusion).
+          description: Search terms (`websearch_to_tsquery` syntax, accepts "frase exata" and -exclusion).
           schema:
             type: string
         - $ref: "#/components/parameters/PersonFilter"
@@ -4029,7 +4029,7 @@ paths:
         - name: field
           in: query
           description: >-
-            Value of a user field, `<field_id>:<value>`; repeatable, as in
+            Value of a user field, `<field_id>:<valor>`; repeatable, as in
             `GET /api/v1/recordings`: values of the same field combine with OR, different fields with AND.
             On a list field, the value need only be one of the items; title and tags work like the built-in ones.
           schema:
@@ -4863,7 +4863,7 @@ paths:
       summary: Generate a password reset link for a user
       description: >-
         Since 2.18.0. Single-use link, valid for 24 hours, that the admin hands over out of band to
-        whoever asked: `<public url>/redefinir-senha#<secret>`, with the secret in the fragment (it
+        whoever asked: `<url pública>/redefinir-senha#<segredo>`, with the secret in the fragment (it
         reaches neither logs nor the `Referer`). The server stores only the hash, and `url` comes
         back only here. A new link expires the account's earlier unused ones; deactivating the
         account voids the pending link. Deactivated account, 409 `conflict`. The admin never sees
@@ -4969,11 +4969,11 @@ components:
     pat:
       type: http
       scheme: bearer
-      bearerFormat: eclp_<secret>
+      bearerFormat: eclp_<segredo>
       description: |
-        Personal PAT: `Authorization: Bearer eclp_<secret>`. It acts as the owning user, limited
+        Personal PAT: `Authorization: Bearer eclp_<segredo>`. It acts as the owning user, limited
         to the granted scopes. The scopes each operation requires are in its security requirement
-        (`pat: [scope, ...]`, all mandatory; several `pat` requirements are alternatives, and
+        (`pat: [escopo, ...]`, all mandatory; several `pat` requirements are alternatives, and
         one is enough). No scope implies another. With a scope missing, the response is 403 with
         `code: insufficient_scope` and `required_scopes`.
 
@@ -5456,7 +5456,7 @@ components:
       required: [url, expires_at]
       properties:
         url:
-          description: "`<public url>/redefinir-senha#<secret>`."
+          description: "`<url pública>/redefinir-senha#<segredo>`."
           type: string
           format: uri
         expires_at:
