@@ -84,7 +84,7 @@ jsdom no Windows, sem ser regressão.
   administrador) ou a CA extra nas configurações, e um PAT colado. Quem atualiza de uma delas
   continua com o PAT e pode trocar pela conta em Configurações · Servidor.
 - **Log.** `%LOCALAPPDATA%\io.github.holetz.eclume\logs\eclume.log`
-  ([desktop-gravacao.md](../standards/code/desktop-gravacao.md#app-e-bandeja)).
+  ([desktop-gravacao.md](../standards/code/desktop-gravacao.md#app-and-tray)).
 
 ## 4. Dirigir o app sem clicar
 
