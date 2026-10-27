@@ -1,17 +1,17 @@
-"""Fakes da suíte: o worker GPU e os agentes de sumarização.
+"""Fakes of the suite: the GPU worker and the summarization agents.
 
-O worker GPU fake cumpre o lado GPU do contrato de jobs com a transcrição de fixture: publica
-`recordings/{id}/r{revision}/transcript.raw.json` (a fixture de 3 locutores sem `person`/
-`suggestions`, com rótulos `Locutor N`) e, se pedido, `speaker_embeddings.json`; grava o progresso
-com a revisão e enfileira `ingest_transcript` (ou `transcription_failed`) em `eclume:default` com o
-`_job_id` da revisão. `legacy=True` faz o worker antigo: chaves sem revisão, progresso sem
-`revision` e retorno sem `_job_id`. Os embeddings têm 256
-dimensões, como os do pyannote: por padrão, uma "voz" fixa por locutor (`voice(1..3)`), a mesma em
-toda gravação; `voices=` troca as vozes de uma rodada.
+The fake GPU worker fulfils the GPU side of the job contract with the fixture transcript: it publishes
+`recordings/{id}/r{revision}/transcript.raw.json` (the 3-speaker fixture without `person`/
+`suggestions`, with `Locutor N` labels) and, when asked, `speaker_embeddings.json`; it writes the progress
+with the revision and enqueues `ingest_transcript` (or `transcription_failed`) on `eclume:default` with the
+`_job_id` of the revision. `legacy=True` plays the old worker: keys without revision, progress without
+`revision` and return without `_job_id`. The embeddings have 256
+dimensions, like pyannote's: by default, one fixed "voice" per speaker (`voice(1..3)`), the same in
+every recording; `voices=` swaps the voices of one round.
 
-`FakeAgents` substitui a fábrica de providers dos jobs por agente (`summarize`, `fill_fields`,
+`FakeAgents` replaces the provider factory of the agent jobs (`summarize`, `fill_fields`,
 `detect_agenda_type`, `summary_chat`):
-nenhum teste chama um LLM de verdade, e cada chamada fica registrada.
+no test calls a real LLM, and every call is recorded.
 """
 
 from __future__ import annotations
@@ -49,8 +49,8 @@ EMBEDDING_DIMS = 256
 
 
 def voice(seed: int, *, jitter: float = 0.0, jitter_seed: int = 0) -> list[float]:
-    """Uma "voz": vetor gaussiano fixo por `seed` (vozes distintas são quase ortogonais), com ruído opcional."""
-    base = random.Random(seed)  # noqa: S311 — dado de teste, sem fim criptográfico
+    """A "voice": Gaussian vector fixed per `seed` (distinct voices are nearly orthogonal), with optional noise."""
+    base = random.Random(seed)  # noqa: S311 — test data, no cryptographic purpose
     noise = random.Random(10_000 + jitter_seed)  # noqa: S311
     return [base.gauss(0, 1) + jitter * noise.gauss(0, 1) for _ in range(EMBEDDING_DIMS)]
 
@@ -68,12 +68,12 @@ ENGINE_INFO = {
 
 
 def contract_transcript() -> dict[str, Any]:
-    """A transcrição de 3 locutores do contrato."""
+    """The 3-speaker transcript of the contract."""
     return json.loads(FIXTURE.read_text(encoding="utf-8"))
 
 
 def raw_transcript() -> dict[str, Any]:
-    """Saída do worker GPU: o schema da transcrição sem pessoas nem sugestões, locutores `Locutor N`."""
+    """Output of the GPU worker: the transcript schema without persons or suggestions, speakers `Locutor N`."""
     source = contract_transcript()
     return {
         "schema_version": source["schema_version"],
@@ -86,9 +86,9 @@ def raw_transcript() -> dict[str, Any]:
 
 
 async def _put_json(storage: Storage, key: str, document: object) -> None:
-    """Grava um JSON no bucket como o worker GPU faz."""
+    """Writes a JSON to the bucket the way the GPU worker does."""
     await asyncio.to_thread(
-        storage._s3.put_object,  # noqa: SLF001 — o worker de verdade grava pelo próprio cliente S3
+        storage._s3.put_object,  # noqa: SLF001 — the real worker writes through its own S3 client
         Bucket=storage.bucket,
         Key=key,
         Body=json.dumps(document).encode(),
@@ -97,12 +97,12 @@ async def _put_json(storage: Storage, key: str, document: object) -> None:
 
 
 def _return_job_id(ctx: dict[str, Any], job: str, recording_id: str, revision: int) -> dict[str, str]:
-    """O `_job_id` do retorno com a revisão; o worker antigo deixa o arq sortear um."""
+    """The return `_job_id` with the revision; the old worker lets arq pick one at random."""
     return {} if ctx.get("legacy") else {"_job_id": f"{job}:{recording_id}:{revision}"}
 
 
 async def fake_transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str, options: dict[str, Any]) -> str:
-    """O `transcribe` do contrato, sem GPU."""
+    """The `transcribe` of the contract, without a GPU."""
     storage: Storage = ctx["storage"]
     redis = ctx["redis"]
     legacy = bool(ctx.get("legacy"))
@@ -122,7 +122,7 @@ async def fake_transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str
             **_return_job_id(ctx, "transcription_failed", recording_id, revision),
         )
         return "falhou"
-    await storage.sha256(audio_key)  # o áudio existe e é legível
+    await storage.sha256(audio_key)  # the audio exists and is readable
     prefix = artifacts_prefix(recording_id) + ("" if legacy else f"r{revision}/")
     transcript_key = f"{prefix}transcript.raw.json"
     await _put_json(storage, transcript_key, raw_transcript())
@@ -132,10 +132,10 @@ async def fake_transcribe(ctx: dict[str, Any], recording_id: str, audio_key: str
         vectors = ctx.get("voices") or DEFAULT_VOICES
         document = {"speaker_embeddings": vectors, "embedding_model": EMBEDDING_MODEL, "dimension": EMBEDDING_DIMS}
         await _put_json(storage, embeddings_key, document)
-    # O job começou no worker há pouco, antes da ingestão.
+    # The job started on the worker a moment ago, before the ingestion.
     info = dict(ENGINE_INFO) | {"started_at": (datetime.now(UTC) - timedelta(seconds=5)).isoformat()}
     if "preprocess" in options:
-        # O pré-processamento feito como a configuração pediu; `preprocess_fallback` simula a queda.
+        # The preprocessing done as the settings asked; `preprocess_fallback` simulates the fallback.
         failed = ctx.get("preprocess_fallback", False)
         steps = [
             {"step": name, "state": ("failed" if failed else "done") if block.get("enabled") else "skipped"}
@@ -174,11 +174,11 @@ def run_gpu(
     voices: dict[str, list[float]] | None = None,
     **behavior: Any,  # noqa: ANN401
 ) -> list[tuple[str, str, dict[str, Any]]]:
-    """Drena `eclume:gpu` com o `transcribe` fake; devolve as chamadas recebidas.
+    """Drains `eclume:gpu` with the fake `transcribe`; returns the calls received.
 
-    `behavior` ajusta o fake: `fail_stage` e `failure` (código, mensagem) na falha,
-    `preprocess_fallback` para a cadeia do pré-processamento caída para só o formato e `legacy`
-    para o worker GPU anterior à revisão nos retornos.
+    `behavior` tunes the fake: `fail_stage` and `failure` (code, message) on failure,
+    `preprocess_fallback` for the preprocessing chain fallen back to the format only, and `legacy`
+    for the GPU worker from before the revision in the returns.
     """
     calls: list[tuple[str, str, dict[str, Any]]] = []
     ctx: dict[str, Any] = {"settings": settings, "fail": fail, "calls": calls, "voices": voices, **behavior}
@@ -196,9 +196,9 @@ def run_gpu(
 
 
 def purpose_of(system: str, prompt: str) -> str:
-    """A finalidade da chamada: `fields`, `agenda_detection`, `chat`, `base_chat`, `agent` ou `summaries`.
+    """The purpose of the call: `fields`, `agenda_detection`, `chat`, `base_chat`, `agent` or `summaries`.
 
-    Os campos e o resumo compartilham o `system`; as regras dos campos vão no prompt.
+    The fields and the summary share the `system`; the field rules go in the prompt.
     """
     if FIELDS_SYSTEM in prompt:
         return "fields"
@@ -214,14 +214,14 @@ def purpose_of(system: str, prompt: str) -> str:
 
 @dataclass
 class FakeAgents:
-    """Fábrica de providers falsos, com respostas por finalidade e erros programados, em ordem.
+    """Factory of fake providers, with replies per purpose and scheduled errors, in order.
 
-    `replies[finalidade]` é a fila de respostas daquela finalidade, uma por chamada (o roteiro do
-    chat: consultas e a resposta); vazia, vale o padrão: Markdown determinístico no resumo, `{}`
-    (nada encontrado) nos campos, o primeiro tipo (`T1`) na detecção e um `reply` sem mudar o
-    resumo no chat.
-    Os `errors` valem para qualquer
-    chamada, antes das respostas; `failures[finalidade]` só para as daquela finalidade.
+    `replies[purpose]` is the reply queue of that purpose, one per call (the chat
+    script: queries and the reply); when empty, the default holds: deterministic Markdown for the summary, `{}`
+    (nothing found) for the fields, the first type (`T1`) for the detection and a `reply` that leaves the
+    summary unchanged for the chat.
+    The `errors` apply to any
+    call, before the replies; `failures[purpose]` only to those of that purpose.
     """
 
     errors: list[ProviderError] = field(default_factory=list)
@@ -230,11 +230,11 @@ class FakeAgents:
     calls: list[tuple[ProviderConfig, str, str]] = field(default_factory=list)
 
     def of(self, purpose: str) -> list[tuple[ProviderConfig, str, str]]:
-        """As chamadas de uma finalidade."""
+        """The calls of one purpose."""
         return [call for call in self.calls if purpose_of(call[1], call[2]) == purpose]
 
     def __call__(self, config: ProviderConfig) -> _FakeAgent:
-        """O provider falso de `config`."""
+        """The fake provider of `config`."""
         return _FakeAgent(self, config)
 
 
@@ -271,16 +271,16 @@ _CPU_ROUNDS = 20
 
 
 def run_cpu(settings: Settings, agents: FakeAgents | None = None) -> FakeAgents:
-    """Drena `eclume:default` e `eclume:agents` com os workers CPU reais do server e agentes falsos.
+    """Drains `eclume:default` and `eclume:agents` with the real CPU workers of the server and fake agents.
 
-    Uma fila enfileira na outra (a ingestão abre a cadeia por agente), então os dois workers rodam
-    em laço até as duas esvaziarem. Devolve os agentes.
+    One queue enqueues into the other (the ingestion opens the agent chain), so both workers run
+    in a loop until both are empty. Returns the agents.
     """
     agents = agents or FakeAgents()
     for _ in range(_CPU_ROUNDS):
         for make in (worker_settings, agent_worker_settings):
             params = make(settings) | {"cron_jobs": None, "poll_delay": 0.05}
-            # Sem espera entre tentativas: o worker em modo burst esperaria o adiamento em tempo real.
+            # No wait between attempts: the worker in burst mode would wait for the postponement in real time.
             params["ctx"] = params["ctx"] | {
                 "provider_factory": agents,
                 "retry_delays": (0, 0),
@@ -290,12 +290,12 @@ def run_cpu(settings: Settings, agents: FakeAgents | None = None) -> FakeAgents:
             run(_drain(params.pop("functions"), **params))
         if not run(_pending(settings)):
             return agents
-    msg = f"as filas do worker CPU não esvaziaram em {_CPU_ROUNDS} rodadas"
+    msg = f"the CPU worker queues did not empty in {_CPU_ROUNDS} rounds"
     raise AssertionError(msg)
 
 
 async def _pending(settings: Settings) -> int:
-    """Jobs ainda nas filas dos workers CPU."""
+    """Jobs still in the CPU worker queues."""
     client = Redis.from_url(settings.redis_url)
     try:
         return sum([await client.zcard(DEFAULT_QUEUE), await client.zcard(AGENT_QUEUE)])
@@ -304,7 +304,7 @@ async def _pending(settings: Settings) -> int:
 
 
 async def _drain(functions: list[Any], **params: Any) -> None:  # noqa: ANN401
-    # O `Worker` guarda o loop corrente ao nascer: precisa ser criado dentro do loop que o roda.
+    # The `Worker` keeps the current loop when created: it must be created inside the loop that runs it.
     worker = Worker(functions, **params, burst=True, max_tries=1, handle_signals=False)
     try:
         await worker.main()
@@ -313,7 +313,7 @@ async def _drain(functions: list[Any], **params: Any) -> None:  # noqa: ANN401
 
 
 def drain_storage(settings: Settings) -> None:
-    """Esvazia a fila de exclusão do bucket, como o cron `drain_storage_deletions` faria."""
+    """Empties the bucket deletion queue, as the `drain_storage_deletions` cron would."""
     from eclume_server.db.session import make_engine  # noqa: PLC0415
     from eclume_server.storage_deletions import drain  # noqa: PLC0415
 
@@ -335,7 +335,7 @@ def transcribed(
     voices: dict[str, list[float]] | None = None,
     **fields: Any,  # noqa: ANN401
 ) -> dict[str, Any]:
-    """Sobe um áudio e roda os dois workers: devolve a gravação já com a transcrição de 3 locutores."""
+    """Uploads an audio and runs both workers: returns the recording already with the 3-speaker transcript."""
     recording = upload_file(api, audio_bytes(1000), **fields)
     run_gpu(settings, voices=voices)
     run_cpu(settings)

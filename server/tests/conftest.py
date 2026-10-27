@@ -1,8 +1,8 @@
-"""Fixtures da suíte do server.
+"""Fixtures of the server suite.
 
-Sem os serviços de `deploy/docker-compose.test.yml`, os testes que os pedem pulam — a não ser com
-`ECLUME_TEST_REQUIRE_SERVICES=1` (a CI), em que a ausência vira falha, para que "pulou" nunca
-passe por "passou".
+Without the services of `deploy/docker-compose.test.yml`, the tests that request them skip — unless
+`ECLUME_TEST_REQUIRE_SERVICES=1` (CI), where their absence becomes a failure, so that "skipped" never
+passes for "passed".
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def services() -> Iterator[Services]:
     missing = unreachable_services()
     if missing:
         message = (
-            f"serviços de teste fora do ar ({', '.join(missing)}): "
+            f"test services are down ({', '.join(missing)}): "
             "docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait"
         )
         if REQUIRE_SERVICES:
@@ -51,24 +51,24 @@ def services() -> Iterator[Services]:
 @pytest.fixture(scope="session")
 def client(services: Services) -> Iterator[TestClient]:
     with TestClient(create_app(services.settings), base_url="https://testserver") as test_client:
-        # Toda resposta de /api/v1 da suíte é conferida contra o contrato bundled.
+        # Every /api/v1 response of the suite is checked against the bundled contract.
         test_client.event_hooks["response"] = [CONFORMANCE.check]
         yield test_client
 
 
 @pytest.fixture(autouse=True)
 def _conformance() -> Iterator[None]:
-    """Falha o teste cujas respostas saíram do contrato."""
+    """Fails the test whose responses left the contract."""
     CONFORMANCE.failures.clear()
     yield
     failures = list(CONFORMANCE.failures)
     CONFORMANCE.failures.clear()
-    assert failures == [], "respostas fora do contrato:\n" + "\n".join(failures)
+    assert failures == [], "responses outside the contract:\n" + "\n".join(failures)
 
 
 @pytest.fixture
 def make_user(services: Services) -> Callable[..., Account]:
-    """Fábrica de contas de usuário."""
+    """Factory of user accounts."""
 
     def make(*, name: str | None = None, notice_version: str | None = NOTICE_VERSION) -> Account:
         return new_user(services, name=name, notice_version=notice_version)
@@ -78,7 +78,7 @@ def make_user(services: Services) -> Callable[..., Account]:
 
 @pytest.fixture(scope="session")
 def _platform_defaults(services: Services) -> dict[str, Any]:
-    """A configuração da plataforma como a migration a deixou."""
+    """The platform settings as the migration left them."""
 
     async def read(conn: Any) -> dict[str, Any]:  # noqa: ANN401
         return dict((await conn.execute(select(*_BLOCKS))).mappings().one())
@@ -88,9 +88,10 @@ def _platform_defaults(services: Services) -> dict[str, Any]:
 
 @pytest.fixture
 def platform(services: Services, _platform_defaults: dict[str, Any]) -> Iterator[None]:
-    """Plataforma (configuração, segredos e providers) nos padrões da migration, antes e depois.
+    """Platform (settings, secrets and providers) at the migration defaults, before and after.
 
-    A plataforma é uma só no banco da sessão: o teste que a muda não vaza para os outros.
+    The platform is a single one in the session database: the test that changes it does not leak
+    into the others.
     """
 
     async def reset(conn: Any) -> None:  # noqa: ANN401
@@ -105,14 +106,14 @@ def platform(services: Services, _platform_defaults: dict[str, Any]) -> Iterator
 
 @pytest.fixture
 def admin(services: Services, client: TestClient, platform: None) -> Api:
-    """Sessão de admin de uma conta de admin nova, com a plataforma nos padrões."""
+    """Admin session of a new admin account, with the platform at its defaults."""
     del platform
     return admin_login(client, new_admin(services).email)
 
 
 @pytest.fixture
 def as_user(client: TestClient) -> Callable[[Account], Api]:
-    """Sessão aberta para uma conta."""
+    """Session opened for an account."""
 
     def open_session(account: Account) -> Api:
         return login(client, account.email)

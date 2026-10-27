@@ -1,1 +1,1 @@
-"""Helpers da suíte do server: harness de serviços, conformidade com o OpenAPI e fakes."""
+"""Helpers of the server suite: service harness, OpenAPI conformance and fakes."""

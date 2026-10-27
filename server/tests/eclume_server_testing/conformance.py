@@ -1,11 +1,11 @@
-"""Conformidade das respostas reais com `contracts/openapi-v1.bundled.yaml`.
+"""Conformance of the real responses with `contracts/openapi-v1.bundled.yaml`.
 
-Cada resposta de `/api/v1` que a suíte produz passa por `check`: o status tem de estar declarado na
-operação, os headers obrigatórios presentes e o corpo JSON válido contra o schema **estrito** (os
-objetos fechados a propriedades não declaradas, como em `contracts/tests/test_contract.py`). Uma
-requisição fora do contrato (parâmetro, corpo ou regra de negócio inválidos)
-recebe 422 `validation_failed` em qualquer operação, como no mock (Prism), mesmo onde a operação
-não declara o 422.
+Every `/api/v1` response the suite produces goes through `check`: the status must be declared in the
+operation, the required headers present and the JSON body valid against the **strict** schema (the
+objects closed to undeclared properties, as in `contracts/tests/test_contract.py`). A request outside
+the contract (invalid parameter, body or business rule)
+gets 422 `validation_failed` in any operation, as in the mock (Prism), even where the operation
+does not declare the 422.
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ BUNDLE_URI = "urn:eclume:contracts:v1:bundle"
 HTTP_METHODS = {"get", "put", "post", "delete", "patch"}
 
 
-def strictify(node: Any) -> Any:  # noqa: ANN401 — percorre YAML arbitrário
-    """Fecha todo schema de objeto a propriedades não declaradas (igual ao teste do contrato)."""
+def strictify(node: Any) -> Any:  # noqa: ANN401 — walks arbitrary YAML
+    """Closes every object schema to undeclared properties (same as the contract test)."""
     if isinstance(node, list):
         return [strictify(item) for item in node]
     if not isinstance(node, dict):
@@ -44,7 +44,7 @@ def strictify(node: Any) -> Any:  # noqa: ANN401 — percorre YAML arbitrário
 
 @cache
 def bundle() -> dict[str, Any]:
-    """O contrato v1 em arquivo único."""
+    """The v1 contract in a single file."""
     return yaml.safe_load(BUNDLE.read_text(encoding="utf-8"))
 
 
@@ -65,24 +65,24 @@ def _pointer(*parts: str) -> str:
 
 @cache
 def _templates() -> list[tuple[re.Pattern[str], str]]:
-    """Templates de caminho do contrato, os literais antes dos parametrizados (`speakers/merge`)."""
+    """Path templates of the contract, the literal ones before the parameterized ones (`speakers/merge`)."""
     paths = sorted(bundle()["paths"], key=lambda p: (p.count("{"), -len(p)))
     return [(re.compile("^" + re.sub(r"\{[^}]+\}", "[^/]+", p) + "$"), p) for p in paths]
 
 
 def operations() -> set[tuple[str, str]]:
-    """`(MÉTODO, caminho)` de toda operação do contrato."""
+    """`(METHOD, path)` of every operation of the contract."""
     return {(m.upper(), p) for p, item in bundle()["paths"].items() for m in item if m in HTTP_METHODS}
 
 
 @dataclass
 class Conformance:
-    """Coletor de violações e de operações exercitadas."""
+    """Collector of violations and of exercised operations."""
 
     failures: list[str] = field(default_factory=list)
 
     def check(self, response: httpx.Response) -> None:
-        """Valida uma resposta de `/api/v1` contra o contrato."""
+        """Validates an `/api/v1` response against the contract."""
         path = response.request.url.path
         if not path.startswith("/api/v1/"):
             return
@@ -96,8 +96,8 @@ class Conformance:
         operation = bundle()["paths"][template][method.lower()]
         declared = operation["responses"].get(str(response.status_code))
         if declared is None and response.status_code in {413, 422, 500}:
-            # 422: requisição fora do contrato, em qualquer operação (como no mock); 413 (corpo acima
-            # do teto) e 500 (`internal_error`) também valem em qualquer operação.
+            # 422: request outside the contract, in any operation (as in the mock); 413 (body above
+            # the ceiling) and 500 (`internal_error`) also hold in any operation.
             self._body(where, response, _pointer("components", "schemas", "Problem"))
             return
         if declared is None:

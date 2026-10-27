@@ -1,8 +1,8 @@
-"""Harness de serviços da suíte do server: Postgres, Redis e MinIO reais.
+"""Service harness of the server suite: real Postgres, Redis and MinIO.
 
-Os serviços vêm de `deploy/docker-compose.test.yml`. Cada sessão de teste cria um banco, um
-bucket e escolhe um banco do Redis próprios, e desfaz tudo no fim. As migrations rodam com o
-superusuário (o migrador); a suíte conecta como `eclume_server`, o papel de conexão de produção.
+The services come from `deploy/docker-compose.test.yml`. Each test session creates its own database
+and bucket and picks its own Redis database, and undoes everything at the end. The migrations run as
+the superuser (the migrator); the suite connects as `eclume_server`, the production connection role.
 """
 
 from __future__ import annotations
@@ -32,16 +32,16 @@ S3_ENDPOINT = os.environ.get("ECLUME_TEST_S3_ENDPOINT", "http://127.0.0.1:59100"
 S3_ACCESS_KEY = os.environ.get("ECLUME_TEST_S3_ACCESS_KEY", "eclume")
 S3_SECRET_KEY = os.environ.get("ECLUME_TEST_S3_SECRET_KEY", "eclume-test-secret")
 REQUIRE_SERVICES = os.environ.get("ECLUME_TEST_REQUIRE_SERVICES") == "1"
-RUNTIME_PASSWORD = "eclume-test-runtime"  # senha de teste do papel de conexão
+RUNTIME_PASSWORD = "eclume-test-runtime"  # test password of the connection role
 
 
 def run[T](coro: Coroutine[Any, Any, T]) -> T:
-    """Roda uma corrotina num loop próprio (os testes são síncronos)."""
+    """Runs a coroutine in its own loop (the tests are synchronous)."""
     return asyncio.run(coro)
 
 
 def unreachable_services() -> list[str]:
-    """Serviços de teste que não respondem na porta."""
+    """Test services that do not answer on their port."""
     missing = []
     for name, url, port in (("postgres", DATABASE_URL, 5432), ("redis", REDIS_URL, 6379), ("minio", S3_ENDPOINT, 9000)):
         parts = urlsplit(url.replace("+asyncpg", ""))
@@ -55,13 +55,13 @@ def unreachable_services() -> list[str]:
 
 @dataclass(frozen=True)
 class Services:
-    """Recursos de teste desta sessão."""
+    """Test resources of this session."""
 
     settings: Settings
     database: str
 
-    def s3(self) -> Any:  # noqa: ANN401 — cliente boto3 sem stubs
-        """Cliente S3 do MinIO de teste."""
+    def s3(self) -> Any:  # noqa: ANN401 — boto3 client without stubs
+        """S3 client of the test MinIO."""
         return boto3.client(
             "s3",
             endpoint_url=self.settings.s3_endpoint,
@@ -71,7 +71,7 @@ class Services:
         )
 
     async def sql(self, fn: Callable[[Any], Awaitable[Any]]) -> Any:  # noqa: ANN401
-        """Executa `fn(conn)` numa transação com o papel de conexão, num engine descartável."""
+        """Runs `fn(conn)` in a transaction with the connection role, on a throwaway engine."""
         engine = create_async_engine(self.settings.database_url)
         try:
             async with engine.begin() as conn:
@@ -87,10 +87,10 @@ async def while_recording_locked(
     then: str,
     **params: str,
 ) -> Any:  # noqa: ANN401
-    """Dois pedidos simultâneos: o segundo (`request`) chega com a gravação travada pelo primeiro.
+    """Two simultaneous requests: the second (`request`) arrives with the recording locked by the first.
 
-    Segura a linha da gravação, dispara `request` numa thread, espera ele ficar à espera desse lock,
-    roda `then` (o que o primeiro faria), confirma e devolve a resposta de `request`.
+    Holds the recording row, fires `request` in a thread, waits for it to wait on that lock, runs
+    `then` (what the first would do), commits and returns the response of `request`.
     """
     engine = create_async_engine(services.settings.database_url)
     watcher = engine.execution_options(isolation_level="AUTOCOMMIT")
@@ -110,7 +110,7 @@ async def while_recording_locked(
             else:
                 await holder.rollback()
                 await pending
-                msg = "o segundo pedido não esperou o lock da gravação"
+                msg = "the second request did not wait for the recording lock"
                 raise AssertionError(msg)
             await holder.execute(text(then), params)
             await holder.commit()
@@ -129,7 +129,7 @@ async def _admin(statement: str) -> None:
 
 
 def provision() -> Services:
-    """Cria banco (com as migrations), bucket e escolhe o banco do Redis desta sessão."""
+    """Creates the database (with the migrations) and the bucket, and picks the Redis database of this session."""
     suffix = secrets.token_hex(4)
     database = f"eclume_test_{suffix}"
     owner_url = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
@@ -156,21 +156,21 @@ def provision() -> Services:
         s3_bucket=f"eclume-test-{suffix}",
         secret_key=secrets.token_hex(16),
         public_url="https://testserver",
-        # Os testes entram todos pelo mesmo IP (`testclient`); o limite é provado com um app próprio.
+        # All tests come in through the same IP (`testclient`); the limit is proved with an app of its own.
         credential_attempts_per_minute=100_000,
         signups_per_ip_per_day=100_000,
-        # Partes no mínimo do contrato (5 MiB) deixam os testes de upload mais leves.
+        # Parts at the contract minimum (5 MiB) make the upload tests lighter.
         upload_part_size=5 * 1024 * 1024,
     )
     services = Services(settings=settings, database=database)
     services.s3().create_bucket(Bucket=settings.s3_bucket)
-    # Filas de uma sessão anterior no mesmo banco do Redis travariam os workers em modo burst.
+    # Queues of an earlier session in the same Redis database would hang the workers in burst mode.
     redis.Redis.from_url(settings.redis_url).flushdb()
     return services
 
 
 def teardown(services: Services) -> None:
-    """Apaga o banco e o bucket da sessão."""
+    """Drops the database and the bucket of the session."""
     run(_admin(f'DROP DATABASE IF EXISTS "{services.database}" WITH (FORCE)'))
     redis.Redis.from_url(services.settings.redis_url).flushdb()
     s3 = services.s3()
