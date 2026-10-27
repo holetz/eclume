@@ -160,7 +160,7 @@ claude setup-token   # long-lived token (1 year) for eclume
 ```
 
 The eclume agent worker receives the token through the panel (Admin → Agentes → Token do Claude) or through
-`ECLUME_CLAUDE_OAUTH_TOKEN` ([deploy-producao.md](deploy-producao.md#segredos)), without mounting the
+`ECLUME_CLAUDE_OAUTH_TOKEN` ([deploy-producao.md](deploy-producao.md#secrets)), without mounting the
 host's session: the bind mount of `~/.claude/.credentials.json` diverges when the host's `claude`
 renews the OAuth. Whether the terms allow this use of the subscription token is a pending decision of the
 owner (holetz/eclume#129).
@@ -201,7 +201,7 @@ scp holetz@192.168.15.199:/srv/eclume/downloads/eclume-root.crt .
 - **Firefox:** import it in Settings → Certificates, because it uses its own store.
 
 Checking the fingerprint and use by lumea (`LUMEA_ECLUME_CA_BUNDLE`) are in
-[deploy-producao.md](deploy-producao.md#ca-raiz-nos-clientes).
+[deploy-producao.md](deploy-producao.md#root-ca-on-the-clients).
 
 ## Ubuntu version upgrade
 
@@ -320,7 +320,7 @@ clients download from the eclume server itself:
   release on the host reads; the same values are in the GitHub secrets `TAURI_SIGNING_PRIVATE_KEY` and
   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for the manual workflow — but a GitHub secret cannot be read
   back and is not a recoverable copy: the copy is the encrypted restic snapshot of `secrets/` that
-  `backup.sh` takes off the host ([deploy-producao.md](deploy-producao.md#backup-e-restauração)).
+  `backup.sh` takes off the host ([deploy-producao.md](deploy-producao.md#backup-and-restore)).
   Never in the repo. The public one is in `desktop/src-tauri/tauri.conf.json`. Losing the private key forces
   reinstalling the app by hand on every client.
 
