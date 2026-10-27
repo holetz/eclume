@@ -11,7 +11,7 @@ interface DayGroup {
   items: Recording[]
 }
 
-/** Agrupa por dia local, na ordem em que as gravações vieram. */
+/** Groups by local day, in the order the recordings came. */
 function groupByDay(recordings: Recording[]): DayGroup[] {
   const groups = new Map<string, DayGroup>()
   for (const recording of recordings) {
@@ -24,7 +24,7 @@ function groupByDay(recordings: Recording[]): DayGroup[] {
   return [...groups.values()]
 }
 
-/** A lista corrida: um `.day-group` por dia, com uma `.rec-row` por gravação. */
+/** The running list: one `.day-group` per day, with one `.rec-row` per recording. */
 export function RecordingList({ recordings }: { recordings: Recording[] }) {
   const location = useLocation()
   const from = `${location.pathname}${location.search}`
