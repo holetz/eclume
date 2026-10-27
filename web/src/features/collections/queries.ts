@@ -1,4 +1,4 @@
-// Coleções do usuário. Poucas por usuário: uma página de 200 cobre a tela inteira.
+// The user's collections. Few per user: one page of 200 covers the whole screen.
 import { useQuery } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
