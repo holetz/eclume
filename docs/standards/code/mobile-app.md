@@ -57,7 +57,7 @@ UI (React, ui/src) ──invoke/listen──▶ src-tauri (comandos, evento esta
 ## Conexão e credencial
 
 - **Três caminhos para a CA fixada** (`conexao.rs`; o protocolo é o de
-  [server-mcp-e-dispositivos.md](server-mcp-e-dispositivos.md#fixação-da-ca-pelos-apps)):
+  [server-mcp-e-dispositivos.md](server-mcp-e-dispositivos.md#ca-pinning-by-the-apps)):
   1. **Descoberto** pelo mDNS: a raiz baixada tem de bater com o `ca` do TXT, e ainda assim a
      pessoa confere a impressão digital antes de mandar e-mail e senha, porque o TXT não é
      autenticado;

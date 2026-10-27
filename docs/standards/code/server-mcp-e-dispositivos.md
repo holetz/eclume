@@ -1,7 +1,7 @@
 ---
 type: standard
-title: Servidor MCP e ligação de dispositivos
-description: Como o server atende assistentes e aparelhos — o servidor MCP em /mcp (SDK mcp 2.x, HTTP streamable sem estado, Bearer eclp_ pelo BearerGate, ferramentas × escopos, erro de ferramenta que nomeia o escopo), os grupos de escopo da tela Conexão MCP, a credencial de dispositivo (login por e-mail e senha ou código de pareamento de 6 caracteres com o link do QR), o limite de tentativas, o descritor público /server com a impressão digital da CA raiz e da próxima, e a raiz própria com restrição de nome e a rotação anunciada.
+title: MCP server and device linking
+description: How the server serves assistants and devices — the MCP server at /mcp (mcp 2.x SDK, stateless streamable HTTP, Bearer eclp_ through the BearerGate, tools × scopes, a tool error that names the scope), the scope groups of the MCP Connection screen, the device credential (login by e-mail and password or a 6-character pairing code with the QR link), the attempt limit, the public /server descriptor with the fingerprint of the root CA and of the next one, and the own root with name constraints and the announced rotation.
 resource: server/src/eclume_server/mcp_server/**, server/src/eclume_server/ca.py, server/src/eclume_server/devices.py, server/src/eclume_server/ratelimit.py, server/src/eclume_server/server_info.py, server/src/eclume_server/routes/devices.py, server/src/eclume_server/routes/server_info.py, server/src/eclume_server/db/migrations/015_dispositivos_e_mcp.sql, server/src/eclume_server/db/migrations/017_dispositivo_le_resumo.sql, server/src/eclume_server/operations.py
 tags: [code, server, mcp, dispositivos, pareamento, tokens, escopos]
 timestamp: 2026-10-05
@@ -11,230 +11,230 @@ source: holetz/eclume#35, holetz/eclume#57, holetz/eclume#101, holetz/eclume#102
 maintainer: holetz
 ---
 
-# Servidor MCP e ligação de dispositivos
+# MCP server and device linking
 
-O assistente (Claude Desktop, Claude Code, qualquer cliente MCP) e os apps (desktop e celular)
-entram no eclume por um token `eclp_` do usuário. O assistente recebe um PAT pessoal criado em
-"Conexão MCP"; o aparelho recebe uma **credencial de dispositivo**, emitida pelo login ou pelo
-pareamento. A autenticação comum está em [server-nucleo.md](server-nucleo.md) §Autenticação, e as
-rotas no [contrato v1](../api/contrato-v1.md).
+The assistant (Claude Desktop, Claude Code, any MCP client) and the apps (desktop and phone)
+enter eclume through a user `eclp_` token. The assistant receives a personal PAT created under
+"MCP Connection"; the device receives a **device credential**, issued by login or by
+pairing. The common authentication is in [server-nucleo.md](server-nucleo.md) §Authentication, and the
+routes in [contract v1](../api/contrato-v1.md).
 
-## Servidor MCP
+## MCP server
 
-- **Onde.** No mesmo processo do server (`mcp_server/`), e não num serviço atrás do Caddy: as
-  ferramentas são as operações da API (RLS por `user_tx`, storage, fila, agentes) e usam o mesmo
+- **Where.** In the same process as the server (`mcp_server/`), and not in a service behind Caddy: the
+  tools are the API operations (RLS through `user_tx`, storage, queue, agents) and use the same
   `AppContext`.
-- **Montagem** (`mcp_server/app.py`, SDK `mcp` 2.x): `MCPServer("eclume", instructions=…)` e
-  `streamable_http_app(stateless_http=True, json_response=True, transport_security=…)` sem a
-  proteção de DNS rebinding (o Host é do Caddy e toda chamada exige Bearer). O `/mcp` entra no
-  roteador do FastAPI como `Route` **exata**, nunca `Mount`: `Mount("/mcp")` responde `/mcp` com
-  redirect para `/mcp/`, que clientes de POST não seguem. Nenhuma rota do SPA começa com `/mcp`.
-- **Lifespan.** O lifespan de um subapp nunca roda, e o session manager só existe depois de
-  `streamable_http_app()`: `create_app` monta o `MCPServer` (um por app, porque o manager roda uma
-  vez só) e o seu lifespan entra em `session_manager.run()` depois de criar o `AppContext`.
-- **Sem estado, resposta JSON.** Cada POST é independente: nenhuma sessão MCP em memória, o
-  restart não derruba o assistente e várias réplicas funcionariam. Só ferramentas: sem recursos,
-  prompts, notificações, progresso ou `elicit`.
-- **Autenticação.** Não se usa o `token_verifier`/`AuthSettings` do SDK: eles publicam o metadata
-  de recurso protegido do OAuth, e o eclume não tem servidor de autorização. O ASGI `BearerGate`
-  chama `auth.authenticate(..., bearer_only=True)`: só `Authorization: Bearer eclp_…` (pessoal ou
-  de dispositivo) vale, cookie não. Sem credencial válida, 401 `application/problem+json` com
-  `WWW-Authenticate: Bearer`. Com ela, grava `mcp_last_used_at` junto de `last_used_at` e põe o
-  `Principal` em `scope["eclume.principal"]`.
-- **Dentro da ferramenta**, `principal_of(ctx)` lê o `Principal` do scope da requisição HTTP que o
-  transporte guarda em `ctx.request_context.request`, e `app_of(ctx)` o `AppContext` do app. Nada
-  de contextvar: o handler roda no task group do manager, fora da task da requisição.
-- **Assistentes conectados.** Sem sessão, "conectado" é um token com `mcp_last_used_at` nas
-  últimas 24 h; a Saúde do admin conta os tokens distintos.
+- **Mounting** (`mcp_server/app.py`, `mcp` 2.x SDK): `MCPServer("eclume", instructions=…)` and
+  `streamable_http_app(stateless_http=True, json_response=True, transport_security=…)` without the
+  DNS rebinding protection (the Host belongs to Caddy and every call requires Bearer). `/mcp` enters the
+  FastAPI router as an **exact** `Route`, never a `Mount`: `Mount("/mcp")` answers `/mcp` with a
+  redirect to `/mcp/`, which POST clients do not follow. No SPA route starts with `/mcp`.
+- **Lifespan.** A subapp's lifespan never runs, and the session manager only exists after
+  `streamable_http_app()`: `create_app` builds the `MCPServer` (one per app, because the manager runs
+  only once) and its lifespan enters `session_manager.run()` after creating the `AppContext`.
+- **Stateless, JSON response.** Each POST is independent: no MCP session in memory, a
+  restart does not drop the assistant and several replicas would work. Tools only: no resources,
+  prompts, notifications, progress or `elicit`.
+- **Authentication.** The SDK's `token_verifier`/`AuthSettings` are not used: they publish the OAuth
+  protected resource metadata, and eclume has no authorization server. The `BearerGate` ASGI
+  calls `auth.authenticate(..., bearer_only=True)`: only `Authorization: Bearer eclp_…` (personal or
+  device) counts, a cookie does not. Without a valid credential, 401 `application/problem+json` with
+  `WWW-Authenticate: Bearer`. With one, it writes `mcp_last_used_at` alongside `last_used_at` and puts the
+  `Principal` in `scope["eclume.principal"]`.
+- **Inside the tool**, `principal_of(ctx)` reads the `Principal` from the scope of the HTTP request that the
+  transport keeps in `ctx.request_context.request`, and `app_of(ctx)` the app's `AppContext`. No
+  contextvar: the handler runs in the manager's task group, outside the request's task.
+- **Connected assistants.** With no session, "connected" is a token with `mcp_last_used_at` in the
+  last 24 h; the admin Health counts the distinct tokens.
 
-## Ferramentas
+## Tools
 
-Nomes em inglês (convenção dos clientes MCP); descrições, erros e `instructions` em pt-BR. Recebem
-`recording_id` como UUID em texto e devolvem JSON estruturado (`structuredContent`, com o texto
-espelhado). Chamam as funções de domínio (`recordings.list_library`, `recordings.delete_recording_of`,
-`search.search`, `summaries`, `summary_chat.open_request`, `fields`, `transcripts`), nunca os
-handlers das rotas; o que vivia só no handler desce para o módulo de domínio.
+Names in English (the MCP clients' convention); descriptions, errors and `instructions` in pt-BR. They receive
+`recording_id` as a UUID in text and return structured JSON (`structuredContent`, with the text
+mirrored). They call the domain functions (`recordings.list_library`, `recordings.delete_recording_of`,
+`search.search`, `summaries`, `summary_chat.open_request`, `fields`, `transcripts`), never the
+route handlers; whatever lived only in the handler moves down to the domain module.
 
-| Ferramenta | O que faz | Escopos | Anotação |
+| Tool | What it does | Scopes | Annotation |
 |---|---|---|---|
-| `search_recordings(query?, started_from?, started_to?, tags?, agenda_type?, status?, awaiting?, limit=20, cursor?)` | sem `query`, a biblioteca por `recorded_at` desc com os filtros (`awaiting="speakers"`: só as paradas à espera dos nomes dos locutores); com `query`, a busca full-text com o trecho (no máximo uma tag). Cada gravação traz `awaiting`, como `Recording.awaiting` | `recordings:read` (+ `transcripts:read` com `query`) | readOnly |
-| `get_recording(recording_id)` | início, tipo, tags, campos com a origem, pessoas (locutores), marcadores, o status por etapa (com `speakers` em `waiting`) e `awaiting` | `recordings:read` | readOnly |
-| `list_fields_and_tags()` | campos (tipo e opções), tags em uso e tipos de agenda, para editar com valores válidos | `recordings:read` | readOnly |
-| `get_transcript(recording_id, start_ms?, end_ms?)` | `[mm:ss] Locutor: fala`, até 60 000 caracteres, com `next_start_ms` quando sobra | `transcripts:read` | readOnly |
-| `get_summary(recording_id)` | a versão atual (Markdown, id, número, origem) e a geração em aberto | `summaries:read` | readOnly |
-| `update_summary(recording_id, content_md)` | versão `manual` nova sobre a atual (`summaries.edit_current`, sem `base_version`) | `summaries:read`, `summaries:write` | — |
-| `request_summary(recording_id, instruction?)` | sem instrução, um resumo novo pelas instruções do tipo e o provider de resumos; com instrução, uma mensagem ao chat de ajuste; devolve o id pendente | `summaries:read`, `summaries:write` | — |
-| `update_fields(recording_id, title?, tags?, fields?)` | título, tags (a lista inteira) e campos do usuário por id, validados pelo tipo do campo, com origem `edited` | `recordings:write` | idempotent |
-| `delete_recording(recording_id)` | a exclusão da API (`recordings.delete_recording_of`) | `recordings:delete` | destructive |
+| `search_recordings(query?, started_from?, started_to?, tags?, agenda_type?, status?, awaiting?, limit=20, cursor?)` | without `query`, the library by `recorded_at` desc with the filters (`awaiting="speakers"`: only those stopped waiting for the speaker names); with `query`, the full-text search with the snippet (at most one tag). Each recording carries `awaiting`, like `Recording.awaiting` | `recordings:read` (+ `transcripts:read` with `query`) | readOnly |
+| `get_recording(recording_id)` | start, type, tags, fields with their origin, people (speakers), markers, the status per step (with `speakers` in `waiting`) and `awaiting` | `recordings:read` | readOnly |
+| `list_fields_and_tags()` | fields (type and options), tags in use and agenda types, to edit with valid values | `recordings:read` | readOnly |
+| `get_transcript(recording_id, start_ms?, end_ms?)` | `[mm:ss] Locutor: fala`, up to 60 000 characters, with `next_start_ms` when there is more | `transcripts:read` | readOnly |
+| `get_summary(recording_id)` | the current version (Markdown, id, number, origin) and the open generation | `summaries:read` | readOnly |
+| `update_summary(recording_id, content_md)` | a new `manual` version over the current one (`summaries.edit_current`, without `base_version`) | `summaries:read`, `summaries:write` | — |
+| `request_summary(recording_id, instruction?)` | without an instruction, a new summary from the type's instructions and the summaries provider; with an instruction, a message to the adjustment chat; returns the pending id | `summaries:read`, `summaries:write` | — |
+| `update_fields(recording_id, title?, tags?, fields?)` | title, tags (the whole list) and the user's fields by id, validated by the field type, with origin `edited` | `recordings:write` | idempotent |
+| `delete_recording(recording_id)` | the API deletion (`recordings.delete_recording_of`) | `recordings:delete` | destructive |
 
-- **Erros.** Escopo faltando, gravação inexistente ou de outra conta e validação voltam como erro
-  de ferramenta (`isError: true`), com a mensagem em pt-BR ("Falta o escopo recordings:delete
-  neste token."). Os problemas da API (404, 409, 422) viram erro de ferramenta pelo
+- **Errors.** A missing scope, a recording that does not exist or belongs to another account, and validation come back as a
+  tool error (`isError: true`), with the message in pt-BR ("Falta o escopo recordings:delete
+  neste token."). The API problems (404, 409, 422) become a tool error through
   `as_tool_error()`.
-- **Listagem.** `tools/list` mostra todas as ferramentas a qualquer token (é estática no
-  `MCPServer`); a recusa nomeia o escopo, e o assistente explica ao usuário o que falta.
-- **Operações compartilhadas** (holetz/eclume#145). As escritas que o Agente também faz vivem em
+- **Listing.** `tools/list` shows every tool to any token (it is static in the
+  `MCPServer`); the refusal names the scope, and the assistant explains to the user what is missing.
+- **Shared operations** (holetz/eclume#145). The writes the Agent also makes live in
   `operations.py` (`regenerate_summary`, `edit_tags`, `edit_collections`, `change_agenda_type`):
-  `request_summary` sem instrução chama `regenerate_summary`, o `PATCH /recordings/{id}` chama
-  `change_agenda_type`, e o job `agent_action` chama as quatro, sempre sob a RLS do dono e com os
-  mesmos escopos. O Agente não chama o `/mcp` por HTTP
-  ([agentes](server-agentes.md#agent)).
+  `request_summary` without an instruction calls `regenerate_summary`, `PATCH /recordings/{id}` calls
+  `change_agenda_type`, and the `agent_action` job calls all four, always under the owner's RLS and with the
+  same scopes. The Agent does not call `/mcp` over HTTP
+  ([agents](server-agentes.md#agent)).
 
-## Grupos da tela "Conexão MCP"
+## Scope groups of the MCP Connection screen
 
-| Grupo | Escopos |
+| Group | Scopes |
 |---|---|
 | Buscar e ler gravações | `recordings:read`, `transcripts:read` |
 | Ler e editar resumos | `summaries:read`, `summaries:write` |
 | Editar campos e tags | `recordings:write` |
 | Excluir gravações | `recordings:delete` |
 
-A validade (30 dias, 90 dias ou nunca) é o `expires_at` que a web calcula; "expirado" deriva
-dele. O prefixo segue `eclp_`, que o `PatStore` do desktop valida.
+The validity (30 days, 90 days or never) is the `expires_at` the web computes; "expired" derives
+from it. The prefix stays `eclp_`, which the desktop `PatStore` validates.
 
-## Credencial de dispositivo
+## Device credential
 
-- **É um token `kind: device`** com `platform`, nome = nome do aparelho, escopos
-  `recordings:read` e `recordings:write` (upload, marcadores, status das próprias gravações e a
-  lista dos tipos de agenda, que `GET /agenda-types` aceita com `recordings:read` desde a 2.4.0)
-  e, desde a 2.6.0, `summaries:read` — o app desktop lê o resumo pronto das gravações que enviou
-  para avisar com "Copiar". A migration `017_dispositivo_le_resumo` estendeu os tokens já
-  emitidos. Desde a 2.8.0 também `transcripts:read`, para a pasta sincronizada do desktop (resumos
-  em Markdown e transcrições em JSONL, [desktop-pasta-sincronizada.md](desktop-pasta-sincronizada.md)):
-  a migration `018_dispositivo_le_transcricao` estendeu os tokens já emitidos. Com ele o dispositivo também lê o resto de `/agenda-types`; escrever resumos e tipos
-  de agenda segue pedindo `summaries:write`, que ele não tem. Sem validade. Aparece em `GET /tokens?kind=device` ("App móvel", "App desktop"), e
-  `DELETE /tokens/{id}` ("Desvincular") desliga o aparelho. `POST /tokens` nunca cria um.
-- **Login** (`POST /devices/login`, público): e-mail, senha, `device_name` e `platform`; a senha
-  passa por `accounts.password_login`, o mesmo caminho de tempo constante do `/auth/login`, com a
-  mesma mensagem no 401. A resposta 201 `DeviceCredential` traz o token, o segredo (só ali) e o
-  descritor do servidor.
-- **Código de pareamento** (`POST /devices/pairing-codes`, só sessão): 6 caracteres de
-  `23456789ABCDEFGHJKMNPQRSTVWXYZ` (sem `0/1/I/L/O/U`, 30⁶ combinações), 10 minutos, uso único.
-  O banco guarda só o HMAC-SHA256 com `ECLUME_SECRET_KEY` (`security.sign`): um SHA-256 puro de 6
-  caracteres seria revertido do banco. O código novo vence os pendentes do mesmo usuário. A
-  resposta traz `display` (`K7Q-4MX`) e o `pair_url`, conteúdo do QR:
-  `<url>/parear?codigo=K7Q4MX&ca=<ca_sha256>` (sem `ca` enquanto a raiz não foi publicada). Lido
-  pela câmera comum, abre a web, que manda instalar o app.
-- **Estado** (`GET /devices/pairing-codes/{id}`, só sessão): `pending|used|expired` e o
-  `token_id` emitido, para a web trocar o QR por "Pareado".
-- **Troca** (`POST /devices/pair`, público): o código é normalizado (maiúsculas, sem hífen nem
-  espaço) e marcado como usado num `UPDATE … WHERE used_at IS NULL AND expires_at > now()
-  RETURNING` só de conta ativa; emite a credencial do dono e grava o `token_id` no código.
-  Inválido, vencido ou usado → 401 `invalid_pairing_code`. `pairing_codes` tem RLS pelo dono; a
-  troca, sem conta ainda, roda com o papel de conexão. O cron `expire_pairing_codes` do worker
-  (de hora em hora) apaga os códigos vencidos sem uso há mais de um dia; os usados ficam, com o
+- **It is a `kind: device` token** with `platform`, name = the device name, scopes
+  `recordings:read` and `recordings:write` (upload, markers, status of its own recordings and the
+  list of agenda types, which `GET /agenda-types` accepts with `recordings:read` since 2.4.0)
+  and, since 2.6.0, `summaries:read` — the desktop app reads the ready summary of the recordings it sent
+  to notify with "Copiar". The `017_dispositivo_le_resumo` migration extended the tokens already
+  issued. Since 2.8.0 also `transcripts:read`, for the desktop synced folder (summaries
+  in Markdown and transcripts in JSONL, [desktop-pasta-sincronizada.md](desktop-pasta-sincronizada.md)):
+  the `018_dispositivo_le_transcricao` migration extended the tokens already issued. With it the device also reads the rest of `/agenda-types`; writing summaries and agenda
+  types still requires `summaries:write`, which it does not have. No expiry. It shows up in `GET /tokens?kind=device` ("App móvel", "App desktop"), and
+  `DELETE /tokens/{id}` ("Desvincular") disconnects the device. `POST /tokens` never creates one.
+- **Login** (`POST /devices/login`, public): e-mail, password, `device_name` and `platform`; the password
+  goes through `accounts.password_login`, the same constant-time path as `/auth/login`, with the
+  same message on the 401. The 201 `DeviceCredential` response carries the token, the secret (only there) and the
+  server descriptor.
+- **Pairing code** (`POST /devices/pairing-codes`, session only): 6 characters from
+  `23456789ABCDEFGHJKMNPQRSTVWXYZ` (without `0/1/I/L/O/U`, 30⁶ combinations), 10 minutes, single use.
+  The database stores only the HMAC-SHA256 with `ECLUME_SECRET_KEY` (`security.sign`): a plain SHA-256 of 6
+  characters would be reversed from the database. A new code supersedes the same user's pending ones. The
+  response carries `display` (`K7Q-4MX`) and the `pair_url`, the content of the QR:
+  `<url>/parear?codigo=K7Q4MX&ca=<ca_sha256>` (without `ca` while the root has not been published). Read
+  by the ordinary camera, it opens the web, which tells the person to install the app.
+- **State** (`GET /devices/pairing-codes/{id}`, session only): `pending|used|expired` and the
+  issued `token_id`, so the web swaps the QR for "Pareado".
+- **Exchange** (`POST /devices/pair`, public): the code is normalized (uppercase, without hyphen or
+  space) and marked as used in an `UPDATE … WHERE used_at IS NULL AND expires_at > now()
+  RETURNING` restricted to active accounts; it issues the owner's credential and writes the `token_id` into the code.
+  Invalid, expired or used → 401 `invalid_pairing_code`. `pairing_codes` has RLS by owner; the
+  exchange, with no account yet, runs with the connection role. The worker's `expire_pairing_codes` cron
+  (hourly) deletes the expired codes unused for more than a day; the used ones stay, with the
   `token_id`.
-- **Aviso no login de dispositivo:** conta que ainda não aceitou o aviso em vigor não ganha
-  credencial nova por `POST /devices/login` (**403** `notice_required`; aceita na web e entra de
-  novo). As credenciais já emitidas seguem valendo, como todo PAT. O código de pareamento nasce
-  numa sessão, que já exige o aceite.
-- **Limite de tentativas** (`ratelimit.py`): as rotas de credencial contam por IP numa janela
-  fixa de 1 minuto no Redis (`ECLUME_CREDENTIAL_ATTEMPTS_PER_MINUTE`, 10). Os logins por senha
-  contam também por conta (`count_login`, `eclume:rl:user_email:<e-mail>`, comum a
-  `/auth/login` e `/devices/login`; o admin tem a sua), e a troca de código tem ainda um teto
-  global de seis vezes o limite por IP (`PAIR_GLOBAL_FACTOR`): trocar de IP não multiplica os
-  chutes. Com 30⁶ combinações e no máximo 600 trocas em 10 minutos, o chute não chega a um
-  código vivo.
+- **Notice on device login:** an account that has not yet accepted the notice in force gets no
+  new credential through `POST /devices/login` (**403** `notice_required`; it accepts on the web and signs in
+  again). The credentials already issued remain valid, like every PAT. The pairing code is born
+  in a session, which already requires the acceptance.
+- **Attempt limit** (`ratelimit.py`): the credential routes count per IP in a fixed
+  1-minute window in Redis (`ECLUME_CREDENTIAL_ATTEMPTS_PER_MINUTE`, 10). Password logins
+  also count per account (`count_login`, `eclume:rl:user_email:<e-mail>`, shared by
+  `/auth/login` and `/devices/login`; the admin has its own), and the code exchange also has a
+  global ceiling of six times the per-IP limit (`PAIR_GLOBAL_FACTOR`): switching IP does not multiply the
+  guesses. With 30⁶ combinations and at most 600 exchanges in 10 minutes, guessing does not reach a
+  live code.
 
-## Descritor do servidor
+## Server descriptor
 
-`GET /api/v1/server` (público, `server_info.py`) devolve `name` (`ECLUME_SERVER_NAME`, padrão
-`eclume`), `url` (`ECLUME_PUBLIC_URL`, ou a da requisição), `mcp_url` (`<url>/mcp`), `ca_sha256`
-e as versões. `ca_sha256` é o SHA-256, em hex minúsculo, do DER do primeiro certificado do PEM em
-`ECLUME_CA_FILE` (em produção, `/srv/downloads/eclume-root.crt`, montado read-only). O valor fica
-em cache pelo `mtime`: no primeiro deploy a CA é publicada depois de o server subir, e o
-descritor passa a trazê-la sem restart. Sem arquivo (ou PEM inválido), `null`. É a fonte do mDNS,
-do QR, do pareamento e do endereço embutido no instalador.
+`GET /api/v1/server` (public, `server_info.py`) returns `name` (`ECLUME_SERVER_NAME`, default
+`eclume`), `url` (`ECLUME_PUBLIC_URL`, or the request's), `mcp_url` (`<url>/mcp`), `ca_sha256`
+and the versions. `ca_sha256` is the SHA-256, in lowercase hex, of the DER of the first certificate of the PEM in
+`ECLUME_CA_FILE` (in production, `/srv/downloads/eclume-root.crt`, mounted read-only). The value is
+cached by `mtime`: on the first deploy the CA is published after the server starts, and the
+descriptor starts carrying it without a restart. With no file (or an invalid PEM), `null`. It is the source of the mDNS,
+of the QR, of pairing and of the address embedded in the installer.
 
-`ca_next_sha256` (desde a 2.21.0, opcional) é a mesma conta, com o mesmo cache, sobre
-`ECLUME_CA_NEXT_FILE` (em produção, `/srv/downloads/eclume-root-proxima.crt`): a próxima raiz
-durante a rotação, `null` fora dela. O mDNS, o QR e o instalador seguem só com `ca_sha256`; a
-próxima só vale pelo descritor lido numa conexão já fixada na raiz atual (ver "Rotação anunciada").
+`ca_next_sha256` (since 2.21.0, optional) is the same computation, with the same cache, over
+`ECLUME_CA_NEXT_FILE` (in production, `/srv/downloads/eclume-root-proxima.crt`): the next root
+during the rotation, `null` outside it. The mDNS, the QR and the installer stay with `ca_sha256` only; the
+next one only counts through the descriptor read over a connection already pinned to the current root (see "Announced rotation").
 
-## Descoberta na rede (mDNS)
+## Network discovery (mDNS)
 
-- **Registro** (`discovery.py`): tipo `_eclume._tcp.local.`, instância `<ECLUME_SERVER_NAME>`,
-  host `<nome>.local.`, endereço e porta lidos de `ECLUME_PUBLIC_URL` (um nome é resolvido para
-  IPv4). Nunca os IPs das interfaces: na rede do host, as bridges do Docker também são
-  interfaces. O TXT tem `url` (a URL pública), `ca` (o `ca_sha256`, vazio sem CA), `v` (versão do
-  contrato) e `name`. O TXT **não é autenticado**: qualquer máquina da LAN pode anunciar um
-  `_eclume._tcp` com outra CA. Ele é uma dica de endereço; o app mostra a impressão digital e
-  pede confirmação antes de fixar uma CA que só o mDNS trouxe (ver abaixo).
-- **`eclume-server announce`** registra com `zeroconf.asyncio` só na interface do endereço
-  público, relê o PEM a cada 60 s e atualiza o TXT quando a CA muda (inclusive quando ela é
-  publicada depois); ao parar, manda os goodbyes. Sem `ECLUME_PUBLIC_URL`, recusa.
-- **`eclume-server discover [--timeout N]`** escuta `N` segundos e imprime um JSON por servidor
-  (`name`, `url`, `ca_sha256`, `contract_version`, `addresses`, `port`); nenhum → saída 1. Serve
-  ao diagnóstico e à prova do deploy.
-- **Onde roda.** No serviço `mdns` do compose de produção: a imagem do server, `network_mode:
-  host` (o multicast não sai da bridge), a pasta de downloads montada read-only e nenhuma porta
-  publicada. Não depende de sudo nem de pacote no host; o deploy o recria depois do `publish-ca`.
-- **Firewall.** O multicast usa 5353/udp na rede do host e passa pelo ufw (só as portas
-  publicadas pelo Docker passam por fora): `ufw allow from 192.168.15.0/24 to any port 5353 proto
-  udp`, passo manual do runbook do host.
+- **Registration** (`discovery.py`): type `_eclume._tcp.local.`, instance `<ECLUME_SERVER_NAME>`,
+  host `<nome>.local.`, address and port read from `ECLUME_PUBLIC_URL` (a name is resolved to
+  IPv4). Never the interface IPs: on the host network, the Docker bridges are also
+  interfaces. The TXT has `url` (the public URL), `ca` (the `ca_sha256`, empty without a CA), `v` (contract
+  version) and `name`. The TXT **is not authenticated**: any machine on the LAN can announce an
+  `_eclume._tcp` with another CA. It is an address hint; the app shows the fingerprint and
+  asks for confirmation before pinning a CA that only mDNS brought (see below).
+- **`eclume-server announce`** registers with `zeroconf.asyncio` only on the interface of the public
+  address, rereads the PEM every 60 s and updates the TXT when the CA changes (including when it is
+  published later); on stopping, it sends the goodbyes. Without `ECLUME_PUBLIC_URL`, it refuses.
+- **`eclume-server discover [--timeout N]`** listens for `N` seconds and prints one JSON per server
+  (`name`, `url`, `ca_sha256`, `contract_version`, `addresses`, `port`); none → exit 1. It serves
+  diagnosis and the deploy proof.
+- **Where it runs.** In the `mdns` service of the production compose: the server image, `network_mode:
+  host` (multicast does not leave the bridge), the downloads folder mounted read-only and no port
+  published. It depends on neither sudo nor a package on the host; the deploy recreates it after `publish-ca`.
+- **Firewall.** Multicast uses 5353/udp on the host network and goes through ufw (only the ports
+  published by Docker bypass it): `ufw allow from 192.168.15.0/24 to any port 5353 proto
+  udp`, a manual step of the host runbook.
 
-## Fixação da CA pelos apps
+## CA pinning by the apps
 
-O Caddy (emissor `internal`) troca o certificado folha a cada ~12 h e o intermediário a cada ~7
-dias, e não envia a raiz na cadeia; a raiz vale 10 anos. Por isso os apps fixam a **raiz**, nunca
-o folha, sem instalar a CA no sistema:
+Caddy (`internal` issuer) rotates the leaf certificate every ~12 h and the intermediate every ~7
+days, and does not send the root in the chain; the root lasts 10 years. That is why the apps pin the **root**, never
+the leaf, without installing the CA in the system:
 
-1. obter `url` e `ca_sha256` — do instalador (endereço embutido no build), do QR (`pair_url`,
-   que sai da web autenticada) ou do TXT do mDNS (não autenticado: antes de mandar a senha, a
-   pessoa confirma a impressão digital, como no endereço digitado);
-2. baixar `<url>/downloads/eclume-root.crt` numa conexão sem verificação;
-3. conferir o SHA-256 do DER do **primeiro** certificado do arquivo (o mesmo que o
-   `server_info.py` publica em `ca_sha256`); divergiu, descartar e parar;
-4. gravar **só esse certificado** (o bloco PEM dele, recortado e relido com o mesmo DER) e confiar
-   só nele (`TrustMode::Pinned`), sem somá-lo às raízes do SO: uma cadeia que não leva à raiz
-   conferida é recusada mesmo que o SO confie nela. Certificados a mais no arquivo servido nunca
-   chegam ao disco, e um PEM fixado com mais de um é erro, nunca confiança ampliada.
+1. obtain `url` and `ca_sha256` — from the installer (address embedded in the build), from the QR (`pair_url`,
+   which comes out of the authenticated web) or from the mDNS TXT (not authenticated: before sending the password, the
+   person confirms the fingerprint, as with a typed address);
+2. download `<url>/downloads/eclume-root.crt` over an unverified connection;
+3. check the SHA-256 of the DER of the **first** certificate of the file (the same one that
+   `server_info.py` publishes in `ca_sha256`); if it differs, discard and stop;
+4. store **only that certificate** (its PEM block, cut out and reread with the same DER) and trust
+   only it (`TrustMode::Pinned`), without adding it to the OS roots: a chain that does not lead to the
+   checked root is refused even if the OS trusts it. Extra certificates in the served file never
+   reach the disk, and a pinned PEM with more than one is an error, never widened trust.
 
-O primeiro certificado do `eclume-root.crt` é a raiz que assina a cadeia servida (o `publish-ca`
-publica a raiz da CA ativa, um certificado só); quem trocar a raiz mantém isso. Um app que já guardou uma CA fixada com
-mais de um certificado a regrava só com o primeiro na abertura, apaga a credencial local e pede
-nova entrada, mandando trocar a senha e desvincular a entrada antiga na web (holetz/eclume#102):
-nenhum servidor legítimo publica mais de um, então o caso é sinal de interceptação na primeira
-conexão.
+The first certificate of `eclume-root.crt` is the root that signs the served chain (`publish-ca`
+publishes the root of the active CA, a single certificate); whoever replaces the root keeps it that way. An app that already stored a pinned CA with
+more than one certificate rewrites it with only the first on opening, deletes the local credential and asks for
+a new sign-in, telling the person to change the password and unlink the old entry on the web (holetz/eclume#102):
+no legitimate server publishes more than one, so the case is a sign of interception on the first
+connection.
 
-Com endereço digitado e sem impressão digital, o app confia na primeira CA (TOFU) e mostra a
-impressão digital ao usuário. A troca do código de pareamento e o login só acontecem depois da
-fixação; `GET /api/v1/server` confirma o que veio e permite trocar de servidor ("Usar outro").
+With a typed address and no fingerprint, the app trusts the first CA (TOFU) and shows the
+fingerprint to the user. The pairing code exchange and the login only happen after
+pinning; `GET /api/v1/server` confirms what came and allows switching servers ("Usar outro").
 
-**Raiz própria com restrição de nome** (holetz/eclume#101). O Caddy define sempre a CA nomeada
-`eclume` (`pki { ca eclume { root { cert … key … } } }`), cuja raiz o `eclume-server ca gerar`
-(`ca.py`) cria uma vez em `<ECLUME_DATA_DIR>/secrets/ca/` (`raiz.crt`, `raiz.key` 0600) e recusa
-sobrescrever: ECDSA P-256, 10 anos, `basicConstraints` CA crítica, `keyUsage` só `keyCertSign` e
-`cRLSign`, `extendedKeyUsage = serverAuth` (o Windows não a aceita para assinatura de código nem
-S/MIME) e `nameConstraints` **crítica** com `permitted` para cada IP exato (`/32` ou `/128`) e cada
-nome DNS de `ECLUME_PUBLIC_HOST` e `ECLUME_CA_NOMES`, mais o e-mail `eclume.invalid`. Sem subtree
-de um tipo, nomes desse tipo ficariam livres (RFC 5280): sem nome DNS configurado, o DNS fica
-restrito a `eclume.invalid`; sem nenhum IP, a geração recusa. A chave fica no host porque o Caddy
-emite intermediário e folhas sozinho; a restrição torna isso aceitável: quem roubar a chave só se
-passa pelo próprio servidor, o que quem já está no host consegue de qualquer jeito. Só a pasta
-`secrets/ca` é montada no Caddy (só leitura), nunca `secrets/`. `ECLUME_TLS_CA` escolhe a CA que
-emite (`tls { issuer internal { ca … } }`): `local` (a raiz gerada pelo Caddy, sem restrição;
-padrão, para a produção não virar num deploy comum) ou `eclume` (instalação nova, pelo
-`.env.prod.example`). Nos apps a restrição não acrescenta nada (já confiam numa raiz só, para um
-servidor só); ela protege navegador, sistema e clientes MCP, que instalam a raiz. `eclume-server ca
-gerar --prova <pasta>` gera uma raiz descartável de `127.0.0.1` com os folhas `dentro` (127.0.0.1)
-e `fora` (127.0.0.2), para provar a recusa nos clientes (`deploy/prova-ca-restrita.sh`).
+**Own root with name constraints** (holetz/eclume#101). Caddy always defines the CA named
+`eclume` (`pki { ca eclume { root { cert … key … } } }`), whose root `eclume-server ca gerar`
+(`ca.py`) creates once in `<ECLUME_DATA_DIR>/secrets/ca/` (`raiz.crt`, `raiz.key` 0600) and refuses to
+overwrite: ECDSA P-256, 10 years, critical CA `basicConstraints`, `keyUsage` only `keyCertSign` and
+`cRLSign`, `extendedKeyUsage = serverAuth` (Windows does not accept it for code signing nor
+S/MIME) and a **critical** `nameConstraints` with `permitted` for each exact IP (`/32` or `/128`) and each
+DNS name of `ECLUME_PUBLIC_HOST` and `ECLUME_CA_NOMES`, plus the e-mail `eclume.invalid`. Without a subtree
+of a type, names of that type would be free (RFC 5280): with no DNS name configured, DNS is
+restricted to `eclume.invalid`; with no IP at all, generation refuses. The key stays on the host because Caddy
+issues the intermediate and leaves by itself; the constraint makes that acceptable: whoever steals the key can only
+impersonate the server itself, which someone already on the host can do anyway. Only the
+`secrets/ca` folder is mounted into Caddy (read-only), never `secrets/`. `ECLUME_TLS_CA` chooses the CA that
+issues (`tls { issuer internal { ca … } }`): `local` (the root generated by Caddy, unconstrained;
+the default, so production does not flip in an ordinary deploy) or `eclume` (a new installation, through
+`.env.prod.example`). In the apps the constraint adds nothing (they already trust a single root, for a single
+server); it protects the browser, the system and the MCP clients, which install the root. `eclume-server ca
+gerar --prova <pasta>` generates a throwaway `127.0.0.1` root with the leaves `dentro` (127.0.0.1)
+and `fora` (127.0.0.2), to prove the refusal in the clients (`deploy/prova-ca-restrita.sh`).
 
-**Rotação anunciada.** O `publish-ca` publica em `/downloads/eclume-root.crt` a raiz da CA ativa
-e, com a ativa `local` e a raiz própria existente, a própria em
-`/downloads/eclume-root-proxima.crt`; com a ativa `eclume`, apaga a próxima. O descritor a anuncia
-em `ca_next_sha256`, que o app lê pela conexão fixada na raiz atual: a raiz velha avaliza a nova,
-sem TOFU. O app baixa a próxima por essa mesma conexão, confere o SHA-256 e grava um certificado
-só ao lado da fixada (`servidor-ca.proxima.pem` no desktop, `ca.proxima.pem` no celular;
-`pin::learn_next`); sem anúncio, apaga a próxima guardada. Quando a conexão fixada falha e a raiz
-servida é a próxima, o app lê o descritor fixando a próxima, confere que ele não a contradiz e a
-troca pela fixada por `rename` — sem nova entrada nem novo pareamento. Uma raiz que não é a
-próxima anunciada segue no caminho de hoje ("O certificado do servidor mudou"). Não há confiança em
-duas raízes ao mesmo tempo: a próxima só vira a fixada, nunca soma com ela. A ordem da rotação
-(apps com suporte publicados → anunciar → janela → virar → release do desktop → aposentar) está no
+**Announced rotation.** `publish-ca` publishes at `/downloads/eclume-root.crt` the root of the active CA
+and, with `local` active and the own root present, the own root at
+`/downloads/eclume-root-proxima.crt`; with `eclume` active, it deletes the next one. The descriptor announces it
+in `ca_next_sha256`, which the app reads over the connection pinned to the current root: the old root vouches for the new one,
+without TOFU. The app downloads the next root over that same connection, checks the SHA-256 and stores a single certificate
+beside the pinned one (`servidor-ca.proxima.pem` on the desktop, `ca.proxima.pem` on the phone;
+`pin::learn_next`); with no announcement, it deletes the stored next root. When the pinned connection fails and the root
+served is the next one, the app reads the descriptor pinning the next root, checks that it does not contradict it and
+swaps it in as the pinned one by `rename` — with no new sign-in and no new pairing. A root that is not the
+announced next one follows today's path ("O certificado do servidor mudou"). There is no trust in
+two roots at the same time: the next root only becomes the pinned one, never adds to it. The rotation order
+(apps with support published → announce → window → switch → desktop release → retire) is in the
 runbook ([deploy-producao.md](../../project/deploy-producao.md), "CA raiz nos clientes").
 
-**Endereço embutido no instalador.** O empacotamento Tauri de hoje embute no **build**: o
-`desktop-release.yml` passa `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256` (variáveis do
-repositório, ao lado de `ECLUME_DOWNLOADS_URL`), e o app os lê por `option_env!`, como o
-`DEFAULT_WEB_URL`. O release já é por servidor: os manifestos têm URLs absolutas deste host.
+**Address embedded in the installer.** Today's Tauri packaging embeds it in the **build**: the
+`desktop-release.yml` passes `ECLUME_SERVER_URL` and `ECLUME_SERVER_CA_SHA256` (repository
+variables, beside `ECLUME_DOWNLOADS_URL`), and the app reads them through `option_env!`, like the
+`DEFAULT_WEB_URL`. The release is already per server: the manifests carry absolute URLs of this host.

@@ -36,7 +36,7 @@ serviços de longa duração (eram dez antes do holetz/eclume#151, com o `web` e
 |---|---|---|
 | `caddy` | `eclume-edge:prod` (`deploy/web.Dockerfile`) | a borda: Caddy 2.11 com o build do SPA em `/srv/web` e as regras dele (`deploy/web.Caddyfile`, em `/etc/caddy/spa.caddy`); TLS interno na 8443, a **única porta publicada** |
 | `server` | `eclume-server:prod` (`deploy/server.Dockerfile`) | API (`uvicorn`) e o servidor MCP em `/mcp`, com healthcheck em `/api/v1/health/ready`; lê a CA publicada (`/srv/downloads`, read-only) para o descritor `/api/v1/server` |
-| `mdns` | `eclume-server:prod` | `eclume-server announce` (leve: só o anunciador, sem a app): anuncia `_eclume._tcp` na LAN com o endereço público e a impressão digital da CA; `network_mode: host`, sem porta publicada ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#descoberta-na-rede-mdns)) |
+| `mdns` | `eclume-server:prod` | `eclume-server announce` (leve: só o anunciador, sem a app): anuncia `_eclume._tcp` na LAN com o endereço público e a impressão digital da CA; `network_mode: host`, sem porta publicada ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#network-discovery-mdns)) |
 | `worker` | `eclume-server:prod` | `eclume-server worker`: as filas `eclume:default` (ingestão, purgas, reaper, retomada e expiração de uploads) e `eclume:agents` (tipo de agenda, campos, resumos, chats e pré-visualizações, com `ECLUME_AGENT_MAX_JOBS` vagas, padrão 2, e o `claude -p`) num processo só |
 | `worker-gpu` | `eclume-worker-gpu:prod` (`worker-gpu/Dockerfile`, ~8 GB) | ASR e diarização, `max_jobs=1`; sai sozinho (código 0) depois da descarga ociosa e o `restart` o traz de volta ([worker-gpu.md](worker-gpu.md)) |
 | `postgres` | `pgvector/pgvector:pg16` | banco; server e worker CPU conectam como `eclume_server` (sem superusuário, só DML) e as requisições baixam para `eclume_app`; o superusuário `eclume` fica para o `migrate`, o bootstrap e o backup ([server-nucleo.md](../standards/code/server-nucleo.md#database-roles)) |
@@ -401,7 +401,7 @@ ECLUME_PROD_SSH=holetz@192.168.15.199 bash deploy/prova-web-prod.sh
 ## Conectar um assistente (MCP)
 
 1. Na web, crie um token em **Conexão MCP** (ou em Tokens de acesso) com os grupos de escopo
-   que o assistente precisa ([grupos](../standards/code/server-mcp-e-dispositivos.md#grupos-da-tela-conexão-mcp))
+   que o assistente precisa ([grupos](../standards/code/server-mcp-e-dispositivos.md#scope-groups-of-the-mcp-connection-screen))
    e a validade; o segredo `eclp_…` aparece uma vez.
 2. No cliente MCP, cadastre um servidor HTTP streamable em `https://192.168.15.199:8443/mcp`
    com o header `Authorization: Bearer eclp_…`. Exemplo do Claude Code:
@@ -417,7 +417,7 @@ HTTPS é obrigatório para o microfone e a conversão de mídia no navegador. A 
 **`https://192.168.15.199:8443/downloads/eclume-root.crt`** (um certificado só, a raiz da CA
 ativa). Ela é distinta da do lumea. Os apps (desktop e celular) **não** usam o repositório do
 sistema: fixam a raiz por conta própria, pela impressão digital, na primeira execução ou no
-pareamento ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#fixação-da-ca-pelos-apps)).
+pareamento ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#ca-pinning-by-the-apps)).
 Só o navegador, o Claude Desktop/Code (MCP) e o lumea precisam da raiz instalada.
 
 A raiz própria do eclume (`ECLUME_TLS_CA=eclume`) tem restrição de nome crítica: só vale para o
