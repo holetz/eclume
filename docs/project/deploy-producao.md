@@ -465,7 +465,7 @@ já tiverem guardado a próxima raiz.
    o `publish-ca` publica a própria como `eclume-root.crt` e apaga a próxima, e o fim do deploy
    confere que a publicada é a raiz própria. Em seguida, troque a variável
    `ECLUME_SERVER_CA_SHA256` pela impressão nova e solte um release do desktop
-   ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#servidor-embutido-no-instalador)):
+   ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#server-embedded-in-the-installer)):
    os instaladores antigos em `/downloads` embutem a impressão velha. Confira desktop e celular
    sincronizando sem nova entrada; quem ficou para trás entra ou pareia de novo.
 3. **Aposentar**, depois da janela: tire a raiz velha das estações, do lumea e dos clientes MCP
@@ -632,7 +632,7 @@ bash deploy/deploy.sh --context gpu-host --services "server caddy"   # só códi
   o release embute o endereço e a impressão digital da CA deste servidor (variáveis
   `ECLUME_SERVER_URL` e `ECLUME_SERVER_CA_SHA256`): trocar a CA raiz (a virada da rotação acima)
   ou o endereço exige atualizar as variáveis e soltar um release novo
-  ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#servidor-embutido-no-instalador)).
+  ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#server-embedded-in-the-installer)).
   Publicar é `bash deploy/release-desktop.sh --publicar --notas "<texto>"` (compila no host, sem
   Actions; `--plan` antes mostra o que sairia) e, com o release criado,
   `ssh holetz@192.168.15.199 'bash -s -- desktop-v<versão>' < deploy/publicar-desktop.sh`.
