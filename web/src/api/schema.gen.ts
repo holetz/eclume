@@ -4081,7 +4081,7 @@ export interface components {
             /** Format: uuid */
             recording_id: string;
             title: string;
-            /** @description O resultado neste alvo; nulo enquanto não executado. */
+            /** @description The result on this target; null until executed. */
             result: {
                 /** @enum {string} */
                 status: "done" | "skipped" | "failed";
@@ -4091,22 +4091,22 @@ export interface components {
                 summary_id?: string | null;
             } | null;
         };
-        /** @description Desde a 2.24.0. Uma ação que o Agente propôs: o texto do cartão, os alvos congelados na proposta e, depois da confirmação, o resultado por alvo. É também o registro de auditoria. */
+        /** @description Since 2.24.0. An action the Agent proposed: the card text, the targets frozen in the proposal and, after confirmation, the result per target. It is also the audit record. */
         AgentAction: {
             /** Format: uuid */
             id: string;
             /**
              * Format: uuid
-             * @description Nulo depois que a conversa é excluída.
+             * @description Null after the conversation is deleted.
              */
             session_id: string | null;
             /** Format: uuid */
             message_id: string | null;
             /** @enum {string} */
             tool: "regenerate_summaries" | "tag_recordings" | "collect_recordings" | "set_agenda_type";
-            /** @description Os parâmetros normalizados (alvos, tags, coleções ou o tipo resolvidos). */
+            /** @description The normalized parameters (resolved targets, tags, collections or type). */
             params: Record<string, never>;
-            /** @description O que será feito, em uma frase. */
+            /** @description What will be done, in one sentence. */
             summary: string;
             targets: components["schemas"]["AgentActionTarget"][];
             /** @enum {string} */
@@ -4137,9 +4137,9 @@ export interface components {
         /** @enum {string} */
         AgentProviderKind: "ollama" | "openai-compatible" | "anthropic" | "claude-cli";
         /**
-         * @description Para que o provider serve: `summaries` (resumos), `fields` (preenchimento de campos),
-         *     `chat` (ajuste do resumo) e `agenda_detection` (detecção do tipo de agenda). Cada
-         *     finalidade tem no máximo um provider: declará-la num provider a tira dos outros.
+         * @description What the provider is for: `summaries` (summaries), `fields` (field filling),
+         *     `chat` (summary adjustment) and `agenda_detection` (agenda type detection). Each
+         *     purpose has at most one provider: declaring it on one provider removes it from the others.
          * @enum {string}
          */
         AgentPurpose: "summaries" | "fields" | "chat" | "agenda_detection";
@@ -4150,27 +4150,28 @@ export interface components {
             kind: components["schemas"]["AgentProviderKind"];
         };
         /**
-         * @description Como a versão nasceu: `generated` (o agente pelas instruções do tipo de agenda), `manual`
-         *     (edição à mão, ou voltar à gerada) ou `chat` (ajuste pelo agente no chat).
+         * @description How the version came about: `generated` (the agent, following the agenda type's
+         *     instructions), `manual` (a hand edit, or reverting to the generated one) or `chat` (an
+         *     adjustment by the agent in the chat).
          * @enum {string}
          */
         SummaryOrigin: "generated" | "manual" | "chat";
         /**
-         * @description Uma versão do resumo da transcrição. A atual é a de maior `version` com `status: done`.
-         *     Uma geração que termina depois de uma edição ou de um ajuste toma o próximo número e vira a
-         *     atual; por isso os números podem pular.
+         * @description One version of the transcript's summary. The current one is the highest `version` with
+         *     `status: done`. A generation that finishes after an edit or an adjustment takes the next
+         *     number and becomes the current one; that is why the numbers can skip.
          */
         Summary: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             transcript_id: string;
-            /** @description Revisão da transcrição que o resumo leu. */
+            /** @description Revision of the transcript the summary read. */
             transcript_revision: number;
             /**
-             * @description Instantâneo do tipo de agenda cujas instruções o resumo seguiu (numa versão `manual` ou
-             *     `chat`, o da versão de que ela partiu): o resumo continua quando o tipo é renomeado ou
-             *     excluído. `null` numa edição sem versão anterior.
+             * @description Snapshot of the agenda type whose instructions the summary followed (in a `manual` or
+             *     `chat` version, that of the version it started from): the summary survives when the
+             *     type is renamed or deleted. `null` in an edit with no previous version.
              */
             agenda_type: {
                 /** Format: uuid */
@@ -4178,8 +4179,8 @@ export interface components {
                 name: string;
             } | null;
             /**
-             * @description Versão do resumo da transcrição, a partir de 1; toda geração, edição, volta à gerada
-             *     ou ajuste por chat sobe a versão.
+             * @description Version of the transcript's summary, starting at 1; every generation, edit, revert to
+             *     the generated one or chat adjustment raises the version.
              */
             version: number;
             origin: components["schemas"]["SummaryOrigin"];
@@ -4187,10 +4188,10 @@ export interface components {
             status: "queued" | "running" | "done" | "failed";
             /** @enum {string} */
             trigger: "manual" | "automatic";
-            /** @description O agente que escreveu a versão; `null` numa versão `manual`. */
+            /** @description The agent that wrote the version; `null` in a `manual` version. */
             provider: components["schemas"]["AgentProviderRef"] | null;
             model: string | null;
-            /** @description Resumo em Markdown, com `status: done`. */
+            /** @description Summary in Markdown, with `status: done`. */
             content_md: string | null;
             error: {
                 code: string;
@@ -4198,18 +4199,18 @@ export interface components {
             } | null;
             /**
              * Format: uuid
-             * @description Na volta à gerada, a versão gerada cujo conteúdo foi restaurado.
+             * @description On a revert to the generated one, the generated version whose content was restored.
              */
             restored_from_id: string | null;
             /**
              * Format: uuid
-             * @description Numa versão `chat`, a resposta do agente que a produziu.
+             * @description In a `chat` version, the agent reply that produced it.
              */
             chat_message_id: string | null;
             /**
              * Format: uuid
              * @deprecated
-             * @description Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             * @description Deprecated since 2.11.0: always the user's own id (each account is isolated); removed in `/api/v2`.
              */
             created_by: string | null;
             /** Format: date-time */
@@ -4220,12 +4221,12 @@ export interface components {
         SummaryCreate: {
             /**
              * Format: uuid
-             * @description Sem valor, o tipo de agenda da gravação.
+             * @description Without a value, the recording's agenda type.
              */
             agenda_type_id?: string;
             /**
              * Format: uuid
-             * @description Sem valor, o provider padrão da plataforma.
+             * @description Without a value, the platform's default provider.
              */
             provider_id?: string;
         };
@@ -4233,28 +4234,28 @@ export interface components {
             items: components["schemas"]["Summary"][];
             next_cursor: components["schemas"]["NextCursor"];
         };
-        /** @description O resumo da gravação como a tela o mostra. */
+        /** @description The recording's summary as the screen shows it. */
         SummaryState: {
-            /** @description A versão atual (maior `version` concluída). */
+            /** @description The current version (highest completed `version`). */
             current: components["schemas"]["Summary"] | null;
-            /** @description A gerada de referência (a `generated` concluída mais recente), para comparar e voltar. */
+            /** @description The reference generated version (the most recent completed `generated`), to compare and revert. */
             generated: components["schemas"]["Summary"] | null;
-            /** @description A geração em `queued` ou `running`, se houver. */
+            /** @description The generation in `queued` or `running`, if any. */
             pending: components["schemas"]["Summary"] | null;
-            /** @description Versões guardadas, de todas as origens. */
+            /** @description Stored versions, of every origin. */
             version_count: number;
         };
         SummaryEdit: {
             content_md: string;
-            /** @description A versão que a pessoa abriu para editar; 0 sem resumo concluído. */
+            /** @description The version the person opened to edit; 0 with no completed summary. */
             base_version: number;
         };
         SummaryChatRequest: {
             message: string;
         };
         /**
-         * @description Uma consulta do agente à transcrição: `read_transcript` (o trecho `from_ms`–`to_ms`,
-         *     `clipped` se passou do teto e foi cortado) ou `search_transcript` (`query` e os `hits`).
+         * @description One agent lookup into the transcript: `read_transcript` (the excerpt `from_ms`–`to_ms`,
+         *     `clipped` if it exceeded the cap and was cut) or `search_transcript` (`query` and the `hits`).
          */
         ChatRead: {
             /** @enum {string} */
@@ -4272,36 +4273,36 @@ export interface components {
             recording_id: string;
             /** @enum {string} */
             role: "user" | "assistant";
-            /** @description O pedido, ou a resposta do agente (`null` até `done`). */
+            /** @description The request, or the agent's reply (`null` until `done`). */
             content: string | null;
             /**
-             * @description A mensagem do usuário nasce `done`; a do agente vai de `queued` a `done` ou `failed`.
+             * @description The user's message is born `done`; the agent's goes from `queued` to `done` or `failed`.
              * @enum {string}
              */
             status: "queued" | "running" | "done" | "failed";
             /**
              * Format: uuid
-             * @description Na resposta do agente, o pedido que ela responde.
+             * @description In the agent's reply, the request it answers.
              */
             reply_to: string | null;
             /**
              * Format: uuid
-             * @description A versão atual quando o pedido chegou.
+             * @description The current version when the request arrived.
              */
             base_summary_id: string | null;
             /**
              * Format: uuid
-             * @description A versão `chat` que a resposta criou, se mudou o resumo.
+             * @description The `chat` version the reply created, if it changed the summary.
              */
             summary_id: string | null;
-            /** @description As consultas do agente à transcrição, em ordem. */
+            /** @description The agent's lookups into the transcript, in order. */
             reads: components["schemas"]["ChatRead"][];
             provider: components["schemas"]["AgentProviderRef"] | null;
             model: string | null;
             /**
-             * @description Com `failed` (`provider_bad_output`, `chat_tool_limit`, `provider_timeout`...), ou com
-             *     `done` e `summary_changed` quando o resumo mudou durante o ajuste: a resposta fica, sem
-             *     versão nova.
+             * @description With `failed` (`provider_bad_output`, `chat_tool_limit`, `provider_timeout`...), or with
+             *     `done` and `summary_changed` when the summary changed during the adjustment: the reply
+             *     stays, with no new version.
              */
             error: {
                 code: string;
@@ -4310,7 +4311,7 @@ export interface components {
             /**
              * Format: uuid
              * @deprecated
-             * @description Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             * @description Deprecated since 2.11.0: always the user's own id (each account is isolated); removed in `/api/v2`.
              */
             created_by: string | null;
             /** Format: date-time */
@@ -4329,16 +4330,16 @@ export interface components {
         MarkerInput: {
             /**
              * Format: uuid
-             * @description Id gerado pelo app; reenviar o mesmo não duplica.
+             * @description Id generated by the app; resending the same one does not duplicate.
              */
             client_id: string;
-            /** @description Instante desde o início da gravação. */
+            /** @description Instant since the start of the recording. */
             at_ms: number;
             note?: string | null;
         };
         MarkerBatch: {
             markers: components["schemas"]["MarkerInput"][];
-            /** @description Quem marcou ("Field phone"). */
+            /** @description Who marked it ("Field phone"). */
             device_name?: string | null;
         };
         MarkerPatch: {
@@ -4351,7 +4352,7 @@ export interface components {
             recording_id: string;
             /** Format: uuid */
             client_id: string;
-            /** @description Instante desde o início; pode passar da duração, que só se conhece depois. */
+            /** @description Instant since the start; it may exceed the duration, which is only known later. */
             at_ms: number;
             note: string | null;
             device_name: string | null;
@@ -4369,18 +4370,18 @@ export interface components {
             engine: "whisperx-local" | "openai-compatible" | "cpu";
             model: string;
             compute_type: string;
-            /** @description `null` = adaptativo à VRAM livre. */
+            /** @description `null` = adaptive to the free VRAM. */
             batch_size: number | null;
             /**
-             * @description Idioma das gravações sem idioma próprio (`pt`, `en`…), ou `auto`: a engine detecta o
-             *     idioma de cada gravação e o alinhador segue o detectado.
+             * @description Language of recordings with no language of their own (`pt`, `en`…), or `auto`: the
+             *     engine detects each recording's language and the aligner follows the detected one.
              */
             default_language: string | null;
-            /** @description Modelo usado depois de um OOM. */
+            /** @description Model used after an OOM. */
             fallback_model: string | null;
             /**
              * Format: uri
-             * @description Base do servidor remoto, com `engine: openai-compatible`.
+             * @description Base of the remote server, with `engine: openai-compatible`.
              */
             endpoint_url: string | null;
         };
@@ -4391,46 +4392,46 @@ export interface components {
             max_speakers: number | null;
         };
         /**
-         * @description Tratamento do áudio antes da transcrição, pelo worker GPU, em ordem fixa: separar canais,
-         *     reduzir ruído, normalizar o loudness e cortar o silêncio do início e do fim. A conversão
-         *     para 16 kHz mono é sempre feita e não tem chave. As marcas de tempo continuam as do áudio
-         *     original.
+         * @description Audio processing before transcription, by the GPU worker, in a fixed order: split
+         *     channels, reduce noise, normalize loudness and trim the silence at the start and end. The
+         *     conversion to 16 kHz mono is always done and has no key. Timestamps remain those of the
+         *     original audio.
          */
         PreprocessingSettings: {
             denoise: {
                 enabled: boolean;
                 /**
-                 * @description `rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg).
+                 * @description `rnnoise` (neural network, 48 kHz) or `afftdn` (ffmpeg's FFT).
                  * @enum {string}
                  */
                 method: "rnnoise" | "afftdn";
-                /** @description Quanto do sinal tratado entra na mistura. */
+                /** @description How much of the processed signal goes into the mix. */
                 strength: number;
             };
             loudnorm: {
                 enabled: boolean;
-                /** @description Loudness integrado alvo (EBU R128). */
+                /** @description Target integrated loudness (EBU R128). */
                 target_lufs: number;
                 true_peak_db: number;
-                /** @description Faixa de loudness. */
+                /** @description Loudness range. */
                 lra: number;
             };
             trim_silence: {
                 enabled: boolean;
-                /** @description Silêncio mínimo, no início ou no fim, para cortar. */
+                /** @description Minimum silence, at the start or the end, to trim. */
                 min_silence_s: number;
-                /** @description Abaixo deste nível, é silêncio. */
+                /** @description Below this level, it is silence. */
                 threshold_db: number;
             };
-            /** @description Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado. */
+            /** @description One channel per person (stereo recording of two sources); duplicated mono is skipped. */
             split_channels: {
                 enabled: boolean;
             };
         };
         VoiceIdentificationSettings: {
-            /** @description Liga a identificação por voz na plataforma; exige a separação de locutores ligada (422 em `voice_identification.enabled`). Desligado, nenhuma impressão é comparada nem criada; desligar apaga as existentes. O aceite do aviso no cadastro cobre o consentimento. */
+            /** @description Turns voice identification on for the platform; it requires speaker diarization on (422 on `voice_identification.enabled`). Off, no voiceprint is compared or created; turning it off deletes the existing ones. Accepting the notice at sign-up covers the consent. */
             enabled: boolean;
-            /** @description Similaridade mínima (cosseno) para sugerir uma pessoa; o padrão sai da calibração. */
+            /** @description Minimum similarity (cosine) to suggest a person; the default comes from calibration. */
             suggestion_threshold: number;
         };
         AdminSettings: {
@@ -4438,20 +4439,20 @@ export interface components {
             diarization: components["schemas"]["DiarizationSettings"];
             voice_identification: components["schemas"]["VoiceIdentificationSettings"];
             preprocessing: components["schemas"]["PreprocessingSettings"];
-            /** @description Cotas padrão de toda conta (desde a 2.15.0); o admin as sobrepõe por conta. */
+            /** @description Default quotas of every account (since 2.15.0); the admin overrides them per account. */
             quotas: components["schemas"]["Quotas"];
             /** @description Since 2.29.0. Platform-wide audio retention settings. */
             retention: components["schemas"]["RetentionSettings"];
             /** Format: date-time */
             updated_at: string;
-            /** @description Conta de admin que mudou por último. */
+            /** @description Admin account that changed it last. */
             updated_by: components["schemas"]["AdminRef"] | null;
         };
         RetentionSettings: {
             /** @description Ceiling, in days, on the audio retention an account may choose; `null` is none. It only caps the accounts' values and deletes nothing for an account that left retention off. */
             audio_max_days: number | null;
         };
-        /** @description Cada bloco é mesclado campo a campo; campos ausentes ficam como estão. */
+        /** @description Each block is merged field by field; absent fields stay as they are. */
         AdminSettingsPatch: {
             asr?: {
                 /** @enum {string} */
@@ -4459,7 +4460,7 @@ export interface components {
                 model?: string;
                 compute_type?: string;
                 batch_size?: number | null;
-                /** @description Código do idioma ou `auto`. */
+                /** @description Language code or `auto`. */
                 default_language?: string | null;
                 fallback_model?: string | null;
                 /** Format: uri */
@@ -4475,39 +4476,39 @@ export interface components {
                 enabled?: boolean;
                 suggestion_threshold?: number;
             };
-            /** @description Cada etapa é mesclada campo a campo. */
+            /** @description Each step is merged field by field. */
             preprocessing?: {
                 denoise?: {
                     enabled?: boolean;
                     /**
-                     * @description `rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg).
+                     * @description `rnnoise` (neural network, 48 kHz) or `afftdn` (ffmpeg's FFT).
                      * @enum {string}
                      */
                     method?: "rnnoise" | "afftdn";
-                    /** @description Quanto do sinal tratado entra na mistura. */
+                    /** @description How much of the processed signal goes into the mix. */
                     strength?: number;
                 };
                 loudnorm?: {
                     enabled?: boolean;
-                    /** @description Loudness integrado alvo (EBU R128). */
+                    /** @description Target integrated loudness (EBU R128). */
                     target_lufs?: number;
                     true_peak_db?: number;
-                    /** @description Faixa de loudness. */
+                    /** @description Loudness range. */
                     lra?: number;
                 };
                 trim_silence?: {
                     enabled?: boolean;
-                    /** @description Silêncio mínimo, no início ou no fim, para cortar. */
+                    /** @description Minimum silence, at the start or the end, to trim. */
                     min_silence_s?: number;
-                    /** @description Abaixo deste nível, é silêncio. */
+                    /** @description Below this level, it is silence. */
                     threshold_db?: number;
                 };
-                /** @description Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado. */
+                /** @description One channel per person (stereo recording of two sources); duplicated mono is skipped. */
                 split_channels?: {
                     enabled?: boolean;
                 };
             };
-            /** @description Cotas padrão (desde a 2.15.0), mescladas campo a campo; `null` é sem limite. */
+            /** @description Default quotas (since 2.15.0), merged field by field; `null` is no limit. */
             quotas?: components["schemas"]["QuotasOverride"];
             /** @description Since 2.29.0. Audio retention ceiling; a null `audio_max_days` removes it. */
             retention?: {
@@ -4521,13 +4522,13 @@ export interface components {
             kind: components["schemas"]["AgentProviderKind"];
             /**
              * Format: uri
-             * @description Base da API (Ollama, OpenAI-compatível). `null` para `anthropic` e `claude-cli`.
+             * @description API base (Ollama, OpenAI-compatible). `null` for `anthropic` and `claude-cli`.
              */
             base_url: string | null;
             model: string;
             api_key_set: boolean;
             enabled: boolean;
-            /** @description Parâmetros do provider (`max_tokens`, `temperature`, `context_window`). */
+            /** @description Provider parameters (`max_tokens`, `temperature`, `context_window`). */
             options: {
                 [key: string]: string | number | boolean;
             };
@@ -4548,7 +4549,7 @@ export interface components {
             options?: {
                 [key: string]: string | number | boolean;
             };
-            /** @description Sem valor, um provider habilitado assume as finalidades que nenhum outro declara. */
+            /** @description Without a value, an enabled provider takes the purposes no other one declares. */
             used_for?: components["schemas"]["AgentPurpose"][];
         };
         AgentProviderPatch: {
@@ -4561,7 +4562,7 @@ export interface components {
             options?: {
                 [key: string]: string | number | boolean;
             };
-            /** @description Substitui a lista; as finalidades declaradas saem dos outros providers. */
+            /** @description Replaces the list; the declared purposes leave the other providers. */
             used_for?: components["schemas"]["AgentPurpose"][];
         };
         AgentProviderPage: {
@@ -4579,7 +4580,7 @@ export interface components {
         SecretPut: {
             value: string;
         };
-        /** @description O job criado por `POST /api/v1/admin/jobs/{job_id}/retry`. */
+        /** @description The job created by `POST /api/v1/admin/jobs/{job_id}/retry`. */
         AdminJobRetried: {
             /** Format: uuid */
             job_id: string;
@@ -4597,7 +4598,7 @@ export interface components {
                 running: number;
                 failed_last_24h: number;
             };
-            /** @description `null` quando o worker não reporta GPU (engine CPU ou remota). */
+            /** @description `null` when the worker reports no GPU (CPU or remote engine). */
             gpu: {
                 name: string;
                 vram_total_mb: number;
@@ -4613,17 +4614,17 @@ export interface components {
                 vram_mb: number | null;
             }[];
             /**
-             * @description As etapas do pipeline que falharam nas últimas 24 h, da mais recente para a mais antiga,
-             *     sem o conteúdo das gravações.
+             * @description The pipeline steps that failed in the last 24 h, from the most recent to the oldest,
+             *     without the recordings' content.
              */
             recent_failures: {
                 /**
                  * Format: uuid
-                 * @description O job de transcrição (que o admin retenta); `null` nas etapas por agente.
+                 * @description The transcription job (which the admin retries); `null` for agent steps.
                  */
                 job_id: string | null;
                 /**
-                 * @description A etapa do pipeline que falhou (holetz/eclume#33).
+                 * @description The pipeline step that failed (holetz/eclume#33).
                  * @enum {string}
                  */
                 step?: "received" | "preprocessing" | "transcription" | "agenda_type" | "fields" | "summary";
@@ -4634,14 +4635,14 @@ export interface components {
                 message: string;
                 /** Format: date-time */
                 failed_at: string;
-                /** @description Falha passageira que `POST /api/v1/admin/jobs/{job_id}/retry` pode resolver (1.4.0). */
+                /** @description Transient failure that `POST /api/v1/admin/jobs/{job_id}/retry` can resolve (1.4.0). */
                 retryable?: boolean;
             }[];
             /** Format: date-time */
             checked_at: string;
             /**
-             * @description Cada etapa do pipeline (fora o recebido) nas últimas 24 h: execuções concluídas (feitas ou
-             *     falhas), a mediana da duração das feitas e as falhas. Zeradas quando não rodaram.
+             * @description Each pipeline step (except received) in the last 24 h: completed runs (done or failed),
+             *     the median duration of the done ones and the failures. Zeroed when they did not run.
              */
             steps: {
                 /** @enum {string} */
@@ -4651,8 +4652,8 @@ export interface components {
                 failures: number;
             }[];
             /**
-             * @description Uma sonda por serviço, em paralelo, com teto de 2 s cada: `healthy`, `degraded` (lento),
-             *     `down` ou `absent` (ainda não existe na plataforma).
+             * @description One probe per service, in parallel, with a 2 s cap each: `healthy`, `degraded` (slow),
+             *     `down` or `absent` (does not exist on the platform yet).
              */
             services: {
                 /** @enum {string} */
@@ -4662,7 +4663,7 @@ export interface components {
                 detail: string | null;
                 latency_ms: number | null;
             }[];
-            /** @description Heartbeat do worker GPU (`eclume:gpu:health`, a cada 15 s, TTL 45 s); `null` quando nenhum worker publicou nos últimos 45 s. */
+            /** @description Heartbeat of the GPU worker (`eclume:gpu:health`, every 15 s, TTL 45 s); `null` when no worker has published in the last 45 s. */
             worker?: {
                 online: boolean;
                 /** Format: date-time */
@@ -4670,21 +4671,21 @@ export interface components {
                 version: string | null;
                 engine: string | null;
                 device?: string | null;
-                /** @description Há um job de transcrição rodando no worker. */
+                /** @description A transcription job is running on the worker. */
                 busy: boolean;
             } | null;
-            /** @description Profundidade de cada fila arq da instância (só números, sem ids). */
+            /** @description Depth of each arq queue of the instance (numbers only, no ids). */
             queues?: {
                 name: string;
                 queued: number;
                 running: number;
             }[];
-            /** @description Desde a 2.15.0: jobs de transcrição retidos no banco, fora da fila da GPU — os que aguardam a vez da conta (ela já tem um na GPU) e os que aguardam a janela de minutos de 24 h. Só números. */
+            /** @description Since 2.15.0: transcription jobs held in the database, outside the GPU queue — those waiting for the account's turn (it already has one on the GPU) and those waiting for the 24 h minutes window. Numbers only. */
             held_jobs?: {
                 account_turn: number;
                 gpu_minutes: number;
             };
-            /** @description Jobs de transcrição da plataforma já despachados à GPU e ainda não concluídos, com o progresso (desde a 2.15.0, sem os retidos, contados em `held_jobs`). */
+            /** @description The platform's transcription jobs already dispatched to the GPU and not yet finished, with their progress (since 2.15.0, without the held ones, counted in `held_jobs`). */
             running_jobs?: {
                 /** Format: uuid */
                 job_id: string;
@@ -4701,7 +4702,7 @@ export interface components {
                 started_at: string | null;
                 /**
                  * Format: date-time
-                 * @description Última escrita do worker no progresso; parado há muito tempo indica worker morto.
+                 * @description The worker's last progress write; stale for a long time indicates a dead worker.
                  */
                 updated_at: string | null;
             }[];

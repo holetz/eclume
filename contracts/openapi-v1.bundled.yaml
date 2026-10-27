@@ -9535,7 +9535,7 @@ components:
         title:
           type: string
         result:
-          description: O resultado neste alvo; nulo enquanto não executado.
+          description: The result on this target; null until executed.
           oneOf:
           - type: object
             required:
@@ -9558,8 +9558,8 @@ components:
                 format: uuid
           - type: 'null'
     AgentAction:
-      description: 'Desde a 2.24.0. Uma ação que o Agente propôs: o texto do cartão, os alvos congelados
-        na proposta e, depois da confirmação, o resultado por alvo. É também o registro de auditoria.'
+      description: 'Since 2.24.0. An action the Agent proposed: the card text, the targets frozen in the
+        proposal and, after confirmation, the result per target. It is also the audit record.'
       type: object
       required:
       - id
@@ -9581,7 +9581,7 @@ components:
           type: string
           format: uuid
         session_id:
-          description: Nulo depois que a conversa é excluída.
+          description: Null after the conversation is deleted.
           type:
           - string
           - 'null'
@@ -9599,10 +9599,10 @@ components:
           - collect_recordings
           - set_agenda_type
         params:
-          description: Os parâmetros normalizados (alvos, tags, coleções ou o tipo resolvidos).
+          description: The normalized parameters (resolved targets, tags, collections or type).
           type: object
         summary:
-          description: O que será feito, em uma frase.
+          description: What will be done, in one sentence.
           type: string
         targets:
           type: array
@@ -9689,11 +9689,11 @@ components:
       - anthropic
       - claude-cli
     AgentPurpose:
-      description: 'Para que o provider serve: `summaries` (resumos), `fields` (preenchimento de campos),
+      description: 'What the provider is for: `summaries` (summaries), `fields` (field filling),
 
-        `chat` (ajuste do resumo) e `agenda_detection` (detecção do tipo de agenda). Cada
+        `chat` (summary adjustment) and `agenda_detection` (agenda type detection). Each
 
-        finalidade tem no máximo um provider: declará-la num provider a tira dos outros.
+        purpose has at most one provider: declaring it on one provider removes it from the others.
 
         '
       type: string
@@ -9717,9 +9717,11 @@ components:
         kind:
           $ref: '#/components/schemas/AgentProviderKind'
     SummaryOrigin:
-      description: 'Como a versão nasceu: `generated` (o agente pelas instruções do tipo de agenda), `manual`
+      description: 'How the version came about: `generated` (the agent, following the agenda type''s
 
-        (edição à mão, ou voltar à gerada) ou `chat` (ajuste pelo agente no chat).
+        instructions), `manual` (a hand edit, or reverting to the generated one) or `chat` (an
+
+        adjustment by the agent in the chat).
 
         '
       type: string
@@ -9728,11 +9730,12 @@ components:
       - manual
       - chat
     Summary:
-      description: 'Uma versão do resumo da transcrição. A atual é a de maior `version` com `status: done`.
+      description: 'One version of the transcript''s summary. The current one is the highest `version`
+        with
 
-        Uma geração que termina depois de uma edição ou de um ajuste toma o próximo número e vira a
+        `status: done`. A generation that finishes after an edit or an adjustment takes the next
 
-        atual; por isso os números podem pular.
+        number and becomes the current one; that is why the numbers can skip.
 
         '
       type: object
@@ -9762,16 +9765,16 @@ components:
           type: string
           format: uuid
         transcript_revision:
-          description: Revisão da transcrição que o resumo leu.
+          description: Revision of the transcript the summary read.
           type: integer
           minimum: 1
         agenda_type:
-          description: 'Instantâneo do tipo de agenda cujas instruções o resumo seguiu (numa versão `manual`
-            ou
+          description: 'Snapshot of the agenda type whose instructions the summary followed (in a `manual`
+            or
 
-            `chat`, o da versão de que ela partiu): o resumo continua quando o tipo é renomeado ou
+            `chat` version, that of the version it started from): the summary survives when the
 
-            excluído. `null` numa edição sem versão anterior.
+            type is renamed or deleted. `null` in an edit with no previous version.
 
             '
           oneOf:
@@ -9787,10 +9790,10 @@ components:
                 type: string
           - type: 'null'
         version:
-          description: 'Versão do resumo da transcrição, a partir de 1; toda geração, edição, volta à
-            gerada
+          description: 'Version of the transcript''s summary, starting at 1; every generation, edit, revert
+            to
 
-            ou ajuste por chat sobe a versão.
+            the generated one or chat adjustment raises the version.
 
             '
           type: integer
@@ -9810,7 +9813,7 @@ components:
           - manual
           - automatic
         provider:
-          description: O agente que escreveu a versão; `null` numa versão `manual`.
+          description: The agent that wrote the version; `null` in a `manual` version.
           oneOf:
           - $ref: '#/components/schemas/AgentProviderRef'
           - type: 'null'
@@ -9819,7 +9822,7 @@ components:
           - string
           - 'null'
         content_md:
-          description: 'Resumo em Markdown, com `status: done`.'
+          description: 'Summary in Markdown, with `status: done`.'
           type:
           - string
           - 'null'
@@ -9836,20 +9839,20 @@ components:
                 type: string
           - type: 'null'
         restored_from_id:
-          description: Na volta à gerada, a versão gerada cujo conteúdo foi restaurado.
+          description: On a revert to the generated one, the generated version whose content was restored.
           type:
           - string
           - 'null'
           format: uuid
         chat_message_id:
-          description: Numa versão `chat`, a resposta do agente que a produziu.
+          description: In a `chat` version, the agent reply that produced it.
           type:
           - string
           - 'null'
           format: uuid
         created_by:
-          description: 'Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada);
-            sai na `/api/v2`.'
+          description: 'Deprecated since 2.11.0: always the user''s own id (each account is isolated);
+            removed in `/api/v2`.'
           deprecated: true
           type:
           - string
@@ -9867,11 +9870,11 @@ components:
       type: object
       properties:
         agenda_type_id:
-          description: Sem valor, o tipo de agenda da gravação.
+          description: Without a value, the recording's agenda type.
           type: string
           format: uuid
         provider_id:
-          description: Sem valor, o provider padrão da plataforma.
+          description: Without a value, the platform's default provider.
           type: string
           format: uuid
     SummaryPage:
@@ -9887,7 +9890,7 @@ components:
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
     SummaryState:
-      description: O resumo da gravação como a tela o mostra.
+      description: The recording's summary as the screen shows it.
       type: object
       required:
       - current
@@ -9896,23 +9899,23 @@ components:
       - version_count
       properties:
         current:
-          description: A versão atual (maior `version` concluída).
+          description: The current version (highest completed `version`).
           oneOf:
           - $ref: '#/components/schemas/Summary'
           - type: 'null'
         generated:
-          description: A gerada de referência (a `generated` concluída mais recente), para comparar e
-            voltar.
+          description: The reference generated version (the most recent completed `generated`), to compare
+            and revert.
           oneOf:
           - $ref: '#/components/schemas/Summary'
           - type: 'null'
         pending:
-          description: A geração em `queued` ou `running`, se houver.
+          description: The generation in `queued` or `running`, if any.
           oneOf:
           - $ref: '#/components/schemas/Summary'
           - type: 'null'
         version_count:
-          description: Versões guardadas, de todas as origens.
+          description: Stored versions, of every origin.
           type: integer
           minimum: 0
     SummaryEdit:
@@ -9926,7 +9929,7 @@ components:
           minLength: 1
           maxLength: 200000
         base_version:
-          description: A versão que a pessoa abriu para editar; 0 sem resumo concluído.
+          description: The version the person opened to edit; 0 with no completed summary.
           type: integer
           minimum: 0
     SummaryChatRequest:
@@ -9939,9 +9942,9 @@ components:
           minLength: 1
           maxLength: 4000
     ChatRead:
-      description: 'Uma consulta do agente à transcrição: `read_transcript` (o trecho `from_ms`–`to_ms`,
+      description: 'One agent lookup into the transcript: `read_transcript` (the excerpt `from_ms`–`to_ms`,
 
-        `clipped` se passou do teto e foi cortado) ou `search_transcript` (`query` e os `hits`).
+        `clipped` if it exceeded the cap and was cut) or `search_transcript` (`query` and the `hits`).
 
         '
       type: object
@@ -9997,12 +10000,13 @@ components:
           - user
           - assistant
         content:
-          description: O pedido, ou a resposta do agente (`null` até `done`).
+          description: The request, or the agent's reply (`null` until `done`).
           type:
           - string
           - 'null'
         status:
-          description: A mensagem do usuário nasce `done`; a do agente vai de `queued` a `done` ou `failed`.
+          description: The user's message is born `done`; the agent's goes from `queued` to `done` or
+            `failed`.
           type: string
           enum:
           - queued
@@ -10010,25 +10014,25 @@ components:
           - done
           - failed
         reply_to:
-          description: Na resposta do agente, o pedido que ela responde.
+          description: In the agent's reply, the request it answers.
           type:
           - string
           - 'null'
           format: uuid
         base_summary_id:
-          description: A versão atual quando o pedido chegou.
+          description: The current version when the request arrived.
           type:
           - string
           - 'null'
           format: uuid
         summary_id:
-          description: A versão `chat` que a resposta criou, se mudou o resumo.
+          description: The `chat` version the reply created, if it changed the summary.
           type:
           - string
           - 'null'
           format: uuid
         reads:
-          description: As consultas do agente à transcrição, em ordem.
+          description: The agent's lookups into the transcript, in order.
           type: array
           items:
             $ref: '#/components/schemas/ChatRead'
@@ -10041,12 +10045,12 @@ components:
           - string
           - 'null'
         error:
-          description: 'Com `failed` (`provider_bad_output`, `chat_tool_limit`, `provider_timeout`...),
-            ou com
+          description: 'With `failed` (`provider_bad_output`, `chat_tool_limit`, `provider_timeout`...),
+            or with
 
-            `done` e `summary_changed` quando o resumo mudou durante o ajuste: a resposta fica, sem
+            `done` and `summary_changed` when the summary changed during the adjustment: the reply
 
-            versão nova.
+            stays, with no new version.
 
             '
           oneOf:
@@ -10061,8 +10065,8 @@ components:
                 type: string
           - type: 'null'
         created_by:
-          description: 'Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada);
-            sai na `/api/v2`.'
+          description: 'Deprecated since 2.11.0: always the user''s own id (each account is isolated);
+            removed in `/api/v2`.'
           deprecated: true
           type:
           - string
@@ -10105,11 +10109,11 @@ components:
       - at_ms
       properties:
         client_id:
-          description: Id gerado pelo app; reenviar o mesmo não duplica.
+          description: Id generated by the app; resending the same one does not duplicate.
           type: string
           format: uuid
         at_ms:
-          description: Instante desde o início da gravação.
+          description: Instant since the start of the recording.
           type: integer
           minimum: 0
         note:
@@ -10129,7 +10133,7 @@ components:
           items:
             $ref: '#/components/schemas/MarkerInput'
         device_name:
-          description: Quem marcou ("Field phone").
+          description: Who marked it ("Field phone").
           type:
           - string
           - 'null'
@@ -10166,7 +10170,7 @@ components:
           type: string
           format: uuid
         at_ms:
-          description: Instante desde o início; pode passar da duração, que só se conhece depois.
+          description: Instant since the start; it may exceed the duration, which is only known later.
           type: integer
           minimum: 0
         note:
@@ -10217,28 +10221,28 @@ components:
         compute_type:
           type: string
         batch_size:
-          description: '`null` = adaptativo à VRAM livre.'
+          description: '`null` = adaptive to the free VRAM.'
           type:
           - integer
           - 'null'
           minimum: 1
         default_language:
-          description: 'Idioma das gravações sem idioma próprio (`pt`, `en`…), ou `auto`: a engine detecta
-            o
+          description: 'Language of recordings with no language of their own (`pt`, `en`…), or `auto`:
+            the
 
-            idioma de cada gravação e o alinhador segue o detectado.
+            engine detects each recording''s language and the aligner follows the detected one.
 
             '
           type:
           - string
           - 'null'
         fallback_model:
-          description: Modelo usado depois de um OOM.
+          description: Model used after an OOM.
           type:
           - string
           - 'null'
         endpoint_url:
-          description: 'Base do servidor remoto, com `engine: openai-compatible`.'
+          description: 'Base of the remote server, with `engine: openai-compatible`.'
           type:
           - string
           - 'null'
@@ -10268,14 +10272,13 @@ components:
           minimum: 1
           maximum: 30
     PreprocessingSettings:
-      description: 'Tratamento do áudio antes da transcrição, pelo worker GPU, em ordem fixa: separar
-        canais,
+      description: 'Audio processing before transcription, by the GPU worker, in a fixed order: split
 
-        reduzir ruído, normalizar o loudness e cortar o silêncio do início e do fim. A conversão
+        channels, reduce noise, normalize loudness and trim the silence at the start and end. The
 
-        para 16 kHz mono é sempre feita e não tem chave. As marcas de tempo continuam as do áudio
+        conversion to 16 kHz mono is always done and has no key. Timestamps remain those of the
 
-        original.
+        original audio.
 
         '
       type: object
@@ -10295,13 +10298,13 @@ components:
             enabled:
               type: boolean
             method:
-              description: '`rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg).'
+              description: '`rnnoise` (neural network, 48 kHz) or `afftdn` (ffmpeg''s FFT).'
               type: string
               enum:
               - rnnoise
               - afftdn
             strength:
-              description: Quanto do sinal tratado entra na mistura.
+              description: How much of the processed signal goes into the mix.
               type: number
               minimum: 0
               maximum: 1
@@ -10316,7 +10319,7 @@ components:
             enabled:
               type: boolean
             target_lufs:
-              description: Loudness integrado alvo (EBU R128).
+              description: Target integrated loudness (EBU R128).
               type: number
               minimum: -30
               maximum: -10
@@ -10325,7 +10328,7 @@ components:
               minimum: -9
               maximum: 0
             lra:
-              description: Faixa de loudness.
+              description: Loudness range.
               type: number
               minimum: 1
               maximum: 20
@@ -10339,17 +10342,17 @@ components:
             enabled:
               type: boolean
             min_silence_s:
-              description: Silêncio mínimo, no início ou no fim, para cortar.
+              description: Minimum silence, at the start or the end, to trim.
               type: number
               minimum: 1
               maximum: 30
             threshold_db:
-              description: Abaixo deste nível, é silêncio.
+              description: Below this level, it is silence.
               type: number
               minimum: -80
               maximum: -20
         split_channels:
-          description: Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado.
+          description: One channel per person (stereo recording of two sources); duplicated mono is skipped.
           type: object
           required:
           - enabled
@@ -10363,12 +10366,12 @@ components:
       - suggestion_threshold
       properties:
         enabled:
-          description: Liga a identificação por voz na plataforma; exige a separação de locutores ligada
-            (422 em `voice_identification.enabled`). Desligado, nenhuma impressão é comparada nem criada;
-            desligar apaga as existentes. O aceite do aviso no cadastro cobre o consentimento.
+          description: Turns voice identification on for the platform; it requires speaker diarization
+            on (422 on `voice_identification.enabled`). Off, no voiceprint is compared or created; turning
+            it off deletes the existing ones. Accepting the notice at sign-up covers the consent.
           type: boolean
         suggestion_threshold:
-          description: Similaridade mínima (cosseno) para sugerir uma pessoa; o padrão sai da calibração.
+          description: Minimum similarity (cosine) to suggest a person; the default comes from calibration.
           type: number
           minimum: 0
           maximum: 1
@@ -10393,7 +10396,7 @@ components:
         preprocessing:
           $ref: '#/components/schemas/PreprocessingSettings'
         quotas:
-          description: Cotas padrão de toda conta (desde a 2.15.0); o admin as sobrepõe por conta.
+          description: Default quotas of every account (since 2.15.0); the admin overrides them per account.
           $ref: '#/components/schemas/Quotas'
         retention:
           description: Since 2.29.0. Platform-wide audio retention settings.
@@ -10402,7 +10405,7 @@ components:
           type: string
           format: date-time
         updated_by:
-          description: Conta de admin que mudou por último.
+          description: Admin account that changed it last.
           oneOf:
           - $ref: '#/components/schemas/AdminRef'
           - type: 'null'
@@ -10420,7 +10423,7 @@ components:
           minimum: 1
           maximum: 3650
     AdminSettingsPatch:
-      description: Cada bloco é mesclado campo a campo; campos ausentes ficam como estão.
+      description: Each block is merged field by field; absent fields stay as they are.
       type: object
       minProperties: 1
       properties:
@@ -10443,7 +10446,7 @@ components:
               - 'null'
               minimum: 1
             default_language:
-              description: Código do idioma ou `auto`.
+              description: Language code or `auto`.
               type:
               - string
               - 'null'
@@ -10486,7 +10489,7 @@ components:
               minimum: 0
               maximum: 1
         preprocessing:
-          description: Cada etapa é mesclada campo a campo.
+          description: Each step is merged field by field.
           type: object
           additionalProperties: false
           properties:
@@ -10497,13 +10500,13 @@ components:
                 enabled:
                   type: boolean
                 method:
-                  description: '`rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg).'
+                  description: '`rnnoise` (neural network, 48 kHz) or `afftdn` (ffmpeg''s FFT).'
                   type: string
                   enum:
                   - rnnoise
                   - afftdn
                 strength:
-                  description: Quanto do sinal tratado entra na mistura.
+                  description: How much of the processed signal goes into the mix.
                   type: number
                   minimum: 0
                   maximum: 1
@@ -10514,7 +10517,7 @@ components:
                 enabled:
                   type: boolean
                 target_lufs:
-                  description: Loudness integrado alvo (EBU R128).
+                  description: Target integrated loudness (EBU R128).
                   type: number
                   minimum: -30
                   maximum: -10
@@ -10523,7 +10526,7 @@ components:
                   minimum: -9
                   maximum: 0
                 lra:
-                  description: Faixa de loudness.
+                  description: Loudness range.
                   type: number
                   minimum: 1
                   maximum: 20
@@ -10534,24 +10537,25 @@ components:
                 enabled:
                   type: boolean
                 min_silence_s:
-                  description: Silêncio mínimo, no início ou no fim, para cortar.
+                  description: Minimum silence, at the start or the end, to trim.
                   type: number
                   minimum: 1
                   maximum: 30
                 threshold_db:
-                  description: Abaixo deste nível, é silêncio.
+                  description: Below this level, it is silence.
                   type: number
                   minimum: -80
                   maximum: -20
             split_channels:
-              description: Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado.
+              description: One channel per person (stereo recording of two sources); duplicated mono is
+                skipped.
               type: object
               additionalProperties: false
               properties:
                 enabled:
                   type: boolean
         quotas:
-          description: Cotas padrão (desde a 2.15.0), mescladas campo a campo; `null` é sem limite.
+          description: Default quotas (since 2.15.0), merged field by field; `null` is no limit.
           $ref: '#/components/schemas/QuotasOverride'
         retention:
           description: Since 2.29.0. Audio retention ceiling; a null `audio_max_days` removes it.
@@ -10587,7 +10591,7 @@ components:
         kind:
           $ref: '#/components/schemas/AgentProviderKind'
         base_url:
-          description: Base da API (Ollama, OpenAI-compatível). `null` para `anthropic` e `claude-cli`.
+          description: API base (Ollama, OpenAI-compatible). `null` for `anthropic` and `claude-cli`.
           type:
           - string
           - 'null'
@@ -10599,7 +10603,7 @@ components:
         enabled:
           type: boolean
         options:
-          description: Parâmetros do provider (`max_tokens`, `temperature`, `context_window`).
+          description: Provider parameters (`max_tokens`, `temperature`, `context_window`).
           type: object
           additionalProperties:
             type:
@@ -10651,7 +10655,7 @@ components:
             - number
             - boolean
         used_for:
-          description: Sem valor, um provider habilitado assume as finalidades que nenhum outro declara.
+          description: Without a value, an enabled provider takes the purposes no other one declares.
           type: array
           items:
             $ref: '#/components/schemas/AgentPurpose'
@@ -10685,7 +10689,7 @@ components:
             - number
             - boolean
         used_for:
-          description: Substitui a lista; as finalidades declaradas saem dos outros providers.
+          description: Replaces the list; the declared purposes leave the other providers.
           type: array
           items:
             $ref: '#/components/schemas/AgentPurpose'
@@ -10734,7 +10738,7 @@ components:
           minLength: 1
           writeOnly: true
     AdminJobRetried:
-      description: O job criado por `POST /api/v1/admin/jobs/{job_id}/retry`.
+      description: The job created by `POST /api/v1/admin/jobs/{job_id}/retry`.
       type: object
       required:
       - job_id
@@ -10787,7 +10791,7 @@ components:
               type: integer
               minimum: 0
         gpu:
-          description: '`null` quando o worker não reporta GPU (engine CPU ou remota).'
+          description: '`null` when the worker reports no GPU (CPU or remote engine).'
           oneOf:
           - type: object
             required:
@@ -10838,10 +10842,9 @@ components:
                 - 'null'
                 minimum: 0
         recent_failures:
-          description: 'As etapas do pipeline que falharam nas últimas 24 h, da mais recente para a mais
-            antiga,
+          description: 'The pipeline steps that failed in the last 24 h, from the most recent to the oldest,
 
-            sem o conteúdo das gravações.
+            without the recordings'' content.
 
             '
           type: array
@@ -10856,13 +10859,13 @@ components:
             - failed_at
             properties:
               job_id:
-                description: O job de transcrição (que o admin retenta); `null` nas etapas por agente.
+                description: The transcription job (which the admin retries); `null` for agent steps.
                 type:
                 - string
                 - 'null'
                 format: uuid
               step:
-                description: A etapa do pipeline que falhou (holetz/eclume#33).
+                description: The pipeline step that failed (holetz/eclume#33).
                 type: string
                 enum:
                 - received
@@ -10886,17 +10889,17 @@ components:
                 type: string
                 format: date-time
               retryable:
-                description: Falha passageira que `POST /api/v1/admin/jobs/{job_id}/retry` pode resolver
+                description: Transient failure that `POST /api/v1/admin/jobs/{job_id}/retry` can resolve
                   (1.4.0).
                 type: boolean
         checked_at:
           type: string
           format: date-time
         steps:
-          description: 'Cada etapa do pipeline (fora o recebido) nas últimas 24 h: execuções concluídas
-            (feitas ou
+          description: 'Each pipeline step (except received) in the last 24 h: completed runs (done or
+            failed),
 
-            falhas), a mediana da duração das feitas e as falhas. Zeradas quando não rodaram.
+            the median duration of the done ones and the failures. Zeroed when they did not run.
 
             '
           type: array
@@ -10928,10 +10931,10 @@ components:
                 type: integer
                 minimum: 0
         services:
-          description: 'Uma sonda por serviço, em paralelo, com teto de 2 s cada: `healthy`, `degraded`
-            (lento),
+          description: 'One probe per service, in parallel, with a 2 s cap each: `healthy`, `degraded`
+            (slow),
 
-            `down` ou `absent` (ainda não existe na plataforma).
+            `down` or `absent` (does not exist on the platform yet).
 
             '
           type: array
@@ -10970,8 +10973,8 @@ components:
                 - 'null'
                 minimum: 0
         worker:
-          description: Heartbeat do worker GPU (`eclume:gpu:health`, a cada 15 s, TTL 45 s); `null` quando
-            nenhum worker publicou nos últimos 45 s.
+          description: Heartbeat of the GPU worker (`eclume:gpu:health`, every 15 s, TTL 45 s); `null`
+            when no worker has published in the last 45 s.
           oneOf:
           - type: object
             required:
@@ -10999,11 +11002,11 @@ components:
                 - string
                 - 'null'
               busy:
-                description: Há um job de transcrição rodando no worker.
+                description: A transcription job is running on the worker.
                 type: boolean
           - type: 'null'
         queues:
-          description: Profundidade de cada fila arq da instância (só números, sem ids).
+          description: Depth of each arq queue of the instance (numbers only, no ids).
           type: array
           items:
             type: object
@@ -11021,9 +11024,9 @@ components:
                 type: integer
                 minimum: 0
         held_jobs:
-          description: 'Desde a 2.15.0: jobs de transcrição retidos no banco, fora da fila da GPU — os
-            que aguardam a vez da conta (ela já tem um na GPU) e os que aguardam a janela de minutos de
-            24 h. Só números.'
+          description: 'Since 2.15.0: transcription jobs held in the database, outside the GPU queue —
+            those waiting for the account''s turn (it already has one on the GPU) and those waiting for
+            the 24 h minutes window. Numbers only.'
           type: object
           required:
           - account_turn
@@ -11036,8 +11039,8 @@ components:
               type: integer
               minimum: 0
         running_jobs:
-          description: Jobs de transcrição da plataforma já despachados à GPU e ainda não concluídos,
-            com o progresso (desde a 2.15.0, sem os retidos, contados em `held_jobs`).
+          description: The platform's transcription jobs already dispatched to the GPU and not yet finished,
+            with their progress (since 2.15.0, without the held ones, counted in `held_jobs`).
           type: array
           items:
             type: object
@@ -11084,8 +11087,8 @@ components:
                 - 'null'
                 format: date-time
               updated_at:
-                description: Última escrita do worker no progresso; parado há muito tempo indica worker
-                  morto.
+                description: The worker's last progress write; stale for a long time indicates a dead
+                  worker.
                 type:
                 - string
                 - 'null'
@@ -11374,14 +11377,14 @@ components:
           - 'null'
   examples:
     Health:
-      summary: Serviço no ar
+      summary: Service up
       value:
         status: ok
         version: 0.1.0
         contract_version: 2.17.0
         commit: 2c93963a4f1e0b7d8c6e5f4a3b2c1d0e9f8a7b6c
     HealthReady:
-      summary: Postgres, Redis e MinIO no ar
+      summary: Postgres, Redis and MinIO up
       value:
         status: ok
         checks:
@@ -11392,22 +11395,22 @@ components:
         - name: storage
           status: ok
     LoginRequest:
-      summary: E-mail e senha
+      summary: E-mail and password
       value:
         email: mariana.couto@example.com
         password: correta-cavalo-bateria-grampo
     PasswordResetInfo:
-      summary: Link válido de uma consultora
+      summary: Valid link of a consultant
       value:
         email: mariana.couto@example.com
         expires_at: '2026-10-02T14:30:00Z'
     PasswordResetLink:
-      summary: Link recém-gerado pelo admin
+      summary: Link freshly generated by the admin
       value:
         url: https://192.168.15.199:8443/redefinir-senha#Vt3q8nZ0bKx2Lr7mQe4yHs9wPa1cDf6gJu5oTi8kNv0
         expires_at: '2026-10-02T14:30:00Z'
     MeUsage:
-      summary: Uso da conta abaixo das cotas padrão
+      summary: Account usage below the default quotas
       value:
         usage:
           storage_bytes: 1288490188
@@ -11421,7 +11424,7 @@ components:
           gpu_minutes_24h: 600
           agent_requests_24h: 200
     MeViaPat:
-      summary: Consultora autenticada pelo PAT do lumea
+      summary: Consultant authenticated by lumea's PAT
       value:
         user:
           id: 01928f3a-1c00-7a00-8000-000000000101
@@ -11440,25 +11443,25 @@ components:
           token_id: 01928f3a-1c00-7a00-8000-000000000701
         notice_required: false
     SignupInfo:
-      summary: Cadastro aberto com o aviso v1
+      summary: Sign-up open with notice v1
       value:
         open: true
         notice:
           version: '1'
           text: Sou responsável por pedir o consentimento das pessoas que gravo.
     SignupRequest:
-      summary: Nova conta aceitando o aviso
+      summary: New account accepting the notice
       value:
         name: Paulo Andrade
         email: paulo.andrade@example.com
         password: senha-bem-longa-2026
         notice_version: '1'
     NoticeAcceptRequest:
-      summary: Aceite do aviso v1
+      summary: Acceptance of notice v1
       value:
         notice_version: '1'
     VoiceAssignment:
-      summary: Atribuição automática ligada, limiar 0,80
+      summary: Automatic assignment on, threshold 0.80
       value:
         enabled: true
         threshold: 0.8
@@ -11467,21 +11470,21 @@ components:
         sample_count: 7
         voiceprint_people: 3
     SpeakerNamingPreference:
-      summary: Marcação ligada, nenhuma gravação esperando
+      summary: Naming on, no recording waiting
       value:
         required: true
         waiting_count: 0
     SpeakerNamingPatchRequest:
-      summary: Exigir a marcação dos locutores
+      summary: Require speaker naming
       value:
         required: true
     TranscriptionPreference:
-      summary: Conta em inglês, servidor em português
+      summary: Account in English, server in Portuguese
       value:
         language: en
         platform_default: pt
     TranscriptionPreferencePatchRequest:
-      summary: Transcrever em inglês por padrão
+      summary: Transcribe in English by default
       value:
         language: en
     AudioRetention:
@@ -11495,11 +11498,11 @@ components:
       value:
         days: 30
     VoiceAssignmentPatchRequest:
-      summary: Subir o limiar para 0,80
+      summary: Raise the threshold to 0.80
       value:
         threshold: 0.8
     AdminMe:
-      summary: Conta de admin
+      summary: Admin account
       value:
         id: 01928f3a-1c00-7a00-8000-000000000a01
         email: mariana.couto@example.com
@@ -11507,7 +11510,7 @@ components:
         created_at: '2026-09-10T12:00:00Z'
         last_login_at: '2026-09-28T11:40:00Z'
     TokenPage:
-      summary: PAT do lumea e PAT do desktop
+      summary: lumea's PAT and the desktop's PAT
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000702
@@ -11536,14 +11539,14 @@ components:
           revoked_at: null
         next_cursor: null
     TokenCreateRequest:
-      summary: PAT para o importador do lumea
+      summary: PAT for lumea's importer
       value:
         name: lumea — importador
         scopes:
         - transcripts:read
         - people:read
     ServerInfo:
-      summary: Servidor de produção com a CA publicada
+      summary: Production server with the published CA
       value:
         name: eclume
         url: https://192.168.15.199:8443
@@ -11553,7 +11556,7 @@ components:
         version: 0.1.0
         contract_version: 2.9.0
     PrivacyInfo:
-      summary: Transcrição no servidor, resumos e chat na Anthropic
+      summary: Transcription on the server, summaries and chat at Anthropic
       value:
         destinations:
         - purpose: transcription
@@ -11572,20 +11575,20 @@ components:
           location: disabled
           processor: null
     DeviceLoginRequest:
-      summary: Notebook entrando com e-mail e senha
+      summary: Laptop signing in with e-mail and password
       value:
         email: mariana@exemplo.com.br
         password: correta-cavalo-bateria
         device_name: Notebook da Mariana
         platform: windows
     DevicePairRequest:
-      summary: Celular trocando o código lido no QR
+      summary: Phone exchanging the code read from the QR
       value:
         code: K7Q-4MX
         device_name: iPhone da Mariana
         platform: ios
     DeviceCredential:
-      summary: Credencial do notebook
+      summary: The laptop's credential
       value:
         token:
           id: 01928f3a-1c00-7a00-8000-000000000703
@@ -11611,7 +11614,7 @@ components:
           version: 0.1.0
           contract_version: 2.9.0
     PairingCodeCreated:
-      summary: Código novo com o link do QR
+      summary: New code with the QR link
       value:
         id: 01928f3a-1c00-7a00-8000-000000000a01
         status: pending
@@ -11621,14 +11624,14 @@ components:
         display: K7Q-4MX
         pair_url: https://192.168.15.199:8443/parear?codigo=K7Q4MX&ca=3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d
     PairingCodeUsed:
-      summary: Código trocado pelo celular
+      summary: Code exchanged by the phone
       value:
         id: 01928f3a-1c00-7a00-8000-000000000a01
         status: used
         expires_at: '2026-09-27T14:12:00Z'
         token_id: 01928f3a-1c00-7a00-8000-000000000704
     TokenCreated:
-      summary: PAT criado, segredo mostrado uma vez
+      summary: PAT created, secret shown once
       value:
         token:
           id: 01928f3a-1c00-7a00-8000-000000000701
@@ -11645,7 +11648,7 @@ components:
           revoked_at: null
         secret: eclp_7Hq2vN4kR8sT1wX6yZ3bC5dF0gJ9mP2a
     UploadCreateRequest:
-      summary: Gravação do desktop, 18 MB em Opus
+      summary: Desktop recording, 18 MB in Opus
       value:
         filename: 2026-09-18 11-00 Teams.opus
         content_type: audio/ogg; codecs=opus
@@ -11670,7 +11673,7 @@ components:
           at_ms: 131500
           note: null
     UploadCreateMobile:
-      summary: Gravação do celular com marcadores e tipo de agenda escolhido ao parar
+      summary: Phone recording with markers and the agenda type chosen on stop
       value:
         filename: 2026-09-26 10-42 celular.ogg
         content_type: audio/ogg; codecs=opus
@@ -11691,7 +11694,7 @@ components:
           at_ms: 2530000
           note: Prazo da proposta
     UploadCreated:
-      summary: Upload em 3 partes, URLs das partes emitidas
+      summary: Upload in 3 parts, part URLs issued
       value:
         id: 01928f3a-1c00-7a00-8000-000000000601
         filename: 2026-09-18 11-00 Teams.opus
@@ -11725,7 +11728,7 @@ components:
           expires_at: '2026-09-18T15:09:10Z'
         recording_id: null
     UploadDeduplicated:
-      summary: Mesmo hash de uma gravação existente
+      summary: Same hash as an existing recording
       value:
         id: 01928f3a-1c00-7a00-8000-000000000602
         filename: 2026-09-18 11-00 Teams.opus
@@ -11741,7 +11744,7 @@ components:
         parts: []
         recording_id: 01928f3a-1c00-7a00-8000-000000000401
     UploadInProgress:
-      summary: Retomada com a parte 1 recebida
+      summary: Resumption with part 1 received
       value:
         id: 01928f3a-1c00-7a00-8000-000000000601
         filename: 2026-09-18 11-00 Teams.opus
@@ -11760,13 +11763,13 @@ components:
         parts: []
         recording_id: null
     PartUrlsRequest:
-      summary: URLs novas para as partes 2 e 3
+      summary: New URLs for parts 2 and 3
       value:
         part_numbers:
         - 2
         - 3
     PartUrls:
-      summary: URLs das partes 2 e 3
+      summary: URLs of parts 2 and 3
       value:
         parts:
         - part_number: 2
@@ -11782,7 +11785,7 @@ components:
             Content-Type: application/octet-stream
           expires_at: '2026-09-18T16:30:00Z'
     UploadCompleteRequest:
-      summary: ETags das 3 partes
+      summary: ETags of the 3 parts
       value:
         parts:
         - part_number: 1
@@ -11792,7 +11795,7 @@ components:
         - part_number: 3
           etag: '"e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4"'
     RecordingQueued:
-      summary: Gravação criada, job na fila
+      summary: Recording created, job queued
       value:
         id: 01928f3a-1c00-7a00-8000-000000000401
         title: Alinhamento do programa de lideranças
@@ -11893,7 +11896,7 @@ components:
         created_at: '2026-09-18T14:09:31Z'
         updated_at: '2026-09-18T14:09:31Z'
     RecordingCancelled:
-      summary: Transcrição cancelada pelo dono no meio do ASR
+      summary: Transcription cancelled by the owner midway through ASR
       value:
         id: 01928f3a-1c00-7a00-8000-000000000401
         title: Alinhamento do programa de lideranças
@@ -11988,7 +11991,7 @@ components:
         created_at: '2026-09-18T14:09:31Z'
         updated_at: '2026-09-18T14:12:40Z'
     RecordingTranscribed:
-      summary: Gravação transcrita
+      summary: Transcribed recording
       value:
         id: 01928f3a-1c00-7a00-8000-000000000401
         title: Alinhamento do programa de lideranças
@@ -12090,7 +12093,7 @@ components:
         created_at: '2026-09-18T14:09:31Z'
         updated_at: '2026-09-18T15:02:17Z'
     RecordingPage:
-      summary: Uma gravação transcrita e uma em processamento
+      summary: One transcribed recording and one in processing
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000402
@@ -12277,7 +12280,7 @@ components:
           updated_at: '2026-09-18T15:02:17Z'
         next_cursor: null
     RecordingWeekPage:
-      summary: Semana de 21/09/2026, com notas, falha, sobreposição e resumo em andamento
+      summary: Week of 2026-09-21, with notes, a failure, an overlap and a summary in progress
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-0000000004a1
@@ -13194,7 +13197,7 @@ components:
           updated_at: '2026-09-26T14:12:00Z'
         next_cursor: null
     RecordingPatchRequest:
-      summary: Tags, coleção e metadados
+      summary: Tags, collection and metadata
       value:
         tags:
         - programa-liderancas
@@ -13206,7 +13209,7 @@ components:
           cliente: Metalúrgica Serra Azul
           projeto: Programa de lideranças 2026
     TranscriptPage:
-      summary: Listagem incremental com uma transcrição
+      summary: Incremental listing with one transcript
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000501
@@ -13250,7 +13253,7 @@ components:
           - cliente-metalurgica
         next_cursor: null
     TranscriptThreeSpeakers:
-      summary: Reunião com 3 locutores, um ligado a pessoa (com `include=words`)
+      summary: Meeting with 3 speakers, one linked to a person (with `include=words`)
       value:
         schema_version: '1.2'
         id: 01928f3a-1c00-7a00-8000-000000000501
@@ -13683,7 +13686,7 @@ components:
         kind: meeting
         recorded_at_source: capture
     TranscriptThreeSpeakersMarkdown:
-      summary: Export `md` da reunião com 3 locutores
+      summary: Export `md` of the meeting with 3 speakers
       value: "---\nid: \"01928f3a-1c00-7a00-8000-000000000501\"\ntitle: \"Alinhamento do programa de lideranças\"\
         \nrecorded_at: \"2026-09-18T14:00:05Z\"\nlanguage: \"pt-BR\"\nduration_ms: 166000\nsource: \"\
         desktop\"\nrevision: 3\nspeakers:\n  - id: \"S1\"\n    label: \"Mariana Couto\"\n    person: \"\
@@ -13709,11 +13712,11 @@ components:
         \ Couto** [00:02:31]: Perfeito. Com a lista em mãos, agendo as entrevistas iniciais e mando o\
         \ cronograma na semana que vem.\n"
     SpeakerPatchRequest:
-      summary: Confirmar a sugestão por voz de S2
+      summary: Confirm the voice suggestion for S2
       value:
         person_id: 01928f3a-1c00-7a00-8000-000000000302
     SpeakerLinked:
-      summary: S2 ligado a Rafael Lima
+      summary: S2 linked to Rafael Lima
       value:
         id: S2
         label: Rafael Lima
@@ -13723,18 +13726,18 @@ components:
         suggestions: []
         talk_ms: 37050
     SpeakerMergeRequest:
-      summary: Mesclar S3 em S2
+      summary: Merge S3 into S2
       value:
         source_speaker_ids:
         - S3
         target_speaker_id: S2
     SegmentPatchRequest:
-      summary: Corrigir um termo
+      summary: Correct a term
       value:
         text: Três turmas de 12 gestores. A primeira começa em outubro, com as lideranças da produção,
           que é onde o turnover está mais alto.
     SummaryPage:
-      summary: Ata pronta
+      summary: Minutes ready
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000a01
@@ -13789,11 +13792,11 @@ components:
           created_by: 01928f3a-1c00-7a00-8000-000000000101
         next_cursor: null
     SummaryCreateRequest:
-      summary: Gerar o resumo com um tipo de agenda
+      summary: Generate the summary with an agenda type
       value:
         agenda_type_id: 01928f3a-1c00-7a00-8000-000000000901
     SummaryQueued:
-      summary: Resumo na fila
+      summary: Summary queued
       value:
         id: 01928f3a-1c00-7a00-8000-000000000a01
         transcript_id: 01928f3a-1c00-7a00-8000-000000000501
@@ -13818,7 +13821,7 @@ components:
         chat_message_id: null
         created_by: 01928f3a-1c00-7a00-8000-000000000101
     SummaryDone:
-      summary: Ata pronta
+      summary: Minutes ready
       value:
         id: 01928f3a-1c00-7a00-8000-000000000a01
         transcript_id: 01928f3a-1c00-7a00-8000-000000000501
@@ -13870,7 +13873,7 @@ components:
         chat_message_id: null
         created_by: 01928f3a-1c00-7a00-8000-000000000101
     SummaryState:
-      summary: Resumo editado à mão sobre a versão gerada
+      summary: Summary edited by hand over the generated version
       value:
         current:
           id: 01928f3a-1c00-7a00-8000-000000000a02
@@ -13974,7 +13977,7 @@ components:
         pending: null
         version_count: 2
     SummaryEditRequest:
-      summary: Edição a partir da versão 1
+      summary: Edit starting from version 1
       value:
         content_md: '# Ata — Alinhamento do programa de lideranças
 
@@ -14006,11 +14009,11 @@ components:
           '
         base_version: 1
     SummaryChatRequest:
-      summary: Pedir quem falou do orçamento
+      summary: Ask who talked about the budget
       value:
         message: Quem falou do orçamento? Acrescente isso nas decisões.
     SummaryChatPage:
-      summary: Um pedido e a resposta que leu a transcrição
+      summary: One request and the reply that read the transcript
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000d01
@@ -14055,7 +14058,7 @@ components:
           completed_at: '2026-09-18T15:12:21Z'
         next_cursor: null
     SummaryChatExchangeQueued:
-      summary: Pedido gravado e resposta na fila
+      summary: Request stored and reply queued
       value:
         message:
           id: 01928f3a-1c00-7a00-8000-000000000d03
@@ -14093,7 +14096,7 @@ components:
           created_at: '2026-09-18T15:20:00Z'
           completed_at: null
     SummaryChatMessageDone:
-      summary: Resposta que leu um trecho e mudou o resumo
+      summary: Reply that read an excerpt and changed the summary
       value:
         id: 01928f3a-1c00-7a00-8000-000000000d02
         recording_id: 01928f3a-1c00-7a00-8000-000000000401
@@ -14121,7 +14124,7 @@ components:
         created_at: '2026-09-18T15:12:00Z'
         completed_at: '2026-09-18T15:12:21Z'
     MarkerBatchRequest:
-      summary: Dois marcadores do celular
+      summary: Two markers from the phone
       value:
         markers:
         - client_id: 01928f3a-1c00-7a00-8000-000000000c01
@@ -14132,7 +14135,7 @@ components:
           note: null
         device_name: iPhone 15 · Mariana
     MarkerPage:
-      summary: Marcadores de uma reunião
+      summary: Markers of a meeting
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000c11
@@ -14153,7 +14156,7 @@ components:
           updated_at: '2026-09-18T14:09:31Z'
         next_cursor: null
     DefaultAgendaTypePage:
-      summary: Os tipos padrão da plataforma
+      summary: The platform's default types
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000c01
@@ -14198,7 +14201,7 @@ components:
           include_for_new_users: true
         next_cursor: null
     AgendaTypePage:
-      summary: Os tipos padrão de uma conta nova
+      summary: The default types of a new account
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000a00
@@ -14265,7 +14268,7 @@ components:
           fallback: false
         next_cursor: WyIyIiwgIjAxOTI4ZjNhLTFjMDAtN2EwMC04MDAwLTAwMDAwMDAwMDkwMiJd
     AgendaTypeCreateRequest:
-      summary: Tipo de agenda para mentorias
+      summary: Agenda type for mentoring sessions
       value:
         name: Mentoria
         title_pattern: Mentoria · {assunto}
@@ -14282,7 +14285,7 @@ components:
 
           Um item por combinado, com prazo quando dito.'
     FieldPage:
-      summary: Os embutidos e um campo de escolha
+      summary: The built-in fields and one choice field
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000d01
@@ -14326,7 +14329,7 @@ components:
           position: 4
         next_cursor: null
     RecordingFieldValues:
-      summary: Título aceito, tags automáticas e um campo sem valor
+      summary: Title accepted, automatic tags and one field with no value
       value:
         items:
         - field:
@@ -14387,7 +14390,7 @@ components:
           origin: edited
           updated_at: '2026-09-18T15:05:00Z'
     FieldPreviewRequest:
-      summary: Testar a regra do campo Cliente
+      summary: Test the rule of the Cliente field
       value:
         field:
           name: Cliente
@@ -14400,7 +14403,7 @@ components:
         recording_ids:
         - 01928f3a-1c00-7a00-8000-000000000201
     AgendaTypePreviewRequest:
-      summary: Pré-visualizar o tipo Mentoria numa gravação
+      summary: Preview the Mentoria type on a recording
       value:
         agenda_type:
           name: Mentoria
@@ -14418,14 +14421,14 @@ components:
             Um item por combinado, com prazo quando dito.'
         recording_id: 01928f3a-1c00-7a00-8000-000000000201
     AgentSession:
-      summary: Conversa nova, ainda sem título
+      summary: New conversation, still untitled
       value:
         id: 01928f3a-1c00-7a00-8000-000000000a01
         title: ''
         created_at: '2026-10-05T13:00:00Z'
         updated_at: '2026-10-05T13:00:00Z'
     AgentSessionDetail:
-      summary: Conversa com um anexo, a pergunta e a resposta com um arquivo gerado
+      summary: Conversation with an attachment, the question and the reply with a generated file
       value:
         id: 01928f3a-1c00-7a00-8000-000000000a01
         title: Liste os prazos da ata e do kickoff numa tabela.
@@ -14481,7 +14484,7 @@ components:
           created_at: '2026-10-05T13:02:00Z'
         pending_files: []
     AgentFileInput:
-      summary: Anexo em PDF ainda não enviado
+      summary: PDF attachment not yet uploaded
       value:
         id: 01928f3a-1c00-7a00-8000-000000000a11
         session_id: 01928f3a-1c00-7a00-8000-000000000a01
@@ -14493,7 +14496,7 @@ components:
         text_chars: 9120
         created_at: '2026-10-05T13:01:00Z'
     AgentTurn:
-      summary: Pergunta gravada e resposta na fila
+      summary: Question stored and reply queued
       value:
         question:
           id: 01928f3a-1c00-7a00-8000-000000000a21
@@ -14533,7 +14536,7 @@ components:
           actions: []
           created_at: '2026-10-05T13:02:00Z'
     AgentMessageDone:
-      summary: Resposta com a fonte e a tabela gerada
+      summary: Reply with the source and the generated table
       value:
         id: 01928f3a-1c00-7a00-8000-000000000a22
         session_id: 01928f3a-1c00-7a00-8000-000000000a01
@@ -14561,7 +14564,7 @@ components:
         actions: []
         created_at: '2026-10-05T13:02:00Z'
     AgentActionProposed:
-      summary: Proposta de aplicar a tag auditoria em duas gravações
+      summary: Proposal to apply the auditoria tag to two recordings
       value:
         id: 01928f3a-1c00-7a00-8000-000000000a31
         session_id: 01928f3a-1c00-7a00-8000-000000000a01
@@ -14593,7 +14596,7 @@ components:
         decided_at: null
         finished_at: null
     BaseChatRequest:
-      summary: Uma pergunta com duas mensagens de histórico
+      summary: One question with two history messages
       value:
         message: Qual orçamento ficou combinado com a Serra Azul?
         history:
@@ -14602,7 +14605,7 @@ components:
         - role: assistant
           content: 'Duas: o kickoff da Serra Azul e a revisão do contrato da Vale Verde.'
     BaseChatQueued:
-      summary: Pergunta na fila
+      summary: Question queued
       value:
         id: 01928f3a-1c00-7a00-8000-000000000f01
         status: queued
@@ -14612,7 +14615,7 @@ components:
         model: null
         error: null
     BaseChatDone:
-      summary: Resposta com a gravação em que se apoia
+      summary: Reply with the recording it relies on
       value:
         id: 01928f3a-1c00-7a00-8000-000000000f01
         status: done
@@ -14625,7 +14628,7 @@ components:
         model: claude-sonnet-5-5
         error: null
     BaseChatFailed:
-      summary: Sem provider para o chat
+      summary: No provider for the chat
       value:
         id: 01928f3a-1c00-7a00-8000-000000000f02
         status: failed
@@ -14637,7 +14640,7 @@ components:
           code: no_provider
           message: Nenhum provider habilitado para o chat.
     PreviewFieldRule:
-      summary: A regra em duas gravações
+      summary: The rule on two recordings
       value:
         id: 01928f3a-1c00-7a00-8000-000000000e01
         kind: field_rule
@@ -14651,7 +14654,7 @@ components:
           value: null
         error: null
     PreviewAgendaType:
-      summary: O tipo em rascunho numa gravação
+      summary: The draft type on one recording
       value:
         id: 01928f3a-1c00-7a00-8000-000000000e02
         kind: agenda_type
@@ -14678,7 +14681,7 @@ components:
             - Ana revisa o plano até sexta.'
         error: null
     PersonPage:
-      summary: Diretório com três pessoas
+      summary: Directory with three people
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000303
@@ -14731,7 +14734,7 @@ components:
           updated_at: '2026-09-18T15:02:17Z'
         next_cursor: null
     Person:
-      summary: Pessoa ligada a locutores
+      summary: Person linked to speakers
       value:
         id: 01928f3a-1c00-7a00-8000-000000000302
         name: Rafael Lima
@@ -14750,7 +14753,7 @@ components:
         created_at: '2026-09-12T11:00:00Z'
         updated_at: '2026-09-18T15:02:17Z'
     PersonCreateRequest:
-      summary: Cadastrar Juliana Prado
+      summary: Register Juliana Prado
       value:
         name: Juliana Prado
         email: juliana.prado@example.com
@@ -14760,7 +14763,7 @@ components:
         tags:
         - cliente
     SearchPage:
-      summary: Busca por "turmas"
+      summary: Search for "turmas"
       value:
         items:
         - transcript:
@@ -14834,7 +14837,7 @@ components:
           rank: 0.38
         next_cursor: null
     CollectionPage:
-      summary: Uma coleção por cliente
+      summary: One collection per client
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000801
@@ -14847,7 +14850,7 @@ components:
           updated_at: '2026-09-19T13:41:07Z'
         next_cursor: null
     TagList:
-      summary: Uma tag cadastrada pelo usuário e uma criada pelo agente
+      summary: One tag registered by the user and one created by the agent
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000b01
@@ -14863,7 +14866,7 @@ components:
           count: 1
           created_at: '2026-09-18T15:02:17Z'
     TagAssignment:
-      summary: Tags fixas, com o limite guardado para o modo autogerenciado
+      summary: Fixed tags, with the limit kept for the self-managed mode
       value:
         auto_fill: true
         instructions: De 1 a 5 tags curtas, em minúsculas. Prefira as tags que você já usa.
@@ -14872,7 +14875,7 @@ components:
         catalog_count: 2
         catalog_limit: 200
     AdminSettings:
-      summary: WhisperX na GTX 1660 Super
+      summary: WhisperX on the GTX 1660 Super
       value:
         asr:
           engine: whisperx-local
@@ -14919,7 +14922,7 @@ components:
           id: 01928f3a-1c00-7a00-8000-000000000a01
           name: Administrator
     AdminSettingsPatchRequest:
-      summary: Trocar o modelo e ligar o resumo automático
+      summary: Change the model and turn on the automatic summary
       value:
         asr:
           model: large-v3
@@ -14931,7 +14934,7 @@ components:
         retention:
           audio_max_days: 90
     AgentProviderPage:
-      summary: claude -p do servidor e DeepSeek
+      summary: The server's claude -p and DeepSeek
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000b01
@@ -14965,7 +14968,7 @@ components:
           - agenda_detection
         next_cursor: null
     AgentProviderCreateRequest:
-      summary: DeepSeek via API OpenAI-compatível
+      summary: DeepSeek via an OpenAI-compatible API
       value:
         name: DeepSeek
         kind: openai-compatible
@@ -14978,7 +14981,7 @@ components:
         used_for:
         - agenda_detection
     SecretList:
-      summary: Token do Hugging Face gravado
+      summary: Hugging Face token stored
       value:
         items:
         - name: hf_token
@@ -14988,7 +14991,7 @@ components:
           is_set: false
           updated_at: null
     AdminUserPage:
-      summary: Duas contas de usuário
+      summary: Two user accounts
       value:
         items:
         - id: 01928f3a-1c00-7a00-8000-000000000101
@@ -15025,7 +15028,7 @@ components:
             agent_requests_24h: 2
         next_cursor: null
     AdminHealth:
-      summary: Um job rodando na GPU
+      summary: One job running on the GPU
       value:
         queue:
           queued: 1
@@ -15146,7 +15149,7 @@ components:
           account_turn: 4
           gpu_minutes: 1
     SpeakerSuggestionRejected:
-      summary: Locutor 2 sem a sugestão recusada
+      summary: Speaker 2 without the rejected suggestion
       value:
         id: S2
         label: Locutor 2
@@ -15154,7 +15157,7 @@ components:
         suggestions: []
         talk_ms: 37050
     Voiceprint:
-      summary: Impressão com duas amostras
+      summary: Voiceprint with two samples
       value:
         person_id: 01928f3a-1c00-7a00-8000-000000000302
         enabled: true
@@ -15185,7 +15188,7 @@ components:
             name: Mariana Couto
           created_at: '2026-09-12T16:40:00Z'
     ProblemUnauthorized:
-      summary: Sem credencial
+      summary: No credential
       value:
         type: https://eclume.dev/problems/unauthorized
         title: Credencial ausente ou inválida
@@ -15193,7 +15196,7 @@ components:
         code: unauthorized
         detail: 'Envie o cookie de sessão ou o header Authorization: Bearer eclp_...'
     ProblemInsufficientScope:
-      summary: PAT sem o escopo exigido
+      summary: PAT without the required scope
       value:
         type: https://eclume.dev/problems/insufficient-scope
         title: Escopo insuficiente
@@ -15203,7 +15206,7 @@ components:
         required_scopes:
         - transcripts:read
     ProblemNotFound:
-      summary: Recurso inexistente ou invisível
+      summary: Nonexistent or invisible resource
       value:
         type: https://eclume.dev/problems/not-found
         title: Não encontrado
@@ -15211,7 +15214,7 @@ components:
         code: not_found
         detail: Transcrição inexistente ou sem acesso.
     ProblemPayloadTooLarge:
-      summary: Corpo acima do teto de uma rota de credencial
+      summary: Body above the cap of a credential route
       value:
         type: https://eclume.dev/problems/payload-too-large
         title: Corpo grande demais
@@ -15220,7 +15223,7 @@ components:
         detail: O corpo passou do limite de 65536 bytes desta rota.
         limit: 65536
     ProblemValidation:
-      summary: Campo inválido
+      summary: Invalid field
       value:
         type: https://eclume.dev/problems/validation-failed
         title: Requisição inválida

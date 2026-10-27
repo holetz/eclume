@@ -8369,7 +8369,7 @@ components:
         title:
           type: string
         result:
-          description: O resultado neste alvo; nulo enquanto não executado.
+          description: The result on this target; null until executed.
           oneOf:
             - type: object
               required: [status]
@@ -8388,8 +8388,8 @@ components:
 
     AgentAction:
       description: >-
-        Desde a 2.24.0. Uma ação que o Agente propôs: o texto do cartão, os alvos congelados na
-        proposta e, depois da confirmação, o resultado por alvo. É também o registro de auditoria.
+        Since 2.24.0. An action the Agent proposed: the card text, the targets frozen in the
+        proposal and, after confirmation, the result per target. It is also the audit record.
       type: object
       required:
         - id
@@ -8411,7 +8411,7 @@ components:
           type: string
           format: uuid
         session_id:
-          description: Nulo depois que a conversa é excluída.
+          description: Null after the conversation is deleted.
           type: [string, "null"]
           format: uuid
         message_id:
@@ -8421,10 +8421,10 @@ components:
           type: string
           enum: [regenerate_summaries, tag_recordings, collect_recordings, set_agenda_type]
         params:
-          description: Os parâmetros normalizados (alvos, tags, coleções ou o tipo resolvidos).
+          description: The normalized parameters (resolved targets, tags, collections or type).
           type: object
         summary:
-          description: O que será feito, em uma frase.
+          description: What will be done, in one sentence.
           type: string
         targets:
           type: array
@@ -8487,9 +8487,9 @@ components:
 
     AgentPurpose:
       description: |
-        Para que o provider serve: `summaries` (resumos), `fields` (preenchimento de campos),
-        `chat` (ajuste do resumo) e `agenda_detection` (detecção do tipo de agenda). Cada
-        finalidade tem no máximo um provider: declará-la num provider a tira dos outros.
+        What the provider is for: `summaries` (summaries), `fields` (field filling),
+        `chat` (summary adjustment) and `agenda_detection` (agenda type detection). Each
+        purpose has at most one provider: declaring it on one provider removes it from the others.
       type: string
       enum: [summaries, fields, chat, agenda_detection]
 
@@ -8507,16 +8507,17 @@ components:
 
     SummaryOrigin:
       description: |
-        Como a versão nasceu: `generated` (o agente pelas instruções do tipo de agenda), `manual`
-        (edição à mão, ou voltar à gerada) ou `chat` (ajuste pelo agente no chat).
+        How the version came about: `generated` (the agent, following the agenda type's
+        instructions), `manual` (a hand edit, or reverting to the generated one) or `chat` (an
+        adjustment by the agent in the chat).
       type: string
       enum: [generated, manual, chat]
 
     Summary:
       description: |
-        Uma versão do resumo da transcrição. A atual é a de maior `version` com `status: done`.
-        Uma geração que termina depois de uma edição ou de um ajuste toma o próximo número e vira a
-        atual; por isso os números podem pular.
+        One version of the transcript's summary. The current one is the highest `version` with
+        `status: done`. A generation that finishes after an edit or an adjustment takes the next
+        number and becomes the current one; that is why the numbers can skip.
       type: object
       required: [id, transcript_id, transcript_revision, agenda_type, version, origin, status, trigger, provider, model, content_md, error, restored_from_id, chat_message_id, created_by, created_at, completed_at]
       properties:
@@ -8527,14 +8528,14 @@ components:
           type: string
           format: uuid
         transcript_revision:
-          description: Revisão da transcrição que o resumo leu.
+          description: Revision of the transcript the summary read.
           type: integer
           minimum: 1
         agenda_type:
           description: |
-            Instantâneo do tipo de agenda cujas instruções o resumo seguiu (numa versão `manual` ou
-            `chat`, o da versão de que ela partiu): o resumo continua quando o tipo é renomeado ou
-            excluído. `null` numa edição sem versão anterior.
+            Snapshot of the agenda type whose instructions the summary followed (in a `manual` or
+            `chat` version, that of the version it started from): the summary survives when the
+            type is renamed or deleted. `null` in an edit with no previous version.
           oneOf:
             - type: object
               required: [id, name]
@@ -8547,8 +8548,8 @@ components:
             - type: "null"
         version:
           description: |
-            Versão do resumo da transcrição, a partir de 1; toda geração, edição, volta à gerada
-            ou ajuste por chat sobe a versão.
+            Version of the transcript's summary, starting at 1; every generation, edit, revert to
+            the generated one or chat adjustment raises the version.
           type: integer
           minimum: 1
         origin:
@@ -8560,14 +8561,14 @@ components:
           type: string
           enum: [manual, automatic]
         provider:
-          description: O agente que escreveu a versão; `null` numa versão `manual`.
+          description: The agent that wrote the version; `null` in a `manual` version.
           oneOf:
             - $ref: "#/components/schemas/AgentProviderRef"
             - type: "null"
         model:
           type: [string, "null"]
         content_md:
-          description: "Resumo em Markdown, com `status: done`."
+          description: "Summary in Markdown, with `status: done`."
           type: [string, "null"]
         error:
           oneOf:
@@ -8580,15 +8581,15 @@ components:
                   type: string
             - type: "null"
         restored_from_id:
-          description: Na volta à gerada, a versão gerada cujo conteúdo foi restaurado.
+          description: On a revert to the generated one, the generated version whose content was restored.
           type: [string, "null"]
           format: uuid
         chat_message_id:
-          description: Numa versão `chat`, a resposta do agente que a produziu.
+          description: In a `chat` version, the agent reply that produced it.
           type: [string, "null"]
           format: uuid
         created_by:
-          description: "Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada); sai na `/api/v2`."
+          description: "Deprecated since 2.11.0: always the user's own id (each account is isolated); removed in `/api/v2`."
           deprecated: true
           type: [string, "null"]
           format: uuid
@@ -8603,11 +8604,11 @@ components:
       type: object
       properties:
         agenda_type_id:
-          description: Sem valor, o tipo de agenda da gravação.
+          description: Without a value, the recording's agenda type.
           type: string
           format: uuid
         provider_id:
-          description: Sem valor, o provider padrão da plataforma.
+          description: Without a value, the platform's default provider.
           type: string
           format: uuid
 
@@ -8623,27 +8624,27 @@ components:
           $ref: "#/components/schemas/NextCursor"
 
     SummaryState:
-      description: O resumo da gravação como a tela o mostra.
+      description: The recording's summary as the screen shows it.
       type: object
       required: [current, generated, pending, version_count]
       properties:
         current:
-          description: A versão atual (maior `version` concluída).
+          description: The current version (highest completed `version`).
           oneOf:
             - $ref: "#/components/schemas/Summary"
             - type: "null"
         generated:
-          description: A gerada de referência (a `generated` concluída mais recente), para comparar e voltar.
+          description: The reference generated version (the most recent completed `generated`), to compare and revert.
           oneOf:
             - $ref: "#/components/schemas/Summary"
             - type: "null"
         pending:
-          description: A geração em `queued` ou `running`, se houver.
+          description: The generation in `queued` or `running`, if any.
           oneOf:
             - $ref: "#/components/schemas/Summary"
             - type: "null"
         version_count:
-          description: Versões guardadas, de todas as origens.
+          description: Stored versions, of every origin.
           type: integer
           minimum: 0
 
@@ -8656,7 +8657,7 @@ components:
           minLength: 1
           maxLength: 200000
         base_version:
-          description: A versão que a pessoa abriu para editar; 0 sem resumo concluído.
+          description: The version the person opened to edit; 0 with no completed summary.
           type: integer
           minimum: 0
 
@@ -8671,8 +8672,8 @@ components:
 
     ChatRead:
       description: |
-        Uma consulta do agente à transcrição: `read_transcript` (o trecho `from_ms`–`to_ms`,
-        `clipped` se passou do teto e foi cortado) ou `search_transcript` (`query` e os `hits`).
+        One agent lookup into the transcript: `read_transcript` (the excerpt `from_ms`–`to_ms`,
+        `clipped` if it exceeded the cap and was cut) or `search_transcript` (`query` and the `hits`).
       type: object
       required: [tool]
       properties:
@@ -8707,26 +8708,26 @@ components:
           type: string
           enum: [user, assistant]
         content:
-          description: O pedido, ou a resposta do agente (`null` até `done`).
+          description: The request, or the agent's reply (`null` until `done`).
           type: [string, "null"]
         status:
-          description: A mensagem do usuário nasce `done`; a do agente vai de `queued` a `done` ou `failed`.
+          description: The user's message is born `done`; the agent's goes from `queued` to `done` or `failed`.
           type: string
           enum: [queued, running, done, failed]
         reply_to:
-          description: Na resposta do agente, o pedido que ela responde.
+          description: In the agent's reply, the request it answers.
           type: [string, "null"]
           format: uuid
         base_summary_id:
-          description: A versão atual quando o pedido chegou.
+          description: The current version when the request arrived.
           type: [string, "null"]
           format: uuid
         summary_id:
-          description: A versão `chat` que a resposta criou, se mudou o resumo.
+          description: The `chat` version the reply created, if it changed the summary.
           type: [string, "null"]
           format: uuid
         reads:
-          description: As consultas do agente à transcrição, em ordem.
+          description: The agent's lookups into the transcript, in order.
           type: array
           items:
             $ref: "#/components/schemas/ChatRead"
@@ -8738,9 +8739,9 @@ components:
           type: [string, "null"]
         error:
           description: |
-            Com `failed` (`provider_bad_output`, `chat_tool_limit`, `provider_timeout`...), ou com
-            `done` e `summary_changed` quando o resumo mudou durante o ajuste: a resposta fica, sem
-            versão nova.
+            With `failed` (`provider_bad_output`, `chat_tool_limit`, `provider_timeout`...), or with
+            `done` and `summary_changed` when the summary changed during the adjustment: the reply
+            stays, with no new version.
           oneOf:
             - type: object
               required: [code, message]
@@ -8751,7 +8752,7 @@ components:
                   type: string
             - type: "null"
         created_by:
-          description: "Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada); sai na `/api/v2`."
+          description: "Deprecated since 2.11.0: always the user's own id (each account is isolated); removed in `/api/v2`."
           deprecated: true
           type: [string, "null"]
           format: uuid
@@ -8787,11 +8788,11 @@ components:
       required: [client_id, at_ms]
       properties:
         client_id:
-          description: Id gerado pelo app; reenviar o mesmo não duplica.
+          description: Id generated by the app; resending the same one does not duplicate.
           type: string
           format: uuid
         at_ms:
-          description: Instante desde o início da gravação.
+          description: Instant since the start of the recording.
           type: integer
           minimum: 0
         note:
@@ -8809,7 +8810,7 @@ components:
           items:
             $ref: "#/components/schemas/MarkerInput"
         device_name:
-          description: Quem marcou ("Field phone").
+          description: Who marked it ("Field phone").
           type: [string, "null"]
           maxLength: 200
 
@@ -8835,7 +8836,7 @@ components:
           type: string
           format: uuid
         at_ms:
-          description: Instante desde o início; pode passar da duração, que só se conhece depois.
+          description: Instant since the start; it may exceed the duration, which is only known later.
           type: integer
           minimum: 0
         note:
@@ -8872,19 +8873,19 @@ components:
         compute_type:
           type: string
         batch_size:
-          description: "`null` = adaptativo à VRAM livre."
+          description: "`null` = adaptive to the free VRAM."
           type: [integer, "null"]
           minimum: 1
         default_language:
           description: |
-            Idioma das gravações sem idioma próprio (`pt`, `en`…), ou `auto`: a engine detecta o
-            idioma de cada gravação e o alinhador segue o detectado.
+            Language of recordings with no language of their own (`pt`, `en`…), or `auto`: the
+            engine detects each recording's language and the aligner follows the detected one.
           type: [string, "null"]
         fallback_model:
-          description: Modelo usado depois de um OOM.
+          description: Model used after an OOM.
           type: [string, "null"]
         endpoint_url:
-          description: "Base do servidor remoto, com `engine: openai-compatible`."
+          description: "Base of the remote server, with `engine: openai-compatible`."
           type: [string, "null"]
           format: uri
 
@@ -8907,10 +8908,10 @@ components:
 
     PreprocessingSettings:
       description: |
-        Tratamento do áudio antes da transcrição, pelo worker GPU, em ordem fixa: separar canais,
-        reduzir ruído, normalizar o loudness e cortar o silêncio do início e do fim. A conversão
-        para 16 kHz mono é sempre feita e não tem chave. As marcas de tempo continuam as do áudio
-        original.
+        Audio processing before transcription, by the GPU worker, in a fixed order: split
+        channels, reduce noise, normalize loudness and trim the silence at the start and end. The
+        conversion to 16 kHz mono is always done and has no key. Timestamps remain those of the
+        original audio.
       type: object
       required: [denoise, loudnorm, trim_silence, split_channels]
       properties:
@@ -8921,11 +8922,11 @@ components:
             enabled:
               type: boolean
             method:
-              description: "`rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg)."
+              description: "`rnnoise` (neural network, 48 kHz) or `afftdn` (ffmpeg's FFT)."
               type: string
               enum: [rnnoise, afftdn]
             strength:
-              description: Quanto do sinal tratado entra na mistura.
+              description: How much of the processed signal goes into the mix.
               type: number
               minimum: 0
               maximum: 1
@@ -8936,7 +8937,7 @@ components:
             enabled:
               type: boolean
             target_lufs:
-              description: Loudness integrado alvo (EBU R128).
+              description: Target integrated loudness (EBU R128).
               type: number
               minimum: -30
               maximum: -10
@@ -8945,7 +8946,7 @@ components:
               minimum: -9
               maximum: 0
             lra:
-              description: Faixa de loudness.
+              description: Loudness range.
               type: number
               minimum: 1
               maximum: 20
@@ -8956,17 +8957,17 @@ components:
             enabled:
               type: boolean
             min_silence_s:
-              description: Silêncio mínimo, no início ou no fim, para cortar.
+              description: Minimum silence, at the start or the end, to trim.
               type: number
               minimum: 1
               maximum: 30
             threshold_db:
-              description: Abaixo deste nível, é silêncio.
+              description: Below this level, it is silence.
               type: number
               minimum: -80
               maximum: -20
         split_channels:
-          description: Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado.
+          description: One channel per person (stereo recording of two sources); duplicated mono is skipped.
           type: object
           required: [enabled]
           properties:
@@ -8979,12 +8980,12 @@ components:
       properties:
         enabled:
           description: >-
-            Liga a identificação por voz na plataforma; exige a separação de locutores ligada (422 em
-            `voice_identification.enabled`). Desligado, nenhuma impressão é comparada nem
-            criada; desligar apaga as existentes. O aceite do aviso no cadastro cobre o consentimento.
+            Turns voice identification on for the platform; it requires speaker diarization on (422
+            on `voice_identification.enabled`). Off, no voiceprint is compared or created; turning
+            it off deletes the existing ones. Accepting the notice at sign-up covers the consent.
           type: boolean
         suggestion_threshold:
-          description: Similaridade mínima (cosseno) para sugerir uma pessoa; o padrão sai da calibração.
+          description: Minimum similarity (cosine) to suggest a person; the default comes from calibration.
           type: number
           minimum: 0
           maximum: 1
@@ -9002,7 +9003,7 @@ components:
         preprocessing:
           $ref: "#/components/schemas/PreprocessingSettings"
         quotas:
-          description: Cotas padrão de toda conta (desde a 2.15.0); o admin as sobrepõe por conta.
+          description: Default quotas of every account (since 2.15.0); the admin overrides them per account.
           $ref: "#/components/schemas/Quotas"
         retention:
           description: Since 2.29.0. Platform-wide audio retention settings.
@@ -9011,7 +9012,7 @@ components:
           type: string
           format: date-time
         updated_by:
-          description: Conta de admin que mudou por último.
+          description: Admin account that changed it last.
           oneOf:
             - $ref: "#/components/schemas/AdminRef"
             - type: "null"
@@ -9030,7 +9031,7 @@ components:
           maximum: 3650
 
     AdminSettingsPatch:
-      description: Cada bloco é mesclado campo a campo; campos ausentes ficam como estão.
+      description: Each block is merged field by field; absent fields stay as they are.
       type: object
       minProperties: 1
       properties:
@@ -9048,7 +9049,7 @@ components:
               type: [integer, "null"]
               minimum: 1
             default_language:
-              description: Código do idioma ou `auto`.
+              description: Language code or `auto`.
               type: [string, "null"]
               pattern: "^(auto|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$"
             fallback_model:
@@ -9081,7 +9082,7 @@ components:
               minimum: 0
               maximum: 1
         preprocessing:
-          description: Cada etapa é mesclada campo a campo.
+          description: Each step is merged field by field.
           type: object
           additionalProperties: false
           properties:
@@ -9092,11 +9093,11 @@ components:
                 enabled:
                   type: boolean
                 method:
-                  description: "`rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg)."
+                  description: "`rnnoise` (neural network, 48 kHz) or `afftdn` (ffmpeg's FFT)."
                   type: string
                   enum: [rnnoise, afftdn]
                 strength:
-                  description: Quanto do sinal tratado entra na mistura.
+                  description: How much of the processed signal goes into the mix.
                   type: number
                   minimum: 0
                   maximum: 1
@@ -9107,7 +9108,7 @@ components:
                 enabled:
                   type: boolean
                 target_lufs:
-                  description: Loudness integrado alvo (EBU R128).
+                  description: Target integrated loudness (EBU R128).
                   type: number
                   minimum: -30
                   maximum: -10
@@ -9116,7 +9117,7 @@ components:
                   minimum: -9
                   maximum: 0
                 lra:
-                  description: Faixa de loudness.
+                  description: Loudness range.
                   type: number
                   minimum: 1
                   maximum: 20
@@ -9127,24 +9128,24 @@ components:
                 enabled:
                   type: boolean
                 min_silence_s:
-                  description: Silêncio mínimo, no início ou no fim, para cortar.
+                  description: Minimum silence, at the start or the end, to trim.
                   type: number
                   minimum: 1
                   maximum: 30
                 threshold_db:
-                  description: Abaixo deste nível, é silêncio.
+                  description: Below this level, it is silence.
                   type: number
                   minimum: -80
                   maximum: -20
             split_channels:
-              description: Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado.
+              description: One channel per person (stereo recording of two sources); duplicated mono is skipped.
               type: object
               additionalProperties: false
               properties:
                 enabled:
                   type: boolean
         quotas:
-          description: Cotas padrão (desde a 2.15.0), mescladas campo a campo; `null` é sem limite.
+          description: Default quotas (since 2.15.0), merged field by field; `null` is no limit.
           $ref: "#/components/schemas/QuotasOverride"
         retention:
           description: Since 2.29.0. Audio retention ceiling; a null `audio_max_days` removes it.
@@ -9168,7 +9169,7 @@ components:
         kind:
           $ref: "#/components/schemas/AgentProviderKind"
         base_url:
-          description: Base da API (Ollama, OpenAI-compatível). `null` para `anthropic` e `claude-cli`.
+          description: API base (Ollama, OpenAI-compatible). `null` for `anthropic` and `claude-cli`.
           type: [string, "null"]
           format: uri
         model:
@@ -9178,7 +9179,7 @@ components:
         enabled:
           type: boolean
         options:
-          description: Parâmetros do provider (`max_tokens`, `temperature`, `context_window`).
+          description: Provider parameters (`max_tokens`, `temperature`, `context_window`).
           type: object
           additionalProperties:
             type: [string, number, boolean]
@@ -9220,7 +9221,7 @@ components:
           additionalProperties:
             type: [string, number, boolean]
         used_for:
-          description: Sem valor, um provider habilitado assume as finalidades que nenhum outro declara.
+          description: Without a value, an enabled provider takes the purposes no other one declares.
           type: array
           items:
             $ref: "#/components/schemas/AgentPurpose"
@@ -9248,7 +9249,7 @@ components:
           additionalProperties:
             type: [string, number, boolean]
         used_for:
-          description: Substitui a lista; as finalidades declaradas saem dos outros providers.
+          description: Replaces the list; the declared purposes leave the other providers.
           type: array
           items:
             $ref: "#/components/schemas/AgentPurpose"
@@ -9292,7 +9293,7 @@ components:
           writeOnly: true
 
     AdminJobRetried:
-      description: O job criado por `POST /api/v1/admin/jobs/{job_id}/retry`.
+      description: The job created by `POST /api/v1/admin/jobs/{job_id}/retry`.
       type: object
       required: [job_id, recording_id, revision, state, queued_at]
       properties:
@@ -9329,7 +9330,7 @@ components:
               type: integer
               minimum: 0
         gpu:
-          description: "`null` quando o worker não reporta GPU (engine CPU ou remota)."
+          description: "`null` when the worker reports no GPU (CPU or remote engine)."
           oneOf:
             - type: object
               required: [name, vram_total_mb, vram_used_mb, utilization_pct]
@@ -9366,19 +9367,19 @@ components:
                 minimum: 0
         recent_failures:
           description: |
-            As etapas do pipeline que falharam nas últimas 24 h, da mais recente para a mais antiga,
-            sem o conteúdo das gravações.
+            The pipeline steps that failed in the last 24 h, from the most recent to the oldest,
+            without the recordings' content.
           type: array
           items:
             type: object
             required: [job_id, recording_id, stage, code, message, failed_at]
             properties:
               job_id:
-                description: O job de transcrição (que o admin retenta); `null` nas etapas por agente.
+                description: The transcription job (which the admin retries); `null` for agent steps.
                 type: [string, "null"]
                 format: uuid
               step:
-                description: A etapa do pipeline que falhou (holetz/eclume#33).
+                description: The pipeline step that failed (holetz/eclume#33).
                 type: string
                 enum: [received, preprocessing, transcription, agenda_type, fields, summary]
               recording_id:
@@ -9394,15 +9395,15 @@ components:
                 type: string
                 format: date-time
               retryable:
-                description: Falha passageira que `POST /api/v1/admin/jobs/{job_id}/retry` pode resolver (1.4.0).
+                description: Transient failure that `POST /api/v1/admin/jobs/{job_id}/retry` can resolve (1.4.0).
                 type: boolean
         checked_at:
           type: string
           format: date-time
         steps:
           description: |
-            Cada etapa do pipeline (fora o recebido) nas últimas 24 h: execuções concluídas (feitas ou
-            falhas), a mediana da duração das feitas e as falhas. Zeradas quando não rodaram.
+            Each pipeline step (except received) in the last 24 h: completed runs (done or failed),
+            the median duration of the done ones and the failures. Zeroed when they did not run.
           type: array
           items:
             type: object
@@ -9422,8 +9423,8 @@ components:
                 minimum: 0
         services:
           description: |
-            Uma sonda por serviço, em paralelo, com teto de 2 s cada: `healthy`, `degraded` (lento),
-            `down` ou `absent` (ainda não existe na plataforma).
+            One probe per service, in parallel, with a 2 s cap each: `healthy`, `degraded` (slow),
+            `down` or `absent` (does not exist on the platform yet).
           type: array
           items:
             type: object
@@ -9442,8 +9443,8 @@ components:
                 minimum: 0
         worker:
           description: >-
-            Heartbeat do worker GPU (`eclume:gpu:health`, a cada 15 s, TTL 45 s); `null` quando
-            nenhum worker publicou nos últimos 45 s.
+            Heartbeat of the GPU worker (`eclume:gpu:health`, every 15 s, TTL 45 s); `null` when
+            no worker has published in the last 45 s.
           oneOf:
             - type: object
               required: [online, last_seen_at, version, engine, busy]
@@ -9460,11 +9461,11 @@ components:
                 device:
                   type: [string, "null"]
                 busy:
-                  description: Há um job de transcrição rodando no worker.
+                  description: A transcription job is running on the worker.
                   type: boolean
             - type: "null"
         queues:
-          description: Profundidade de cada fila arq da instância (só números, sem ids).
+          description: Depth of each arq queue of the instance (numbers only, no ids).
           type: array
           items:
             type: object
@@ -9480,9 +9481,9 @@ components:
                 minimum: 0
         held_jobs:
           description: >-
-            Desde a 2.15.0: jobs de transcrição retidos no banco, fora da fila da GPU — os que
-            aguardam a vez da conta (ela já tem um na GPU) e os que aguardam a janela de minutos de
-            24 h. Só números.
+            Since 2.15.0: transcription jobs held in the database, outside the GPU queue — those
+            waiting for the account's turn (it already has one on the GPU) and those waiting for the
+            24 h minutes window. Numbers only.
           type: object
           required: [account_turn, gpu_minutes]
           properties:
@@ -9494,8 +9495,8 @@ components:
               minimum: 0
         running_jobs:
           description: >-
-            Jobs de transcrição da plataforma já despachados à GPU e ainda não concluídos, com o
-            progresso (desde a 2.15.0, sem os retidos, contados em `held_jobs`).
+            The platform's transcription jobs already dispatched to the GPU and not yet finished,
+            with their progress (since 2.15.0, without the held ones, counted in `held_jobs`).
           type: array
           items:
             type: object
@@ -9525,55 +9526,55 @@ components:
                 type: [string, "null"]
                 format: date-time
               updated_at:
-                description: Última escrita do worker no progresso; parado há muito tempo indica worker morto.
+                description: The worker's last progress write; stale for a long time indicates a dead worker.
                 type: [string, "null"]
                 format: date-time
 
   examples:
     Health:
-      summary: Serviço no ar
+      summary: Service up
       externalValue: ./fixtures/health.json
     HealthReady:
-      summary: Postgres, Redis e MinIO no ar
+      summary: Postgres, Redis and MinIO up
       externalValue: ./fixtures/health-ready.json
     LoginRequest:
-      summary: E-mail e senha
+      summary: E-mail and password
       externalValue: ./fixtures/login-request.json
     PasswordResetInfo:
-      summary: Link válido de uma consultora
+      summary: Valid link of a consultant
       externalValue: ./fixtures/password-reset-info.json
     PasswordResetLink:
-      summary: Link recém-gerado pelo admin
+      summary: Link freshly generated by the admin
       externalValue: ./fixtures/password-reset-link.json
     MeUsage:
-      summary: Uso da conta abaixo das cotas padrão
+      summary: Account usage below the default quotas
       externalValue: ./fixtures/me-usage.json
     MeViaPat:
-      summary: Consultora autenticada pelo PAT do lumea
+      summary: Consultant authenticated by lumea's PAT
       externalValue: ./fixtures/me-via-pat.json
     SignupInfo:
-      summary: Cadastro aberto com o aviso v1
+      summary: Sign-up open with notice v1
       externalValue: ./fixtures/signup-info.json
     SignupRequest:
-      summary: Nova conta aceitando o aviso
+      summary: New account accepting the notice
       externalValue: ./fixtures/signup-request.json
     NoticeAcceptRequest:
-      summary: Aceite do aviso v1
+      summary: Acceptance of notice v1
       externalValue: ./fixtures/notice-accept-request.json
     VoiceAssignment:
-      summary: Atribuição automática ligada, limiar 0,80
+      summary: Automatic assignment on, threshold 0.80
       externalValue: ./fixtures/voice-assignment.json
     SpeakerNamingPreference:
-      summary: Marcação ligada, nenhuma gravação esperando
+      summary: Naming on, no recording waiting
       externalValue: ./fixtures/speaker-naming-preference.json
     SpeakerNamingPatchRequest:
-      summary: Exigir a marcação dos locutores
+      summary: Require speaker naming
       externalValue: ./fixtures/speaker-naming-patch-request.json
     TranscriptionPreference:
-      summary: Conta em inglês, servidor em português
+      summary: Account in English, server in Portuguese
       externalValue: ./fixtures/transcription-preference.json
     TranscriptionPreferencePatchRequest:
-      summary: Transcrever em inglês por padrão
+      summary: Transcribe in English by default
       externalValue: ./fixtures/transcription-preference-patch-request.json
     AudioRetention:
       summary: Thirty days chosen, ceiling of ninety
@@ -9582,257 +9583,257 @@ components:
       summary: Keep the audio for thirty days
       externalValue: ./fixtures/audio-retention-patch-request.json
     VoiceAssignmentPatchRequest:
-      summary: Subir o limiar para 0,80
+      summary: Raise the threshold to 0.80
       externalValue: ./fixtures/voice-assignment-patch-request.json
     AdminMe:
-      summary: Conta de admin
+      summary: Admin account
       externalValue: ./fixtures/admin-me.json
     TokenPage:
-      summary: PAT do lumea e PAT do desktop
+      summary: lumea's PAT and the desktop's PAT
       externalValue: ./fixtures/token-page.json
     TokenCreateRequest:
-      summary: PAT para o importador do lumea
+      summary: PAT for lumea's importer
       externalValue: ./fixtures/token-create-request.json
     ServerInfo:
-      summary: Servidor de produção com a CA publicada
+      summary: Production server with the published CA
       externalValue: ./fixtures/server-info.json
     PrivacyInfo:
-      summary: Transcrição no servidor, resumos e chat na Anthropic
+      summary: Transcription on the server, summaries and chat at Anthropic
       externalValue: ./fixtures/privacy-info.json
     DeviceLoginRequest:
-      summary: Notebook entrando com e-mail e senha
+      summary: Laptop signing in with e-mail and password
       externalValue: ./fixtures/device-login-request.json
     DevicePairRequest:
-      summary: Celular trocando o código lido no QR
+      summary: Phone exchanging the code read from the QR
       externalValue: ./fixtures/device-pair-request.json
     DeviceCredential:
-      summary: Credencial do notebook
+      summary: The laptop's credential
       externalValue: ./fixtures/device-credential.json
     PairingCodeCreated:
-      summary: Código novo com o link do QR
+      summary: New code with the QR link
       externalValue: ./fixtures/pairing-code-created.json
     PairingCodeUsed:
-      summary: Código trocado pelo celular
+      summary: Code exchanged by the phone
       externalValue: ./fixtures/pairing-code-used.json
     TokenCreated:
-      summary: PAT criado, segredo mostrado uma vez
+      summary: PAT created, secret shown once
       externalValue: ./fixtures/token-created.json
     UploadCreateRequest:
-      summary: Gravação do desktop, 18 MB em Opus
+      summary: Desktop recording, 18 MB in Opus
       externalValue: ./fixtures/upload-create-request.json
     UploadCreateMobile:
-      summary: Gravação do celular com marcadores e tipo de agenda escolhido ao parar
+      summary: Phone recording with markers and the agenda type chosen on stop
       externalValue: ./fixtures/upload-create-mobile.json
     UploadCreated:
-      summary: Upload em 3 partes, URLs das partes emitidas
+      summary: Upload in 3 parts, part URLs issued
       externalValue: ./fixtures/upload-created.json
     UploadDeduplicated:
-      summary: Mesmo hash de uma gravação existente
+      summary: Same hash as an existing recording
       externalValue: ./fixtures/upload-deduplicated.json
     UploadInProgress:
-      summary: Retomada com a parte 1 recebida
+      summary: Resumption with part 1 received
       externalValue: ./fixtures/upload-in-progress.json
     PartUrlsRequest:
-      summary: URLs novas para as partes 2 e 3
+      summary: New URLs for parts 2 and 3
       externalValue: ./fixtures/part-urls-request.json
     PartUrls:
-      summary: URLs das partes 2 e 3
+      summary: URLs of parts 2 and 3
       externalValue: ./fixtures/part-urls.json
     UploadCompleteRequest:
-      summary: ETags das 3 partes
+      summary: ETags of the 3 parts
       externalValue: ./fixtures/upload-complete-request.json
     RecordingQueued:
-      summary: Gravação criada, job na fila
+      summary: Recording created, job queued
       externalValue: ./fixtures/recording-queued.json
     RecordingCancelled:
-      summary: Transcrição cancelada pelo dono no meio do ASR
+      summary: Transcription cancelled by the owner midway through ASR
       externalValue: ./fixtures/recording-cancelled.json
     RecordingTranscribed:
-      summary: Gravação transcrita
+      summary: Transcribed recording
       externalValue: ./fixtures/recording-transcribed.json
     RecordingPage:
-      summary: Uma gravação transcrita e uma em processamento
+      summary: One transcribed recording and one in processing
       externalValue: ./fixtures/recording-page.json
     RecordingWeekPage:
-      summary: Semana de 21/09/2026, com notas, falha, sobreposição e resumo em andamento
+      summary: Week of 2026-09-21, with notes, a failure, an overlap and a summary in progress
       externalValue: ./fixtures/recording-week-page.json
     RecordingPatchRequest:
-      summary: Tags, coleção e metadados
+      summary: Tags, collection and metadata
       externalValue: ./fixtures/recording-patch-request.json
     TranscriptPage:
-      summary: Listagem incremental com uma transcrição
+      summary: Incremental listing with one transcript
       externalValue: ./fixtures/transcript-page.json
     TranscriptThreeSpeakers:
-      summary: Reunião com 3 locutores, um ligado a pessoa (com `include=words`)
+      summary: Meeting with 3 speakers, one linked to a person (with `include=words`)
       externalValue: ./fixtures/transcript-3-locutores.json
     TranscriptThreeSpeakersMarkdown:
-      summary: Export `md` da reunião com 3 locutores
+      summary: Export `md` of the meeting with 3 speakers
       externalValue: ./fixtures/transcript-3-locutores.md
     SpeakerPatchRequest:
-      summary: Confirmar a sugestão por voz de S2
+      summary: Confirm the voice suggestion for S2
       externalValue: ./fixtures/speaker-patch-request.json
     SpeakerLinked:
-      summary: S2 ligado a Rafael Lima
+      summary: S2 linked to Rafael Lima
       externalValue: ./fixtures/speaker-linked.json
     SpeakerMergeRequest:
-      summary: Mesclar S3 em S2
+      summary: Merge S3 into S2
       externalValue: ./fixtures/speaker-merge-request.json
     SegmentPatchRequest:
-      summary: Corrigir um termo
+      summary: Correct a term
       externalValue: ./fixtures/segment-patch-request.json
     SummaryPage:
-      summary: Ata pronta
+      summary: Minutes ready
       externalValue: ./fixtures/summary-page.json
     SummaryCreateRequest:
-      summary: Gerar o resumo com um tipo de agenda
+      summary: Generate the summary with an agenda type
       externalValue: ./fixtures/summary-create-request.json
     SummaryQueued:
-      summary: Resumo na fila
+      summary: Summary queued
       externalValue: ./fixtures/summary-queued.json
     SummaryDone:
-      summary: Ata pronta
+      summary: Minutes ready
       externalValue: ./fixtures/summary-done.json
     SummaryState:
-      summary: Resumo editado à mão sobre a versão gerada
+      summary: Summary edited by hand over the generated version
       externalValue: ./fixtures/summary-state.json
     SummaryEditRequest:
-      summary: Edição a partir da versão 1
+      summary: Edit starting from version 1
       externalValue: ./fixtures/summary-edit-request.json
     SummaryChatRequest:
-      summary: Pedir quem falou do orçamento
+      summary: Ask who talked about the budget
       externalValue: ./fixtures/summary-chat-request.json
     SummaryChatPage:
-      summary: Um pedido e a resposta que leu a transcrição
+      summary: One request and the reply that read the transcript
       externalValue: ./fixtures/summary-chat-page.json
     SummaryChatExchangeQueued:
-      summary: Pedido gravado e resposta na fila
+      summary: Request stored and reply queued
       externalValue: ./fixtures/summary-chat-message-queued.json
     SummaryChatMessageDone:
-      summary: Resposta que leu um trecho e mudou o resumo
+      summary: Reply that read an excerpt and changed the summary
       externalValue: ./fixtures/summary-chat-message-done.json
     MarkerBatchRequest:
-      summary: Dois marcadores do celular
+      summary: Two markers from the phone
       externalValue: ./fixtures/marker-batch-request.json
     MarkerPage:
-      summary: Marcadores de uma reunião
+      summary: Markers of a meeting
       externalValue: ./fixtures/marker-page.json
     DefaultAgendaTypePage:
-      summary: Os tipos padrão da plataforma
+      summary: The platform's default types
       externalValue: ./fixtures/default-agenda-type-page.json
     AgendaTypePage:
-      summary: Os tipos padrão de uma conta nova
+      summary: The default types of a new account
       externalValue: ./fixtures/agenda-type-page.json
     AgendaTypeCreateRequest:
-      summary: Tipo de agenda para mentorias
+      summary: Agenda type for mentoring sessions
       externalValue: ./fixtures/agenda-type-create-request.json
     FieldPage:
-      summary: Os embutidos e um campo de escolha
+      summary: The built-in fields and one choice field
       externalValue: ./fixtures/field-page.json
     RecordingFieldValues:
-      summary: Título aceito, tags automáticas e um campo sem valor
+      summary: Title accepted, automatic tags and one field with no value
       externalValue: ./fixtures/recording-field-values.json
     FieldPreviewRequest:
-      summary: Testar a regra do campo Cliente
+      summary: Test the rule of the Cliente field
       externalValue: ./fixtures/field-preview-request.json
     AgendaTypePreviewRequest:
-      summary: Pré-visualizar o tipo Mentoria numa gravação
+      summary: Preview the Mentoria type on a recording
       externalValue: ./fixtures/agenda-type-preview-request.json
     AgentSession:
-      summary: Conversa nova, ainda sem título
+      summary: New conversation, still untitled
       externalValue: ./fixtures/agent-session.json
     AgentSessionDetail:
-      summary: Conversa com um anexo, a pergunta e a resposta com um arquivo gerado
+      summary: Conversation with an attachment, the question and the reply with a generated file
       externalValue: ./fixtures/agent-session-detail.json
     AgentFileInput:
-      summary: Anexo em PDF ainda não enviado
+      summary: PDF attachment not yet uploaded
       externalValue: ./fixtures/agent-file-input.json
     AgentTurn:
-      summary: Pergunta gravada e resposta na fila
+      summary: Question stored and reply queued
       externalValue: ./fixtures/agent-turn.json
     AgentMessageDone:
-      summary: Resposta com a fonte e a tabela gerada
+      summary: Reply with the source and the generated table
       externalValue: ./fixtures/agent-message-done.json
     AgentActionProposed:
-      summary: Proposta de aplicar a tag auditoria em duas gravações
+      summary: Proposal to apply the auditoria tag to two recordings
       externalValue: ./fixtures/agent-action-proposed.json
     BaseChatRequest:
-      summary: Uma pergunta com duas mensagens de histórico
+      summary: One question with two history messages
       externalValue: ./fixtures/base-chat-request.json
     BaseChatQueued:
-      summary: Pergunta na fila
+      summary: Question queued
       externalValue: ./fixtures/base-chat-queued.json
     BaseChatDone:
-      summary: Resposta com a gravação em que se apoia
+      summary: Reply with the recording it relies on
       externalValue: ./fixtures/base-chat-done.json
     BaseChatFailed:
-      summary: Sem provider para o chat
+      summary: No provider for the chat
       externalValue: ./fixtures/base-chat-failed.json
     PreviewFieldRule:
-      summary: A regra em duas gravações
+      summary: The rule on two recordings
       externalValue: ./fixtures/preview-field-rule.json
     PreviewAgendaType:
-      summary: O tipo em rascunho numa gravação
+      summary: The draft type on one recording
       externalValue: ./fixtures/preview-agenda-type.json
     PersonPage:
-      summary: Diretório com três pessoas
+      summary: Directory with three people
       externalValue: ./fixtures/person-page.json
     Person:
-      summary: Pessoa ligada a locutores
+      summary: Person linked to speakers
       externalValue: ./fixtures/person.json
     PersonCreateRequest:
-      summary: Cadastrar Juliana Prado
+      summary: Register Juliana Prado
       externalValue: ./fixtures/person-create-request.json
     SearchPage:
-      summary: Busca por "turmas"
+      summary: Search for "turmas"
       externalValue: ./fixtures/search-page.json
     CollectionPage:
-      summary: Uma coleção por cliente
+      summary: One collection per client
       externalValue: ./fixtures/collection-page.json
     TagList:
-      summary: Uma tag cadastrada pelo usuário e uma criada pelo agente
+      summary: One tag registered by the user and one created by the agent
       externalValue: ./fixtures/tag-list.json
     TagAssignment:
-      summary: Tags fixas, com o limite guardado para o modo autogerenciado
+      summary: Fixed tags, with the limit kept for the self-managed mode
       externalValue: ./fixtures/tag-assignment.json
     AdminSettings:
-      summary: WhisperX na GTX 1660 Super
+      summary: WhisperX on the GTX 1660 Super
       externalValue: ./fixtures/admin-settings.json
     AdminSettingsPatchRequest:
-      summary: Trocar o modelo e ligar o resumo automático
+      summary: Change the model and turn on the automatic summary
       externalValue: ./fixtures/admin-settings-patch-request.json
     AgentProviderPage:
-      summary: claude -p do servidor e DeepSeek
+      summary: The server's claude -p and DeepSeek
       externalValue: ./fixtures/agent-provider-page.json
     AgentProviderCreateRequest:
-      summary: DeepSeek via API OpenAI-compatível
+      summary: DeepSeek via an OpenAI-compatible API
       externalValue: ./fixtures/agent-provider-create-request.json
     SecretList:
-      summary: Token do Hugging Face gravado
+      summary: Hugging Face token stored
       externalValue: ./fixtures/secret-list.json
     AdminUserPage:
-      summary: Duas contas de usuário
+      summary: Two user accounts
       externalValue: ./fixtures/admin-user-page.json
     AdminHealth:
-      summary: Um job rodando na GPU
+      summary: One job running on the GPU
       externalValue: ./fixtures/admin-health.json
     SpeakerSuggestionRejected:
-      summary: Locutor 2 sem a sugestão recusada
+      summary: Speaker 2 without the rejected suggestion
       externalValue: ./fixtures/speaker-suggestion-rejected.json
     Voiceprint:
-      summary: Impressão com duas amostras
+      summary: Voiceprint with two samples
       externalValue: ./fixtures/voiceprint.json
     ProblemUnauthorized:
-      summary: Sem credencial
+      summary: No credential
       externalValue: ./fixtures/problem-unauthorized.json
     ProblemInsufficientScope:
-      summary: PAT sem o escopo exigido
+      summary: PAT without the required scope
       externalValue: ./fixtures/problem-insufficient-scope.json
     ProblemNotFound:
-      summary: Recurso inexistente ou invisível
+      summary: Nonexistent or invisible resource
       externalValue: ./fixtures/problem-not-found.json
     ProblemPayloadTooLarge:
-      summary: Corpo acima do teto de uma rota de credencial
+      summary: Body above the cap of a credential route
       externalValue: ./fixtures/problem-payload-too-large.json
     ProblemValidation:
-      summary: Campo inválido
+      summary: Invalid field
       externalValue: ./fixtures/problem-validation.json
