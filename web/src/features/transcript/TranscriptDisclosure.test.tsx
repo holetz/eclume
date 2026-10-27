@@ -7,7 +7,7 @@ import { mockTranscriptApi, RECORDING_ID as RECORDING } from '../../test/transcr
 
 beforeAll(() => preloadRoute('/gravacoes/x'))
 
-// Conta os renders de cada fala e da barra de marcadores, sem mudar o que renderizam.
+// Counts the renders of each segment and of the markers bar, without changing what they render.
 const renders = vi.hoisted(() => ({ rows: 0, markerBar: 0 }))
 vi.mock('./SegmentRow', async (original) => {
   const actual = await original<typeof import('./SegmentRow')>()
@@ -38,7 +38,7 @@ afterEach(() => {
 const COUNT = 3000
 const STEP_MS = 4000
 
-/** 3.000 falas a partir da fixture, com ids e inícios crescentes (4 s cada). */
+/** 3,000 segments from the fixture, with increasing ids and starts (4 s each). */
 function longTranscript() {
   const base = fixtures.transcript()
   const segments = Array.from({ length: COUNT }, (_, index) => {
@@ -59,8 +59,8 @@ function tick(ms: number) {
   })
 }
 
-describe('transcrição longa', () => {
-  it('um tick sem troca de fala não renderiza fala nenhuma; a troca renderiza duas', async () => {
+describe('long transcript', () => {
+  it('a tick without a segment change renders no segment; the change renders two', async () => {
     mockTranscriptApi({ 'GET /api/v1/transcripts/:id': () => longTranscript() })
     renderApp(`/gravacoes/${RECORDING}?t=0`)
     const list = await screen.findByRole('list', { name: 'Falas' })
@@ -82,8 +82,8 @@ describe('transcrição longa', () => {
   })
 })
 
-describe('acompanhar o áudio', () => {
-  it('abre pelo ?t= centrando a fala dentro da lista e segue o áudio rolando só a lista, nunca a página', async () => {
+describe('following the audio', () => {
+  it('opens through ?t= centering the segment inside the list and follows the audio scrolling only the list, never the page', async () => {
     const intoView = vi.mocked(Element.prototype.scrollIntoView)
     const scrollTo = vi.mocked(Element.prototype.scrollTo)
     intoView.mockClear()
@@ -92,12 +92,12 @@ describe('acompanhar o áudio', () => {
     renderApp(`/gravacoes/${RECORDING}?t=${STEP_MS * 50 + 100}`)
     const list = await screen.findByRole('list', { name: 'Falas' })
 
-    // O ?t= traz a lista (não a fala) à janela, uma vez, e centra a fala por dentro dela.
+    // The ?t= brings the list (not the segment) into the window, once, and centers the segment inside it.
     expect(intoView).toHaveBeenCalledTimes(1)
     expect(intoView.mock.contexts[0]).toBe(list)
     expect(scrollTo.mock.contexts).toContain(list)
 
-    // A lista é um contêiner de 400 px; as falas que entram ficam abaixo dele.
+    // The list is a 400 px container; the incoming segments sit below it.
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
       return (this === list ? { top: 0, height: 400 } : { top: 1000, height: 80 }) as DOMRect
     })
@@ -109,7 +109,7 @@ describe('acompanhar o áudio', () => {
     expect(scrollTo.mock.calls[0][0]).toMatchObject({ behavior: 'smooth' })
     expect(intoView).not.toHaveBeenCalled()
 
-    // Sem acompanhar, a troca de fala não rola nada.
+    // Without following, the segment change scrolls nothing.
     fireEvent.click(screen.getByRole('checkbox', { name: 'Acompanhar o áudio' }))
     scrollTo.mockClear()
     tick(STEP_MS * 61 + 100)

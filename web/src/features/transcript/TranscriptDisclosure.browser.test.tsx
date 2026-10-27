@@ -1,5 +1,5 @@
-// Tempo de commit da transcrição longa no Chromium (npm run test:browser, no host de build): com
-// 3.000 falas, um tick do áudio que não troca a fala ativa e um que troca cabem num quadro.
+// Commit time of the long transcript in Chromium (npm run test:browser, on the build host): with
+// 3,000 segments, an audio tick that does not change the active segment and one that does fit in a frame.
 import { QueryClientProvider } from '@tanstack/react-query'
 import { Profiler, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -29,10 +29,10 @@ function longTranscript() {
 const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
-describe('transcrição longa no navegador', () => {
-  it('tick sem troca de fala comita em menos de 8 ms e a troca em menos de 16 ms (mediana de 20)', async ({ skip }) => {
-    // O limiar é do Chromium (o motor da maior parte de quem usa); os outros motores rodam a lista
-    // nos testes de render e no smoke do E2E.
+describe('long transcript in the browser', () => {
+  it('a tick without a segment change commits in under 8 ms and the change in under 16 ms (median of 20)', async ({ skip }) => {
+    // The threshold is Chromium's (the engine most users have); the other engines run the list
+    // in the render tests and in the E2E smoke.
     skip(server.browser !== 'chromium', 'a medida de commit é contrato só no Chromium')
     let clock: PlaybackClock | null = null
     let commitMs = 0
@@ -72,7 +72,7 @@ describe('transcrição longa no navegador', () => {
       </QueryClientProvider>,
     )
     while (document.querySelectorAll('[role="list"][aria-label="Falas"] > *').length < COUNT) await settle()
-    // O <audio> sem servidor falha e renova uma vez: deixa assentar antes de medir.
+    // The <audio> with no server fails and renews once: let it settle before measuring.
     await new Promise((resolve) => setTimeout(resolve, 500))
 
     async function measure(ms: number) {
@@ -89,7 +89,7 @@ describe('transcrição longa no navegador', () => {
       change.push(await measure(segment * STEP_MS + 100))
       same.push(await measure(segment * STEP_MS + 600))
     }
-    // A troca de fala comita de fato (a medida pega os commits do tick).
+    // The segment change does commit (the measure catches the tick's commits).
     expect(median(change)).toBeGreaterThan(0)
     console.info(`commit por tick: sem troca ${median(same).toFixed(2)} ms, com troca ${median(change).toFixed(2)} ms`)
     expect(median(same)).toBeLessThan(8)
