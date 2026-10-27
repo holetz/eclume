@@ -1,9 +1,9 @@
-"""Pré-visualizações: testar a regra de um campo e o efeito de um tipo de agenda sem gravar nada.
+"""Previews: test a field's rule and the effect of an agenda type without writing anything.
 
-O estado vive no Redis (`eclume:preview:{id}`, hash com `owner_id`, `kind`, `status`, `request`,
-`result` e `error`) por 1 h; o job `run_preview` do worker CPU o preenche. Nada vai para o banco.
-Cada conta tem no máximo `MAX_OPEN` em aberto (`eclume:preview:open:{owner_id}`); além disso, 429.
-Contrato em docs/standards/code/processamento-automatico.md.
+The state lives in Redis (`eclume:preview:{id}`, a hash with `owner_id`, `kind`, `status`, `request`,
+`result` and `error`) for 1 h; the CPU worker's `run_preview` job fills it. Nothing goes to the database.
+Each account has at most `MAX_OPEN` open (`eclume:preview:open:{owner_id}`); beyond that, 429.
+Contract in docs/standards/code/processamento-automatico.md.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ if TYPE_CHECKING:
 
 TTL_S = 3600
 MAX_RECORDINGS = 3
-# Pré-visualizações em aberto (na fila ou rodando) por conta: cada uma ocupa o agente.
+# Open previews (queued or running) per account: each one occupies the agent.
 MAX_OPEN = 3
 _OPEN = {"queued", "running"}
 NO_PROVIDER = "no_provider"
@@ -54,17 +54,17 @@ log = logging.getLogger(__name__)
 
 
 def preview_key(preview_id: UUID | str) -> str:
-    """Hash do estado da pré-visualização."""
+    """Hash of the preview state."""
     return f"eclume:preview:{preview_id}"
 
 
 def open_key(owner_id: UUID | str) -> str:
-    """Conjunto ordenado (pelo instante do pedido) das pré-visualizações em aberto da conta."""
+    """Sorted set (by request instant) of the account's open previews."""
     return f"eclume:preview:open:{owner_id}"
 
 
 async def _open_count(redis: ArqRedis, owner_id: UUID) -> int:
-    """Quantas a conta tem em aberto, tirando do conjunto as que terminaram ou expiraram."""
+    """How many the account has open, removing from the set those that finished or expired."""
     key = open_key(owner_id)
     await redis.zremrangebyscore(key, "-inf", time.time() - TTL_S)
     for member in await redis.zrange(key, 0, -1):
@@ -109,7 +109,7 @@ def _decode(raw: dict[Any, Any]) -> dict[str, str]:
 
 
 async def get_preview(redis: ArqRedis, preview_id: UUID, owner_id: UUID) -> dict[str, Any] | None:
-    """Schema `Preview`, se existe e é do usuário."""
+    """Schema `Preview`, if it exists and belongs to the user."""
     state = _decode(await redis.hgetall(preview_key(preview_id)))
     if state.get("owner_id") != str(owner_id):
         return None
@@ -126,10 +126,10 @@ async def get_preview(redis: ArqRedis, preview_id: UUID, owner_id: UUID) -> dict
 
 
 class PreviewError(Exception):
-    """Falha que vira `Preview.error`."""
+    """A failure that becomes `Preview.error`."""
 
     def __init__(self, code: str, message: str) -> None:
-        """Código e mensagem legível."""
+        """Code and readable message."""
         super().__init__(message)
         self.code = code
         self.message = message
@@ -147,7 +147,7 @@ async def _provider(ctx: dict[str, Any], conn: AsyncConnection, purpose: str) ->
 
 
 async def _transcribed(conn: AsyncConnection, owner_id: UUID, recording_ids: list[UUID]) -> list[Row]:
-    """As gravações transcritas do usuário pedidas, ou as mais recentes."""
+    """The requested transcribed recordings of the user, or the most recent ones."""
     r = t.recordings.c
     query = (
         select(t.recordings, t.transcripts.c.id.label("transcript_id"))
@@ -198,8 +198,9 @@ async def _agenda_type(ctx: dict[str, Any], owner_id: UUID, request: dict[str, A
         )
         values = await title_values(conn, recording, draft)
         transcript = await transcript_text(conn, recording["transcript_id"])
-    # O rascunho entra no lugar do tipo salvo que edita (ou do de mesmo nome), ou no fim da lista. O tipo
-    # de reserva não concorre: ele fica quando nenhum serve ou a confiança é baixa, como na detecção.
+    # The draft takes the place of the saved type it edits (or the one with the same name), or goes at the
+    # end of the list. The fallback type does not compete: it stays when none fits or confidence is low,
+    # as in detection.
     edited = request.get("agenda_type_id")
     replaced = next(
         (row for row in saved if (str(row["id"]) == edited if edited else row["name"] == draft["name"])), None
@@ -252,7 +253,7 @@ async def run_preview(ctx: dict[str, Any], preview_id: str) -> str:
     except (PreviewError, ProviderError) as exc:
         error = {"code": exc.code, "message": exc.message}
     except Exception as exc:
-        log.exception("pré-visualização %s: falha inesperada", preview_id)
+        log.exception("preview %s: unexpected failure", preview_id)
         error = {"code": INTERNAL_ERROR, "message": type(exc).__name__}
     else:
         await redis.hset(key, mapping={"status": "done", "result": json.dumps(items, ensure_ascii=False)})
