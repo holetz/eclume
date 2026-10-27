@@ -1,4 +1,4 @@
-"""O Agente: conversas persistidas, anexos, perguntas com arquivos gerados, download e isolamento."""
+"""The Agent: persisted sessions, attachments, questions with generated files, download and isolation."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def _ask(api: Api, session_id: str, message: str = "O que foi combinado?", attac
     return api.post(f"{SESSIONS}/{session_id}/messages", json={"message": message, "attachments": attachments or []})
 
 
-def test_conversa_criada_listada_renomeada_e_excluida(user: Api):
+def test_session_created_listed_renamed_and_deleted(user: Api):
     first = _session(user, "Planejamento")
     second = _session(user)
     assert (first["title"], second["title"]) == ("Planejamento", "")
@@ -74,7 +74,7 @@ def test_conversa_criada_listada_renomeada_e_excluida(user: Api):
     assert [item["id"] for item in user.get(SESSIONS).json()["items"]] == [second["id"]]
 
 
-def test_pergunta_com_anexo_gera_arquivo_para_baixar(user: Api, services: Services):
+def test_question_with_attachment_generates_a_file_to_download(user: Api, services: Services):
     session = _session(user)
     attached = _attach(user, session["id"], "ata.md", b"# Ata\nPrazo: sexta-feira.")
     assert attached.status_code == 201, attached.text
@@ -120,11 +120,11 @@ def test_pergunta_com_anexo_gera_arquivo_para_baixar(user: Api, services: Servic
     assert detail["title"] == "Quais os prazos da ata?"
     assert [m["role"] for m in detail["messages"]] == ["user", "assistant"]
     assert detail["pending_files"] == []
-    # O anexo enviado fica no histórico.
+    # The uploaded attachment stays in the history.
     assert user.delete(f"{SESSIONS}/{session['id']}/files/{file['id']}").status_code == 409
 
 
-def test_historico_vem_do_servidor(user: Api, services: Services):
+def test_history_comes_from_the_server(user: Api, services: Services):
     session = _session(user)
     agents = FakeAgents(replies={"agent": [_json(action="reply", message="Primeira resposta.")]})
     _ask(user, session["id"], "Primeira pergunta")
@@ -137,7 +137,7 @@ def test_historico_vem_do_servidor(user: Api, services: Services):
     assert prompt.endswith("## Pergunta\n\nSegunda pergunta")
 
 
-def test_a_base_continua_disponivel_com_fontes(user: Api, services: Services):
+def test_the_knowledge_base_stays_available_with_sources(user: Api, services: Services):
     recording = upload_file(user, audio_bytes(1900), title="Alinhamento da turma")
     run_gpu(services.settings)
     run_cpu(services.settings)
@@ -157,19 +157,19 @@ def test_a_base_continua_disponivel_com_fontes(user: Api, services: Services):
     assert done["sources"] == [{"recording_id": rid, "title": "Alinhamento da turma"}]
 
 
-def test_anexos_recusados_por_tipo_tamanho_e_conversa(user: Api):
+def test_attachments_refused_by_type_size_and_session(user: Api):
     session = _session(user)
     assert _attach(user, session["id"], "planilha.xlsx", b"PK\x03\x04").status_code == 415
     assert _attach(user, session["id"], "falso.pdf", b"texto").status_code == 415
     assert _attach(user, session["id"], "grande.txt", b"a" * (10 * 1024 * 1024 + 1)).status_code == 413
     other = _session(user)
     file = _attach(user, other["id"], "nota.txt", b"oi").json()
-    # O anexo de outra conversa não vai junto.
+    # An attachment from another session is not sent along.
     assert _ask(user, session["id"], attachments=[file["id"]]).status_code == 422
     assert user.delete(f"{SESSIONS}/{other['id']}/files/{file['id']}").status_code == 204
 
 
-def test_outra_conta_nao_ve_conversa_mensagem_nem_arquivo(
+def test_another_account_sees_no_session_message_or_file(
     user: Api, services: Services, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     session = _session(user)
@@ -187,7 +187,7 @@ def test_outra_conta_nao_ve_conversa_mensagem_nem_arquivo(
     run_cpu(services.settings)
 
 
-def test_uma_resposta_por_conversa_e_duas_por_conta(user: Api, services: Services):
+def test_one_answer_per_session_and_two_per_account(user: Api, services: Services):
     first, second, third = _session(user), _session(user), _session(user)
     assert _ask(user, first["id"]).status_code == 202
     assert _ask(user, first["id"]).status_code == 409
@@ -198,7 +198,7 @@ def test_uma_resposta_por_conversa_e_duas_por_conta(user: Api, services: Service
     run_cpu(services.settings)
 
 
-def test_escopo_e_validacao(user: Api, services: Services):
+def test_scope_and_validation(user: Api, services: Services):
     session = _session(user)
     assert user.pat("recordings:read").get(SESSIONS).status_code == 403
     assert _ask(user, session["id"], "").status_code == 422
@@ -208,12 +208,12 @@ def test_escopo_e_validacao(user: Api, services: Services):
     agents = FakeAgents()
     run_cpu(services.settings, agents)
     [(_, system, _)] = agents.of("agent")
-    # PAT sem `transcripts:read`: o agente não enxerga as ferramentas de transcrição.
+    # PAT without `transcripts:read`: the agent does not see the transcript tools.
     assert "search_transcripts" not in system
     assert user.get(f"{SESSIONS}/{session['id']}/messages/{answer['id']}").json()["status"] == "done"
 
 
-def test_sem_provider_a_resposta_falha_com_motivo(
+def test_without_a_provider_the_answer_fails_with_a_reason(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     del admin
@@ -225,7 +225,7 @@ def test_sem_provider_a_resposta_falha_com_motivo(
     assert (failed["status"], failed["error"]["code"]) == ("failed", "no_provider")
 
 
-def test_resposta_presa_expira_na_leitura(user: Api, services: Services):
+def test_stuck_answer_expires_on_read(user: Api, services: Services):
     session = _session(user)
     answer = _ask(user, session["id"]).json()["answer"]
     _sql(services, "UPDATE agent_messages SET created_at = now() - interval '1 hour' WHERE id = :m", m=answer["id"])
@@ -234,7 +234,7 @@ def test_resposta_presa_expira_na_leitura(user: Api, services: Services):
     run_cpu(services.settings)
 
 
-def test_excluir_a_conversa_enfileira_os_arquivos_no_bucket(user: Api, services: Services):
+def test_deleting_the_session_queues_the_bucket_files(user: Api, services: Services):
     session = _session(user)
     file = _attach(user, session["id"], "nota.txt", b"oi").json()
     [(key,)] = _sql(services, "SELECT storage_key FROM agent_files WHERE id = :f", f=file["id"])
