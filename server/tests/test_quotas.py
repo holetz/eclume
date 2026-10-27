@@ -1,4 +1,4 @@
-"""Cotas por conta: cota efetiva, uso em `GET /me/usage` e as recusas do `POST /uploads`."""
+"""Per-account quotas: effective quota, usage in `GET /me/usage` and the refusals of `POST /uploads`."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def _create(api: Api, data: bytes) -> Any:  # noqa: ANN401
     )
 
 
-def test_cota_efetiva_sobrepoe_campo_a_campo():
+def test_effective_quota_overrides_field_by_field():
     default = {"storage_bytes": 10, "file_bytes": 5, "open_uploads": 3, "gpu_minutes_24h": 60}
     assert merge(default, {"file_bytes": None, "open_uploads": 1}) == {
         "storage_bytes": 10,
@@ -46,7 +46,7 @@ def test_cota_efetiva_sobrepoe_campo_a_campo():
     assert merge(default, None)["file_bytes"] == 5
 
 
-def test_uso_da_conta(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_account_usage(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     account = make_user()
     api = as_user(account)
     fresh = api.get("/api/v1/me/usage")
@@ -67,7 +67,7 @@ def test_uso_da_conta(as_user: Callable[[Account], Api], make_user: Callable[...
     assert usage["open_uploads"] == 1
 
 
-def test_upload_recusado_por_cota(
+def test_upload_refused_by_quota(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -95,14 +95,14 @@ def test_upload_recusado_por_cota(
     assert full.status_code == 403
     assert (full.json()["quota"], full.json()["used"]) == ("storage_bytes", 24 * KIB)
 
-    # Retomar o mesmo arquivo não é upload novo: não passa pela cota.
+    # Resuming the same file is not a new upload: it does not go through the quota.
     assert _create(api, audio_bytes(8 * KIB, seed="um")).status_code == 201
 
     override_quotas(services, api, None)
     assert _create(api, audio_bytes(16 * KIB, seed="tres")).status_code == 201
 
 
-# --- cota do agente: atômica e devolvida quando o pedido não sai --------------------------------
+# --- agent quota: atomic and given back when the request does not go out --------------------------
 
 
 def _redis_run(services: Services, work: Callable[[Any], Any]) -> Any:  # noqa: ANN401
@@ -116,7 +116,7 @@ def _redis_run(services: Services, work: Callable[[Any], Any]) -> Any:  # noqa: 
     return asyncio.run(go())
 
 
-def test_pedidos_concorrentes_passam_exatamente_o_limite(services: Services, make_user: Callable[..., Account]):
+def test_concurrent_requests_pass_exactly_the_limit(services: Services, make_user: Callable[..., Account]):
     owner = make_user().user_id
     limit, requests = 5, 12
 
@@ -134,11 +134,11 @@ def test_pedidos_concorrentes_passam_exatamente_o_limite(services: Services, mak
     assert used == limit
 
 
-def test_estorno_devolve_a_cota_e_e_idempotente(services: Services, make_user: Callable[..., Account]):
+def test_refund_gives_the_quota_back_and_is_idempotent(services: Services, make_user: Callable[..., Account]):
     owner = make_user().user_id
 
     async def work(redis: Any) -> list[int]:  # noqa: ANN401
-        first = await take_agent_request(redis, owner, None)  # sem limite também conta
+        first = await take_agent_request(redis, owner, None)  # no limit still counts
         await take_agent_request(redis, owner, None)
         counted = await agent_requests_used(redis, owner)
         await refund_agent_request(redis, owner, first)
@@ -148,14 +148,14 @@ def test_estorno_devolve_a_cota_e_e_idempotente(services: Services, make_user: C
     assert _redis_run(services, work) == [2, 1]
 
 
-def test_falha_do_enqueue_estorna_a_cota(services: Services, make_user: Callable[..., Account]):
+def test_enqueue_failure_refunds_the_quota(services: Services, make_user: Callable[..., Account]):
     owner = make_user().user_id
 
     async def work(redis: Any) -> tuple[int, int, int]:  # noqa: ANN401
         before = await agent_requests_used(redis, owner)
 
         async def broken(*_args: Any, **_kwargs: Any) -> None:  # noqa: ANN401
-            msg = "fila fora do ar"
+            msg = "queue is down"
             raise RuntimeError(msg)
 
         redis.enqueue_job = broken

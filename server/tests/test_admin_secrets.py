@@ -1,4 +1,4 @@
-"""`/admin/secrets`: só escrita, cifrados, e entregues a quem os usa (worker GPU e provider anthropic)."""
+"""`/admin/secrets`: write-only, encrypted, and delivered to whoever uses them (GPU worker and anthropic provider)."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def _jobs_options(services: Services, recording_id: str) -> list[dict[str, Any]]
     return run(services.sql(go))
 
 
-def test_segredo_so_entra_e_nunca_volta(
+def test_secret_only_goes_in_and_never_comes_back(
     admin: Api,
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
@@ -80,7 +80,7 @@ def test_segredo_so_entra_e_nunca_volta(
     assert admin.get(URL).json()["items"][0]["is_set"] is False
 
 
-def test_token_do_hf_vai_cifrado_so_no_payload_do_job(
+def test_hf_token_goes_encrypted_only_in_the_job_payload(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     member = as_user(make_user())
@@ -89,7 +89,7 @@ def test_token_do_hf_vai_cifrado_so_no_payload_do_job(
     ((_, _, options),) = run_gpu(services.settings)
     assert options["hf_token_encrypted"].startswith("v1:")
     assert decrypt(services.settings, options["hf_token_encrypted"]) == HF
-    # O worker GPU abre o mesmo texto com a chave do ambiente dele (a mesma do server).
+    # The GPU worker opens the same text with its own environment's key (the same as the server's).
     opened = open_secret(
         options["hf_token_encrypted"],
         encryption_key=services.settings.encryption_key,
@@ -97,11 +97,11 @@ def test_token_do_hf_vai_cifrado_so_no_payload_do_job(
     )
     assert opened == HF
     run_cpu(services.settings)
-    # O que fica no banco, e aparece no job, nunca leva o segredo.
+    # What stays in the database, and shows in the job, never carries the secret.
     assert all("hf_token_encrypted" not in opts for opts in _jobs_options(services, recording["id"]))
 
 
-def test_provider_anthropic_sem_chave_usa_o_segredo_da_plataforma(
+def test_anthropic_provider_without_key_uses_the_platform_secret(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     provider = admin.post(
@@ -119,7 +119,7 @@ def test_provider_anthropic_sem_chave_usa_o_segredo_da_plataforma(
     agenda_type_id = str(agenda_types(services, account.user_id)[0]["id"])
     url = f"/api/v1/transcripts/{transcript_id}/summaries"
 
-    # Sem chave nenhuma, o provider recebe `api_key` nula (e o real recusa com provider_not_configured).
+    # With no key at all, the provider gets a null `api_key` (and the real one refuses with provider_not_configured).
     user.post(url, json={"agenda_type_id": agenda_type_id, "provider_id": provider_id})
     ((config, _, _),) = run_cpu(services.settings).calls
     assert config.api_key is None
@@ -129,7 +129,7 @@ def test_provider_anthropic_sem_chave_usa_o_segredo_da_plataforma(
     ((config, _, _),) = run_cpu(services.settings).calls
     assert config.api_key == "sk-ant-da-plataforma"
 
-    # A chave própria do provider tem precedência sobre a da plataforma.
+    # The provider's own key takes precedence over the platform's.
     admin.patch(f"/api/v1/admin/agent-providers/{provider_id}", json={"api_key": "sk-ant-do-provider"})
     user.post(url, json={"agenda_type_id": agenda_type_id, "provider_id": provider_id})
     ((config, _, _),) = run_cpu(services.settings).calls
