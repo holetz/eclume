@@ -1,4 +1,4 @@
-/* O combobox de pessoa (ligar locutor, filtros da biblioteca e da busca). */
+/* The person combobox (linking a speaker, library and search filters). */
 .combo {
   display: grid;
   gap: var(--space-2);
@@ -32,7 +32,7 @@
   outline: 1px solid var(--color-accent);
 }
 
-/* A lista do combobox some quando não há opção (o display do módulo venceria o atributo). */
+/* The combobox list goes away when there is no option (the module's display would win over the attribute). */
 .options[hidden] {
   display: none;
 }

@@ -20,7 +20,7 @@
   max-width: 320px;
 }
 
-/* A tabela rola no próprio contêiner em telas estreitas, sem rolar a página. */
+/* The table scrolls in its own container on narrow screens, without scrolling the page. */
 .tableWrap {
   overflow-x: auto;
 }
@@ -127,7 +127,7 @@
   max-width: 24rem;
 }
 
-/* Empresa, área, cargo, e-mail e telefone lado a lado no diálogo; uma coluna em tela estreita. */
+/* Company, department, role, e-mail and phone side by side in the dialog; one column on a narrow screen. */
 .formGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
@@ -155,7 +155,7 @@
   max-width: 20rem;
 }
 
-/* O botão Colunas fica à direita da busca, com o popover ancorado nele. */
+/* The Colunas button sits to the right of the search, with the popover anchored to it. */
 .columns {
   position: relative;
   margin-left: auto;

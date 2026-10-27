@@ -11,14 +11,14 @@ type Option = { kind: 'person'; person: Person } | { kind: 'create'; name: strin
 interface PersonComboboxProps {
   label: string
   onSelect: (person: Pick<Person, 'id' | 'name'>) => void
-  /** Sem ele, não há Cancelar: o campo fica no lugar (filtro), sem foco automático nem cadastro. */
+  /** Without it, there is no Cancelar: the field stays in place (filter), with no autofocus and no registration. */
   onCancel?: () => void
   placeholder?: string
 }
 
 /**
- * Combobox (ARIA 1.2, lista em popup) para escolher uma pessoa do diretório pelo nome ou e-mail,
- * com a opção de cadastrar na hora quem ainda não existe. Setas navegam, Enter escolhe, Esc cancela.
+ * Combobox (ARIA 1.2, popup list) to choose a person from the directory by name or e-mail,
+ * with the option of registering on the spot someone who does not exist yet. Arrows navigate, Enter chooses, Esc cancels.
  */
 export function PersonCombobox({ label, onSelect, onCancel, placeholder = 'Nome ou e-mail' }: PersonComboboxProps) {
   const inline = onCancel === undefined
@@ -45,7 +45,7 @@ export function PersonCombobox({ label, onSelect, onCancel, placeholder = 'Nome 
   const name = text.trim()
   const matches = people.data?.items ?? []
   const exists = matches.some((p) => p.name.toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'))
-  // No filtro, a lista só abre quando há texto, e não cadastra pessoa nova.
+  // In the filter, the list only opens when there is text, and it does not register a new person.
   const options: Option[] =
     inline && !name
       ? []
@@ -72,7 +72,7 @@ export function PersonCombobox({ label, onSelect, onCancel, placeholder = 'Nome 
       event.preventDefault()
       if (current >= 0 && !create.isPending) choose(options[current])
     } else if (event.key === 'Escape') {
-      // Esc limpa ou cancela o combobox sem fechar o diálogo em volta.
+      // Esc clears or cancels the combobox without closing the surrounding dialog.
       if (onCancel || text) event.stopPropagation()
       if (onCancel) onCancel()
       else setText('')

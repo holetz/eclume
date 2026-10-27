@@ -1,5 +1,5 @@
-// As colunas da tabela de Pessoas que o usuário escolhe mostrar. O nome é fixo; a escolha fica neste
-// navegador, no localStorage, como as preferências do Ambiente.
+// The People table columns the user chooses to show. The name is fixed; the choice stays in this
+// browser, in localStorage, like the Ambiente preferences.
 import { readStored, STORAGE_KEYS, writeStored } from '../../app/storage'
 
 export type PersonColumn =
@@ -13,7 +13,7 @@ export type PersonColumn =
   | 'voice_sample_count'
   | 'last_seen_at'
 
-/** Todas as colunas, na ordem da tabela, com o rótulo do cabeçalho e do menu Colunas. */
+/** All the columns, in table order, with the label of the header and of the Colunas menu. */
 export const PERSON_COLUMNS: readonly { key: PersonColumn; label: string }[] = [
   { key: 'company', label: 'Empresa' },
   { key: 'department', label: 'Área' },
@@ -26,7 +26,7 @@ export const PERSON_COLUMNS: readonly { key: PersonColumn; label: string }[] = [
   { key: 'last_seen_at', label: 'Última gravação' },
 ]
 
-/** O padrão esconde e-mail, telefone, cargo e a última gravação: o e-mail quase nunca importa. */
+/** The default hides e-mail, phone, role and the last recording: the e-mail hardly ever matters. */
 export const DEFAULT_PERSON_COLUMNS: readonly PersonColumn[] = [
   'company',
   'department',
@@ -37,17 +37,17 @@ export const DEFAULT_PERSON_COLUMNS: readonly PersonColumn[] = [
 
 const KEYS = PERSON_COLUMNS.map((column) => column.key)
 
-/** As colunas guardadas, na ordem da tabela; sem valor guardado (ou só lixo), o padrão. */
+/** The stored columns, in table order; with no stored value (or only garbage), the default. */
 export function readPersonColumns(): PersonColumn[] {
   const stored = readStored(STORAGE_KEYS.peopleColumns)
   if (stored === null) return [...DEFAULT_PERSON_COLUMNS]
   const chosen = new Set(stored.split(','))
-  // Guardado vazio é escolha válida: só o nome.
+  // A stored empty value is a valid choice: only the name.
   if (stored !== '' && !KEYS.some((key) => chosen.has(key))) return [...DEFAULT_PERSON_COLUMNS]
   return KEYS.filter((key) => chosen.has(key))
 }
 
-/** Grava a escolha; igual ao padrão, apaga a chave. */
+/** Saves the choice; equal to the default, it deletes the key. */
 export function savePersonColumns(columns: PersonColumn[]): void {
   const ordered = KEYS.filter((key) => columns.includes(key))
   const isDefault = ordered.join(',') === DEFAULT_PERSON_COLUMNS.join(',')
