@@ -15,8 +15,8 @@ interface SecretFieldProps {
 const updated = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' })
 
 /**
- * Segredo só de escrita: guardado, mostra só que existe (a API nunca devolve parte dele) e se
- * substitui ou apaga; vazio, pede o valor. Grava na hora, fora do Salvar da página.
+ * Write-only secret: stored, it shows only that it exists (the API never returns any part of it)
+ * and is replaced or deleted; empty, it asks for the value. Saves at once, apart from Salvar.
  */
 export function SecretField({ label, isSet, updatedAt, hint, onSave, onClear }: SecretFieldProps) {
   const [editing, setEditing] = useState(false)
@@ -82,7 +82,7 @@ export function SecretField({ label, isSet, updatedAt, hint, onSave, onClear }: 
             aria-describedby={hint || isSet ? hintId : undefined}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
-              // O campo pode estar dentro do form da página: Enter grava o segredo, não o form.
+              // The field may sit inside the page's form: Enter saves the secret, not the form.
               if (e.key === 'Enter') {
                 e.preventDefault()
                 save()

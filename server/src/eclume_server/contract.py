@@ -1,4 +1,4 @@
-"""Versão do contrato HTTP que o server implementa; módulo sem dependências, importável de qualquer processo."""
+"""Version of the HTTP contract the server implements; a dependency-free module, importable from any process."""
 
 from __future__ import annotations
 

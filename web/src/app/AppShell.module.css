@@ -1,5 +1,5 @@
-/* Só o que o Design System (.nav-group) não tem no app: a navegação na barra lateral e a conta no
-   cabeçalho do ShellFrame (nome e e-mail, ajuda, configurações e sair). */
+/* Only what the Design System (.nav-group) lacks in the app: the sidebar navigation and the account in
+   the ShellFrame header (name and e-mail, help, settings and log out). */
 .nav {
   flex: 1;
   display: flex;
@@ -7,8 +7,8 @@
   gap: var(--space-6);
 }
 
-/* O item destacado (Perguntar) é o `.btn-primary` do DS em largura total; aceso na própria rota, fica no
-   tom de "pressionado" do DS (--color-accent-700). */
+/* The featured item ("Perguntar") is the DS `.btn-primary` at full width; lit on its own route, it takes
+   the DS "pressed" tone (--color-accent-700). */
 .featured {
   width: 100%;
   justify-content: flex-start;
@@ -62,7 +62,7 @@
   background: var(--color-divider);
 }
 
-/* Em tela estreita o cabeçalho divide espaço com o Menu: ficam só os botões. */
+/* On a narrow screen the header shares space with the Menu: only the buttons stay. */
 @media (max-width: 56rem) {
   .user {
     display: none;

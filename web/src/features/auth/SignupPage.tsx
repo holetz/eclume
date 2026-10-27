@@ -11,7 +11,7 @@ import { MIN_PASSWORD, useSignupInfo } from './signup'
 
 const CLOSED = 'O cadastro está fechado neste servidor. Peça uma conta a quem o administra.'
 
-/** A linha antes do aceite: os resumos e o chat que saem do servidor, e para quem; `null` se nada sai. */
+/** The line before the acceptance: the summaries and the chat that leave the server, and to whom; `null` if nothing leaves. */
 function signupDestinationLine(info: PrivacyInfo | undefined): string | null {
   const outside = externalDestinations(info).filter((d) => d.purpose === 'summaries' || d.purpose === 'chat')
   if (outside.length === 0) return null
@@ -20,12 +20,12 @@ function signupDestinationLine(info: PrivacyInfo | undefined): string | null {
   return `Neste servidor, ${what} são feitos fora dele, por ${who}: o texto das transcrições vai para lá. O áudio e as transcrições ficam guardados aqui.`
 }
 
-/** "a, b e c". */
+/** "a, b e c" ("a, b and c"). */
 function joinMissing(labels: string[]): string {
   return labels.length > 1 ? `${labels.slice(0, -1).join(', ')} e ${labels[labels.length - 1]}` : labels[0]
 }
 
-/** Criar conta (`/cadastro`): cadastro aberto, com o aceite obrigatório do aviso em vigor. */
+/** Criar conta (`/cadastro`): open signup, with the mandatory acceptance of the notice in force. */
 export function SignupPage() {
   usePageTitle('Criar conta')
   const me = useMe()
@@ -53,7 +53,7 @@ export function SignupPage() {
   if (me.data) return <Navigate to="/" replace />
 
   const notice = info.data?.notice
-  // O que falta, na ordem do formulário: o botão fica ativo e, ao enviar, diz isto e foca o primeiro.
+  // What is missing, in form order: the button stays active and, on submit, says this and focuses the first one.
   const missing = [
     name.trim() === '' && { id: ids.name, label: 'o nome' },
     email.trim() === '' && { id: ids.email, label: 'o e-mail' },
@@ -78,7 +78,7 @@ export function SignupPage() {
           body: { name: name.trim(), email: email.trim(), password, notice_version: notice.version },
         }),
       )
-      // A resposta abre a sessão, como o login.
+      // The response opens the session, like the login.
       await refreshSession(queryClient)
       navigate('/', { replace: true })
     } catch (caught) {

@@ -65,8 +65,8 @@ function cards() {
   return within(screen.getByRole('list', { name: 'Sistemas' })).getAllByRole('listitem')
 }
 
-describe('app desktop', () => {
-  it('põe o sistema deste computador primeiro, com o instalador recomendado e os outros tipos', async () => {
+describe('desktop app', () => {
+  it('puts the system of this computer first, with the recommended installer and the other types', async () => {
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
     mockDesktopApi()
     renderApp('/app-desktop')
@@ -86,14 +86,14 @@ describe('app desktop', () => {
     expect(within(mac).getByText('Os instaladores ainda não foram publicados neste servidor.')).toBeInTheDocument()
   })
 
-  it('sem instaladores publicados, cada cartão avisa', async () => {
+  it('with no published installers, each card warns', async () => {
     mockDesktopApi({ 'GET /downloads/instaladores.json': () => empty(404) })
     renderApp('/app-desktop')
     expect(await screen.findAllByText('Os instaladores ainda não foram publicados neste servidor.')).toHaveLength(3)
     expect(screen.queryByRole('link', { name: /Baixar/ })).not.toBeInTheDocument()
   })
 
-  it('gera o código de vínculo por botão e lista só os computadores', async () => {
+  it('generates the pairing code by button and lists only the computers', async () => {
     const http = mockDesktopApi({
       'POST /api/v1/devices/pairing-codes': () =>
         json(fixtures.pairingCodeCreated(), 201, { Date: 'Sun, 27 Sep 2026 14:02:18 GMT' }),
@@ -116,22 +116,22 @@ describe('app desktop', () => {
   })
 })
 
-describe('instaladores', () => {
-  it('valida o manifesto e recusa o que não tem a forma do standard', () => {
+describe('installers', () => {
+  it('validates the manifest and rejects what lacks the standard shape', () => {
     expect(parseInstallers(MANIFEST)?.instaladores).toHaveLength(3)
     expect(parseInstallers({ versao: '0.5.0' })).toBeNull()
     expect(parseInstallers({ versao: '0.5.0', instaladores: [{ plataforma: 'android' }] })).toBeNull()
     expect(parseInstallers('oi')).toBeNull()
   })
 
-  it('detecta o sistema pelo user agent', () => {
+  it('detects the system from the user agent', () => {
     expect(detectOs('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)')).toBe('macos')
     expect(detectOs('Mozilla/5.0 (X11; Linux x86_64)')).toBe('linux')
     expect(detectOs('Mozilla/5.0 (Linux; Android 14)')).toBeNull()
     expect(detectOs('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)')).toBeNull()
   })
 
-  it('cobre macOS, Windows e Linux, na ordem do DS', () => {
+  it('covers macOS, Windows and Linux, in DS order', () => {
     expect(PLATFORMS.map((p) => p.os)).toEqual(['macos', 'windows', 'linux'])
   })
 })

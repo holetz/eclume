@@ -1,10 +1,10 @@
-"""Cotas por conta: a cota efetiva (sobreposição da conta sobre o padrão), o uso e as checagens.
+"""Per-account quotas: the effective quota (the account's override over the default), the usage and the checks.
 
-As cotas padrão vivem em `platform_settings.quotas`; `users.quotas` guarda só os campos que a conta
-sobrepõe. `null` é "sem limite". Os minutos de GPU e os pedidos ao agente contam numa janela móvel
-de 24 h: os minutos pela duração das gravações despachadas (`transcription_jobs.dispatched_at`), os
-pedidos num conjunto ordenado por conta no Redis (`eclume:quota:agent:{owner}`), aparado a cada
-leitura. Contrato em docs/standards/code/server-nucleo.md (§Upload e áudio) e server-agentes.md.
+The default quotas live in `platform_settings.quotas`; `users.quotas` keeps only the fields the
+account overrides. `null` is "no limit". GPU minutes and agent requests count over a rolling 24 h
+window: the minutes by the duration of the dispatched recordings (`transcription_jobs.dispatched_at`),
+the requests in a per-account sorted set in Redis (`eclume:quota:agent:{owner}`), trimmed on every
+read. Contract in docs/standards/code/server-nucleo.md (`§Upload e áudio`) and server-agentes.md.
 """
 
 from __future__ import annotations
@@ -31,12 +31,12 @@ if TYPE_CHECKING:
 
 FIELDS = ("storage_bytes", "file_bytes", "open_uploads", "gpu_minutes_24h", "agent_requests_24h")
 WINDOW_S = 24 * 3600
-# Resumos na fila ou rodando por conta: cada um ocupa o agente.
+# Queued or running summaries per account: each one occupies the agent.
 MAX_OPEN_SUMMARIES = 3
 
 
 def quota_exceeded(quota: str, limit: int, used: int) -> ApiProblemError:
-    """403 — a conta passou de uma cota; `quota`, `limit` e `used` dizem qual e quanto."""
+    """403 — the account went over a quota; `quota`, `limit` and `used` say which and by how much."""
     return ApiProblemError(
         403,
         "quota_exceeded",
@@ -46,13 +46,13 @@ def quota_exceeded(quota: str, limit: int, used: int) -> ApiProblemError:
 
 
 def merge(default: dict[str, Any], override: dict[str, Any] | None) -> dict[str, int | None]:
-    """Cota efetiva: a sobreposição da conta, campo a campo, sobre o padrão da plataforma."""
+    """Effective quota: the account's override, field by field, over the platform default."""
     override = override or {}
     return {field: override[field] if field in override else default.get(field) for field in FIELDS}
 
 
 async def effective(conn: AsyncConnection, owner_id: UUID) -> dict[str, int | None]:
-    """Cota efetiva da conta (lê `platform_settings` e `users`)."""
+    """The account's effective quota (reads `platform_settings` and `users`)."""
     default = (await conn.execute(select(t.platform_settings.c.quotas))).scalar_one()
     override = (await conn.execute(select(t.users.c.quotas).where(t.users.c.id == owner_id))).scalar()
     return merge(default, override)
@@ -64,7 +64,7 @@ def _open_upload(now: datetime) -> Any:  # noqa: ANN401
 
 
 async def storage_used(conn: AsyncConnection, owner_id: UUID) -> tuple[int, int]:
-    """`(bytes guardados, uploads abertos)`: o áudio das gravações mais os uploads em andamento."""
+    """`(stored bytes, open uploads)`: the recordings' audio plus the uploads in progress."""
     now = datetime.now(UTC)
     recorded = (
         await conn.execute(
@@ -82,7 +82,7 @@ async def storage_used(conn: AsyncConnection, owner_id: UUID) -> tuple[int, int]
 
 
 async def gpu_minutes_used(conn: AsyncConnection, owner_id: UUID) -> int:
-    """Minutos de áudio despachados à GPU nas últimas 24 h (arredondado para cima)."""
+    """Minutes of audio dispatched to the GPU in the last 24 h (rounded up)."""
     jobs, recordings = t.transcription_jobs.c, t.recordings.c
     since = datetime.now(UTC) - timedelta(seconds=WINDOW_S)
     total_ms = (
@@ -96,19 +96,19 @@ async def gpu_minutes_used(conn: AsyncConnection, owner_id: UUID) -> int:
 
 
 def agent_key(owner_id: UUID | str) -> str:
-    """Conjunto ordenado (pelo instante) dos pedidos da conta ao agente."""
+    """Sorted set (by instant) of the account's agent requests."""
     return f"eclume:quota:agent:{owner_id}"
 
 
 async def agent_requests_used(redis: ArqRedis, owner_id: UUID) -> int:
-    """Pedidos ao agente nas últimas 24 h, aparando os mais antigos."""
+    """Agent requests in the last 24 h, trimming the oldest ones."""
     key = agent_key(owner_id)
     await redis.zremrangebyscore(key, "-inf", time.time() - WINDOW_S)
     return int(await redis.zcard(key))
 
 
 async def usage(conn: AsyncConnection, redis: ArqRedis, owner_id: UUID) -> dict[str, Any]:
-    """Schema `Usage`: o uso da conta e a cota efetiva."""
+    """Schema `Usage`: the account's usage and the effective quota."""
     storage, open_uploads = await storage_used(conn, owner_id)
     return {
         "usage": {
@@ -122,7 +122,7 @@ async def usage(conn: AsyncConnection, redis: ArqRedis, owner_id: UUID) -> dict[
 
 
 async def check_upload(conn: AsyncConnection, owner_id: UUID, size_bytes: int) -> None:
-    """Recusa um upload novo que passa do tamanho por arquivo, do armazenamento ou dos abertos."""
+    """Refuse a new upload that exceeds the per-file size, the storage or the open uploads."""
     quotas = await effective(conn, owner_id)
     file_limit = quotas["file_bytes"]
     if file_limit is not None and size_bytes > file_limit:
@@ -137,19 +137,19 @@ async def check_upload(conn: AsyncConnection, owner_id: UUID, size_bytes: int) -
 
 
 async def within_gpu_minutes(conn: AsyncConnection, owner_id: UUID) -> bool:
-    """Se a conta ainda tem minutos de GPU na janela de 24 h."""
+    """Whether the account still has GPU minutes in the 24 h window."""
     limit = (await effective(conn, owner_id))["gpu_minutes_24h"]
     return limit is None or await gpu_minutes_used(conn, owner_id) < limit
 
 
 async def agent_limit(conn: AsyncConnection, owner_id: UUID) -> int | None:
-    """Cota efetiva de pedidos ao agente em 24 h."""
+    """Effective quota of agent requests in 24 h."""
     return (await effective(conn, owner_id))["agent_requests_24h"]
 
 
-# Apara a janela, compara e inscreve numa só ida ao Redis: pedidos concorrentes da mesma conta não
-# leem o mesmo uso. Devolve 0 quando contou e `uso + 1` quando recusou. ARGV: agora, janela, limite
-# (-1 sem limite), membro.
+# Trims the window, compares and adds in a single Redis round trip: concurrent requests of the same
+# account never read the same usage. Returns 0 when it counted and `usage + 1` when it refused. ARGV:
+# now, window, limit (-1 for no limit), member.
 _TAKE = """
 redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', tonumber(ARGV[1]) - tonumber(ARGV[2]))
 local used = redis.call('ZCARD', KEYS[1])
@@ -166,9 +166,9 @@ _log = logging.getLogger(__name__)
 
 
 async def take_agent_request(redis: ArqRedis, owner_id: UUID, limit: int | None) -> str:
-    """Conta um pedido da pessoa ao agente, atômico; devolve o token que `refund_agent_request` estorna.
+    """Count one of the person's agent requests, atomically; return the token `refund_agent_request` refunds.
 
-    Estourada a cota de 24 h, 403 `quota_exceeded`.
+    Over the 24 h quota, 403 `quota_exceeded`.
     """
     member = str(uuid4())
     script = redis.register_script(_TAKE)
@@ -184,22 +184,22 @@ async def take_agent_request(redis: ArqRedis, owner_id: UUID, limit: int | None)
 
 
 async def refund_agent_request(redis: ArqRedis, owner_id: UUID, token: str) -> None:
-    """Devolve a cota de um pedido que não saiu; idempotente e nunca levanta (não mascara o erro original)."""
+    """Give back the quota of a request that did not go out; idempotent and never raises (does not mask the original error)."""
     try:
         await redis.zrem(agent_key(owner_id), token)
-    except Exception:  # noqa: BLE001 — o estorno nunca mascara o erro original
-        _log.exception("não foi possível estornar a cota do agente de %s", owner_id)
+    except Exception:  # noqa: BLE001 — the refund never masks the original error
+        _log.exception("could not refund the agent quota of %s", owner_id)
 
 
 class AgentCharge:
-    """O token da cota gasta dentro de `refunding`; vazio até a cobrança acontecer."""
+    """The token of the quota spent inside `refunding`; empty until the charge happens."""
 
     token: str | None = None
 
 
 @asynccontextmanager
 async def refunding(redis: ArqRedis, owner_id: UUID) -> AsyncIterator[AgentCharge]:
-    """Estorna a cota cobrada (`charge.token`) se o bloco falhar depois; re-levanta o erro."""
+    """Refund the charged quota (`charge.token`) if the block fails afterwards; re-raise the error."""
     charge = AgentCharge()
     try:
         yield charge
@@ -210,12 +210,12 @@ async def refunding(redis: ArqRedis, owner_id: UUID) -> AsyncIterator[AgentCharg
 
 
 async def charge_agent(conn: AsyncConnection, redis: ArqRedis, owner_id: UUID) -> str:
-    """`take_agent_request` com a cota efetiva da conta; devolve o token."""
+    """`take_agent_request` with the account's effective quota; return the token."""
     return await take_agent_request(redis, owner_id, await agent_limit(conn, owner_id))
 
 
 async def check_open_summaries(conn: AsyncConnection, owner_id: UUID) -> None:
-    """Com `MAX_OPEN_SUMMARIES` resumos na fila ou rodando, 429 `rate_limited`."""
+    """With `MAX_OPEN_SUMMARIES` summaries queued or running, 429 `rate_limited`."""
     s = t.summaries.c
     count = (
         await conn.execute(select(func.count()).where(s.owner_id == owner_id, s.status.in_(("queued", "running"))))

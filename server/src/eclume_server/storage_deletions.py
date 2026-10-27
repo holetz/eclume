@@ -1,11 +1,11 @@
-"""Fila de exclusão no bucket (`storage_deletions`): o dreno com retentativa e a reconciliação.
+"""Bucket deletion queue (`storage_deletions`): the drain with retries and the reconciliation.
 
-Os gatilhos da migration 024 enfileiram, na mesma transação do `DELETE`, o áudio e o prefixo
-`recordings/{id}/` da gravação excluída e o multipart do upload em andamento. O cron
-`drain_storage_deletions` (a cada minuto) os tira do bucket; uma falha soma `attempts`, guarda
-`last_error` e adia (1 min dobrando até 1 h), sem nunca desistir. O cron `reconcile_storage`
-(semanal) enfileira o que sobrou no bucket sem linha no banco há mais de 24 h. Regras em
-docs/standards/code/server-nucleo.md §Exclusão no armazenamento.
+The migration 024 triggers enqueue, in the same transaction as the `DELETE`, the audio and the
+`recordings/{id}/` prefix of the deleted recording and the multipart of the upload in progress. The
+`drain_storage_deletions` cron (every minute) removes them from the bucket; a failure increments
+`attempts`, stores `last_error` and postpones (1 min, doubling up to 1 h), never giving up. The
+`reconcile_storage` cron (weekly) enqueues what is left in the bucket with no database row for more
+than 24 h. Rules in docs/standards/code/server-nucleo.md `§Exclusão no armazenamento`.
 """
 
 from __future__ import annotations
@@ -31,16 +31,16 @@ log = logging.getLogger(__name__)
 DRAIN_BATCH = 100
 FIRST_DELAY = timedelta(minutes=1)
 MAX_DELAY = timedelta(hours=1)
-# Margem da reconciliação: cobre o objeto montado por um `complete` cujo commit ainda não aconteceu.
+# Reconciliation margin: covers the object assembled by a `complete` whose commit has not happened yet.
 ORPHAN_AGE = timedelta(hours=24)
-# Raízes do bucket que a reconciliação percorre: áudios (as chaves antigas da organização também) e
-# artefatos do worker GPU.
+# Bucket roots the reconciliation walks: audio (the old organization keys too) and GPU worker
+# artifacts.
 AUDIO_ROOTS = ("users/", "orgs/")
 _ERROR_LIMIT = 500
 
 
 def retry_delay(attempts: int) -> timedelta:
-    """A espera depois da `attempts`-ésima falha: 1 min, dobrando, até 1 h."""
+    """The wait after the `attempts`-th failure: 1 min, doubling, up to 1 h."""
     return min(FIRST_DELAY * 2 ** max(attempts - 1, 0), MAX_DELAY)
 
 
@@ -54,7 +54,7 @@ async def _remove(storage: Storage, row: Row) -> None:
 
 
 async def drain(engine: AsyncEngine, storage: Storage, now: datetime | None = None, limit: int = DRAIN_BATCH) -> int:
-    """Tira do bucket até `limit` linhas vencidas; devolve quantas saíram da fila."""
+    """Remove up to `limit` due rows from the bucket; return how many left the queue."""
     now = now or datetime.now(UTC)
     sd = t.storage_deletions
     done = 0
@@ -75,7 +75,7 @@ async def drain(engine: AsyncEngine, storage: Storage, now: datetime | None = No
         for row in rows:
             try:
                 await _remove(storage, row)
-            except Exception as exc:  # noqa: BLE001 — qualquer falha do S3 adia a linha, que nunca desiste
+            except Exception as exc:  # noqa: BLE001 — any S3 failure postpones the row, which never gives up
                 attempts = row["attempts"] + 1
                 await conn.execute(
                     update(sd)
@@ -86,7 +86,7 @@ async def drain(engine: AsyncEngine, storage: Storage, now: datetime | None = No
                         next_attempt_at=now + retry_delay(attempts),
                     )
                 )
-                log.warning("exclusão no armazenamento %s falhou (tentativa %d): %s", row["id"], attempts, exc)
+                log.warning("storage deletion %s failed (attempt %d): %s", row["id"], attempts, exc)
                 continue
             await conn.execute(delete(sd).where(sd.c.id == row["id"]))
             done += 1
@@ -94,7 +94,7 @@ async def drain(engine: AsyncEngine, storage: Storage, now: datetime | None = No
 
 
 async def _queued(conn: AsyncConnection) -> tuple[set[str], set[str], set[str]]:
-    """Chaves, prefixos e multiparts já na fila."""
+    """Keys, prefixes and multiparts already queued."""
     sd = t.storage_deletions.c
     rows = (await conn.execute(select(sd.key, sd.prefix, sd.s3_upload_id))).all()
     keys = {key for key, _, upload in rows if key is not None and upload is None}
@@ -104,7 +104,7 @@ async def _queued(conn: AsyncConnection) -> tuple[set[str], set[str], set[str]]:
 
 
 async def reconcile(engine: AsyncEngine, storage: Storage, now: datetime | None = None) -> int:
-    """Enfileira o que está no bucket há mais de `ORPHAN_AGE` sem linha no banco; devolve quantos."""
+    """Enqueue what has been in the bucket for more than `ORPHAN_AGE` with no database row; return how many."""
     cutoff = (now or datetime.now(UTC)) - ORPHAN_AGE
     async with system_tx(engine) as conn:
         r = t.recordings.c
@@ -139,5 +139,5 @@ async def reconcile(engine: AsyncEngine, storage: Storage, now: datetime | None 
         async with system_tx(engine) as conn:
             for row in rows:
                 await conn.execute(insert(t.storage_deletions).values(**row))
-        log.warning("reconciliação do armazenamento: %d órfãos na fila de exclusão", len(rows))
+        log.warning("storage reconciliation: %d orphans in the deletion queue", len(rows))
     return len(rows)

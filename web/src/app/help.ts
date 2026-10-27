@@ -1,12 +1,12 @@
-// Ajuda contextual: cada página declara a sua chave de página, e a gaveta de ajuda (HelpDrawer)
-// mostra os artigos da central que citam essa chave no cabeçalho ("Nesta página").
+// Contextual help: each page declares its page key, and the help drawer (HelpDrawer) shows the
+// help center articles that cite that key in their header ("Nesta página").
 import { createContext, useContext, useEffect } from 'react'
 import type { HelpPageKey } from '../features/help/pages'
 
 export interface HelpContextValue {
   open: boolean
   pageKey: HelpPageKey | null
-  /** Abre a gaveta; ao fechar, o foco volta para `opener` (ou para o elemento que estava ativo). */
+  /** Opens the drawer; on close, focus returns to `opener` (or to the element that was active). */
   openHelp: (opener?: HTMLElement | null) => void
   closeHelp: () => void
   setPageKey: (key: HelpPageKey | null) => void
@@ -14,12 +14,12 @@ export interface HelpContextValue {
 
 export const HelpContext = createContext<HelpContextValue | null>(null)
 
-/** A gaveta de ajuda, ou `null` fora de um HelpProvider. */
+/** The help drawer, or `null` outside a HelpProvider. */
 export function useHelp(): HelpContextValue | null {
   return useContext(HelpContext)
 }
 
-/** Declara a chave de ajuda da página enquanto ela está montada. */
+/** Declares the page's help key while it is mounted. */
 export function useHelpTopic(key: HelpPageKey): void {
   const setPageKey = useContext(HelpContext)?.setPageKey
   useEffect(() => {
@@ -29,14 +29,14 @@ export function useHelpTopic(key: HelpPageKey): void {
   }, [key, setPageKey])
 }
 
-/** Se o evento nasceu num campo em que `?` é texto: input, textarea, select ou contenteditable. */
+/** Whether the event started in a field where `?` is text: input, textarea, select or contenteditable. */
 export function isEditableTarget(event: Event): boolean {
   const target = event.target
   if (!(target instanceof HTMLElement)) return false
   return target.matches('input, textarea, select') || target.isContentEditable
 }
 
-/** O atalho `/` (buscar na ajuda), fora de campos editáveis e sem modificadores. */
+/** The `/` shortcut (search the help), outside editable fields and without modifiers. */
 export function isSearchShortcut(event: KeyboardEvent): boolean {
   return event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey && !isEditableTarget(event)
 }

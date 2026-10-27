@@ -1,14 +1,14 @@
--- 008_conta_por_usuario — cada usuário tem o próprio espaço (holetz/eclume#32). Sai a organização
--- e, com ela, grupos, compartilhamento, convites, consentimento de voz por pessoa e a auditoria de
--- voz. A RLS passa a isolar por dono (`owner_id = eclume_user()`), a configuração e os segredos
--- viram da plataforma, e o admin ganha conta e sessão próprias (`admins`, `admin_sessions`).
+-- 008_conta_por_usuario — every user has their own space (holetz/eclume#32). The organization goes
+-- and, with it, groups, sharing, invitations, per-person voice consent and the voice
+-- audit. RLS now isolates by owner (`owner_id = eclume_user()`), the settings and the secrets
+-- become the platform's, and the admin gets their own account and session (`admins`, `admin_sessions`).
 --
--- Preserva os dados: cada usuário vira uma conta independente, dona do que já era dela; os admins
--- ganham conta de admin com o mesmo e-mail e hash; pessoas e templates da organização ficam com o
--- dono e, para os outros usuários que os usavam, viram cópias. Padrões em
--- docs/standards/code/server-nucleo.md. Uma transação só, como toda migration do runner.
+-- Preserves the data: every user becomes an independent account, owner of what was already theirs; the admins
+-- get an admin account with the same e-mail and hash; the organization's people and templates stay with the
+-- owner and, for the other users who used them, become copies. Patterns in
+-- docs/standards/code/server-nucleo.md. A single transaction, like every migration of the runner.
 
--- --- 1. solta as amarras -----------------------------------------------------------------------
+-- --- 1. loosen the ties ------------------------------------------------------------------------
 
 DO $$
 DECLARE
@@ -24,16 +24,16 @@ DROP TRIGGER voice_samples_audit_delete ON voice_samples;
 DROP FUNCTION eclume_voice_sample_removed();
 DROP FUNCTION eclume_voice_forget(uuid);
 DROP FUNCTION eclume_purge_speaker_embeddings();
--- Repontar locutores para a cópia da pessoa (passo 5) não pode apagar as amostras deles.
+-- Repointing speakers to the person's copy (step 5) must not delete their samples.
 ALTER TABLE speakers DISABLE TRIGGER speakers_voice_relink;
 
--- Organização de origem da configuração da plataforma: a mais antiga (em produção, a única).
+-- Source organization of the platform settings: the oldest (in production, the only one).
 CREATE TEMP TABLE _origin ON COMMIT DROP AS
 SELECT id FROM organizations ORDER BY created_at, id LIMIT 1;
 
--- --- 2. contas de admin ------------------------------------------------------------------------
+-- --- 2. admin accounts -------------------------------------------------------------------------
 
--- Sem RLS e sem GRANT para `eclume_app`, como `sessions`: só o papel de conexão as lê.
+-- No RLS and no GRANT to `eclume_app`, like `sessions`: only the connection role reads them.
 CREATE TABLE admins (
     id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     email          text NOT NULL,
@@ -55,18 +55,18 @@ CREATE TABLE admin_sessions (
 );
 CREATE INDEX admin_sessions_admin_idx ON admin_sessions (admin_id);
 
--- O mesmo e-mail segue em `users`: são contas distintas, e a sessão de usuário dele continua valendo.
+-- The same e-mail stays in `users`: they are distinct accounts, and their user session stays valid.
 INSERT INTO admins (email, name, password_hash, active, created_at, last_login_at)
 SELECT email, name, password_hash, active, created_at, last_login_at
 FROM users WHERE role = 'admin'
 ORDER BY created_at, id;
 
--- Conta de admin que corresponde a um usuário (mesmo e-mail), para os `updated_by`.
+-- Admin account matching a user (same e-mail), for the `updated_by`.
 CREATE TEMP TABLE _admin_of ON COMMIT DROP AS
 SELECT u.id AS user_id, a.id AS admin_id
 FROM users u JOIN admins a ON lower(a.email) = lower(u.email);
 
--- --- 3. plataforma -----------------------------------------------------------------------------
+-- --- 3. platform -------------------------------------------------------------------------------
 
 CREATE TABLE platform_settings (
     id                    boolean PRIMARY KEY DEFAULT true CHECK (id),
@@ -88,7 +88,7 @@ SELECT
     (SELECT a.admin_id FROM _admin_of a WHERE a.user_id = s.updated_by)
 FROM org_settings s JOIN _origin o ON o.id = s.org_id;
 
--- Banco novo (sem organização): os padrões. A identificação por voz nasce desligada.
+-- New database (no organization): the defaults. Voice identification is born off.
 INSERT INTO platform_settings (asr, diarization, summarization, voice_identification)
 SELECT
     '{"engine": "whisperx-local", "model": "large-v3-turbo", "compute_type": "int8_float16",
@@ -100,7 +100,7 @@ SELECT
     '{"enabled": false, "suggestion_threshold": 0.55}'::jsonb
 WHERE NOT EXISTS (SELECT 1 FROM platform_settings);
 
--- `crypto.encrypt` (AES-GCM) sem dado associado à organização: o texto cifrado passa como está.
+-- `crypto.encrypt` (AES-GCM) with no associated data for the organization: the ciphertext passes as is.
 CREATE TABLE platform_secrets (
     name             text PRIMARY KEY CHECK (name ~ '^[a-z][a-z0-9_]{1,63}$'),
     value_encrypted  text NOT NULL,
@@ -112,7 +112,7 @@ INSERT INTO platform_secrets (name, value_encrypted, updated_at, updated_by)
 SELECT s.name, s.value_encrypted, s.updated_at, (SELECT a.admin_id FROM _admin_of a WHERE a.user_id = s.updated_by)
 FROM org_secrets s JOIN _origin o ON o.id = s.org_id;
 
--- --- 4. dono no conteúdo -----------------------------------------------------------------------
+-- --- 4. owner on the content -------------------------------------------------------------------
 
 ALTER TABLE transcription_jobs  ADD COLUMN owner_id uuid;
 ALTER TABLE transcripts         ADD COLUMN owner_id uuid;
@@ -149,10 +149,10 @@ BEGIN
 END
 $$;
 
--- --- 5. pessoas --------------------------------------------------------------------------------
+-- --- 5. people ---------------------------------------------------------------------------------
 
--- O dono é quem criou a pessoa; sem ele, o admin mais antigo da organização, ou o usuário mais
--- antigo. Sem nenhum usuário na organização, a pessoa sai.
+-- The owner is whoever created the person; without them, the organization's oldest admin, or the oldest
+-- user. With no user in the organization, the person goes.
 ALTER TABLE people ADD COLUMN owner_id uuid;
 UPDATE people p SET owner_id = coalesce(
     (SELECT u.id FROM users u WHERE u.id = p.created_by AND u.org_id = p.org_id),
@@ -161,12 +161,12 @@ UPDATE people p SET owner_id = coalesce(
 );
 DELETE FROM people WHERE owner_id IS NULL;
 
--- Cópias ficam na mesma organização que a original até o passo 7: o e-mail único por organização
--- deixaria de valer. O índice volta por dono no passo 8.
+-- Copies stay in the same organization as the original until step 7: the per-organization unique e-mail
+-- would stop holding. The index comes back per owner in step 8.
 DROP INDEX people_email_idx;
 
--- Cada (pessoa, outro usuário) em que um locutor, uma amostra ou uma sugestão das transcrições desse
--- usuário aponta para ela ganha uma cópia da pessoa, dona desse usuário.
+-- Each (person, other user) where a speaker, a sample or a suggestion of that user's transcripts
+-- points to it gets a copy of the person, owned by that user.
 CREATE TEMP TABLE _person_copies (
     person_id  uuid NOT NULL,
     user_id    uuid NOT NULL,
@@ -201,7 +201,7 @@ FROM _person_copies c WHERE x.person_id = c.person_id AND x.owner_id = c.user_id
 UPDATE speaker_suggestions x SET person_id = c.copy_id
 FROM _person_copies c WHERE x.person_id = c.person_id AND x.owner_id = c.user_id;
 
--- O nome mostrado não muda, mas o id da pessoa sim: o `?since=` dos clientes busca de novo.
+-- The displayed name does not change, but the person's id does: the clients' `?since=` fetches again.
 UPDATE transcripts t SET updated_at = now()
 WHERE EXISTS (
     SELECT 1 FROM speakers s JOIN _person_copies c ON c.copy_id = s.person_id WHERE s.transcript_id = t.id
@@ -213,7 +213,7 @@ ALTER TABLE people ALTER COLUMN owner_id SET NOT NULL;
 ALTER TABLE people ADD CONSTRAINT people_owner_fk FOREIGN KEY (owner_id) REFERENCES users (id) ON DELETE CASCADE;
 ALTER TABLE voice_consents DROP CONSTRAINT voice_consents_person_id_org_id_fkey;
 ALTER TABLE people DROP CONSTRAINT people_id_org_id_key;
--- Alvo das FKs compostas: um locutor só se liga a uma pessoa da mesma conta.
+-- Target of the composite FKs: a speaker only links to a person of the same account.
 ALTER TABLE people ADD CONSTRAINT people_id_owner_id_key UNIQUE (id, owner_id);
 ALTER TABLE speakers
     ADD CONSTRAINT speakers_person_fk FOREIGN KEY (person_id, owner_id)
@@ -225,7 +225,7 @@ ALTER TABLE speaker_suggestions
     ADD CONSTRAINT speaker_suggestions_person_fk FOREIGN KEY (person_id, owner_id)
     REFERENCES people (id, owner_id) ON DELETE CASCADE;
 
--- As amostras existentes ficam: só existem de quem consentiu.
+-- The existing samples stay: they only exist for those who consented.
 ALTER TABLE people
     DROP COLUMN voice_consent_status,
     DROP COLUMN voice_consent_updated_at,
@@ -237,8 +237,8 @@ ALTER TABLE people
 CREATE TEMP TABLE _first_user ON COMMIT DROP AS
 SELECT DISTINCT ON (org_id) org_id, id AS user_id FROM users ORDER BY org_id, created_at, id;
 
--- Os demais usuários da organização recebem uma cópia de cada template dela, com id novo e o
--- mesmo `created_at` (a ordem da lista).
+-- The organization's other users receive a copy of each of its templates, with a new id and the
+-- same `created_at` (the list order).
 CREATE TEMP TABLE _template_copies ON COMMIT DROP AS
 SELECT tpl.id AS template_id, u.id AS user_id, gen_random_uuid() AS copy_id
 FROM summary_templates tpl
@@ -250,12 +250,12 @@ INSERT INTO summary_templates (id, org_id, owner_id, name, description, instruct
 SELECT c.copy_id, tpl.org_id, c.user_id, tpl.name, tpl.description, tpl.instructions, false, tpl.created_at, tpl.updated_at
 FROM _template_copies c JOIN summary_templates tpl ON tpl.id = c.template_id;
 
--- O template da organização passa, com o mesmo id, ao usuário mais antigo dela.
+-- The organization's template passes, with the same id, to its oldest user.
 UPDATE summary_templates tpl SET owner_id = f.user_id
 FROM _first_user f WHERE tpl.owner_id IS NULL AND tpl.org_id = f.org_id;
 DELETE FROM summary_templates WHERE owner_id IS NULL;
 
--- O padrão da organização (ou a cópia dele) vira o padrão de quem ainda não tinha um pessoal.
+-- The organization default (or its copy) becomes the default of whoever had no personal one yet.
 UPDATE summary_templates tpl SET is_default = true
 FROM users u
 JOIN org_settings s ON s.org_id = u.org_id
@@ -272,8 +272,8 @@ WHERE tpl.owner_id = u.id
 ALTER TABLE summary_templates ALTER COLUMN owner_id SET NOT NULL;
 ALTER TABLE summary_templates DROP CONSTRAINT summary_templates_check;
 
--- Semeia os três templates padrão de um usuário sem nenhum (a ata é o padrão do resumo
--- automático). Roda com o papel de conexão: no cadastro e nesta migration.
+-- Seeds the three default templates of a user with none (the minutes are the automatic summary's
+-- default). Runs with the connection role: at sign-up and in this migration.
 DROP FUNCTION eclume_seed_summary_templates(uuid);
 CREATE FUNCTION eclume_seed_summary_templates(target uuid) RETURNS void
     LANGUAGE plpgsql
@@ -282,7 +282,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM summary_templates WHERE owner_id = target) THEN
         RETURN;
     END IF;
-    -- Instantes distintos: a listagem ordena por `created_at` e os três nascem na mesma transação.
+    -- Distinct instants: the listing sorts by `created_at` and all three are born in the same transaction.
     INSERT INTO summary_templates (owner_id, name, description, instructions, is_default, created_at, updated_at)
     VALUES
         (
@@ -324,7 +324,7 @@ END
 $$;
 REVOKE ALL ON FUNCTION eclume_seed_summary_templates(uuid) FROM PUBLIC;
 
--- --- 7. remoções -------------------------------------------------------------------------------
+-- --- 7. removals -------------------------------------------------------------------------------
 
 DROP TABLE recording_shares, group_members, groups, invitations, voice_consents, voice_audit,
     org_settings, org_secrets;
@@ -349,7 +349,7 @@ DROP FUNCTION eclume_org();
 DROP FUNCTION eclume_admin();
 DROP FUNCTION eclume_actor();
 
--- Aceite do aviso do cadastro: a conta migrada nasce sem, a do cadastro nasce com.
+-- Acceptance of the sign-up notice: the migrated account is born without it, the signed-up one with it.
 ALTER TABLE users
     ADD COLUMN notice_version      text,
     ADD COLUMN notice_accepted_at  timestamptz,
@@ -357,7 +357,7 @@ ALTER TABLE users
 
 SELECT eclume_seed_summary_templates(id) FROM users;
 
--- --- 8. índices, políticas e GRANTs por dono ---------------------------------------------------
+-- --- 8. indexes, policies and GRANTs per owner -------------------------------------------------
 
 CREATE INDEX users_created_idx ON users (created_at DESC, id DESC);
 CREATE INDEX recordings_owner_idx ON recordings (owner_id, created_at DESC, id DESC);
@@ -367,7 +367,7 @@ CREATE INDEX people_sort_idx ON people (owner_id, sort_name, id);
 CREATE UNIQUE INDEX people_email_idx ON people (owner_id, lower(email)) WHERE email IS NOT NULL;
 CREATE INDEX voice_samples_person_idx ON voice_samples (owner_id, person_id, model);
 
--- O único contexto da RLS é `app.user_id`; nenhuma política consulta outra tabela.
+-- The only RLS context is `app.user_id`; no policy queries another table.
 CREATE POLICY users_self ON users
     USING (id = eclume_user()) WITH CHECK (id = eclume_user());
 CREATE POLICY api_tokens_own ON api_tokens
@@ -390,13 +390,13 @@ BEGIN
 END
 $$;
 
--- O que cada tabela permite fica nos GRANTs de antes, mais o DELETE das amostras e das sugestões:
--- esquecer a voz de uma pessoa é um DELETE comum do dono.
+-- What each table allows stays in the earlier GRANTs, plus the DELETE of samples and suggestions:
+-- forgetting a person's voice is an ordinary DELETE by the owner.
 GRANT DELETE ON voice_samples       TO eclume_app;
 GRANT DELETE ON speaker_suggestions TO eclume_app;
 
--- Providers são da plataforma: sem RLS, e `eclume_app` só lê as colunas sem segredo (o resumo
--- resolve o provider sob a RLS do usuário; quem abre a chave é o worker, com o papel de conexão).
+-- Providers belong to the platform: no RLS, and `eclume_app` only reads the columns without secrets (the summary
+-- resolves the provider under the user's RLS; the key is opened by the worker, with the connection role).
 ALTER TABLE agent_providers NO FORCE ROW LEVEL SECURITY;
 ALTER TABLE agent_providers DISABLE ROW LEVEL SECURITY;
 CREATE INDEX agent_providers_created_idx ON agent_providers (created_at, id);
@@ -404,10 +404,10 @@ REVOKE ALL ON agent_providers FROM eclume_app;
 GRANT SELECT (id, name, kind, base_url, model, enabled, options, created_at, updated_at)
     ON agent_providers TO eclume_app;
 
--- `eclume_app` lê a configuração da plataforma (voz, resumo automático); os segredos, nunca.
+-- `eclume_app` reads the platform settings (voice, automatic summary); the secrets, never.
 GRANT SELECT ON platform_settings TO eclume_app;
 
--- Busca: o GIN com o papel dono, restrito ao usuário da transação.
+-- Search: the GIN with the owner role, restricted to the transaction's user.
 CREATE OR REPLACE FUNCTION eclume_segment_matches(query tsquery)
     RETURNS TABLE (transcript_id uuid, segment_id text)
     LANGUAGE sql STABLE SECURITY DEFINER
@@ -419,8 +419,8 @@ CREATE OR REPLACE FUNCTION eclume_segment_matches(query tsquery)
 
 ALTER TABLE speakers ENABLE TRIGGER speakers_voice_relink;
 
--- --- 9. papel de conexão -----------------------------------------------------------------------
+-- --- 9. connection role ------------------------------------------------------------------------
 
--- Já coberto pelo ALTER DEFAULT PRIVILEGES da 006 (mesmo migrador); repetido por clareza.
+-- Already covered by the ALTER DEFAULT PRIVILEGES of 006 (same migrator); repeated for clarity.
 GRANT SELECT, INSERT, UPDATE, DELETE ON admins, admin_sessions, platform_settings, platform_secrets
     TO eclume_server;

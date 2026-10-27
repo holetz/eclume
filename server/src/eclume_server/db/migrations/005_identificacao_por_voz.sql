@@ -1,18 +1,18 @@
--- 005_identificacao_por_voz — impressão de voz por pessoa, sugestões por voz, consentimento LGPD e
--- trilha de auditoria (holetz/eclume#15). Regras em docs/standards/code/identificacao-por-voz.md.
+-- 005_identificacao_por_voz — per-person voiceprint, voice suggestions, LGPD consent and
+-- audit trail (holetz/eclume#15). Rules in docs/standards/code/identificacao-por-voz.md.
 --
--- A impressão de uma pessoa é o conjunto das suas AMOSTRAS: uma por locutor confirmado como ela,
--- com o vetor copiado de `speaker_embeddings`. A amostra vive enquanto o vínculo existir (FK para
--- `speakers` com cascata, e o gatilho de troca de `person_id`), então desligar, religar, mesclar,
--- retranscrever ou excluir a gravação tiram a contribuição exata.
+-- A person's voiceprint is the set of their SAMPLES: one per speaker confirmed as them,
+-- with the vector copied from `speaker_embeddings`. The sample lives while the link exists (FK to
+-- `speakers` with cascade, and the `person_id` change trigger), so unlinking, relinking, merging,
+-- retranscribing or deleting the recording remove the exact contribution.
 
--- --- pessoas: consentimento corrente ------------------------------------------------------------
+-- --- people: current consent --------------------------------------------------------------------
 
 ALTER TABLE people
     ADD COLUMN voice_consent_term_version text,
     ADD COLUMN voice_consent_by           uuid REFERENCES users (id) ON DELETE SET NULL;
 
--- Histórico de consentimento, só de inserção: quem registrou, quando e o texto exato do termo.
+-- Consent history, insert-only: who recorded it, when and the exact text of the terms.
 CREATE TABLE voice_consents (
     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id        uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
@@ -27,7 +27,7 @@ CREATE TABLE voice_consents (
 );
 CREATE INDEX voice_consents_person_idx ON voice_consents (person_id, recorded_at);
 
--- --- amostras da impressão ----------------------------------------------------------------------
+-- --- voiceprint samples -------------------------------------------------------------------------
 
 CREATE TABLE voice_samples (
     transcript_id  uuid NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE voice_samples (
 );
 CREATE INDEX voice_samples_person_idx ON voice_samples (org_id, person_id, model);
 
--- --- sugestões ----------------------------------------------------------------------------------
+-- --- suggestions --------------------------------------------------------------------------------
 
 CREATE TABLE speaker_suggestions (
     transcript_id  uuid NOT NULL,
@@ -63,9 +63,9 @@ CREATE TABLE speaker_suggestions (
 );
 CREATE INDEX speaker_suggestions_person_idx ON speaker_suggestions (person_id) WHERE status = 'pending';
 
--- --- auditoria ----------------------------------------------------------------------------------
+-- --- audit --------------------------------------------------------------------------------------
 
--- Nunca guarda vetores. `person_id` sem FK: o evento sobrevive à exclusão da pessoa.
+-- Never stores vectors. `person_id` without FK: the event survives the person's deletion.
 CREATE TABLE voice_audit (
     id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id         uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
@@ -82,13 +82,13 @@ CREATE TABLE voice_audit (
 CREATE INDEX voice_audit_org_idx ON voice_audit (org_id, created_at DESC, id DESC);
 CREATE INDEX voice_audit_person_idx ON voice_audit (person_id, created_at DESC);
 
--- Quem age na transação corrente (`app.user_id`), ou `NULL` no papel de sistema.
+-- Who acts in the current transaction (`app.user_id`), or `NULL` in the system role.
 CREATE FUNCTION eclume_actor() RETURNS uuid
     LANGUAGE sql STABLE
     AS $$ SELECT nullif(current_setting('app.user_id', true), '')::uuid $$;
 
--- Toda amostra que sai deixa um evento, qualquer que seja o caminho (desligar, religar, mesclar,
--- retranscrever, excluir). Uma exclusão em lote liga `eclume.voice_quiet` e audita um evento só.
+-- Every sample that leaves leaves an event, whatever the path (unlink, relink, merge,
+-- retranscribe, delete). A bulk deletion sets `eclume.voice_quiet` and audits a single event.
 CREATE FUNCTION eclume_voice_sample_removed() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path = public, pg_temp
@@ -106,8 +106,8 @@ CREATE TRIGGER voice_samples_audit_delete
     AFTER DELETE ON voice_samples
     FOR EACH ROW EXECUTE FUNCTION eclume_voice_sample_removed();
 
--- Trocar ou tirar a pessoa de um locutor tira a amostra dele, e as sugestões pendentes deixam de
--- valer. SECURITY DEFINER: a amostra é da organização, e quem edita a transcrição é o dono dela.
+-- Changing or removing a speaker's person removes their sample, and the pending suggestions stop
+-- being valid. SECURITY DEFINER: the sample belongs to the organization, and the transcript's editor is its owner.
 CREATE FUNCTION eclume_voice_relink() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path = public, pg_temp
@@ -124,9 +124,9 @@ CREATE TRIGGER speakers_voice_relink
     FOR EACH ROW WHEN (OLD.person_id IS DISTINCT FROM NEW.person_id)
     EXECUTE FUNCTION eclume_voice_relink();
 
--- Esquecer a voz de uma pessoa (revogar, excluir a impressão) ou de toda a organização (purga):
--- atravessa a visibilidade de gravação de quem pede, por isso é SECURITY DEFINER, restrita a
--- `eclume_org()`; a purga exige admin. Devolve `(amostras, sugestões)` apagadas.
+-- Forgetting the voice of a person (revoke, delete the voiceprint) or of the whole organization (purge):
+-- it crosses the requester's recording visibility, hence SECURITY DEFINER, restricted to
+-- `eclume_org()`; the purge requires admin. Returns the deleted `(samples, suggestions)`.
 CREATE FUNCTION eclume_voice_forget(target uuid, OUT samples bigint, OUT suggestions bigint)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path = public, pg_temp
@@ -156,8 +156,8 @@ CREATE POLICY voice_consents_org ON voice_consents
     USING (org_id = eclume_org())
     WITH CHECK (org_id = eclume_org() AND recorded_by = eclume_user());
 
--- A impressão é da organização (a página da pessoa mostra as amostras a qualquer membro, e o
--- título só da gravação que ele vê); só o dono da gravação cria a amostra, ao confirmar o locutor.
+-- The voiceprint belongs to the organization (the person page shows the samples to any member, and the
+-- title only of the recording they can see); only the recording's owner creates the sample, on confirming the speaker.
 CREATE POLICY voice_samples_read ON voice_samples FOR SELECT
     USING (org_id = eclume_org());
 CREATE POLICY voice_samples_insert ON voice_samples FOR INSERT
@@ -197,10 +197,10 @@ GRANT SELECT, UPDATE ON speaker_suggestions TO eclume_app;
 GRANT SELECT, INSERT ON voice_audit         TO eclume_app;
 GRANT EXECUTE ON FUNCTION eclume_voice_forget(uuid) TO eclume_app;
 
--- --- limiar calibrado ---------------------------------------------------------------------------
+-- --- calibrated threshold -----------------------------------------------------------------------
 
--- O padrão antigo (0,75) era um palpite; o calibrado está em docs/project/calibracao-voz.md.
--- Só muda organização que nunca mexeu no limiar.
+-- The old default (0.75) was a guess; the calibrated one is in docs/project/calibracao-voz.md.
+-- Only changes organizations that never touched the threshold.
 UPDATE org_settings
 SET voice_identification = jsonb_set(voice_identification, '{suggestion_threshold}', to_jsonb(0.55::numeric))
 WHERE (voice_identification ->> 'suggestion_threshold')::numeric = 0.75;

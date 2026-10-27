@@ -1,12 +1,12 @@
-"""As ações do Agente no ambiente: a proposta, a confirmação, a execução e o registro de auditoria.
+"""The Agent's actions on the environment: the proposal, the confirmation, the execution and the audit log.
 
-O agente só propõe (`agents/agent_tools.py`): `Planner` resolve os alvos sob a RLS do dono e escreve
-o resumo do cartão; o job `agent_turn` grava a proposta em `agent_actions` (`proposed`). A pessoa
-confirma (`proposed → queued`, uma atualização condicional: confirmar de novo não reenfileira) e o
-job `agent_action` executa alvo a alvo pelas funções de `operations.py` — as mesmas do MCP —, cada
-alvo numa transação que faz a operação e grava o resultado dele, então uma nova execução pula o que
-já foi feito. A linha fica como auditoria, mesmo depois que a conversa sai. Contrato em
-docs/standards/code/server-agentes.md §Agente.
+The agent only proposes (`agents/agent_tools.py`): `Planner` resolves the targets under the owner's RLS
+and writes the card's summary; the `agent_turn` job writes the proposal to `agent_actions` (`proposed`).
+The person confirms (`proposed → queued`, a conditional update: confirming again does not requeue) and
+the `agent_action` job executes target by target through the functions of `operations.py` — the same as
+MCP's —, each target in a transaction that performs the operation and writes its result, so a new run
+skips what was already done. The row stays as an audit record, even after the conversation is gone.
+Contract in docs/standards/code/server-agentes.md §Agente.
 """
 
 from __future__ import annotations
@@ -46,11 +46,11 @@ A = t.agent_actions.c
 R = t.recordings.c
 
 
-# --- vistas --------------------------------------------------------------------------------------
+# --- views ---------------------------------------------------------------------------------------
 
 
 def action_json(row: Row) -> dict[str, Any]:
-    """Schema `AgentAction`: a proposta, o estado e o resultado por alvo."""
+    """Schema `AgentAction`: the proposal, the state and the result per target."""
     results: dict[str, Any] = row["results"] or {}
     counts = {"done": 0, "skipped": 0, "failed": 0}
     for outcome in results.values():
@@ -74,7 +74,7 @@ def action_json(row: Row) -> dict[str, Any]:
     }
 
 
-# --- a proposta ----------------------------------------------------------------------------------
+# --- the proposal --------------------------------------------------------------------------------
 
 
 def _uuid(value: str) -> UUID | None:
@@ -84,8 +84,8 @@ def _uuid(value: str) -> UUID | None:
         return None
 
 
-async def _by_name(conn: AsyncConnection, table: Any, value: str) -> Row | None:  # noqa: ANN401 — a tabela
-    """Um tipo de agenda ou uma coleção do dono, pelo id ou pelo nome (sem caixa)."""
+async def _by_name(conn: AsyncConnection, table: Any, value: str) -> Row | None:  # noqa: ANN401 — the table
+    """An agenda type or a collection of the owner, by id or by name (case-insensitive)."""
     rid = _uuid(value)
     condition = table.c.id == rid if rid is not None else func.lower(table.c.name) == value.lower()
     return (await conn.execute(select(table.c.id, table.c.name).where(condition).limit(1))).mappings().first()
@@ -96,19 +96,19 @@ def _plural(count: int, one: str, many: str) -> str:
 
 
 class PlanError(Exception):
-    """O motivo, para o agente, de não haver proposta."""
+    """The reason, for the agent, why there is no proposal."""
 
 
 class Planner:
-    """Resolve os alvos e escreve o resumo de uma proposta, sob a RLS do dono."""
+    """Resolves the targets and writes a proposal's summary, under the owner's RLS."""
 
     def __init__(self, engine: AsyncEngine, owner_id: UUID) -> None:
-        """O planejador das propostas de uma conta."""
+        """The proposal planner of an account."""
         self.engine = engine
         self.owner_id = owner_id
 
     async def plan(self, tool: str, params: dict[str, Any], limit: int) -> ProposedAction | str:
-        """A proposta, ou o motivo (texto) quando não há alvo, um nome não existe ou passa do limite."""
+        """The proposal, or the reason (text) when there is no target, a name does not exist or the limit is exceeded."""
         try:
             async with user_tx(self.engine, self.owner_id) as conn:
                 extra = await self._resolve(conn, tool, params)
@@ -175,7 +175,7 @@ class Planner:
         library = Library(
             since=None,
             from_=start,
-            # `to` é o último dia, inclusive.
+            # `to` is the last day, inclusive.
             to=end + timedelta(days=1) if end else None,
             kind=None,
             status=None,
@@ -194,7 +194,7 @@ def _day(value: str | None) -> datetime | None:
 
 
 def _summary(tool: str, params: dict[str, Any], count: int) -> str:
-    """O texto do cartão de confirmação."""
+    """The text of the confirmation card."""
     recordings = _plural(count, "gravação", "gravações")
     if tool == "regenerate_summaries":
         return f"Gerar de novo o resumo de {recordings}, pelas instruções do tipo de agenda de cada uma."
@@ -218,7 +218,7 @@ def _summary(tool: str, params: dict[str, Any], count: int) -> str:
 async def save_proposals(
     conn: AsyncConnection, owner_id: UUID, session_id: UUID, message_id: UUID, proposals: list[ProposedAction]
 ) -> None:
-    """Grava as propostas da resposta em `proposed`, com os alvos congelados."""
+    """Writes the reply's proposals as `proposed`, with the targets frozen."""
     for item in proposals:
         await conn.execute(
             insert(t.agent_actions).values(
@@ -234,7 +234,7 @@ async def save_proposals(
 
 
 async def actions_by_message(conn: AsyncConnection, message_ids: list[UUID]) -> dict[UUID, list[dict[str, Any]]]:
-    """As propostas de cada resposta, na ordem."""
+    """The proposals of each reply, in order."""
     if not message_ids:
         return {}
     await expire_proposals(conn)
@@ -249,11 +249,11 @@ async def actions_by_message(conn: AsyncConnection, message_ids: list[UUID]) -> 
     return found
 
 
-# --- confirmar, descartar, ler -------------------------------------------------------------------
+# --- confirm, discard, read ----------------------------------------------------------------------
 
 
 async def expire_proposals(conn: AsyncConnection) -> None:
-    """As propostas do dono com mais de `PROPOSAL_TTL` viram `expired`."""
+    """The owner's proposals older than `PROPOSAL_TTL` become `expired`."""
     await conn.execute(
         update(t.agent_actions)
         .where(and_(A.status == "proposed", A.created_at < func.now() - PROPOSAL_TTL))
@@ -273,12 +273,12 @@ async def _action(conn: AsyncConnection, action_id: UUID, *, lock: bool = False)
 
 
 async def read_action(conn: AsyncConnection, action_id: UUID) -> dict[str, Any]:
-    """Uma ação da conta."""
+    """An action of the account."""
     return action_json(await _action(conn, action_id))
 
 
 async def list_actions(conn: AsyncConnection, cursor: str | None, limit: int) -> dict[str, Any]:
-    """O registro de auditoria: as ações da conta, da mais recente para trás."""
+    """The audit log: the account's actions, from the most recent backwards."""
     await expire_proposals(conn)
     stmt = select(t.agent_actions).order_by(A.created_at.desc(), A.id.desc()).limit(limit + 1)
     if cursor:
@@ -292,10 +292,10 @@ async def list_actions(conn: AsyncConnection, cursor: str | None, limit: int) ->
 
 
 async def confirm_action(conn: AsyncConnection, principal: Principal, action_id: UUID) -> tuple[dict[str, Any], bool]:
-    """`proposed → queued`; devolve a ação e se é preciso enfileirar.
+    """`proposed → queued`; returns the action and whether it must be enqueued.
 
-    Já confirmada (ou terminada), devolve o estado atual sem reenfileirar: confirmar é idempotente.
-    Vencida ou descartada, 409. PAT sem o escopo da ferramenta, 403.
+    Already confirmed (or finished), it returns the current state without requeuing: confirming is
+    idempotent. Expired or discarded, 409. A PAT without the tool's scope, 403.
     """
     row = await _action(conn, action_id, lock=True)
     scope = ACTION_SCOPES[row["tool"]]
@@ -328,7 +328,7 @@ async def confirm_action(conn: AsyncConnection, principal: Principal, action_id:
 
 
 async def cancel_action(conn: AsyncConnection, action_id: UUID) -> dict[str, Any]:
-    """Descarta a proposta; só de `proposed` (senão 409)."""
+    """Discards the proposal; only from `proposed` (otherwise 409)."""
     row = await _action(conn, action_id, lock=True)
     if row["status"] == "cancelled":
         return action_json(row)
@@ -350,7 +350,7 @@ async def cancel_action(conn: AsyncConnection, action_id: UUID) -> dict[str, Any
 
 
 async def enqueue_action(redis: ArqRedis, action_id: UUID, attempt: int = 0) -> None:
-    """Enfileira `agent_action` (depois do commit); o id do job deduplica a confirmação repetida."""
+    """Enqueues `agent_action` (after the commit); the job id deduplicates a repeated confirmation."""
     suffix = f":{attempt}" if attempt else ""
     await redis.enqueue_job(
         "agent_action",
@@ -362,11 +362,11 @@ async def enqueue_action(redis: ArqRedis, action_id: UUID, attempt: int = 0) -> 
     )
 
 
-# --- o job `agent_action` ------------------------------------------------------------------------
+# --- the `agent_action` job ----------------------------------------------------------------------
 
 
-class _Retry(Exception):  # noqa: N818 — sinal interno, não erro
-    """Os resumos em aberto estão no teto: o job volta em `RETRY_DEFER_S`."""
+class _Retry(Exception):  # noqa: N818 — internal signal, not an error
+    """The open summaries are at the ceiling: the job comes back in `RETRY_DEFER_S`."""
 
 
 async def _record(conn: AsyncConnection, action_id: UUID, rid: str, outcome: dict[str, Any]) -> None:
@@ -377,7 +377,7 @@ async def _record(conn: AsyncConnection, action_id: UUID, rid: str, outcome: dic
 async def _apply(
     conn: AsyncConnection, redis: ArqRedis, owner_id: UUID, row: Row, rid: UUID
 ) -> tuple[dict[str, Any], UUID | None, str | None]:
-    """Executa a ação num alvo; devolve o resultado e o resumo a enfileirar."""
+    """Executes the action on one target; returns the result and the summary to enqueue."""
     params, tool = row["params"], row["tool"]
     current = (await conn.execute(select(R.id, R.agenda_type_id).where(R.id == rid))).first()
     if current is None:
@@ -403,7 +403,7 @@ async def _apply(
 
 
 async def _one(ctx: dict[str, Any], owner_id: UUID, row: Row, rid: str) -> bool:
-    """Um alvo numa transação (a operação e o resultado juntos); `False` encerra o resto (cota)."""
+    """One target in one transaction (the operation and the result together); `False` ends the rest (quota)."""
     engine: AsyncEngine = ctx["engine"]
     redis: ArqRedis = ctx["redis"]
     async with refunding(redis, owner_id) as charge:
@@ -412,10 +412,10 @@ async def _one(ctx: dict[str, Any], owner_id: UUID, row: Row, rid: str) -> bool:
                 outcome, summary_id, charge.token = await _apply(conn, redis, owner_id, row, UUID(rid))
                 await _record(conn, row["id"], rid, outcome)
         except ApiProblemError as exc:
-            # A transação foi desfeita: o pedido não saiu, a cota cobrada volta.
+            # The transaction was rolled back: the request did not go out, the charged quota comes back.
             if charge.token is not None:
                 await refund_agent_request(redis, owner_id, charge.token)
-            if exc.status_code == 429:  # noqa: PLR2004 — os resumos em aberto no teto
+            if exc.status_code == 429:  # noqa: PLR2004 — the open summaries at the ceiling
                 raise _Retry from exc
             if exc.code == TRANSCRIPT_MISSING:
                 outcome = {"status": "skipped", "detail": "a gravação ainda não tem transcrição"}
@@ -435,7 +435,7 @@ async def _finish(engine: AsyncEngine, owner_id: UUID, action_id: UUID, **values
 
 
 async def run_agent_action_job(ctx: dict[str, Any], action_id: str, attempt: int = 0) -> str:
-    """O job `agent_action`: executa a ação confirmada, alvo a alvo, até `done`."""
+    """The `agent_action` job: executes the confirmed action, target by target, until `done`."""
     engine: AsyncEngine = ctx["engine"]
     aid = UUID(action_id)
     async with system_tx(engine) as conn:
@@ -476,7 +476,7 @@ async def run_agent_action_job(ctx: dict[str, Any], action_id: str, attempt: int
         await enqueue_action(ctx["redis"], aid, attempt + 1)
         return "reagendada: resumos em aberto no teto"
     except Exception as exc:
-        log.exception("ação %s: falha inesperada", action_id)
+        log.exception("action %s: unexpected failure", action_id)
         error = {"code": "internal_error", "message": type(exc).__name__}
         await _finish(engine, owner_id, aid, status="failed", error=error)
         return "falhou: internal_error"

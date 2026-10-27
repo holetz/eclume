@@ -5,16 +5,16 @@ import { Dialog } from './Dialog'
 interface LeaveOptions {
   title: string
   message: ReactNode
-  /** Roda quando a pessoa confirma a saída, antes de navegar (ex.: apagar o rascunho guardado). */
+  /** Runs when the person confirms leaving, before navigating (e.g.: deleting the saved draft). */
   onDiscard?: () => void
 }
 
 const DEFAULT_OPTIONS: LeaveOptions = { title: 'Descartar alterações?', message: 'As alterações ainda não foram salvas.' }
 
 /**
- * Guarda de saída de um formulário com alterações não salvas: fechar ou recarregar a aba dispara o
- * aviso do navegador, e ir para outra rota do app pede confirmação. Mudar só a busca ou o `#` da
- * mesma rota (o `?t=` da gravação, a seleção na URL) não pede nada. Devolve o diálogo a renderizar.
+ * Leave guard of a form with unsaved changes: closing or reloading the tab fires the
+ * browser's warning, and going to another app route asks for confirmation. Changing only the search or the `#` of the
+ * same route (the recording's `?t=`, the selection in the URL) asks nothing. Returns the dialog to render.
  */
 export function useLeaveGuard(dirty: boolean, options: LeaveOptions = DEFAULT_OPTIONS): ReactNode {
   useEffect(() => {

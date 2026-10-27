@@ -8,7 +8,7 @@
   max-width: 68ch;
 }
 
-/* Os blocos lado a lado enquanto couberem; em tela estreita, um embaixo do outro. */
+/* The blocks side by side while they fit; on a narrow screen, one below the other. */
 .sections {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
@@ -20,7 +20,7 @@
   margin: 0;
 }
 
-/* O .seg do DS tem a largura das opções; aqui ele segue o painel. */
+/* The DS .seg is as wide as its options; here it follows the panel. */
 .seg {
   display: flex;
 }

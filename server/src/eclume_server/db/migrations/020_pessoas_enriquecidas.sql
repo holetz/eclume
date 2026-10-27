@@ -1,10 +1,10 @@
--- 020_pessoas_enriquecidas — a pessoa ganha empresa, área, cargo, telefone e tags de pessoa
+-- 020_pessoas_enriquecidas — the person gains company, department, job title, phone and person tags
 -- (holetz/eclume#75).
 --
--- São os dados de cadastro que filtram a biblioteca pelos participantes ("alguém da empresa X,
--- da área Y, com a tag Z falou na gravação") e que a atribuição de coleções lê. Todos opcionais; as
--- tags de pessoa são rótulos da pessoa, separados das tags das gravações. Regras em
--- docs/standards/code/frontend-web.md (Pessoas) e no contrato v1.
+-- They are the directory data that filter the library by participants ("someone from company X,
+-- department Y, with tag Z spoke in the recording") and that collection assignment reads. All optional; the
+-- person tags are labels of the person, separate from the recordings' tags. Rules in
+-- docs/standards/code/frontend-web.md (`Pessoas`) and in contract v1.
 
 ALTER TABLE people
     ADD COLUMN company       text CHECK (company IS NULL OR company <> ''),
@@ -13,7 +13,7 @@ ALTER TABLE people
     ADD COLUMN phone         text CHECK (phone IS NULL OR phone <> ''),
     ADD COLUMN tags          text[] NOT NULL DEFAULT '{}';
 
--- O filtro da biblioteca e as facetas comparam sem acento e sem caixa, como o nome.
+-- The library filter and the facets compare accent- and case-insensitively, like the name.
 CREATE INDEX people_company_idx ON people (owner_id, lower(eclume_unaccent(company)))
     WHERE company IS NOT NULL;
 CREATE INDEX people_department_idx ON people (owner_id, lower(eclume_unaccent(department)))

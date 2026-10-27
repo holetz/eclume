@@ -1,11 +1,11 @@
 import { MediaConvertError } from './errors'
 
 export interface EnvironmentReport {
-  /** `isSecureContext`: sem HTTPS (ou localhost) não há WebCodecs nem `crypto.subtle`. */
+  /** `isSecureContext`: without HTTPS (or localhost) there is neither WebCodecs nor `crypto.subtle`. */
   secureContext: boolean
-  /** `AudioDecoder` e `AudioEncoder` existem: a via WebCodecs pode ser tentada. */
+  /** `AudioDecoder` and `AudioEncoder` exist: the WebCodecs path can be tried. */
   webCodecs: boolean
-  /** `crypto.subtle` existe: o SHA-256 do resultado pode ser calculado. */
+  /** `crypto.subtle` exists: the SHA-256 of the result can be computed. */
   subtleCrypto: boolean
 }
 
@@ -24,7 +24,7 @@ export function checkEnvironment(scope: Scope = globalThis as Scope): Environmen
   }
 }
 
-/** Falha com `insecure-context` antes de qualquer leitura quando a página não está em HTTPS. */
+/** Fails with `insecure-context` before any read when the page is not on HTTPS. */
 export function assertSecureContext(scope: Scope = globalThis as Scope): EnvironmentReport {
   const report = checkEnvironment(scope)
   if (!report.secureContext || !report.subtleCrypto) {

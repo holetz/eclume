@@ -1,12 +1,12 @@
-"""Erros RFC 9457 (`application/problem+json`) com o campo estável `code`."""
+"""RFC 9457 errors (`application/problem+json`) with the stable `code` field."""
 
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
 
-# FastAPI só é importado quando uma resposta ou um handler precisa dele: o worker usa os erros
-# (`invalid_field`, `conflict`…) sem carregar o framework web.
+# FastAPI is imported only when a response or a handler needs it: the worker uses the errors
+# (`invalid_field`, `conflict`…) without loading the web framework.
 if TYPE_CHECKING:
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse
@@ -40,7 +40,7 @@ _TITLES = {
 
 
 class ApiProblemError(Exception):
-    """Erro de API que vira um problem+json."""
+    """An API error that becomes a problem+json."""
 
     def __init__(
         self,
@@ -51,7 +51,7 @@ class ApiProblemError(Exception):
         extra: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
     ) -> None:
-        """Problema com status, `code` estável, `detail` opcional e campos extras do corpo."""
+        """Problem with a status, a stable `code`, an optional `detail` and extra body fields."""
         super().__init__(detail or code)
         self.status_code = status_code
         self.code = code
@@ -60,7 +60,7 @@ class ApiProblemError(Exception):
         self.headers = headers or {}
 
     def body(self) -> dict[str, Any]:
-        """Corpo RFC 9457."""
+        """RFC 9457 body."""
         body: dict[str, Any] = {
             "type": _TYPE_BASE + self.code.replace("_", "-"),
             "title": _TITLES.get(self.code, self.code),
@@ -73,7 +73,7 @@ class ApiProblemError(Exception):
         return body
 
     def response(self) -> JSONResponse:
-        """Resposta HTTP do problema."""
+        """HTTP response of the problem."""
         from fastapi.responses import JSONResponse  # noqa: PLC0415
 
         return JSONResponse(self.body(), status_code=self.status_code, media_type=PROBLEM_JSON, headers=self.headers)
@@ -82,27 +82,27 @@ class ApiProblemError(Exception):
 def unauthorized(
     detail: str = "Envie o cookie de sessão ou o header Authorization: Bearer eclp_...",
 ) -> ApiProblemError:
-    """401 — sem credencial, ou credencial inválida, expirada ou revogada."""
+    """401 — no credential, or an invalid, expired or revoked credential."""
     return ApiProblemError(401, "unauthorized", detail, headers={"WWW-Authenticate": 'Bearer realm="eclume"'})
 
 
 def forbidden(detail: str) -> ApiProblemError:
-    """403 — credencial válida sem permissão (papel, dono, CSRF, rota só de sessão)."""
+    """403 — valid credential without permission (role, owner, CSRF, session-only route)."""
     return ApiProblemError(403, "forbidden", detail)
 
 
 def session_required() -> ApiProblemError:
-    """403 — PAT numa operação que aceita só sessão do navegador."""
+    """403 — a PAT on an operation that accepts only a browser session."""
     return ApiProblemError(403, "session_required", "Esta operação aceita só sessão do navegador, não PAT.")
 
 
 def notice_required() -> ApiProblemError:
-    """403 — sessão de conta que ainda não aceitou o aviso em vigor."""
+    """403 — session of an account that has not yet accepted the notice in force."""
     return ApiProblemError(403, "notice_required", "Aceite o aviso em vigor em POST /api/v1/me/notice.")
 
 
 def insufficient_scope(missing: list[str], *, any_of: bool = False) -> ApiProblemError:
-    """403 — o PAT não tem os escopos exigidos pela operação (`any_of`: bastaria um deles)."""
+    """403 — the PAT lacks the scopes the operation requires (`any_of`: one of them would do)."""
     detail = (
         f"Este PAT precisa de um destes escopos: {', '.join(missing)}."
         if any_of
@@ -112,45 +112,45 @@ def insufficient_scope(missing: list[str], *, any_of: bool = False) -> ApiProble
 
 
 def not_found(detail: str = "Recurso inexistente ou sem acesso.") -> ApiProblemError:
-    """404 — não existe ou não é visível (o eclume não distingue)."""
+    """404 — does not exist or is not visible (eclume does not tell them apart)."""
     return ApiProblemError(404, "not_found", detail)
 
 
 def validation_failed(errors: list[dict[str, str]]) -> ApiProblemError:
-    """422 — corpo ou parâmetros inválidos, um item por campo."""
+    """422 — invalid body or parameters, one item per field."""
     return ApiProblemError(422, "validation_failed", extra={"errors": errors})
 
 
 def invalid_field(field: str, message: str) -> ApiProblemError:
-    """422 de um campo só."""
+    """422 for a single field."""
     return validation_failed([{"field": field, "message": message}])
 
 
 def conflict(detail: str, code: str = "conflict") -> ApiProblemError:
-    """409 — o estado atual impede a operação."""
+    """409 — the current state prevents the operation."""
     return ApiProblemError(409, code, detail)
 
 
 def rate_limited(detail: str, retry_after: int | None = None) -> ApiProblemError:
-    """429 — limite atingido: pedidos em aberto, ou tentativas na janela (com `Retry-After`)."""
+    """429 — limit reached: open requests, or attempts in the window (with `Retry-After`)."""
     headers = {"Retry-After": str(retry_after)} if retry_after is not None else None
     return ApiProblemError(429, "rate_limited", detail, headers=headers)
 
 
 def payload_too_large(limit: int) -> ApiProblemError:
-    """413 — o corpo passou do teto da rota."""
+    """413 — the body exceeded the route's ceiling."""
     return ApiProblemError(
         413, "payload_too_large", f"O corpo passou do limite de {limit} bytes desta rota.", extra={"limit": limit}
     )
 
 
 def unsupported_media_type(detail: str) -> ApiProblemError:
-    """415 — o arquivo não é de um tipo que a rota aceita."""
+    """415 — the file is not of a type the route accepts."""
     return ApiProblemError(415, "unsupported_media_type", detail)
 
 
 def internal_error() -> ApiProblemError:
-    """500 — falha inesperada do servidor; o detalhe fica só no log."""
+    """500 — unexpected server failure; the detail stays only in the log."""
     return ApiProblemError(500, "internal_error", "Erro inesperado no servidor; tente de novo.")
 
 
@@ -168,13 +168,13 @@ def _field(loc: tuple[Any, ...]) -> str:
 async def _validation_handler(_: Request, exc: Exception) -> JSONResponse:
     from fastapi.exceptions import RequestValidationError  # noqa: PLC0415
 
-    assert isinstance(exc, RequestValidationError)  # noqa: S101 — registrado só para este tipo
+    assert isinstance(exc, RequestValidationError)  # noqa: S101 — registered only for this type
     errors = [{"field": _field(tuple(error["loc"])), "message": error["msg"]} for error in exc.errors()]
     return validation_failed(errors).response()
 
 
 async def _problem_handler(_: Request, exc: Exception) -> JSONResponse:
-    assert isinstance(exc, ApiProblemError)  # noqa: S101 — registrado só para este tipo
+    assert isinstance(exc, ApiProblemError)  # noqa: S101 — registered only for this type
     return exc.response()
 
 
@@ -182,7 +182,7 @@ async def _http_handler(_: Request, exc: Exception) -> JSONResponse:
     from fastapi import status  # noqa: PLC0415
     from starlette.exceptions import HTTPException as StarletteHTTPException  # noqa: PLC0415
 
-    assert isinstance(exc, StarletteHTTPException)  # noqa: S101 — registrado só para este tipo
+    assert isinstance(exc, StarletteHTTPException)  # noqa: S101 — registered only for this type
     code = {
         status.HTTP_404_NOT_FOUND: "not_found",
         status.HTTP_405_METHOD_NOT_ALLOWED: "method_not_allowed",
@@ -191,12 +191,12 @@ async def _http_handler(_: Request, exc: Exception) -> JSONResponse:
 
 
 async def _internal_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.error("erro não tratado em %s %s", request.method, request.url.path, exc_info=exc)
+    logger.error("unhandled error in %s %s", request.method, request.url.path, exc_info=exc)
     return internal_error().response()
 
 
 def install_handlers(app: FastAPI) -> None:
-    """Faz todo erro da API sair como problem+json, inclusive o 500 inesperado."""
+    """Make every API error come out as problem+json, including the unexpected 500."""
     from fastapi.exceptions import RequestValidationError  # noqa: PLC0415
     from starlette.exceptions import HTTPException as StarletteHTTPException  # noqa: PLC0415
 

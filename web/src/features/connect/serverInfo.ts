@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import { unwrap } from '../../api/problem'
 
-/** O descritor público do servidor (`GET /server`): endereço, endereço MCP e impressão da CA. */
+/** The server's public descriptor (`GET /server`): address, MCP address and CA fingerprint. */
 export function useServerInfo() {
   return useQuery({
     queryKey: ['server'],

@@ -1,6 +1,6 @@
-// Os instaladores do app desktop vêm de /downloads/instaladores.json, que o
-// deploy/publicar-desktop.sh publica no host (standard desktop-distribuicao.md). Só o que a página
-// usa é validado; o resto do manifesto é ignorado.
+// The desktop app installers come from /downloads/instaladores.json, which
+// deploy/publicar-desktop.sh publishes on the host (standard desktop-distribuicao.md). Only what the
+// page uses is validated; the rest of the manifest is ignored.
 import { useQuery } from '@tanstack/react-query'
 
 type DesktopOs = 'windows' | 'macos' | 'linux'
@@ -23,7 +23,7 @@ export interface Platform {
   os: DesktopOs
   name: string
   requirements: string
-  /** Aviso da primeira instalação: os instaladores não são assinados. */
+  /** First-install warning: the installers are not signed. */
   firstRun: string
 }
 
@@ -81,7 +81,7 @@ function isInstaller(value: unknown): value is Installer {
   )
 }
 
-/** O manifesto validado, ou `null` se ele não tem a forma esperada. */
+/** The validated manifest, or `null` when it does not have the expected shape. */
 export function parseInstallers(value: unknown): InstallerManifest | null {
   const m = value as { versao?: unknown; instaladores?: unknown }
   if (typeof m !== 'object' || m === null || typeof m.versao !== 'string' || !Array.isArray(m.instaladores)) return null
@@ -89,7 +89,7 @@ export function parseInstallers(value: unknown): InstallerManifest | null {
   return { versao: m.versao, instaladores: m.instaladores }
 }
 
-/** O manifesto de instaladores deste servidor; `null` quando ainda não foi publicado ou veio inválido. */
+/** This server's installer manifest; `null` when it has not been published yet or came back invalid. */
 export function useInstallers() {
   return useQuery({
     queryKey: ['installers'],

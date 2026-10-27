@@ -1,13 +1,13 @@
-"""O registro de ferramentas do Agente: cada ferramenta declara uso, validação, execução e natureza.
+"""The Agent tool registry: each tool declares its usage, validation, execution and kind.
 
-O laço (`agents/agent.py`) não conhece ferramenta nenhuma: ele pede ao `ToolRegistry` as linhas do
-`system` das disponíveis para a credencial, valida a ação JSON pela ferramenta dona e a executa.
-Natureza (`kind`): `read` consulta (a base, os anexos, as habilidades), `produce` prepara um arquivo
-para a resposta e `action` age no ambiente — esta, com `confirm`, nunca roda no laço: o `plan` dela
-resolve os alvos e registra uma proposta, que a pessoa confirma num cartão e o job `agent_action`
-executa (holetz/eclume#145). Uma ação sem `plan` só avisa ao agente que precisa de confirmação. Para
-acrescentar uma ferramenta, registre um `AgentTool` em `default_registry()` (ou num registro próprio).
-Contrato em docs/standards/code/server-agentes.md §Agente.
+The loop (`agents/agent.py`) knows no tool at all: it asks the `ToolRegistry` for the `system` lines
+of the tools available to the credential, validates the JSON action through the tool that owns it and
+runs it. Kind (`kind`): `read` looks things up (the base, the attachments, the skills), `produce`
+prepares a file for the answer and `action` acts on the environment — that one, with `confirm`, never
+runs in the loop: its `plan` resolves the targets and records a proposal, which the person confirms on
+a card and the `agent_action` job executes (holetz/eclume#145). An action without `plan` only tells the
+agent it needs confirmation. To add a tool, register an `AgentTool` in `default_registry()` (or in a
+registry of your own). Contract in docs/standards/code/server-agentes.md `§Agente`.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ REPLY = "reply"
 UNKNOWN_FILE = "arquivo inexistente nesta conversa"
 MAX_PROPOSALS = 3
 MAX_SKILL_CHARS = 8000
-# Até quantas gravações uma ação alcança: regenerar resumos pesa na fila e na cota.
+# How many recordings an action may reach: regenerating summaries weighs on the queue and the quota.
 MAX_TARGETS = {"regenerate_summaries": 20, "tag_recordings": 50, "collect_recordings": 50, "set_agenda_type": 50}
 TARGET_FILTERS = ("agenda_type", "from", "to", "collection", "tag")
 MAX_LABELS = 10
@@ -43,18 +43,18 @@ NEEDS_CONFIRMATION = (
 
 @dataclass(frozen=True)
 class Capabilities:
-    """O que a credencial e a conversa permitem: ler transcrições, ter anexos, os escopos."""
+    """What the credential and the conversation allow: reading transcripts, having attachments, the scopes."""
 
     transcripts: bool = True
     files: bool = False
     scopes: frozenset[str] = frozenset()
-    # A pessoa tem habilidades ligadas que o agente pode escolher (`use_skill`).
+    # The person has enabled skills the agent may pick (`use_skill`).
     skills: bool = False
 
 
 @dataclass(frozen=True)
 class InputFile:
-    """Um anexo da conversa, com o texto extraído."""
+    """A conversation attachment, with its extracted text."""
 
     id: UUID
     name: str
@@ -63,7 +63,7 @@ class InputFile:
 
 @dataclass(frozen=True)
 class ProducedFile:
-    """Um arquivo que o agente preparou: o job o monta (`agent_files.render_output`) e guarda."""
+    """A file the agent prepared: the job renders it (`agent_files.render_output`) and stores it."""
 
     name: str
     format: str
@@ -72,7 +72,7 @@ class ProducedFile:
 
 @dataclass(frozen=True)
 class Skill:
-    """Uma habilidade da pessoa: as instruções e, opcionalmente, as ferramentas permitidas (nulo = todas)."""
+    """A person's skill: its instructions and, optionally, the allowed tools (null = all)."""
 
     name: str
     description: str
@@ -82,7 +82,7 @@ class Skill:
 
 @dataclass(frozen=True)
 class ProposedAction:
-    """Uma ação que o agente propôs: os parâmetros normalizados, o texto do cartão e os alvos `(id, título)`."""
+    """An action the agent proposed: the normalised parameters, the card text and the `(id, title)` targets."""
 
     tool: str
     params: dict[str, Any]
@@ -91,47 +91,47 @@ class ProposedAction:
 
 
 class AgentEnv(Protocol):
-    """O acesso das ferramentas ao ambiente do dono, dado pelo job."""
+    """The tools' access to the owner's environment, provided by the job."""
 
     @property
     def base(self) -> base.BaseTools:
-        """A base de gravações, sob a RLS do dono."""
+        """The recordings base, under the owner's RLS."""
         ...
 
     async def read_file(self, file_id: UUID) -> InputFile | None:
-        """Um anexo desta conversa, ou `None` se ele não existe ou é de outra."""
+        """An attachment of this conversation, or `None` when it does not exist or belongs to another one."""
         ...
 
     async def skill(self, name: str) -> Skill | None:
-        """A habilidade ligada da pessoa com esse nome, ou `None`."""
+        """The person's enabled skill with that name, or `None`."""
         ...
 
     async def plan_action(self, tool: str, params: dict[str, Any], limit: int) -> ProposedAction | str:
-        """Resolve os alvos sob a RLS e escreve o resumo; o motivo (texto) quando não há proposta."""
+        """Resolve the targets under RLS and write the summary; the reason (text) when there is no proposal."""
         ...
 
 
 @dataclass
 class RunState:
-    """O que uma resposta acumula: as gravações vistas (fontes possíveis), os arquivos e as ações pendentes."""
+    """What one answer accumulates: the recordings seen (possible sources), the files and the pending actions."""
 
     seen: dict[UUID, str] = field(default_factory=dict)
     produced: list[ProducedFile] = field(default_factory=list)
     pending_actions: list[dict[str, Any]] = field(default_factory=list)
     proposals: list[ProposedAction] = field(default_factory=list)
-    # A habilidade em uso e as ferramentas que ela permite (nulo = todas).
+    # The skill in use and the tools it allows (null = all).
     skill: str | None = None
     allowed: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
 class AgentTool:
-    """Uma ferramenta: o nome da ação, a linha de uso no `system`, a validação e a execução.
+    """A tool: the action name, the usage line in the `system`, the validation and the execution.
 
-    `run(env, action, budget, state)` devolve o bloco `<ferramenta>` para o agente e o registro da
-    chamada. `available(caps)` diz se a credencial a enxerga. `kind="action"` com `confirm=True`
-    nunca roda no laço: `plan(env, action, state)` registra a proposta e devolve o bloco.
-    `description` é a frase do catálogo (`GET /agent/tools`).
+    `run(env, action, budget, state)` returns the `<ferramenta>` block for the agent and the record of
+    the call. `available(caps)` says whether the credential sees it. `kind="action"` with `confirm=True`
+    never runs in the loop: `plan(env, action, state)` records the proposal and returns the block.
+    `description` is the catalogue sentence (`GET /agent/tools`).
     """
 
     name: str
@@ -146,16 +146,16 @@ class AgentTool:
 
 
 class ToolRegistry:
-    """As ferramentas do agente por nome, na ordem de registro; `reply` é reservada ao laço."""
+    """The agent's tools by name, in registration order; `reply` is reserved for the loop."""
 
     def __init__(self, tools: list[AgentTool] | None = None) -> None:
-        """Registro com as ferramentas dadas, na ordem."""
+        """A registry with the given tools, in order."""
         self._tools: dict[str, AgentTool] = {}
         for tool in tools or []:
             self.register(tool)
 
     def register(self, tool: AgentTool) -> None:
-        """Acrescenta uma ferramenta; nome repetido ou `reply` é `ValueError`."""
+        """Add a tool; a repeated name or `reply` is a `ValueError`."""
         if tool.name == REPLY or tool.name in self._tools:
             raise ValueError(f"ferramenta já registrada ou reservada: {tool.name}")
         if tool.kind == "action" and not tool.confirm:
@@ -163,26 +163,26 @@ class ToolRegistry:
         self._tools[tool.name] = tool
 
     def get(self, name: str) -> AgentTool | None:
-        """A ferramenta pelo nome."""
+        """The tool by name."""
         return self._tools.get(name)
 
     def available(self, caps: Capabilities, allowed: frozenset[str] | None = None) -> list[AgentTool]:
-        """As ferramentas que a credencial enxerga (e a habilidade em uso permite), na ordem de registro."""
+        """The tools the credential sees (and the skill in use allows), in registration order."""
         return [
             tool for tool in self._tools.values() if tool.available(caps) and (allowed is None or tool.name in allowed)
         ]
 
     def names(self, caps: Capabilities, allowed: frozenset[str] | None = None) -> list[str]:
-        """Os nomes das ações válidas para a credencial, com `reply` no fim."""
+        """The names of the actions valid for the credential, with `reply` last."""
         return [tool.name for tool in self.available(caps, allowed)] + [REPLY]
 
     def catalog(self) -> list[dict[str, str]]:
-        """Todas as ferramentas, com a natureza e a descrição (o seletor de ferramentas de uma habilidade)."""
+        """Every tool, with its kind and description (a skill's tool picker)."""
         tools = self._tools.values()
         return [{"name": tool.name, "kind": tool.kind, "description": tool.description} for tool in tools]
 
 
-# --- as ferramentas da base (as do chat sobre a base, reaproveitadas) -----------------------------
+# --- the base tools (those of the base chat, reused) --------------------------------------------
 
 
 _BASE_DESCRIPTIONS = {
@@ -195,7 +195,7 @@ _BASE_DESCRIPTIONS = {
 
 def _base_tool(name: str, *, transcripts: bool) -> AgentTool:
     async def run(env: AgentEnv, action: dict[str, Any], budget: int, state: RunState) -> tuple[str, dict[str, Any]]:
-        return await base._run_tool(env.base, action, budget, state.seen)  # noqa: SLF001 — o mesmo protocolo
+        return await base._run_tool(env.base, action, budget, state.seen)  # noqa: SLF001 — the same protocol
 
     return AgentTool(
         name=name,
@@ -207,7 +207,7 @@ def _base_tool(name: str, *, transcripts: bool) -> AgentTool:
     )
 
 
-# --- os anexos -----------------------------------------------------------------------------------
+# --- attachments ---------------------------------------------------------------------------------
 
 
 def _file_id(value: object) -> UUID | None:
@@ -230,7 +230,7 @@ def _valid_read_file(action: dict[str, Any]) -> bool:
 
 
 def clip_chars(text: str, budget: int) -> str:
-    """O começo do texto que cabe em `budget` tokens."""
+    """The start of the text that fits in `budget` tokens."""
     if estimate_tokens(text) <= budget:
         return text
     return text[: max(budget, 0) * 3]
@@ -240,7 +240,7 @@ async def _read_file(
     env: AgentEnv, action: dict[str, Any], budget: int, _state: RunState
 ) -> tuple[str, dict[str, Any]]:
     file_id = _file_id(action["file_id"])
-    assert file_id is not None  # noqa: S101 — validado
+    assert file_id is not None  # noqa: S101 — validated
     offset = _offset(action.get("offset")) or 0
     record = {"tool": "read_file", "file_id": str(file_id), "offset": offset}
     found = await env.read_file(file_id)
@@ -255,7 +255,7 @@ async def _read_file(
     return base._block("read_file", attributes, body), record  # noqa: SLF001
 
 
-# --- os arquivos de saída ------------------------------------------------------------------------
+# --- output files -------------------------------------------------------------------------------
 
 
 def _valid_write_file(action: dict[str, Any]) -> bool:
@@ -310,11 +310,11 @@ WRITE_FILE = AgentTool(
 )
 
 
-# --- as habilidades -----------------------------------------------------------------------------
+# --- skills ------------------------------------------------------------------------------------
 
 
 def skill_name(value: object) -> str | None:
-    """O nome da habilidade sem a barra, em minúsculas, ou `None` se não é texto."""
+    """The skill name without the slash, lower-cased, or `None` when it is not text."""
     if not isinstance(value, str) or not value.strip():
         return None
     return value.strip().lstrip("/").lower()
@@ -343,7 +343,7 @@ async def _use_skill(
 
 
 def apply_skill(state: RunState, skill: Skill) -> None:
-    """Marca a habilidade em uso e restringe as ferramentas às permitidas por ela."""
+    """Mark the skill in use and restrict the tools to the ones it allows."""
     state.skill = skill.name
     state.allowed = frozenset(skill.allowed_tools) if skill.allowed_tools is not None else None
 
@@ -361,7 +361,7 @@ USE_SKILL = AgentTool(
 )
 
 
-# --- as ações no ambiente (propostas; o job `agent_action` executa depois da confirmação) -------
+# --- environment actions (proposals; the `agent_action` job runs them after confirmation) -------
 
 
 def _date(value: str) -> bool:
@@ -373,7 +373,7 @@ def _date(value: str) -> bool:
 
 
 def _id_targets(ids: object) -> dict[str, Any] | None:
-    """`recording_ids` não vazio e só de UUIDs, sem repetição; `None` se inválido."""
+    """A non-empty `recording_ids` of UUIDs only, without repeats; `None` when invalid."""
     if not isinstance(ids, list) or not ids:
         return None
     parsed = [_file_id(item) for item in ids]
@@ -383,7 +383,7 @@ def _id_targets(ids: object) -> dict[str, Any] | None:
 
 
 def _filter_targets(targets: dict[str, Any]) -> dict[str, Any] | None:
-    """Um filtro de `TARGET_FILTERS` com textos não vazios e datas válidas; `None` se inválido ou vazio."""
+    """A `TARGET_FILTERS` filter with non-empty texts and valid dates; `None` when invalid or empty."""
     if set(targets) - set(TARGET_FILTERS):
         return None
     found: dict[str, str] = {}
@@ -396,12 +396,12 @@ def _filter_targets(targets: dict[str, Any]) -> dict[str, Any] | None:
         if key in {"from", "to"} and not _date(value.strip()):
             return None
         found[key] = value.strip()
-    # Filtro vazio seria a base inteira: recusado, o agente tem de dizer quais.
+    # An empty filter would be the whole base: refused, the agent must say which ones.
     return found or None
 
 
 def targets_of(action: dict[str, Any]) -> dict[str, Any] | None:
-    """Os alvos normalizados: `recording_ids` ou um filtro não vazio; `None` se inválidos."""
+    """The normalised targets: `recording_ids` or a non-empty filter; `None` when invalid."""
     targets = action.get("targets")
     if not isinstance(targets, dict) or not targets:
         return None
@@ -423,7 +423,7 @@ def _labels(value: object) -> list[str] | None:
 
 
 def action_params(action: dict[str, Any]) -> dict[str, Any] | None:
-    """Os parâmetros normalizados da ação (sem a chave `action`), ou `None` se inválidos."""
+    """The action's normalised parameters (without the `action` key), or `None` when invalid."""
     name = action.get("action")
     targets = targets_of(action)
     if targets is None:
@@ -449,7 +449,7 @@ async def _plan(env: AgentEnv, action: dict[str, Any], state: RunState) -> tuple
         body = f"limite de {MAX_PROPOSALS} propostas por resposta atingido; nada foi proposto"
         return base._block(name, "", body), record  # noqa: SLF001
     params = action_params(action)
-    assert params is not None  # noqa: S101 — validado
+    assert params is not None  # noqa: S101 — validated
     planned = await env.plan_action(name, params, MAX_TARGETS[name])
     if isinstance(planned, str):
         return base._block(name, "", f"{planned}; nada foi proposto"), record  # noqa: SLF001
@@ -529,7 +529,7 @@ ACTION_TOOLS = [
 
 
 def default_registry() -> ToolRegistry:
-    """As ferramentas do Agente: a base, os anexos, os arquivos gerados, as habilidades e as ações."""
+    """The Agent's tools: the base, the attachments, the generated files, the skills and the actions."""
     return ToolRegistry(
         [
             _base_tool("search_summaries", transcripts=False),

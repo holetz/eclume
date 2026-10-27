@@ -162,7 +162,7 @@ function SkillDialog({ skill, onClose }: { skill: AgentSkill | null; onClose: ()
   )
 }
 
-/** A página Habilidades: as instruções reutilizáveis que o Agente segue, no grupo Agente do menu. */
+/** The Habilidades page: the reusable instructions the Agent follows, in the menu's Agente group. */
 export function SkillsPage() {
   useHelpTopic('agente')
   const skills = useSkills()

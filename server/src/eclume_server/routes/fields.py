@@ -1,7 +1,7 @@
-"""Campos do usuário: listar, criar, obter, editar e excluir.
+"""The user's fields: list, create, get, edit and delete.
 
-Título e tags são embutidos: não saem nem mudam de tipo. Os valores de cada gravação ficam em
-`field_values`, com a origem (`auto`, `edited`, `accepted`).
+Title and tags are built in: they are never removed and never change type. Each recording's values
+live in `field_values`, with their source (`auto`, `edited`, `accepted`).
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ _NOT_NULL = ("name", "kind", "options", "instructions", "auto_fill", "position")
 
 @router.get("/fields")
 async def list_fields(principal: Reader, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50) -> dict[str, Any]:
-    """Campos do usuário, na ordem da lista (os embutidos começam nela)."""
+    """The user's fields, in list order (the built-in ones start it)."""
     c = t.fields.c
     query = select(t.fields).order_by(c.position, c.id).limit(limit + 1)
     if cursor:
@@ -64,11 +64,11 @@ async def list_fields(principal: Reader, ctx: Ctx, cursor: Cursor = None, limit:
 
 @router.post("/fields", status_code=201)
 async def create_field(body: FieldCreate, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Cria um campo; a chave sai do nome e não muda depois."""
+    """Creates a field; the key comes from the name and never changes afterwards."""
     values = body.model_dump()
     values["options"] = check_options(values["kind"], values["options"])
     async with user_tx(ctx.engine, principal.user_id) as conn:
-        # Serializa as criações da conta: a chave livre é escolhida antes do INSERT.
+        # Serializes the account's creations: the free key is chosen before the INSERT.
         await conn.execute(select(t.users.c.id).where(t.users.c.id == principal.user_id).with_for_update())
         if values["position"] is None:
             values["position"] = await next_position(conn, t.fields)
@@ -92,7 +92,7 @@ class FieldPreviewRequest(BaseModel):
 
 @router.post("/fields/preview", status_code=202)
 async def preview_field(body: FieldPreviewRequest, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Testa a regra de um campo em rascunho em até 3 gravações transcritas, sem gravar nada."""
+    """Tests a draft field's rule on up to 3 transcribed recordings, without storing anything."""
     check_options(body.field.kind, body.field.options)
     ids = list(dict.fromkeys(body.recording_ids))
     async with user_tx(ctx.engine, principal.user_id) as conn:
@@ -104,14 +104,14 @@ async def preview_field(body: FieldPreviewRequest, principal: Writer, ctx: Ctx) 
 
 @router.get("/fields/{field_id}")
 async def get_field_route(field_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Um campo do usuário."""
+    """One of the user's fields."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return field_json(await get_field(conn, field_id))
 
 
 @router.patch("/fields/{field_id}")
 async def update_field(field_id: UUID, body: FieldPatch, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Edita o campo; mudar o tipo descarta os valores já preenchidos (o formato muda)."""
+    """Edits the field; changing the type discards the values already filled (the format changes)."""
     values = body.model_dump(exclude_unset=True)
     if not values:
         raise invalid_field("body", "informe ao menos um campo")
@@ -146,7 +146,7 @@ async def update_field(field_id: UUID, body: FieldPatch, principal: Writer, ctx:
 
 @router.delete("/fields/{field_id}", status_code=204)
 async def delete_field(field_id: UUID, principal: Writer, ctx: Ctx) -> Response:
-    """Exclui o campo e os valores dele; os embutidos ficam (409 `builtin_field`)."""
+    """Deletes the field and its values; built-in ones stay (409 `builtin_field`)."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         current = await get_field(conn, field_id)
         if current["builtin"]:
@@ -155,7 +155,7 @@ async def delete_field(field_id: UUID, principal: Writer, ctx: Ctx) -> Response:
     return Response(status_code=204)
 
 
-# --- valores por gravação ------------------------------------------------------------------------
+# --- values per recording ------------------------------------------------------------------------
 
 
 class FieldValuePut(BaseModel):
@@ -179,7 +179,7 @@ async def _values(conn: AsyncConnection, recording_id: UUID) -> dict[str, Any]:
 
 @router.get("/recordings/{recording_id}/fields")
 async def list_recording_fields(recording_id: UUID, principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """Cada campo do usuário com o valor na gravação e a origem (os sem valor saem com `null`)."""
+    """Each of the user's fields with its value in the recording and the source (none: `null`)."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await _values(conn, recording_id)
 
@@ -188,7 +188,7 @@ async def list_recording_fields(recording_id: UUID, principal: Reader, ctx: Ctx)
 async def put_recording_field(
     recording_id: UUID, field_id: UUID, body: FieldValuePut, principal: Writer, ctx: Ctx
 ) -> dict[str, Any]:
-    """O usuário escreve o valor: origem `edited`, que o preenchimento automático não sobrescreve."""
+    """The user writes the value: source `edited`, which automatic filling does not overwrite."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await _recording(conn, recording_id)
         field = await get_field(conn, field_id)
@@ -206,7 +206,7 @@ async def _accept(conn: AsyncConnection, recording_id: UUID, field_id: UUID | No
 
 @router.post("/recordings/{recording_id}/fields/accept")
 async def accept_recording_fields(recording_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Aceita todos os valores automáticos da gravação (origem `accepted`)."""
+    """Accepts every automatic value of the recording (source `accepted`)."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await _recording(conn, recording_id)
         await _accept(conn, recording_id)
@@ -215,7 +215,7 @@ async def accept_recording_fields(recording_id: UUID, principal: Writer, ctx: Ct
 
 @router.post("/recordings/{recording_id}/fields/{field_id}/accept")
 async def accept_recording_field(recording_id: UUID, field_id: UUID, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Aceita o valor automático do campo; um valor que não é `auto` dá 409 `not_auto`."""
+    """Accepts the field's automatic value; a value that is not `auto` gives 409 `not_auto`."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await _recording(conn, recording_id)
         await get_field(conn, field_id)

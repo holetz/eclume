@@ -1,1 +1,1 @@
-"""Persistência do eclume: engine, transações com RLS, tabelas e migrations."""
+"""eclume persistence: engine, RLS transactions, tables and migrations."""

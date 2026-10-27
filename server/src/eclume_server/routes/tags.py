@@ -1,7 +1,7 @@
-"""Cadastro de tags do usuário e a configuração das tags automáticas.
+"""The user's tag registry and the automatic tag configuration.
 
-As tags são fixas por padrão: o agente só escolhe entre as cadastradas. Renomear, mesclar e excluir
-mudam também as gravações e as tags padrão dos tipos. Contrato em
+Tags are fixed by default: the agent only chooses among the registered ones. Renaming, merging and
+deleting also change the recordings and the agenda types' default tags. Contract in
 docs/standards/code/processamento-automatico.md.
 """
 
@@ -66,7 +66,7 @@ class TagPatch(BaseModel):
 
 
 class TagMerge(BaseModel):
-    """Schema `TagMerge`: a tag que fica."""
+    """Schema `TagMerge`: the tag that stays."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -74,7 +74,7 @@ class TagMerge(BaseModel):
 
 
 class TagAssignmentPatch(BaseModel):
-    """Corpo do `PATCH /me/tag-assignment`: os campos enviados mudam, os demais ficam."""
+    """Body of `PATCH /me/tag-assignment`: the fields sent change, the others stay."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -105,7 +105,7 @@ async def _get(conn: AsyncConnection, tag_id: UUID) -> Row:
 
 @router.get("/tags")
 async def list_tags(principal: Reader, ctx: Ctx) -> dict[str, Any]:
-    """O cadastro de tags do usuário, com quantas gravações usam cada uma, em ordem alfabética."""
+    """The user's tag registry, with how many recordings use each one, in alphabetical order."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         rows = (
             (await conn.execute(select(t.tags, _count).order_by(func.lower(t.tags.c.name), t.tags.c.id)))
@@ -117,7 +117,7 @@ async def list_tags(principal: Reader, ctx: Ctx) -> dict[str, Any]:
 
 @router.post("/tags", status_code=201)
 async def create_tag(body: TagCreate, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Cadastra uma tag; o mesmo nome (sem acento e sem caixa) é 409."""
+    """Registers a tag; the same name (ignoring accents and case) is 409."""
     name = body.name.strip()
     if not name:
         raise invalid_field("name", "não pode ser vazio")
@@ -137,7 +137,7 @@ async def create_tag(body: TagCreate, principal: Writer, ctx: Ctx) -> dict[str, 
 
 @router.patch("/tags/{tag_id}")
 async def update_tag(tag_id: UUID, body: TagPatch, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Renomeia (nas gravações e nos tipos também) ou descreve a tag; um nome já usado é 409."""
+    """Renames (in recordings and types too) or describes the tag; a name already in use is 409."""
     values = body.model_dump(exclude_unset=True)
     if not values:
         raise invalid_field("body", "informe ao menos um campo")
@@ -161,7 +161,7 @@ async def update_tag(tag_id: UUID, body: TagPatch, principal: Writer, ctx: Ctx) 
 
 @router.post("/tags/{tag_id}/merge")
 async def merge_tag(tag_id: UUID, body: TagMerge, principal: Writer, ctx: Ctx) -> dict[str, Any]:
-    """Junta a tag a outra: onde havia ela, fica `into` (sem repetir), e ela sai do cadastro."""
+    """Merges the tag into another: wherever it was, `into` stays (without repeating), and it leaves the registry."""
     if body.into == tag_id:
         raise invalid_field("into", "escolha outra tag")
     async with user_tx(ctx.engine, principal.user_id) as conn:
@@ -176,7 +176,7 @@ async def merge_tag(tag_id: UUID, body: TagMerge, principal: Writer, ctx: Ctx) -
 
 @router.delete("/tags/{tag_id}", status_code=204)
 async def delete_tag(tag_id: UUID, principal: Writer, ctx: Ctx) -> Response:
-    """Exclui a tag do cadastro, das gravações e das tags padrão dos tipos."""
+    """Deletes the tag from the registry, from the recordings and from the types' default tags."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         current = await _get(conn, tag_id)
         await replace_everywhere(conn, current["name"], None)
@@ -184,11 +184,11 @@ async def delete_tag(tag_id: UUID, principal: Writer, ctx: Ctx) -> Response:
     return Response(status_code=204)
 
 
-# --- configuração das tags automáticas ------------------------------------------------------------
+# --- automatic tag configuration -----------------------------------------------------------------
 
 
 async def _assignment(conn: AsyncConnection, user_id: UUID) -> dict[str, Any]:
-    """Schema `TagAssignment`: o automático e a regra do embutido Tags, o modo e o limite."""
+    """Schema `TagAssignment`: the automatic switch and the rule of the built-in Tags, the mode and the limit."""
     field = (await builtin_fields(conn, user_id))["tags"]
     mode, limit = (
         await conn.execute(select(t.users.c.tag_mode, t.users.c.tag_new_limit).where(t.users.c.id == user_id))
@@ -198,7 +198,7 @@ async def _assignment(conn: AsyncConnection, user_id: UUID) -> dict[str, Any]:
         "auto_fill": field["auto_fill"],
         "instructions": field["instructions"],
         "mode": mode,
-        # No modo fixo o limite fica guardado para quando o autogerenciado voltar.
+        # In fixed mode the limit is kept for when self-managed mode comes back.
         "new_limit": max(limit, 1),
         "catalog_count": total,
         "catalog_limit": MAX_CATALOG,
@@ -207,14 +207,14 @@ async def _assignment(conn: AsyncConnection, user_id: UUID) -> dict[str, Any]:
 
 @router.get("/me/tag-assignment")
 async def get_tag_assignment(principal: Member, ctx: Ctx) -> dict[str, Any]:
-    """Como o agente atribui as tags: ligado ou não, a regra geral, o modo e o limite de tags novas."""
+    """How the agent assigns tags: on or off, the general rule, the mode and the limit of new tags."""
     async with user_tx(ctx.engine, principal.user_id) as conn:
         return await _assignment(conn, principal.user_id)
 
 
 @router.patch("/me/tag-assignment")
 async def patch_tag_assignment(body: TagAssignmentPatch, principal: Member, ctx: Ctx) -> dict[str, Any]:
-    """Muda a configuração; vale para as próximas transcrições."""
+    """Changes the configuration; it applies to the next transcriptions."""
     values = body.model_dump(exclude_unset=True)
     if not values:
         raise invalid_field("body", "informe ao menos um campo")

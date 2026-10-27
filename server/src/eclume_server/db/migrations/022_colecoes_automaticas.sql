@@ -1,12 +1,12 @@
--- 022_colecoes_automaticas — o agente põe a gravação nas coleções pela regra de cada uma
+-- 022_colecoes_automaticas — the agent puts the recording into collections by each one's rule
 -- (holetz/eclume#77).
 --
--- A coleção ganha a regra ("Quando incluir") e o interruptor "Incluir automaticamente"; o
--- `fill_fields` lê as coleções automáticas com regra, o tipo de agenda e os participantes (pessoas
--- ligadas aos locutores, com empresa, área, cargo e tags de pessoa) e escolhe as coleções na mesma
--- chamada dos campos. `recordings.collections_origin` diz de quem é a lista: `auto` (o agente),
--- `edited` (o usuário mexeu; o agente não toca mais) ou nula (vinda do envio, ou ainda sem escolha:
--- o agente só soma). Padrões em docs/standards/code/processamento-automatico.md.
+-- The collection gains the rule ("Quando incluir") and the "Incluir automaticamente" switch; the
+-- `fill_fields` reads the automatic collections with a rule, the agenda type and the participants (people
+-- linked to the speakers, with company, department, job title and person tags) and chooses the collections in the same
+-- call as the fields. `recordings.collections_origin` says whose list it is: `auto` (the agent),
+-- `edited` (the user changed it; the agent no longer touches it) or null (from the upload, or no choice yet:
+-- the agent only adds). Patterns in docs/standards/code/processamento-automatico.md.
 
 ALTER TABLE collections
     ADD COLUMN instructions  text NOT NULL DEFAULT '' CHECK (char_length(instructions) <= 4000),

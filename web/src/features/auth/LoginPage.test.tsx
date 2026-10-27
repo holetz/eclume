@@ -20,7 +20,7 @@ async function fillLogin(password = 'segredo-forte') {
 }
 
 describe('login', () => {
-  it('rota protegida sem sessão leva ao login e volta para ela depois', async () => {
+  it('a protected route without a session leads to the login and returns to it afterwards', async () => {
     let loggedIn = false
     const http = mockFetch({
       'GET /api/v1/me': () => (loggedIn ? fixtures.me() : problem('unauthorized', 401)),
@@ -37,7 +37,7 @@ describe('login', () => {
     expect(body).toEqual({ email: 'mariana.couto@example.com', password: 'segredo-forte' })
   })
 
-  it('entrar com outra conta apaga o cache e os rascunhos da anterior; a mesma conta os reencontra', async () => {
+  it('signing in with another account clears the previous one cache and drafts; the same account finds them again', async () => {
     const draft = 'eclume-resumo-rascunho:gravacao-da-outra'
     for (const [previous, kept] of [
       ['outra-conta', false],
@@ -65,7 +65,7 @@ describe('login', () => {
     }
   })
 
-  it('um 401 com a sessão aberta apaga o cache de usuário e mantém os rascunhos da aba', async () => {
+  it('a 401 with the session open clears the user cache and keeps the tab drafts', async () => {
     const draft = 'eclume-resumo-rascunho:gravacao-1'
     window.sessionStorage.setItem(draft, '{"base_version":1,"content_md":"# Meu"}')
     let loggedIn = true
@@ -80,7 +80,7 @@ describe('login', () => {
     expect(window.sessionStorage.getItem(draft)).not.toBeNull()
   })
 
-  it('credencial errada mostra o erro sem sair da página', async () => {
+  it('a wrong credential shows the error without leaving the page', async () => {
     mockFetch({
       'GET /api/v1/me': () => problem('unauthorized', 401),
       'POST /api/v1/auth/login': () => problem('unauthorized', 401),
@@ -91,7 +91,7 @@ describe('login', () => {
     expect(screen.getByRole('heading', { name: 'Entrar' })).toBeInTheDocument()
   })
 
-  it('sair encerra a sessão e volta ao login', async () => {
+  it('signing out ends the session and returns to the login', async () => {
     let loggedIn = true
     const http = mockFetch({
       'GET /api/v1/me': () => (loggedIn ? fixtures.me() : problem('unauthorized', 401)),
@@ -106,7 +106,7 @@ describe('login', () => {
     await waitFor(() => expect(http.requests('POST /api/v1/auth/logout')).toHaveLength(1))
   })
 
-  it('mostra a marca e leva a Criar conta', async () => {
+  it('shows the brand and leads to Criar conta', async () => {
     mockFetch({ 'GET /api/v1/me': () => problem('unauthorized', 401) })
     renderApp('/entrar')
     expect(await screen.findByRole('heading', { level: 2, name: 'Entrar' })).toBeInTheDocument()
@@ -115,7 +115,7 @@ describe('login', () => {
     expect(screen.getByRole('link', { name: 'Criar conta' })).toHaveAttribute('href', '/cadastro')
   })
 
-  it('orienta quem esqueceu a senha e mostra o aviso de senha redefinida', async () => {
+  it('guides whoever forgot the password and shows the password-reset notice', async () => {
     mockFetch({ 'GET /api/v1/me': () => problem('unauthorized', 401) })
     const { router } = renderApp('/entrar')
     expect(await screen.findByText('Esqueceu a senha? Peça um link a quem administra o servidor.')).toBeInTheDocument()
@@ -124,7 +124,7 @@ describe('login', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Senha redefinida. Entre com a nova.')
   })
 
-  it('só aceita volta para caminho interno', () => {
+  it('only accepts returning to an internal path', () => {
     expect(safeReturnPath('/gravacoes/1')).toBe('/gravacoes/1')
     expect(safeReturnPath('//evil.example')).toBe('/')
     expect(safeReturnPath('https://evil.example')).toBe('/')

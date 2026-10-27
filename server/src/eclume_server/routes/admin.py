@@ -1,8 +1,8 @@
-"""Contas de usuário vistas pelo admin (`/admin/users`). Só a sessão de admin.
+"""User accounts as the admin sees them (`/admin/users`). Admin session only.
 
-O admin lê só dados da conta, a contagem de gravações e o uso, nunca o conteúdo; muda `active` e a
-sobreposição das cotas, gera o link de redefinição de senha (nunca vê nem define a senha) e exclui a
-conta. Roda com o papel de conexão: as contas não são do admin para a RLS.
+The admin reads only account data, the recording count and usage, never the content; changes
+`active` and the quota override, generates the password reset link (never sees or sets the password)
+and deletes the account. Runs with the connection role: the accounts are not the admin's for RLS.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ _recording_count = (
 
 
 class UserPatch(BaseModel):
-    """Schema `UserPatch`: `quotas` troca a sobreposição inteira (`null` volta ao padrão)."""
+    """Schema `UserPatch`: `quotas` replaces the whole override (`null` returns to the default)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -53,7 +53,7 @@ class UserPatch(BaseModel):
 
 
 async def admin_user_json(conn: AsyncConnection, ctx: AppContext, row: Row) -> dict[str, Any]:
-    """Schema `AdminUser`: com o uso da conta e a sobreposição das cotas."""
+    """Schema `AdminUser`: with the account's usage and the quota override."""
     return {
         **user_json(row),
         "recording_count": row["recording_count"],
@@ -62,13 +62,13 @@ async def admin_user_json(conn: AsyncConnection, ctx: AppContext, row: Row) -> d
     }
 
 
-def _users() -> Any:  # noqa: ANN401 — Select do SQLAlchemy
+def _users() -> Any:  # noqa: ANN401 — an SQLAlchemy Select
     return select(t.users, _recording_count)
 
 
 @router.get("/users")
 async def list_users(ctx: Ctx, cursor: Cursor = None, limit: Limit = 50) -> dict[str, Any]:
-    """Contas de usuário, da mais nova para a mais antiga."""
+    """User accounts, from the newest to the oldest."""
     query = _users().order_by(t.users.c.created_at.desc(), t.users.c.id.desc()).limit(limit + 1)
     if cursor:
         query = query.where(tuple_(t.users.c.created_at, t.users.c.id) < decode_cursor(cursor))
@@ -80,9 +80,9 @@ async def list_users(ctx: Ctx, cursor: Cursor = None, limit: Limit = 50) -> dict
 
 @router.patch("/users/{user_id}")
 async def update_user(user_id: UUID, body: UserPatch, ctx: Ctx) -> dict[str, Any]:
-    """Desativa ou reativa a conta e troca a sobreposição das cotas.
+    """Deactivate or reactivate the account and replace the quota override.
 
-    Desativar encerra as sessões, revoga os PATs e vence o link de redefinição pendente do usuário.
+    Deactivating ends the sessions, revokes the PATs and expires the user's pending reset link.
     """
     sent = body.model_dump(exclude_unset=True)
     if not sent:
@@ -112,7 +112,7 @@ async def update_user(user_id: UUID, body: UserPatch, ctx: Ctx) -> dict[str, Any
 
 @router.post("/users/{user_id}/password-reset", status_code=201)
 async def create_user_password_reset(user_id: UUID, request: Request, admin: Admin, ctx: Ctx) -> dict[str, Any]:
-    """Link de redefinição de senha da conta, válido por 24 h, com a URL pública do servidor."""
+    """The account's password reset link, valid for 24 h, with the server's public URL."""
     url = server_info(ctx.settings, str(request.base_url))["url"]
     async with system_tx(ctx.engine) as conn:
         active = (await conn.execute(select(t.users.c.active).where(t.users.c.id == user_id))).scalar()
@@ -125,14 +125,14 @@ async def create_user_password_reset(user_id: UUID, request: Request, admin: Adm
 
 @router.delete("/users/{user_id}", status_code=204)
 async def delete_user(user_id: UUID, ctx: Ctx) -> Response:
-    """Exclui a conta e todos os dados dela, como a exclusão pela própria pessoa, sem a senha.
+    """Delete the account and all its data, like the person's own deletion, without the password.
 
-    Os objetos saem do bucket pela fila de exclusão; o e-mail fica livre para um cadastro novo.
+    The objects leave the bucket through the deletion queue; the e-mail becomes free for a new sign-up.
     """
     async with system_tx(ctx.engine) as conn:
         open_jobs = await open_jobs_of(conn, user_id)
         if not await purge_user(conn, user_id):
             raise not_found("Usuário inexistente.")
-    # A GPU não segue transcrevendo o que a conta excluída tinha na fila ou em curso.
+    # The GPU does not keep transcribing what the deleted account had queued or in progress.
     await ctx.queue.request_cancel(open_jobs)
     return Response(status_code=204)

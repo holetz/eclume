@@ -18,8 +18,8 @@ async function openEnvironment() {
   expect(await screen.findByRole('heading', { level: 1, name: 'Ambiente' })).toBeInTheDocument()
 }
 
-describe('tela Ambiente', () => {
-  it('troca tema, densidade e movimento, aplica na hora e guarda neste navegador', async () => {
+describe('Ambiente screen', () => {
+  it('changes theme, density and motion, applies them at once and stores them in this browser', async () => {
     await openEnvironment()
     const user = userEvent.setup()
 
@@ -35,7 +35,7 @@ describe('tela Ambiente', () => {
     expect(document.documentElement).toHaveAttribute('data-motion', 'reduce')
   })
 
-  it('ajusta o expediente sem deixar o fim antes do início', async () => {
+  it('adjusts work hours without letting the end come before the start', async () => {
     await openEnvironment()
     const user = userEvent.setup()
     const start = screen.getByRole('combobox', { name: 'Início' })
@@ -52,7 +52,7 @@ describe('tela Ambiente', () => {
     expect(localStorage.getItem('eclume-expediente')).toBe('6-7')
   })
 
-  it('escolhe a visão de abertura da biblioteca e restaura os padrões', async () => {
+  it('picks the library opening view and restores the defaults', async () => {
     await openEnvironment()
     const user = userEvent.setup()
     const opening = screen.getByRole('radiogroup', { name: 'Abrir a biblioteca em' })
@@ -67,7 +67,7 @@ describe('tela Ambiente', () => {
     expect(document.documentElement).not.toHaveAttribute('data-density')
   })
 
-  it('liga o aviso do navegador só no gesto e explica quando a permissão é negada', async () => {
+  it('turns on the browser notification only on a gesture and explains when permission is denied', async () => {
     let answer: NotificationPermission = 'denied'
     const fake = {
       permission: 'default' as NotificationPermission,
@@ -99,7 +99,7 @@ describe('tela Ambiente', () => {
     expect(localStorage.getItem('eclume-aviso-navegador')).toBeNull()
   })
 
-  it('lista os atalhos de teclado', async () => {
+  it('lists the keyboard shortcuts', async () => {
     await openEnvironment()
     expect(screen.getByText('Abre a ajuda da página em que você está')).toBeInTheDocument()
     expect(screen.getByText('Aproxima ou afasta as horas na semana da biblioteca')).toBeInTheDocument()

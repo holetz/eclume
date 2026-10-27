@@ -1,6 +1,6 @@
-/* Só o que o Design System (.shell, .sidebar, .main) não tem: a barra lateral fixa na altura da
-   tela, o cabeçalho estreito do app (marca e conta) e, em tela estreita, o menu compacto. Vale para o
-   app e o painel admin; o admin não tem conta no cabeçalho e segue com a marca na barra lateral. */
+/* Only what the Design System (.shell, .sidebar, .main) lacks: the sidebar fixed at the screen's
+   height, the app's narrow header (brand and account) and, on a narrow screen, the compact menu. Holds for the
+   app and the admin panel; the admin has no account in the header and keeps the brand in the sidebar. */
 .shell {
   --shell-header: 0px;
   grid-template-areas: 'sidebar main';
@@ -26,7 +26,7 @@
   outline: none;
 }
 
-/* O cabeçalho estreito em qualquer largura: marca à esquerda, conta à direita. */
+/* The narrow header at any width: brand on the left, account on the right. */
 .shell[data-header] {
   --shell-header: 3.25rem;
   grid-template-rows: var(--shell-header) 1fr;

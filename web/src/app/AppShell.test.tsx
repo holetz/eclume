@@ -10,7 +10,7 @@ import { PageHead } from './PageHead'
 import { mockFetch } from '../test/http'
 import { createQueryClient } from './queryClient'
 
-// A fila real, com o "enviando" controlado pelo teste (converter e subir de verdade fica no ImportDialog.test).
+// The real queue, with "sending" controlled by the test (real converting and uploading is in ImportDialog.test).
 const importState = vi.hoisted(() => ({ sending: false }))
 vi.mock('../features/import/useImportQueue', async (original) => {
   const actual = await original<typeof import('../features/import/useImportQueue')>()
@@ -22,7 +22,7 @@ afterEach(() => vi.unstubAllGlobals())
 const member: ShellUser = { name: 'Mariana Couto', email: 'mariana@exemplo.org' }
 
 function renderShell(user = member, onLogout = vi.fn(), at = '/tokens') {
-  // O shell monta a fila de importação, que usa o QueryClient.
+  // The shell mounts the import queue, which uses the QueryClient.
   render(
     <QueryClientProvider client={createQueryClient({ retry: false })}>
       <MemoryRouter initialEntries={[at]}>
@@ -39,20 +39,20 @@ function renderShell(user = member, onLogout = vi.fn(), at = '/tokens') {
   return onLogout
 }
 
-describe('navegação', () => {
+describe('navigation', () => {
   const titles = (entries: { group: string }[]) => entries.map((entry) => entry.group)
   const labels = (entries: { items: { label: string }[] }[]) => entries.flatMap((entry) => entry.items.map((i) => i.label))
 
-  it('agrupa em Agente, Gravações, Organizar (dados) e Regras, e o resto nos menus do cabeçalho', () => {
+  it('groups into Agente, Gravações, Organizar (data) and Regras, and the rest in the header menus', () => {
     const { main, header: more } = navGroups()
     expect(titles(main)).toEqual(['Agente', 'Gravações', 'Organizar', 'Regras'])
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
-    // Na ordem do NAV_ITEMS: as specs donas ligam os itens delas sem mudar a ordem. O destacado não
-    // pertence a grupo: a barra lateral o desenha antes deles.
+    // In NAV_ITEMS order: the owning specs enable their items without changing the order. The featured
+    // item belongs to no group: the sidebar draws it before them.
     const enabled = (section: string) =>
       NAV_ITEMS.filter((i) => i.enabled && !i.featured && i.section === section).map((i) => i.label)
     expect(labels(main)).toEqual(enabled('main'))
-    // Importar é o modal da biblioteca; a coleção fica em Organizar.
+    // Import is the library's modal; the collection sits in Organizar.
     expect(labels(main)).toEqual([
       'Conversas',
       'Habilidades',
@@ -69,21 +69,21 @@ describe('navegação', () => {
     expect(labels(more)).toEqual(expect.arrayContaining(['Ambiente', 'Tokens de acesso', 'App desktop', 'Central de ajuda']))
   })
 
-  it('Agente é o item destacado, primeiro da lista e fora dos grupos, na rota /agente', () => {
+  it('Agente is the featured item, first in the list and outside the groups, on the /agente route', () => {
     expect(NAV_ITEMS[0]).toMatchObject({ to: '/agente', label: 'Agente', featured: true, section: 'main' })
     expect(featuredItem()).toBe(NAV_ITEMS[0])
     expect(labels(navGroups().main)).not.toContain('Agente')
     expect(featuredItem(NAV_ITEMS.map((item) => ({ ...item, enabled: !item.featured })))).toBeUndefined()
   })
 
-  it('deixa fora os itens desligados e o painel admin (conta e login próprios)', () => {
+  it('leaves out the disabled items and the admin panel (own account and login)', () => {
     const { main, header: more } = navGroups()
     const off = NAV_ITEMS.map((item) => ({ ...item, enabled: item.label !== 'Campos personalizados' }))
     expect(labels(Object.values(navGroups(off)).flat())).not.toContain('Campos personalizados')
     expect(labels([...main, ...more])).not.toContain('Painel admin')
   })
 
-  it('registra cada área na rota do mapa de telas', () => {
+  it('registers each area on the route of the screen map', () => {
     const all = NAV_ITEMS.map((item) => ({ ...item, enabled: true }))
     const { main, header: more } = navGroups(all)
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
@@ -101,7 +101,7 @@ describe('navegação', () => {
     })
   })
 
-  it('acende a Biblioteca também na página da gravação', () => {
+  it('lights Biblioteca on the recording page too', () => {
     const library = NAV_ITEMS.find((item) => item.label === 'Biblioteca')!
     const people = NAV_ITEMS.find((item) => item.label === 'Pessoas')!
     expect(isItemActive(library, '/')).toBe(true)
@@ -111,7 +111,7 @@ describe('navegação', () => {
     expect(isItemActive(people, '/pessoasx')).toBe(false)
   })
 
-  it('o Agente acende na conversa, e Conversas só na lista de todas', () => {
+  it('Agente lights on a conversation, and Conversas only on the list of all of them', () => {
     const agent = NAV_ITEMS.find((item) => item.label === 'Agente')!
     const sessions = NAV_ITEMS.find((item) => item.label === 'Conversas')!
     expect(isItemActive(agent, '/agente')).toBe(true)
@@ -121,7 +121,7 @@ describe('navegação', () => {
     expect(isItemActive(sessions, '/agente/01928f3a')).toBe(false)
   })
 
-  it('Habilidades fica no grupo Agente e não acende o destacado', () => {
+  it('Habilidades sits in the Agente group and does not light the featured item', () => {
     const agent = NAV_ITEMS.find((item) => item.label === 'Agente')!
     const skills = NAV_ITEMS.find((item) => item.label === 'Habilidades')!
     expect(skills.group).toBe('Agente')
@@ -134,15 +134,15 @@ describe('navegação', () => {
 describe('AppShell', () => {
   afterEach(() => document.documentElement.removeAttribute('data-theme'))
 
-  it('mostra os grupos na ordem', () => {
+  it('shows the groups in order', () => {
     renderShell()
     const nav = screen.getByRole('navigation', { name: 'Principal' })
-    // O <details> também tem o papel group; os grupos de links são os rotulados pelo título.
+    // The <details> also has the group role; the link groups are the ones labelled by their title.
     const titles = within(nav)
       .getAllByRole('group')
       .filter((group) => group.hasAttribute('aria-labelledby'))
       .map((group) => document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent)
-    // Configurações e ajuda saíram da barra lateral: moram nos menus do cabeçalho.
+    // Settings and help left the sidebar: they live in the header menus.
     expect(titles).toEqual(['Agente', 'Gravações', 'Organizar', 'Regras'])
     expect(within(nav).queryByText('Configurações e ajuda')).not.toBeInTheDocument()
     for (const item of NAV_ITEMS.filter((i) => !i.enabled)) {
@@ -150,7 +150,7 @@ describe('AppShell', () => {
     }
   })
 
-  it('Agente abre a barra lateral, acima dos grupos, com ícone, e acende na própria rota', () => {
+  it('Agente opens the sidebar, above the groups, with an icon, and lights on its own route', () => {
     renderShell(member, vi.fn(), '/agente')
     const nav = screen.getByRole('navigation', { name: 'Principal' })
     const [first] = within(nav).getAllByRole('link')
@@ -159,7 +159,7 @@ describe('AppShell', () => {
     expect(first).toHaveClass('btn', 'btn-primary')
     expect(first).toHaveAttribute('aria-current', 'page')
     expect(first.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
-    // Vem antes do primeiro grupo e não aparece dentro de nenhum.
+    // It comes before the first group and appears inside none.
     const firstGroup = within(nav).getByRole('group', { name: 'Agente' })
     expect(first.compareDocumentPosition(firstGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(firstGroup).queryByRole('link', { name: 'Agente' })).not.toBeInTheDocument()
@@ -168,7 +168,7 @@ describe('AppShell', () => {
     expect(within(nav).queryByRole('link', { name: 'Perguntar' })).not.toBeInTheDocument()
   })
 
-  it('Agente perde o destaque, não o lugar, enquanto a conta não tem gravação', async () => {
+  it('Agente loses its emphasis, not its place, while the account has no recording', async () => {
     mockFetch({ 'GET /api/v1/recordings': () => ({ items: [], next_cursor: null }) })
     renderShell(member, vi.fn(), '/pessoas')
     const nav = screen.getByRole('navigation', { name: 'Principal' })
@@ -178,19 +178,19 @@ describe('AppShell', () => {
     expect(first).not.toHaveClass('btn-primary')
   })
 
-  it('Agente não acende fora da rota /agente', () => {
+  it('Agente does not light outside the /agente route', () => {
     renderShell(member, vi.fn(), '/pessoas')
     const nav = screen.getByRole('navigation', { name: 'Principal' })
     expect(within(nav).getByRole('link', { name: 'Agente' })).not.toHaveAttribute('aria-current')
   })
 
-  it('não mostra o painel admin', () => {
+  it('does not show the admin panel', () => {
     renderShell()
     expect(screen.queryByRole('link', { name: 'Painel admin' })).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Gravações' })).toBeInTheDocument()
   })
 
-  it('marca a página corrente, tem skip link, mostra o usuário no cabeçalho e sai', async () => {
+  it('marks the current page, has a skip link, shows the user in the header and logs out', async () => {
     const onLogout = renderShell(member, vi.fn(), '/pessoas')
     const nav = screen.getByRole('navigation', { name: 'Principal' })
     expect(within(nav).getByRole('link', { name: 'Pessoas' })).toHaveAttribute('aria-current', 'page')
@@ -205,7 +205,7 @@ describe('AppShell', () => {
     expect(onLogout).toHaveBeenCalled()
   })
 
-  it('com envio em andamento, Sair pede confirmação antes de encerrar a sessão', async () => {
+  it('with an upload in progress, Sair asks for confirmation before ending the session', async () => {
     importState.sending = true
     try {
       const onLogout = renderShell()
@@ -225,13 +225,13 @@ describe('AppShell', () => {
     }
   })
 
-  it('na gravação, a Biblioteca fica marcada como no frame', () => {
+  it('on a recording, Biblioteca stays marked as in the frame', () => {
     renderShell(member, vi.fn(), '/gravacoes/01928f3a-1c00-7a00-8000-000000000401')
     const nav = screen.getByRole('navigation', { name: 'Principal' })
     expect(within(nav).getByRole('link', { name: 'Biblioteca' })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('a engrenagem abre Minhas configurações e navega sem mexer na barra lateral', async () => {
+  it('the gear opens Minhas configurações and navigates without touching the sidebar', async () => {
     renderShell(member, vi.fn(), '/pessoas')
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Configurações' }))
@@ -244,7 +244,7 @@ describe('AppShell', () => {
       'Tokens de acesso',
       'Ambiente',
     ])
-    // Agrupada por natureza: cada parte abre com um rótulo que o teclado não foca.
+    // Grouped by nature: each part opens with a label the keyboard does not focus.
     expect(within(menu).getAllByRole('separator').map((sep) => sep.getAttribute('aria-label'))).toEqual([
       'Conta e privacidade',
       'Aparelhos',
@@ -260,7 +260,7 @@ describe('AppShell', () => {
     expect(within(nav).queryByRole('link', { current: 'page' })).not.toBeInTheDocument()
   })
 
-  it('o botão de ajuda abre a ajuda da página ou leva à central', async () => {
+  it('the help button opens the page help or goes to the help center', async () => {
     renderShell()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Ajuda' }))
@@ -270,7 +270,7 @@ describe('AppShell', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
-  it('abre e fecha o menu compacto', async () => {
+  it('opens and closes the compact menu', async () => {
     renderShell()
     const button = screen.getByRole('button', { name: 'Menu' })
     expect(button).toHaveAttribute('aria-expanded', 'false')
@@ -281,8 +281,8 @@ describe('AppShell', () => {
   })
 })
 
-describe('menu compacto acessível', () => {
-  it('abrir foca o primeiro link, Esc fecha e devolve o foco ao Menu, e o link da rota atual fecha', async () => {
+describe('accessible compact menu', () => {
+  it('opening focuses the first link, Esc closes and returns focus to Menu, and the current route link closes', async () => {
     const user = userEvent.setup()
     renderShell(member, vi.fn(), '/pessoas')
     const button = screen.getByRole('button', { name: 'Menu' })
@@ -301,8 +301,8 @@ describe('menu compacto acessível', () => {
   })
 })
 
-describe('PageHead e 404', () => {
-  it('mostra kicker, título e ações, e dá o título da aba', () => {
+describe('PageHead and 404', () => {
+  it('shows kicker, title and actions, and sets the tab title', () => {
     render(<PageHead kicker="Organizar" title="Pessoas" actions={<button type="button">Adicionar</button>} />)
     expect(screen.getByRole('heading', { level: 1, name: 'Pessoas' })).toBeInTheDocument()
     expect(screen.getByText('Organizar')).toHaveClass('kicker')
@@ -310,7 +310,7 @@ describe('PageHead e 404', () => {
     expect(document.title).toBe('Pessoas · eclume')
   })
 
-  it('uma rota inexistente mostra a página não encontrada dentro do shell', () => {
+  it('an unknown route shows the not-found page inside the shell', () => {
     renderShell(member, vi.fn(), '/nao-existe')
     const main = screen.getByRole('main')
     expect(within(main).getByRole('heading', { level: 1, name: 'Página não encontrada' })).toBeInTheDocument()
@@ -319,7 +319,7 @@ describe('PageHead e 404', () => {
   })
 })
 
-describe('foco na troca de rota', () => {
+describe('focus on route change', () => {
   function renderPages() {
     render(
       <QueryClientProvider client={createQueryClient({ retry: false })}>
@@ -340,7 +340,7 @@ describe('foco na troca de rota', () => {
     )
   }
 
-  it('não move o foco na primeira carga, foca o h1 da página nova e não move numa troca só de busca', async () => {
+  it('does not move focus on first load, focuses the new page h1 and does not move on a search-only change', async () => {
     renderPages()
     expect(screen.getByRole('heading', { level: 1, name: 'Tokens' })).not.toHaveFocus()
 
@@ -348,8 +348,8 @@ describe('foco na troca de rota', () => {
     await userEvent.click(within(nav).getByRole('link', { name: 'Pessoas' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'Pessoas' })).toHaveFocus()
 
-    const falas = screen.getByRole('link', { name: 'Falas' })
-    await userEvent.click(falas)
+    const speechTab = screen.getByRole('link', { name: 'Falas' })
+    await userEvent.click(speechTab)
     expect(screen.getByRole('heading', { level: 1, name: 'Pessoas' })).not.toHaveFocus()
   })
 })

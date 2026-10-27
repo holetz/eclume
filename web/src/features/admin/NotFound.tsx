@@ -2,7 +2,7 @@ import { Link } from 'react-router'
 import { AdminPageHead } from './AdminPageHead'
 import { ADMIN_HOME_PATH } from './adminSession'
 
-/** Rota inexistente dentro do painel: continua na moldura do admin. */
+/** A nonexistent route inside the panel: stays in the admin frame. */
 export function NotFound() {
   return (
     <>

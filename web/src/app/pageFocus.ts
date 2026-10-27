@@ -1,6 +1,6 @@
-// A rota corrente depois da primeira troca de rota dentro da moldura (`ShellFrame`), ou `null`
-// antes dela e fora da moldura: o `PageHead` leva o foco ao título quando ela muda. A primeira
-// carga e a troca só de busca não mudam o valor, então não movem o foco.
+// The current route after the first route change inside the frame (`ShellFrame`), or `null`
+// before it and outside the frame: `PageHead` moves focus to the title when it changes. The first
+// load and a search-only change do not change the value, so they do not move focus.
 import { createContext, useContext } from 'react'
 
 export const NavigatedPathContext = createContext<string | null>(null)

@@ -1,10 +1,10 @@
--- 019_atribuicao_automatica_de_locutores — a voz liga o locutor à pessoa sozinha, acima de um limiar
--- que cada usuário escolhe.
+-- 019_atribuicao_automatica_de_locutores — the voice links the speaker to the person on its own, above a threshold
+-- each user chooses.
 --
--- `users` guarda a preferência: ligada por padrão, mas só vale com a identificação por voz ligada na
--- plataforma. `speakers.auto_score` marca o vínculo que a voz fez (a pontuação dele) e fica `NULL`
--- no vínculo que uma pessoa fez ou confirmou: só o confirmado reforça a impressão de voz.
--- Regras em docs/standards/code/identificacao-por-voz.md.
+-- `users` keeps the preference: on by default, but it only applies with voice identification on in the
+-- platform. `speakers.auto_score` marks the link the voice made (its score) and stays `NULL`
+-- on a link a person made or confirmed: only the confirmed one reinforces the voiceprint.
+-- Rules in docs/standards/code/identificacao-por-voz.md.
 
 ALTER TABLE users
     ADD COLUMN voice_auto_assign    boolean NOT NULL DEFAULT true,

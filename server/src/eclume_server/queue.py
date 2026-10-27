@@ -1,6 +1,6 @@
-"""Fila arq (Redis) do contrato de jobs: enfileirar `transcribe` e ler o progresso do worker GPU.
+"""The arq (Redis) queue of the job contract: enqueue `transcribe` and read the GPU worker's progress.
 
-Contrato em docs/standards/api/jobs-transcricao.md.
+Contract in docs/standards/api/jobs-transcricao.md.
 """
 
 from __future__ import annotations
@@ -17,18 +17,18 @@ if TYPE_CHECKING:
     from uuid import UUID
 
 GPU_QUEUE = "eclume:gpu"
-# Ingestão, falhas do worker GPU, purgas e crons: não divide vaga com chamada a agente.
+# Ingestion, GPU worker failures, purges and crons: it shares no slot with an agent call.
 DEFAULT_QUEUE = "eclume:default"
-# Jobs por agente (tipo de agenda, campos, resumo, chats e pré-visualizações), no worker de agentes.
+# Agent jobs (agenda type, fields, summary, chats and previews), in the agent worker.
 AGENT_QUEUE = "eclume:agents"
-# Heartbeat do worker GPU (hash com TTL), lido pela saúde do painel admin.
+# The GPU worker heartbeat (a hash with a TTL), read by the admin panel's health.
 GPU_HEALTH_KEY = "eclume:gpu:health"
-# `updated_at` do último heartbeat visto, gravado pelo cron `reap_stalled_jobs`: o "fora do ar desde".
+# `updated_at` of the last heartbeat seen, written by the `reap_stalled_jobs` cron: the "down since".
 GPU_LAST_SEEN_KEY = "eclume:gpu:last_seen"
 DEFAULT_LANGUAGE = "pt"
 AUTO_LANGUAGE = "auto"
 
-# Etapas do worker GPU → `Job.stage` do contrato v1.
+# GPU worker stages → contract v1 `Job.stage`.
 _STAGES = {
     "download": "asr",
     "preprocess": "preprocessing",
@@ -41,44 +41,44 @@ _STAGES = {
 
 
 def transcribe_job_id(recording_id: UUID | str, revision: int) -> str:
-    """`_job_id` do `transcribe`: um por gravação e revisão."""
+    """The `transcribe` `_job_id`: one per recording and revision."""
     return f"transcribe:{recording_id}:{revision}"
 
 
 def step_job_id(job: str, recording_id: UUID | str, revision: int) -> str:
-    """`_job_id` de uma etapa do pipeline (`fill_fields`, `detect_agenda_type`): uma por revisão."""
+    """The `_job_id` of a pipeline step (`fill_fields`, `detect_agenda_type`): one per revision."""
     return f"{job}:{recording_id}:{revision}"
 
 
 def summarize_job_id(summary_id: UUID | str) -> str:
-    """`_job_id` do `summarize`: um por resumo."""
+    """The `summarize` `_job_id`: one per summary."""
     return f"summarize:{summary_id}"
 
 
 def summary_chat_job_id(message_id: UUID | str) -> str:
-    """`_job_id` do `summary_chat`: um por resposta do chat."""
+    """The `summary_chat` `_job_id`: one per chat reply."""
     return f"summary_chat:{message_id}"
 
 
-# Pedido de cancelamento de um `transcribe`, que o worker GPU confere (cooperativo).
+# Cancellation request of a `transcribe`, which the GPU worker checks (cooperative).
 CANCEL_TTL_S = 7 * 24 * 3600
 
 
 def cancel_key(recording_id: UUID | str, revision: int) -> str:
-    """Chave que pede ao worker GPU para parar o `transcribe` da revisão."""
+    """Key that asks the GPU worker to stop the revision's `transcribe`."""
     return f"eclume:cancel:{recording_id}:{revision}"
 
 
 def progress_key(recording_id: UUID | str) -> str:
-    """Hash de progresso que o worker GPU grava."""
+    """Progress hash the GPU worker writes."""
     return f"eclume:progress:{recording_id}"
 
 
 def return_revision(job: str, recording_id: UUID | str, job_id: str | None) -> int | None:
-    """A revisão do `_job_id` `{job}:{recording_id}:{revision}` de um job de retorno do worker GPU.
+    """The revision of the `_job_id` `{job}:{recording_id}:{revision}` of a GPU worker return job.
 
-    `None` quando o id não tem essa forma (worker antigo, id aleatório do arq): vale a regra antiga,
-    o job mais recente da gravação.
+    `None` when the id does not have that shape (an old worker, a random arq id): the old rule
+    holds, the recording's most recent job.
     """
     prefix = f"{job}:{recording_id}:"
     if not job_id or not job_id.startswith(prefix):
@@ -90,7 +90,7 @@ def return_revision(job: str, recording_id: UUID | str, job_id: str | None) -> i
 
 
 def progress_of_revision(raw: dict[str, str] | None, revision: int) -> dict[str, str] | None:
-    """O hash de progresso, se for da revisão; o hash sem `revision` (worker antigo) vale."""
+    """The progress hash, if it belongs to the revision; a hash without `revision` (an old worker) counts."""
     if not raw or raw.get("revision", str(revision)) != str(revision):
         return None
     return raw
@@ -117,15 +117,15 @@ def _speaker_limits(
 
 
 def transcribe_options(
-    platform: Any,  # noqa: ANN401 — linha de platform_settings
+    platform: Any,  # noqa: ANN401 — a platform_settings row
     language: str | None,
     *,
     keep_samples: bool = True,
     speakers: tuple[int | None, int | None] | None = None,
 ) -> dict[str, Any]:
-    """`options` do `transcribe`, da configuração da plataforma e da conta; o worker não lê o banco.
+    """The `transcribe` `options`, from the platform and account settings; the worker does not read the database.
 
-    `speakers` é o par `(min, max)` de locutores que vence os limites do admin (a nota e o pedido);
+    `speakers` is the `(min, max)` pair of speakers that overrides the admin limits (the note and the request);
     an empty side of the pair keeps the platform limit.
     """
     asr = platform["asr"]
@@ -133,7 +133,7 @@ def transcribe_options(
     low, high = _speaker_limits(diarization, speakers)
     chosen = language or asr.get("default_language") or DEFAULT_LANGUAGE
     return {
-        # O ASR recebe o idioma sem região (`pt-BR` → `pt`); `auto` vira `null`, e a engine detecta.
+        # ASR receives the language without a region (`pt-BR` → `pt`); `auto` becomes `null`, and the engine detects.
         "language": None if chosen == AUTO_LANGUAGE else chosen.split("-", 1)[0],
         "min_speakers": low,
         "max_speakers": high,
@@ -145,21 +145,21 @@ def transcribe_options(
         "endpoint_url": asr.get("endpoint_url"),
         "diarize": bool(diarization.get("enabled")),
         "diarization_model": diarization.get("model"),
-        # Impressão de voz só com a identificação por voz ligada na plataforma e a conta guardando
-        # amostras (LGPD).
+        # Voiceprint only with voice identification turned on for the platform and the account keeping
+        # samples (LGPD).
         "embeddings": keep_samples and bool(platform["voice_identification"].get("enabled")),
-        # O tratamento do áudio antes do ASR; um worker antigo ignora a chave.
+        # The audio processing before ASR; an old worker ignores the key.
         "preprocess": platform["preprocessing"],
     }
 
 
 async def enqueue_summary(pool: ArqRedis, summary_id: UUID | str) -> None:
-    """Enfileira o `summarize` de um resumo na fila do worker de agentes."""
+    """Enqueue a summary's `summarize` on the agent worker's queue."""
     await pool.enqueue_job("summarize", str(summary_id), _job_id=summarize_job_id(summary_id), _queue_name=AGENT_QUEUE)
 
 
 def job_progress(raw: dict[str, str] | None) -> tuple[str | None, float] | None:
-    """`(stage, progress de 0 a 1)` do hash de progresso, ou `None` se o worker ainda não começou."""
+    """`(stage, progress from 0 to 1)` of the progress hash, or `None` if the worker has not started yet."""
     if not raw:
         return None
     try:
@@ -170,16 +170,16 @@ def job_progress(raw: dict[str, str] | None) -> tuple[str | None, float] | None:
 
 
 class Queue:
-    """Pool arq compartilhado pela API."""
+    """The arq pool shared by the API."""
 
     def __init__(self, pool: ArqRedis) -> None:
-        """Envolve um pool já aberto."""
+        """Wrap an already open pool."""
         self.pool = pool
 
     @classmethod
     async def connect(cls, redis_url: str) -> Queue:
-        """Abre o pool a partir da URL do Redis."""
-        # Fase A da fila sem pickle (holetz/eclume#94): lê JSON e pickle sem globais; grava pickle.
+        """Open the pool from the Redis URL."""
+        # Phase A of the pickle-free queue (holetz/eclume#94): reads JSON and pickle without globals; writes pickle.
         return cls(
             await create_pool(
                 RedisSettings.from_dsn(redis_url), default_queue_name=DEFAULT_QUEUE, job_deserializer=desserializar
@@ -187,37 +187,37 @@ class Queue:
         )
 
     async def close(self) -> None:
-        """Fecha o pool."""
+        """Close the pool."""
         await self.pool.aclose()
 
     async def enqueue_summarize(self, summary_id: UUID) -> None:
-        """Enfileira `summarize` no worker de agentes; um job por resumo."""
+        """Enqueue `summarize` on the agent worker; one job per summary."""
         await enqueue_summary(self.pool, summary_id)
 
     async def enqueue_summary_chat(self, message_id: UUID) -> None:
-        """Enfileira `summary_chat` no worker de agentes; um job por resposta do chat."""
+        """Enqueue `summary_chat` on the agent worker; one job per chat reply."""
         await self.pool.enqueue_job(
             "summary_chat", str(message_id), _job_id=summary_chat_job_id(message_id), _queue_name=AGENT_QUEUE
         )
 
     async def enqueue_step(self, job: str, recording_id: UUID, revision: int) -> None:
-        """Enfileira uma etapa por agente do pipeline (`detect_agenda_type`), pelo `_job_id` da revisão."""
+        """Enqueue a pipeline agent step (`detect_agenda_type`), by the revision's `_job_id`."""
         await self.pool.enqueue_job(
             job, str(recording_id), revision, _job_id=step_job_id(job, recording_id, revision), _queue_name=AGENT_QUEUE
         )
 
     async def request_cancel(self, jobs: list[tuple[UUID, int]]) -> None:
-        """Pede ao worker GPU para parar os `transcribe` de `(gravação, revisão)`."""
+        """Ask the GPU worker to stop the `transcribe` jobs of `(recording, revision)`."""
         for recording_id, revision in jobs:
             await self.pool.set(cancel_key(recording_id, revision), "1", ex=CANCEL_TTL_S)
 
     async def enqueue_purge_embedding_objects(self, owner_id: UUID | None = None) -> None:
-        """Enfileira a remoção dos `speaker_embeddings.json` da plataforma, ou só da conta, no worker CPU."""
+        """Enqueue on the CPU worker the removal of the `speaker_embeddings.json` of the platform, or of one account only."""
         args = (str(owner_id),) if owner_id is not None else ()
         await self.pool.enqueue_job("purge_embedding_objects", *args, _queue_name=DEFAULT_QUEUE)
 
     async def raw_progress(self, recording_ids: list[UUID]) -> dict[UUID, dict[str, str]]:
-        """Hashes de progresso publicados pelo worker GPU, por gravação (só os presentes)."""
+        """Progress hashes published by the GPU worker, per recording (only those present)."""
         if not recording_ids:
             return {}
         pipe = self.pool.pipeline(transaction=False)
@@ -229,7 +229,7 @@ class Queue:
         }
 
     async def progress(self, open_jobs: dict[UUID, int]) -> dict[UUID, tuple[str | None, float]]:
-        """Progresso publicado pelo worker GPU, por gravação, só o da revisão do job em aberto."""
+        """Progress published by the GPU worker, per recording, only that of the open job's revision."""
         raw = await self.raw_progress(list(open_jobs))
         return {
             recording_id: parsed
@@ -238,7 +238,7 @@ class Queue:
         }
 
     async def depth(self, queue_name: str) -> tuple[int, int]:
-        """`(na fila, rodando)` de uma fila arq: o zset guarda os dois até o job terminar."""
+        """`(queued, running)` of an arq queue: the zset holds both until the job finishes."""
         job_ids = await self.pool.zrange(queue_name, 0, -1)
         if not job_ids:
             return 0, 0
@@ -249,7 +249,7 @@ class Queue:
         return len(job_ids) - running, running
 
     async def gpu_health(self) -> dict[str, str] | None:
-        """Último heartbeat do worker GPU, ou `None` se expirou (worker parado há mais de 45 s)."""
+        """The GPU worker's last heartbeat, or `None` if it expired (worker stopped for more than 45 s)."""
         values = await self.pool.hgetall(GPU_HEALTH_KEY)
         return _decode(values) if values else None
 

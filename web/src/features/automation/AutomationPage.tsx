@@ -23,17 +23,17 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
 
 interface Step {
   title: string
-  /** O que a etapa faz, em uma frase. */
+  /** What the step does, in one sentence. */
   what: string
-  /** A tela que configura a etapa; sem ela, a etapa é da plataforma. */
+  /** The screen that configures the step; without one, the step belongs to the platform. */
   to?: string
   linkLabel?: string
   state: ReactNode
-  /** A chave que se muda aqui mesmo, quando nenhuma outra tela é dona dela. */
+  /** The switch that is changed right here, when no other screen owns it. */
   control?: ReactNode
 }
 
-/** O estado de uma etapa vindo de uma consulta: carregando, erro ou o texto calculado. */
+/** The state of a step coming from a query: loading, error or the computed text. */
 function stateOf<T>(query: UseQueryResult<T>, describe: (data: T) => string): ReactNode {
   if (query.isPending) return 'Carregando…'
   if (query.isError) return <span role="alert">{errorMessage(query.error)}</span>
@@ -60,10 +60,10 @@ function tagState(tags: TagAssignment): string {
 }
 
 /**
- * Processamento automático (pasta própria: lê pessoas, tags, coleções e organize sem criar ciclo
- * entre elas): a visão geral, na ordem do pipeline, do que o eclume faz sozinho depois
- * de cada gravação. Lê o que as telas de cada etapa configuram e leva até elas; só a marcação
- * obrigatória dos locutores, que não tem outra tela, se liga aqui mesmo.
+ * Automatic processing (its own folder: it reads people, tags, collections and organize without
+ * creating a cycle between them): the overview, in pipeline order, of what eclume does on its own
+ * after each recording. It reads what each step's screens configure and links to them; only the
+ * mandatory speaker labelling, which has no other screen, is switched on right here.
  */
 export function AutomationPage() {
   useHelpTopic('automacao')

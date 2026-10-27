@@ -429,60 +429,60 @@
       },
       "title": {
         "displayName": "Title",
-        "purpose": "h3 e títulos de seção."
+        "purpose": "h3 and section titles."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Texto corrido e transcrição."
+        "purpose": "Body text and transcript."
       },
       "control": {
         "displayName": "Control",
-        "purpose": "Campos, rádios e listas."
+        "purpose": "Fields, radios and lists."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Botões."
+        "purpose": "Buttons."
       },
       "nav": {
         "displayName": "Nav",
-        "purpose": "Itens de navegação."
+        "purpose": "Navigation items."
       },
       "kicker": {
         "displayName": "Kicker",
-        "purpose": "Kicker e badge em caixa alta."
+        "purpose": "Uppercase kicker and badge."
       },
       "mono": {
         "displayName": "Mono",
-        "purpose": "Tempos e números tabulares."
+        "purpose": "Times and tabular numbers."
       }
     },
     "shadows": [
       {
         "name": "sm",
         "value": "0px 1px 2px 0px rgb(45 42 38 / 0.14)",
-        "purpose": "Elevação baixa."
+        "purpose": "Low elevation."
       },
       {
         "name": "md",
         "value": "0px 3px 10px 0px rgb(45 42 38 / 0.16)",
-        "purpose": "Menus e popovers."
+        "purpose": "Menus and popovers."
       },
       {
         "name": "lg",
         "value": "0px 12px 32px 0px rgb(45 42 38 / 0.22)",
-        "purpose": "Diálogos e gaveta."
+        "purpose": "Dialogs and drawer."
       },
       {
         "name": "ambient-low",
         "value": "0px 3px 10px 0px rgb(45 42 38 / 0.16)",
-        "purpose": "Separação difusa das mídias: a sombra média."
+        "purpose": "Diffuse separation of the media: the medium shadow."
       }
     ],
     "motion": [
       {
         "name": "standard",
         "value": "150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms",
-        "purpose": "Transição de estado sem mola; o web não anima além de indicadores de progresso."
+        "purpose": "State transition without spring; the web animates nothing beyond progress indicators."
       }
     ],
     "breakpoints": []

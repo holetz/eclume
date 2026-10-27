@@ -1,8 +1,8 @@
--- 018_dispositivo_le_transcricao — a credencial de dispositivo lê transcrições.
+-- 018_dispositivo_le_transcricao — the device credential reads transcripts.
 --
--- O app desktop espelha a biblioteca numa pasta local (resumos em Markdown e transcrições em
--- JSONL); para ler `GET /transcripts` o token `kind: device` ganha `transcripts:read`, e os já
--- emitidos também. Padrão em docs/standards/code/server-mcp-e-dispositivos.md.
+-- The desktop app mirrors the library into a local folder (summaries in Markdown and transcripts in
+-- JSONL); to read `GET /transcripts` the `kind: device` token gains `transcripts:read`, and the ones already
+-- issued too. Pattern in docs/standards/code/server-mcp-e-dispositivos.md.
 
 UPDATE api_tokens SET scopes = array_append(scopes, 'transcripts:read')
 WHERE kind = 'device' AND NOT 'transcripts:read' = ANY (scopes);

@@ -1,8 +1,8 @@
-"""Raiz própria do eclume com restrição de nome (`eclume-server ca gerar`).
+"""eclume's own name-constrained root (`eclume-server ca gerar`).
 
-A chave fica no host para o Caddy emitir intermediários e folhas sozinho; a restrição de nome
-crítica limita o estrago de quem a roubar a se passar pelo próprio servidor
-(docs/standards/code/server-mcp-e-dispositivos.md §Fixação da CA).
+The key stays on the host so Caddy issues intermediates and leaves by itself; the critical name
+constraint limits the damage of whoever steals it to impersonating the server itself
+(`docs/standards/code/server-mcp-e-dispositivos.md` `§Fixação da CA`).
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ if TYPE_CHECKING:
 ROOT_CERT = "raiz.crt"
 ROOT_KEY = "raiz.key"
 ROOT_LIFETIME = timedelta(days=3650)
-# Sem subtree de um tipo, nomes desse tipo ficam livres (RFC 5280): DNS e e-mail entram sempre,
-# com um nome reservado que não resolve quando a instalação não usa nenhum.
+# With no subtree of a type, names of that type are free (RFC 5280): DNS and e-mail always go in,
+# with a reserved name that does not resolve when the installation uses none.
 UNUSED_DOMAIN = "eclume.invalid"
-# Raiz descartável da prova nos clientes: aceita o primeiro endereço e recusa o segundo.
+# Disposable root for the proof in the clients: accepts the first address and refuses the second.
 PROOF_INSIDE = "127.0.0.1"
 PROOF_OUTSIDE = "127.0.0.2"
 PROOF_LIFETIME = timedelta(days=30)
@@ -36,7 +36,7 @@ _BACKDATE = timedelta(minutes=5)
 
 
 class CaError(Exception):
-    """Falha da geração, com mensagem para o operador."""
+    """A generation failure, with a message for the operator."""
 
 
 def _ip_network(value: str) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
@@ -44,11 +44,11 @@ def _ip_network(value: str) -> ipaddress.IPv4Network | ipaddress.IPv6Network | N
         address = ipaddress.ip_address(value)
     except ValueError:
         return None
-    return ipaddress.ip_network(address)  # /32 ou /128
+    return ipaddress.ip_network(address)  # /32 or /128
 
 
 def permitted_names(host: str, names: list[str]) -> list[x509.GeneralName]:
-    """Subtrees permitidas: cada IP exato e cada nome DNS de `host` e `names`, mais o e-mail inútil."""
+    """Permitted subtrees: each exact IP and each DNS name of `host` and `names`, plus the useless e-mail."""
     ips: list[x509.GeneralName] = []
     dns: list[x509.GeneralName] = []
     for value in dict.fromkeys(v.strip().lower() for v in [host, *names] if v.strip()):
@@ -63,7 +63,7 @@ def permitted_names(host: str, names: list[str]) -> list[x509.GeneralName]:
 
 
 def split_names(raw: str | None) -> list[str]:
-    """`ECLUME_CA_NOMES`: nomes ou IPs separados por vírgula ou espaço."""
+    """`ECLUME_CA_NOMES`: names or IPs separated by comma or space."""
     return [n for n in re.split(r"[,\s]+", raw or "") if n]
 
 
@@ -93,7 +93,7 @@ def _root(key: ec.EllipticCurvePrivateKey, permitted: list[x509.GeneralName], no
             critical=True,
         )
         .add_extension(x509.NameConstraints(permitted_subtrees=permitted, excluded_subtrees=None), critical=True)
-        # Na raiz, para o Windows não aceitá-la em assinatura de código nem S/MIME.
+        # On the root, so Windows does not accept it for code signing or S/MIME.
         .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
         .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
         .sign(key, hashes.SHA256())
@@ -146,12 +146,12 @@ def _write_private(path: Path, data: bytes) -> None:
 
 
 def sha256(cert: x509.Certificate) -> str:
-    """Impressão digital no formato do descritor (`ca_sha256`)."""
+    """Fingerprint in the descriptor format (`ca_sha256`)."""
     return hashlib.sha256(cert.public_bytes(serialization.Encoding.DER)).hexdigest()
 
 
 def generate(folder: Path, host: str, names: list[str], now: datetime | None = None) -> x509.Certificate:
-    """Cria `raiz.crt` e `raiz.key` em `folder`; recusa sobrescrever uma raiz que já existe."""
+    """Create `raiz.crt` and `raiz.key` in `folder`; refuse to overwrite a root that already exists."""
     cert_path, key_path = folder / ROOT_CERT, folder / ROOT_KEY
     existing = [p.name for p in (cert_path, key_path) if p.exists()]
     if existing:
@@ -166,9 +166,9 @@ def generate(folder: Path, host: str, names: list[str], now: datetime | None = N
 
 
 def generate_proof(folder: Path, now: datetime | None = None) -> x509.Certificate:
-    """Raiz descartável de `127.0.0.1` e os folhas `dentro` (127.0.0.1) e `fora` (127.0.0.2).
+    """Disposable `127.0.0.1` root and the leaves `dentro` (127.0.0.1) and `fora` (127.0.0.2).
 
-    A chave da raiz não é gravada: a prova só serve para os clientes aceitarem um e recusarem o outro.
+    The root key is not written: the proof only serves for the clients to accept one and refuse the other.
     """
     now = now or datetime.now(UTC)
     folder.mkdir(parents=True, exist_ok=True)

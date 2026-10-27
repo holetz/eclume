@@ -19,14 +19,14 @@ const ANTHROPIC_KEY = 'anthropic_api_key'
 
 const purposeLabel = (purpose: string) => labelOf(PURPOSES, purpose).toLocaleLowerCase('pt-BR')
 
-/** O aviso de segredo faltando; o `anthropic` sem chave própria usa a compartilhada. */
+/** The missing-secret notice; `anthropic` without its own key uses the shared one. */
 function missingSecret(provider: Provider, sharedKeySet: boolean): string | null {
   if (provider.api_key_set || provider.kind === 'ollama') return null
   if (provider.kind === 'anthropic' && sharedKeySet) return null
   return providerSecret(provider.kind).missing
 }
 
-/** Providers de agente da plataforma, para que cada um serve e os segredos que usam. */
+/** The platform's agent providers, what each one serves and the secrets they use. */
 export function AgentsPage() {
   const providers = useProviders()
   const secrets = useSecrets()
@@ -35,7 +35,7 @@ export function AgentsPage() {
   const items = providers.data?.items ?? []
   const anthropic = secrets.data?.items.find((secret) => secret.name === ANTHROPIC_KEY)
   const sharedKeySet = anthropic?.is_set ?? false
-  // Relido da lista: depois de gravar o segredo, o painel mostra o estado novo.
+  // Reread from the list: after saving the secret, the panel shows the new state.
   const current = editing === 'new' ? null : items.find((provider) => provider.id === editing)
   const owners = new Map(items.flatMap((provider) => provider.used_for.map((purpose) => [purpose, provider] as const)))
   const orphans = PURPOSES.filter((purpose) => !owners.get(purpose.value as Purpose)?.enabled)
@@ -151,7 +151,7 @@ function ProviderPanel({ provider, owners, onDone }: ProviderPanelProps) {
   const [baseUrl, setBaseUrl] = useState(provider?.base_url ?? '')
   const [apiKey, setApiKey] = useState('')
   const [enabled, setEnabled] = useState(provider?.enabled ?? true)
-  // Um provider novo assume, marcadas, as finalidades que ninguém tem (o que o server faria sem `used_for`).
+  // A new provider takes, checked, the purposes nobody has (what the server would do without `used_for`).
   const [usedFor, setUsedFor] = useState<Purpose[]>(
     () => provider?.used_for ?? PURPOSES.map((p) => p.value as Purpose).filter((purpose) => !owners.has(purpose)),
   )

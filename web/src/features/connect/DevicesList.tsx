@@ -12,7 +12,7 @@ type Token = Schemas['Token']
 const dayMonth = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' })
 const hourMinute = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
-/** "hoje 09:58", "ontem 16:40" ou "12/09 09:58". */
+/** "hoje 09:58", "ontem 16:40" or "12/09 09:58". */
 function formatSync(iso: string, now: Date = new Date()): string {
   const date = new Date(iso)
   const days = Math.round(
@@ -28,11 +28,11 @@ interface DevicesListProps {
   title: string
   platforms: readonly DevicePlatform[]
   empty: string
-  /** O que acontece com o aparelho desvinculado, no diálogo de confirmação. */
+  /** What happens to the unpaired device, in the confirmation dialog. */
   unpairMessage: string
 }
 
-/** Os aparelhos vinculados destas plataformas, com Desvincular (revoga a credencial do aparelho). */
+/** The paired devices of these platforms, with Desvincular (revokes the device's credential). */
 export function DevicesList({ title, platforms, empty, unpairMessage }: DevicesListProps) {
   const devices = useDeviceTokens()
   const [unpairing, setUnpairing] = useState<Token | null>(null)

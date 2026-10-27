@@ -1,7 +1,7 @@
-"""Configuração em runtime da plataforma (`platform_settings`) e segredos cifrados (`platform_secrets`).
+"""Runtime platform settings (`platform_settings`) and encrypted secrets (`platform_secrets`).
 
-Regras em docs/standards/code/server-admin.md: o `PATCH` mescla campo a campo por bloco, valida o
-estado resultante e vale para os próximos jobs; os segredos só entram, nunca saem pela API.
+Rules in docs/standards/code/server-admin.md: the `PATCH` merges field by field per block, validates
+the resulting state and applies to the next jobs; secrets only go in, never come out through the API.
 """
 
 from __future__ import annotations
@@ -24,16 +24,16 @@ if TYPE_CHECKING:
     from eclume_server.serialize import Row
 
 BLOCKS = ("asr", "diarization", "voice_identification", "preprocessing", "quotas", "retention")
-# O `float16` puro é recusado: a série GTX 16xx dá NaN nele, e a engine o troca (worker-gpu.md).
+# Plain `float16` is refused: the GTX 16xx series yields NaN on it, and the engine swaps it (worker-gpu.md).
 COMPUTE_TYPES = ("int8_float16", "int8", "int8_float32", "float32")
-# O único pipeline de diarização que a engine `whisperx-local` sabe carregar.
+# The only diarization pipeline the `whisperx-local` engine knows how to load.
 DIARIZATION_MODELS = ("pyannote/speaker-diarization-community-1",)
-# Segredos que alguém lê: o token do HF vai ao worker GPU; a chave da Anthropic, ao provider sem chave.
-HF_TOKEN = "hf_token"  # noqa: S105 — nome do segredo, não o valor
+# Secrets someone reads: the HF token goes to the GPU worker; the Anthropic key, to the provider with no key.
+HF_TOKEN = "hf_token"  # noqa: S105 — the secret's name, not its value
 ANTHROPIC_API_KEY = "anthropic_api_key"
 KNOWN_SECRETS = (HF_TOKEN, ANTHROPIC_API_KEY)
-# Teto de locutores esperados: uma reunião institucional (comitê, conselho, assembleia) raramente passa de
-# duas dezenas de vozes. Fica bem abaixo do `uint8` do `count` do pyannote (255), que estoura além de 255.
+# Ceiling of expected speakers: an institutional meeting (committee, board, assembly) rarely goes past
+# two dozen voices. It stays well below the `uint8` of pyannote's `count` (255), which overflows past 255.
 MAX_SPEAKERS = 30
 
 
@@ -53,7 +53,7 @@ BaseUrl = Annotated[str | None, AfterValidator(_http_url)]
 def _not_bool(value: object) -> object:
     if isinstance(value, bool):
         msg = "precisa ser um inteiro, não um booleano"
-        raise ValueError(msg)  # noqa: TRY004 — o pydantic só vira 422 com ValueError
+        raise ValueError(msg)  # noqa: TRY004 — pydantic only turns a ValueError into 422
     return value
 
 
@@ -69,20 +69,20 @@ class _Block(BaseModel):
 
 
 class AsrPatch(_Block):
-    """Bloco `asr` do `AdminSettingsPatch`."""
+    """Block `asr` of the `AdminSettingsPatch`."""
 
     engine: Literal["whisperx-local", "openai-compatible", "cpu"] | None = None
     model: str | None = Field(default=None, min_length=1)
     compute_type: Literal[COMPUTE_TYPES] | None = None  # type: ignore[valid-type]
     batch_size: PlainInt | None = Field(default=None, ge=1)
-    # `auto`: a engine detecta o idioma de cada gravação.
+    # `auto`: the engine detects the language of each recording.
     default_language: str | None = Field(default=None, pattern=r"^(auto|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$")
     fallback_model: str | None = Field(default=None, min_length=1)
     endpoint_url: BaseUrl = None
 
 
 class DiarizationPatch(_Block):
-    """Bloco `diarization` do `AdminSettingsPatch`."""
+    """Block `diarization` of the `AdminSettingsPatch`."""
 
     enabled: bool | None = None
     model: Literal[DIARIZATION_MODELS] | None = None  # type: ignore[valid-type]
@@ -91,7 +91,7 @@ class DiarizationPatch(_Block):
 
 
 class DenoisePatch(_Block):
-    """Etapa `denoise` do pré-processamento: RNNoise (ou `afftdn`) com a força de 0 a 1."""
+    """Preprocessing step `denoise`: RNNoise (or `afftdn`) with a strength from 0 to 1."""
 
     enabled: bool | None = None
     method: Literal["rnnoise", "afftdn"] | None = None
@@ -99,7 +99,7 @@ class DenoisePatch(_Block):
 
 
 class LoudnormPatch(_Block):
-    """Etapa `loudnorm` do pré-processamento: normalização de loudness EBU R128."""
+    """Preprocessing step `loudnorm`: EBU R128 loudness normalization."""
 
     enabled: bool | None = None
     target_lufs: PlainFloat | None = Field(default=None, ge=-30, le=-10)
@@ -108,7 +108,7 @@ class LoudnormPatch(_Block):
 
 
 class TrimSilencePatch(_Block):
-    """Etapa `trim_silence` do pré-processamento: corta o silêncio do início e do fim."""
+    """Preprocessing step `trim_silence`: cuts the silence at the start and at the end."""
 
     enabled: bool | None = None
     min_silence_s: PlainFloat | None = Field(default=None, ge=1, le=30)
@@ -116,15 +116,15 @@ class TrimSilencePatch(_Block):
 
 
 class SplitChannelsPatch(_Block):
-    """Etapa `split_channels` do pré-processamento: um canal por pessoa."""
+    """Preprocessing step `split_channels`: one channel per person."""
 
     enabled: bool | None = None
 
 
 class PreprocessingPatch(_Block):
-    """Bloco `preprocessing` do `AdminSettingsPatch`: cada etapa é mesclada campo a campo.
+    """Block `preprocessing` of the `AdminSettingsPatch`: each step is merged field by field.
 
-    A conversão para 16 kHz mono não tem chave: é sempre feita.
+    The conversion to 16 kHz mono has no key: it is always done.
     """
 
     denoise: DenoisePatch | None = None
@@ -134,14 +134,14 @@ class PreprocessingPatch(_Block):
 
 
 class VoiceIdentificationPatch(_Block):
-    """Bloco `voice_identification` do `AdminSettingsPatch`."""
+    """Block `voice_identification` of the `AdminSettingsPatch`."""
 
     enabled: bool | None = None
     suggestion_threshold: PlainFloat | None = Field(default=None, ge=0, le=1)
 
 
 class QuotasPatch(_Block):
-    """Bloco `quotas` do `AdminSettingsPatch` e a sobreposição por conta: `null` é sem limite."""
+    """Block `quotas` of the `AdminSettingsPatch` and the per-account override: `null` is no limit."""
 
     storage_bytes: PlainInt | None = Field(default=None, ge=0)
     file_bytes: PlainInt | None = Field(default=None, ge=0)
@@ -151,13 +151,13 @@ class QuotasPatch(_Block):
 
 
 class RetentionPatch(_Block):
-    """Bloco `retention` do `AdminSettingsPatch`: `audio_max_days` nulo é sem teto."""
+    """Block `retention` of the `AdminSettingsPatch`: a null `audio_max_days` is no ceiling."""
 
     audio_max_days: PlainInt | None = Field(default=None, ge=MIN_DAYS, le=MAX_DAYS)
 
 
 class AdminSettingsPatch(_Block):
-    """Schema `AdminSettingsPatch`: cada bloco é mesclado campo a campo."""
+    """Schema `AdminSettingsPatch`: each block is merged field by field."""
 
     asr: AsrPatch | None = None
     diarization: DiarizationPatch | None = None
@@ -167,7 +167,7 @@ class AdminSettingsPatch(_Block):
     retention: RetentionPatch | None = None
 
 
-# Campos que o schema aceita como `null`; os demais, enviados como `null`, são 422.
+# Fields the schema accepts as `null`; the others, sent as `null`, are 422.
 _NULLABLE = {
     "asr": {"batch_size", "default_language", "fallback_model", "endpoint_url"},
     "diarization": {"min_speakers", "max_speakers"},
@@ -179,7 +179,7 @@ _NULLABLE = {
 
 
 def settings_json(row: Row, updated_by_name: str | None) -> dict[str, Any]:
-    """Schema `AdminSettings`; `updated_by` é a conta de admin."""
+    """Schema `AdminSettings`; `updated_by` is the admin account."""
     body: dict[str, Any] = {block: dict(row[block]) for block in BLOCKS}
     body["voice_identification"] = voice_settings(body["voice_identification"])
     body["updated_at"] = iso(row["updated_at"])
@@ -188,7 +188,7 @@ def settings_json(row: Row, updated_by_name: str | None) -> dict[str, Any]:
 
 
 def changes_of(body: AdminSettingsPatch) -> dict[str, dict[str, Any]]:
-    """Os campos enviados, por bloco, com UUIDs em texto; recusa `null` onde o schema não aceita."""
+    """The fields sent, per block, with UUIDs as text; refuse `null` where the schema does not accept it."""
     sent = body.model_dump(exclude_unset=True, mode="json")
     if not any(sent.get(block) for block in BLOCKS):
         raise invalid_field("body", "informe ao menos um campo")
@@ -206,7 +206,7 @@ def changes_of(body: AdminSettingsPatch) -> dict[str, dict[str, Any]]:
 
 
 def merge(current: dict[str, Any], changes: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Configuração resultante: campo a campo por bloco, e por etapa no `preprocessing`."""
+    """Resulting settings: field by field per block, and per step in `preprocessing`."""
     merged = {block: {**current[block], **changes.get(block, {})} for block in BLOCKS}
     merged["preprocessing"] = {
         step: {**current["preprocessing"].get(step, {}), **changes.get("preprocessing", {}).get(step, {})}
@@ -216,10 +216,10 @@ def merge(current: dict[str, Any], changes: dict[str, dict[str, Any]]) -> dict[s
 
 
 def validate_merged(merged: dict[str, dict[str, Any]], changes: dict[str, dict[str, Any]]) -> None:
-    """Regras entre campos, sobre a configuração resultante.
+    """Cross-field rules, over the resulting settings.
 
-    A regra voz → separação de locutores só vale quando o `PATCH` toca um dos dois blocos: um
-    estado antigo que a quebra não trava a edição de outro bloco.
+    The voice → speaker separation rule only applies when the `PATCH` touches one of the two blocks:
+    an old state that breaks it does not lock the editing of another block.
     """
     asr, diarization = merged["asr"], merged["diarization"]
     if asr.get("engine") == "openai-compatible" and not asr.get("endpoint_url"):
@@ -227,14 +227,14 @@ def validate_merged(merged: dict[str, dict[str, Any]], changes: dict[str, dict[s
     low, high = diarization.get("min_speakers"), diarization.get("max_speakers")
     touches_voice = "voice_identification" in changes or "diarization" in changes
     if touches_voice and merged["voice_identification"].get("enabled") and not diarization.get("enabled"):
-        # A impressão de voz é por locutor: sem a separação, não há o que comparar.
+        # The voiceprint is per speaker: without the separation, there is nothing to compare.
         raise invalid_field("voice_identification.enabled", "exige a separação de locutores ligada")
     if low is not None and high is not None and low > high:
         raise invalid_field("diarization.min_speakers", "não pode passar de max_speakers")
 
 
 async def secret_encrypted(conn: AsyncConnection, name: str) -> str | None:
-    """Texto cifrado do segredo da plataforma, ou `None`; leia com o papel de conexão."""
+    """Ciphertext of the platform secret, or `None`; read it with the connection role."""
     return (
         await conn.execute(select(t.platform_secrets.c.value_encrypted).where(t.platform_secrets.c.name == name))
     ).scalar()

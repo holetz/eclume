@@ -1,5 +1,5 @@
-/* Títulos de seção na escala do DS (h4 e título de cartão) e sem as margens da base, que o grid
-   já espaça. Especificidade de elemento: as classes deste módulo continuam vencendo. */
+/* Section titles on the DS scale (h4 and card title) and without the base margins, which the grid
+   already spaces. Element specificity: this module's classes keep winning. */
 :where(.page) h2 {
   font-size: 20px;
   margin: 0;
@@ -14,7 +14,7 @@
   margin: 0;
 }
 
-/* A marca com o selo Admin, no topo da barra lateral (templates/admin do DS). */
+/* The brand with the Admin badge, at the top of the sidebar (DS templates/admin). */
 .brand {
   display: flex;
   align-items: center;
@@ -74,7 +74,7 @@
   gap: var(--space-2);
 }
 
-/* Usuários: a busca na largura do DS e o contador à direita da barra. */
+/* Usuários: the search at the DS width and the counter on the right of the bar. */
 .search {
   max-width: 320px;
 }
@@ -88,12 +88,12 @@
   font-size: 12px;
 }
 
-/* Abaixo de 56rem, a tabela rola dentro do contêiner, e a página não rola na horizontal. */
+/* Below 56rem, the table scrolls inside the container, and the page does not scroll horizontally. */
 .scroll {
   overflow-x: auto;
 }
 
-/* Forms da configuração da plataforma, nas larguras do DS (Transcrição 520 px, Locutores 560 px). */
+/* Platform configuration forms, at the DS widths (Transcrição 520 px, Locutores 560 px). */
 .narrowForm,
 .wideForm,
 .stack {
@@ -111,13 +111,13 @@
   gap: 32px;
 }
 
-/* O `.seg` ocupa só a largura das opções, como no DS, mesmo dentro de uma grade. */
+/* The `.seg` takes only the width of its options, as in the DS, even inside a grid. */
 .label + :global(.seg) {
   width: fit-content;
   max-width: 100%;
 }
 
-/* O rótulo de um grupo (.seg), igual ao `label` de `.field`. */
+/* The label of a group (.seg), the same as the `label` of `.field`. */
 .label {
   display: block;
   font-size: 12px;
@@ -131,7 +131,7 @@
   margin-bottom: var(--space-3);
 }
 
-/* Locutores: as duas seções do DS, a segunda com o divisor em cima. */
+/* Locutores: the two DS sections, the second with the divider on top. */
 .sectionTitle {
   margin: 0;
   font-family: var(--font-heading);
@@ -153,8 +153,8 @@
   accent-color: var(--color-accent);
 }
 
-/* Pré-processamento: a lista do DS sem a coluna da alça (a ordem é fixa) e o painel de ajustes
-   aberto logo abaixo da etapa. */
+/* Pré-processamento: the DS list without the handle column (the order is fixed) and the settings panel
+   open right below the step. */
 .audioForm {
   display: grid;
   gap: var(--space-4);
@@ -165,7 +165,7 @@
   margin: 0;
 }
 
-/* O respiro do DS entre a introdução e a lista; no form do áudio, o `gap` da grade já o dá. */
+/* The DS spacing between the introduction and the list; in the audio form, the grid `gap` already gives it. */
 .lede + * {
   margin-top: var(--space-4);
 }
@@ -189,7 +189,7 @@
   gap: var(--space-4);
 }
 
-/* Agentes: o painel de edição abaixo da lista e a chave compartilhada depois dele. */
+/* Agentes: the edit panel below the list and the shared key after it. */
 .providerPanel {
   max-width: 560px;
   margin-top: var(--space-6);
@@ -205,8 +205,8 @@
   margin-top: 32px;
 }
 
-/* Tipos de agenda padrão: a linha clicável com o fundo do DS quando aberta, o painel em duas
-   colunas no topo e a quebra do `.split` numa coluna abaixo de 56rem. */
+/* Tipos de agenda padrão: the clickable row with the DS background when open, the panel in two
+   columns at the top and the `.split` break into one column below 56rem. */
 .typeRow {
   cursor: pointer;
 }
@@ -253,7 +253,7 @@
   min-height: 80px;
 }
 
-/* `textarea.input` do DS fixa 90px; o seletor precisa pesar mais que ele. */
+/* The DS `textarea.input` fixes 90px; the selector must weigh more than it. */
 textarea.instructionsInput {
   min-height: 196px;
   font-size: 13px;
@@ -281,7 +281,7 @@ textarea.instructionsInput {
   }
 }
 
-/* A linha de ações dos exemplos do DS (o `.row` de examples/*.html, fora do styles.css). */
+/* The action row of the DS examples (the `.row` of examples/*.html, outside styles.css). */
 .row {
   display: flex;
   flex-wrap: wrap;
@@ -289,7 +289,7 @@ textarea.instructionsInput {
   gap: var(--space-2);
 }
 
-/* Saúde: os títulos das tabelas com o espaço do DS e o worker sem sinal em vermelho. */
+/* Saúde: the table titles with the DS spacing and the worker without a signal in red. */
 .healthTitle {
   margin: 32px 0 12px;
 }
@@ -298,8 +298,8 @@ textarea.instructionsInput {
   color: var(--color-danger);
 }
 
-/* O cabeçalho de linha das tabelas da Saúde tem a cara de célula do DS (`td` com `<strong>`),
-   não a de cabeçalho de coluna em caixa alta. */
+/* The row header of the Saúde tables looks like a DS cell (`td` with `<strong>`),
+   not like an uppercase column header. */
 :global(.table) th.rowHead {
   font-size: inherit;
   letter-spacing: normal;
@@ -308,7 +308,7 @@ textarea.instructionsInput {
   border-bottom-width: 1px;
 }
 
-/* Na tela estreita, o valor do indicador ("Transcrevendo", o nome do modelo) quebra na coluna. */
+/* On a narrow screen, the indicator value ("Transcrevendo", the model name) wraps in the column. */
 @media (max-width: 56rem) {
   .healthStats :global(.stat-value) {
     font-size: 24px;

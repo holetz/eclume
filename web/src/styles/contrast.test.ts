@@ -1,8 +1,8 @@
 // @vitest-environment node
-// Contraste dos tokens do eclume.css (WCAG): borda de controle ≥ 3:1 (1.4.11, que o axe não mede) e
-// texto ≥ 4,5:1 (1.4.3), no tema claro e no escuro, sobre o fundo e a superfície. Os valores são
-// lidos do próprio CSS, com `var()` e `color-mix(... transparent)` resolvidos sobre o fundo.
-// Tipado pelo tsconfig.node.json (lê o arquivo do disco).
+// Contrast of the eclume.css tokens (WCAG): control border ≥ 3:1 (1.4.11, which axe does not measure) and
+// text ≥ 4.5:1 (1.4.3), in the light and dark themes, over the background and the surface. The values are
+// read from the CSS itself, with `var()` and `color-mix(... transparent)` resolved over the background.
+// Typed by tsconfig.node.json (it reads the file from disk).
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
@@ -25,7 +25,7 @@ function hex(value: string): Rgb {
   return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as Rgb
 }
 
-/** Resolve um valor de cor do tema para RGB, compondo `color-mix(... transparent)` sobre `under`. */
+/** Resolves a theme color value to RGB, compositing `color-mix(... transparent)` over `under`. */
 function resolve(value: string, theme: Record<string, string>, under: Rgb): Rgb {
   const v = value.trim()
   const ref = /^var\((--[\w-]+)\)$/.exec(v)
@@ -53,20 +53,20 @@ function ratio(a: Rgb, b: Rgb): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-/** A cor do `color` (ou da borda) de uma regra do DS, para o par que ela desenha. */
+/** The `color` (or border) of a DS rule, for the pair it draws. */
 function ruleColor(selector: string, property: string): string {
-  // Cada regra do CSS é `seletor { corpo }`; o seletor é a última linha antes do `{`.
+  // Each CSS rule is `selector { body }`; the selector is the last line before the `{`.
   const rule = css
     .split('}')
     .map((chunk) => chunk.split('{'))
     .find(([head]) => head.trim().split(/\n/).pop()?.trim() === selector)
-  if (!rule) throw new Error(`regra ausente: ${selector}`)
+  if (!rule) throw new Error(`missing rule: ${selector}`)
   const body = rule[1]
   const declaration = body
     .split(';')
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${property}:`) || part.startsWith(`${property} :`))
-  if (!declaration) throw new Error(`${property} ausente em ${selector}`)
+  if (!declaration) throw new Error(`${property} missing in ${selector}`)
   return declaration
     .slice(declaration.indexOf(':') + 1)
     .trim()
@@ -77,25 +77,25 @@ const CONTROL = 3
 const TEXT = 4.5
 
 const PAIRS: { name: string; color: string; min: number }[] = [
-  { name: 'borda de controle', color: 'var(--color-control-border)', min: CONTROL },
+  { name: 'control border', color: 'var(--color-control-border)', min: CONTROL },
   { name: '.input', color: ruleColor('.input', 'border'), min: CONTROL },
   { name: '.btn-secondary', color: ruleColor('.btn-secondary', 'border-color'), min: CONTROL },
   { name: '.check .box', color: ruleColor('.check .box', 'border'), min: CONTROL },
   { name: '.switch .track', color: ruleColor('.switch .track', 'border'), min: CONTROL },
-  { name: 'texto secundário', color: 'var(--color-text-muted)', min: TEXT },
-  { name: 'texto de aviso', color: 'var(--color-warning)', min: TEXT },
-  { name: 'texto de sucesso', color: 'var(--color-success)', min: TEXT },
-  { name: 'texto de erro', color: 'var(--color-danger)', min: TEXT },
-  { name: 'cabeçalho de tabela', color: ruleColor('.table th', 'color'), min: TEXT },
+  { name: 'muted text', color: 'var(--color-text-muted)', min: TEXT },
+  { name: 'warning text', color: 'var(--color-warning)', min: TEXT },
+  { name: 'success text', color: 'var(--color-success)', min: TEXT },
+  { name: 'error text', color: 'var(--color-danger)', min: TEXT },
+  { name: 'table header', color: ruleColor('.table th', 'color'), min: TEXT },
 ]
 
-describe('contraste dos tokens do Design System', () => {
+describe('contrast of the Design System tokens', () => {
   for (const [theme, values] of [
-    ['claro', LIGHT],
-    ['escuro', DARK],
+    ['light', LIGHT],
+    ['dark', DARK],
   ] as const) {
     for (const ground of ['--color-bg', '--color-surface']) {
-      it.each(PAIRS)(`$name no tema ${theme} sobre ${ground}`, ({ color, min }) => {
+      it.each(PAIRS)(`$name in the ${theme} theme over ${ground}`, ({ color, min }) => {
         const under = resolve(values[ground], values, [0, 0, 0])
         expect(ratio(resolve(color, values, under), under)).toBeGreaterThanOrEqual(min)
       })

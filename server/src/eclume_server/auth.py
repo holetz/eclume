@@ -1,7 +1,7 @@
-"""Credenciais: sessão de usuário por cookie (com CSRF), PAT com escopos e a sessão de admin.
+"""Credentials: the user session by cookie (with CSRF), the PAT with scopes and the admin session.
 
-A conta de admin é separada das contas de usuário: a sessão de admin (`eclume_admin_session`) é a
-única credencial aceita em `/api/v1/admin/*`, e nenhuma credencial de usuário alcança o painel.
+The admin account is separate from user accounts: the admin session (`eclume_admin_session`) is the
+only credential accepted on `/api/v1/admin/*`, and no user credential reaches the panel.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ SESSION_COOKIE = "eclume_session"
 CSRF_COOKIE = "eclume_csrf"
 ADMIN_SESSION_COOKIE = "eclume_admin_session"
 ADMIN_CSRF_COOKIE = "eclume_admin_csrf"
-# O cookie da sessão de admin só viaja para o painel.
+# The admin session cookie only travels to the panel.
 ADMIN_COOKIE_PATH = "/api/v1/admin"
 CSRF_HEADER = "X-CSRF-Token"
 ALL_SCOPES = (
@@ -48,26 +48,26 @@ _MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 
 @dataclass(frozen=True)
 class Principal:
-    """Quem faz a requisição e com que credencial."""
+    """Who makes the request and with which credential."""
 
     user_id: UUID
     method: str  # session | pat
     scopes: tuple[str, ...]
     token_id: UUID | None = None
     session_id: UUID | None = None
-    # A conta ainda não aceitou o aviso em vigor (só apurado com sessão).
+    # The account has not accepted the notice in force yet (only determined with a session).
     notice_pending: bool = False
 
 
 @dataclass(frozen=True)
 class AdminPrincipal:
-    """A conta de admin da requisição, pela sessão de admin."""
+    """The request's admin account, from the admin session."""
 
     admin_id: UUID
     session_id: UUID
 
 
-# Precisão de `api_tokens.last_used_at` e `mcp_last_used_at`.
+# Precision of `api_tokens.last_used_at` and `mcp_last_used_at`.
 USED_AT_RESOLUTION = timedelta(seconds=60)
 
 
@@ -87,8 +87,9 @@ async def _from_pat(ctx: AppContext, secret: str, *, via_mcp: bool = False) -> P
             or not row["active"]
         ):
             raise unauthorized("PAT inválido, expirado ou revogado.")
-        # O uso pelo MCP conta os assistentes conectados na Saúde. Cada marca só é regravada
-        # quando a gravada tem mais de `USED_AT_RESOLUTION`: o PAT não escreve no banco a cada requisição.
+        # Use through MCP counts the connected assistants on the Health screen. Each mark is only
+        # rewritten when the stored one is older than `USED_AT_RESOLUTION`: the PAT does not write to
+        # the database on every request.
         stale = now - USED_AT_RESOLUTION
         used = {
             column: now
@@ -103,7 +104,7 @@ async def _from_pat(ctx: AppContext, secret: str, *, via_mcp: bool = False) -> P
 
 def _check_csrf(request: Request, expected: str, cookie: str) -> None:
     if request.method in _MUTATING and not hmac.compare_digest(request.headers.get(CSRF_HEADER, ""), expected):
-        # Sem o double-submit a sessão não é uma credencial completa: 401, que toda operação declara.
+        # Without the double-submit the session is not a complete credential: 401, which every operation declares.
         raise unauthorized(f"O header {CSRF_HEADER} deve repetir o cookie {cookie}.")
 
 
@@ -127,10 +128,10 @@ async def _from_session(ctx: AppContext, token: str, request: Request) -> Princi
 
 
 async def authenticate(request: Request, ctx: AppContext, *, bearer_only: bool = False) -> Principal:
-    """Resolve a credencial de usuário; um Bearer presente nunca cai para o cookie.
+    """Resolve the user credential; a Bearer that is present never falls back to the cookie.
 
-    O cookie da sessão de admin não é credencial aqui: fora de `/admin/*`, ele é ignorado. Com
-    `bearer_only` (o servidor MCP), só o Bearer vale, e o uso fica marcado como MCP.
+    The admin session cookie is not a credential here: outside `/admin/*`, it is ignored. With
+    `bearer_only` (the MCP server), only the Bearer counts, and the use is marked as MCP.
     """
     authorization = request.headers.get("Authorization")
     if authorization is not None:
@@ -150,10 +151,11 @@ async def authenticate(request: Request, ctx: AppContext, *, bearer_only: bool =
 def requires(
     *scopes: str, session_only: bool = False, before_notice: bool = False
 ) -> Callable[[Request, AppContext], Awaitable[Principal]]:
-    """Dependência que exige credencial de usuário, os escopos do PAT e/ou sessão.
+    """Dependency that requires a user credential, the PAT's scopes and/or a session.
 
-    A sessão de uma conta sem o aceite do aviso em vigor só alcança as rotas `before_notice`
-    (`/me`, `/me/notice`, logout); o PAT não é barrado (desktop e lumea de contas migradas).
+    The session of an account that has not accepted the notice in force only reaches the
+    `before_notice` routes (`/me`, `/me/notice`, logout); the PAT is not blocked (desktop and lumea of
+    migrated accounts).
     """
 
     async def dependency(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> Principal:
@@ -162,7 +164,7 @@ def requires(
             raise notice_required()
         if principal.method == "pat":
             if session_only:
-                # Credencial válida, mas não a aceita aqui (o contrato declara só `sessionCookie`).
+                # A valid credential, but not the one accepted here (the contract declares only `sessionCookie`).
                 raise session_required()
             missing = [scope for scope in scopes if scope not in principal.scopes]
             if missing:
@@ -173,7 +175,7 @@ def requires(
 
 
 def requires_any(*scopes: str) -> Callable[[Request, AppContext], Awaitable[Principal]]:
-    """Como `requires`, mas basta ao PAT um dos escopos (o contrato lista um requisito `pat` por escopo)."""
+    """Like `requires`, but one of the scopes is enough for the PAT (the contract lists one `pat` requirement per scope)."""
     authenticated = requires()
 
     async def dependency(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> Principal:
@@ -186,7 +188,7 @@ def requires_any(*scopes: str) -> Callable[[Request, AppContext], Awaitable[Prin
 
 
 async def require_admin(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> AdminPrincipal:
-    """Dependência das rotas de admin: só a sessão de admin; PAT ou sessão de usuário são 401."""
+    """Dependency of the admin routes: only the admin session; a PAT or a user session is 401."""
     if request.headers.get("Authorization") is not None:
         raise unauthorized("O painel admin aceita só a sessão de admin.")
     token = request.cookies.get(ADMIN_SESSION_COOKIE)

@@ -1,9 +1,9 @@
 export interface ConvertProgress {
-  /** Fração convertida, de 0 a 1, nunca decrescente. */
+  /** Converted fraction, from 0 to 1, never decreasing. */
   ratio: number
   /**
-   * Bytes efetivamente lidos do arquivo de entrada até agora. Pode terminar abaixo de
-   * `bytesTotal`: o demuxer pula os dados de vídeo que não precisa ler.
+   * Bytes actually read from the input file so far. It may end below
+   * `bytesTotal`: the demuxer skips the video data it does not need to read.
    */
   bytesRead: number
   bytesTotal: number
@@ -11,7 +11,7 @@ export interface ConvertProgress {
 
 export type ProgressCallback = (progress: ConvertProgress) => void
 
-/** Agrega a razão do motor e as leituras da fonte num progresso monótono. */
+/** Combines the engine's ratio and the source reads into monotonic progress. */
 export class ProgressTracker {
   private ratio = 0
   private bytesRead = 0
@@ -23,15 +23,15 @@ export class ProgressTracker {
     this.onProgress = onProgress
   }
 
-  /** Soma `count` bytes lidos da entrada. */
+  /** Adds `count` bytes read from the input. */
   addBytesRead(count: number): void {
     this.bytesRead = Math.min(this.bytesTotal, this.bytesRead + Math.max(0, count))
     this.emit()
   }
 
   /**
-   * Atualiza a razão; valores fora de [0, 1] são limitados e recuos são ignorados. `bytesRead`,
-   * quando dado, substitui a contagem (motores que não expõem as leituras da fonte).
+   * Updates the ratio; values outside [0, 1] are clamped and regressions are ignored. `bytesRead`,
+   * when given, replaces the count (engines that do not expose the source reads).
    */
   setRatio(ratio: number, bytesRead?: number): void {
     if (!Number.isFinite(ratio)) return

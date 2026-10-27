@@ -1,5 +1,5 @@
-// As habilidades do Agente (/agent/skills): instruções reutilizáveis da pessoa, com as ferramentas
-// permitidas escolhidas do catálogo (/agent/tools). A conversa invoca uma por `/nome` ou pelo seletor.
+// The Agent's skills (/agent/skills): the person's reusable instructions, with the allowed tools
+// picked from the catalogue (/agent/tools). The conversation invokes one by `/name` or the picker.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
@@ -17,14 +17,14 @@ export const SKILL_NAME = /^[a-z0-9][a-z0-9-]{1,39}$/
 export const skillsKey = [...AGENT_KEY, 'skills'] as const
 export const toolsKey = [...AGENT_KEY, 'tools'] as const
 
-/** A natureza da ferramenta, como a tela a nomeia. */
+/** The tool's kind, as the screen names it. */
 export const TOOL_KIND: Record<AgentTool['kind'], string> = {
   read: 'consulta',
   produce: 'gera arquivo',
   action: 'propõe mudança',
 }
 
-/** O nome digitado como a API o guarda: sem barra e em minúsculas. */
+/** The typed name as the API stores it: without the slash and in lowercase. */
 export const normalizeSkillName = (value: string) => value.trim().replace(/^\//, '').toLowerCase()
 
 export function useSkills() {

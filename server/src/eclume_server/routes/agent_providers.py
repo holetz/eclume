@@ -1,7 +1,7 @@
-"""Providers de agente da plataforma (`/admin/agent-providers`). Só a sessão de admin.
+"""The platform's agent providers (`/admin/agent-providers`). Admin session only.
 
-A chave de API entra cifrada (`crypto.encrypt`) e nunca volta: a resposta diz só `api_key_set`.
-Regras em docs/standards/code/server-agentes.md.
+The API key goes in encrypted (`crypto.encrypt`) and never comes back: the response only says `api_key_set`.
+Rules in docs/standards/code/server-agentes.md.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 Kind = Literal["ollama", "openai-compatible", "anthropic", "claude-cli"]
 OptionValue = StrictBool | StrictInt | StrictFloat | StrictStr
 Purpose = Literal[PURPOSES]  # type: ignore[valid-type]
-# Tipos que falam HTTP com um servidor escolhido pelo admin.
+# Types that speak HTTP to a server the admin chose.
 _NEEDS_BASE_URL = {"ollama", "openai-compatible"}
 
 
@@ -48,7 +48,7 @@ class AgentProviderCreate(BaseModel):
 
 
 class AgentProviderPatch(BaseModel):
-    """Schema `AgentProviderPatch`: `api_key: null` apaga a chave; ausente, mantém."""
+    """Schema `AgentProviderPatch`: `api_key: null` deletes the key; absent, keeps it."""
 
     name: str | None = Field(default=None, min_length=1)
     base_url: BaseUrl = None
@@ -77,7 +77,7 @@ def provider_json(row: Row) -> dict[str, Any]:
 
 
 def _check_shape(kind: str, base_url: str | None) -> None:
-    """Invariantes por tipo, na criação e depois de cada edição."""
+    """Per-type invariants, at creation and after each edit."""
     if kind in _NEEDS_BASE_URL and not base_url:
         raise invalid_field("base_url", f"obrigatória para {kind}")
     if kind == "claude-cli" and base_url:
@@ -85,14 +85,14 @@ def _check_shape(kind: str, base_url: str | None) -> None:
 
 
 async def _lock_purposes(conn: AsyncConnection) -> None:
-    """Serializa as escritas de `used_for` até o fim da transação (o mesmo lock do trigger da 013)."""
+    """Serializes the writes of `used_for` until the transaction ends (the lock of migration 013's trigger)."""
     await conn.execute(text("SELECT pg_advisory_xact_lock(hashtext('agent_providers.used_for'))"))
 
 
 async def _claim(conn: AsyncConnection, provider_id: UUID | None, purposes: list[str]) -> None:
-    """Tira dos outros providers as finalidades que este passa a declarar: uma por provider.
+    """Takes from the other providers the purposes this one now declares: one per provider.
 
-    Na criação (`provider_id` nulo) roda antes do insert: o trigger recusa a sobreposição.
+    At creation (`provider_id` null) it runs before the insert: the trigger refuses the overlap.
     """
     if purposes:
         await conn.execute(
@@ -107,7 +107,7 @@ async def _claim(conn: AsyncConnection, provider_id: UUID | None, purposes: list
 
 
 async def _unclaimed(conn: AsyncConnection) -> list[str]:
-    """Finalidades que nenhum provider declara."""
+    """Purposes no provider declares."""
     claimed = set((await conn.execute(select(func.unnest(t.agent_providers.c.used_for)))).scalars())
     return [purpose for purpose in PURPOSES if purpose not in claimed]
 
@@ -123,7 +123,7 @@ async def _get(conn: AsyncConnection, provider_id: UUID) -> Row:
 
 @router.get("/agent-providers")
 async def list_agent_providers(_: Admin, ctx: Ctx, cursor: Cursor = None, limit: Limit = 50) -> dict[str, Any]:
-    """Providers da plataforma, na ordem de cadastro."""
+    """The platform's providers, in registration order."""
     c = t.agent_providers.c
     query = select(t.agent_providers).order_by(c.created_at, c.id).limit(limit + 1)
     if cursor:
@@ -135,7 +135,7 @@ async def list_agent_providers(_: Admin, ctx: Ctx, cursor: Cursor = None, limit:
 
 @router.post("/agent-providers", status_code=201)
 async def create_agent_provider(body: AgentProviderCreate, _: Admin, ctx: Ctx) -> dict[str, Any]:
-    """Cadastra um provider; sem `used_for`, um habilitado assume as finalidades que ninguém declara."""
+    """Registers a provider; without `used_for`, an enabled one takes the purposes nobody declares."""
     _check_shape(body.kind, body.base_url)
     values = body.model_dump(exclude={"api_key"})
     async with system_tx(ctx.engine) as conn:
@@ -164,7 +164,7 @@ async def create_agent_provider(body: AgentProviderCreate, _: Admin, ctx: Ctx) -
 
 @router.patch("/agent-providers/{provider_id}")
 async def update_agent_provider(provider_id: UUID, body: AgentProviderPatch, _: Admin, ctx: Ctx) -> dict[str, Any]:
-    """Edita o provider; `api_key: null` apaga a chave guardada; `used_for` tira as finalidades dos outros."""
+    """Edits the provider; `api_key: null` deletes the stored key; `used_for` takes the purposes from the others."""
     values = body.model_dump(exclude_unset=True)
     if not values:
         raise invalid_field("body", "informe ao menos um campo")
@@ -202,10 +202,10 @@ async def update_agent_provider(provider_id: UUID, body: AgentProviderPatch, _: 
 
 @router.delete("/agent-providers/{provider_id}", status_code=204)
 async def delete_agent_provider(provider_id: UUID, _: Admin, ctx: Ctx) -> Response:
-    """Remove o provider; 409 com resumo na fila ou rodando nele. As finalidades dele ficam sem provider."""
+    """Removes the provider; 409 with a summary queued or running on it. Its purposes are left without a provider."""
     async with system_tx(ctx.engine) as conn:
         await _get(conn, provider_id)
-        # Os resumos em aberto são de todos os usuários.
+        # The open summaries belong to every user.
         busy = (
             await conn.execute(
                 select(func.count())
