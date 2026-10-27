@@ -1,16 +1,16 @@
-// Verificação visual contra o Design System do eclume, com o mock (Prism) do app.spec.ts:
-// - afirma o estilo computado da base do DS (cores, fonte local, canto zero, tema escuro);
-// - com E2E_SCREENSHOTS=1, salva as telas em claro e escuro, a 1440×900 e a 390×844, em
-//   test-results/screens/app-<tela>[-movel]-<claro|escuro>.png;
-// - com E2E_SCREENSHOTS=1, salva também, do design-system/ (ou de ECLUME_DS_DIR), os quadros de
-//   examples/access.html e examples/library.html (ds-<quadro>-<claro|escuro>.png), para a
-//   revisão lado a lado.
+// Visual check against the eclume Design System, with the app.spec.ts mock (Prism):
+// - asserts the computed style of the DS base (colors, local font, zero radius, dark theme);
+// - with E2E_SCREENSHOTS=1, saves the screens in light and dark, at 1440×900 and 390×844, in
+//   test-results/screens/app-<screen>[-movel]-<claro|escuro>.png;
+// - with E2E_SCREENSHOTS=1, also saves, from design-system/ (or from ECLUME_DS_DIR), the frames of
+//   examples/access.html and examples/library.html (ds-<frame>-<claro|escuro>.png), for the
+//   side-by-side review.
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 
 const SCREENS = process.env.E2E_SCREENSHOTS ? 'test-results/screens' : null
-// O Design System versionado em design-system/; ECLUME_DS_DIR aponta para outro export, se preciso.
+// The Design System versioned in design-system/; ECLUME_DS_DIR points at another export, if needed.
 const DS_DIR = process.env.ECLUME_DS_DIR ?? fileURLToPath(new URL('../../design-system', import.meta.url))
 const DESKTOP = { width: 1440, height: 900 }
 const MOBILE = { width: 390, height: 844 }
@@ -20,7 +20,7 @@ const THEMES = [
 ] as const
 
 test.beforeEach(async ({ page, baseURL }) => {
-  // O mock não emite cookies: o login bem-sucedido ganha os cookies que o servidor real poria.
+  // The mock sets no cookies: a successful login gets the cookies the real server would set.
   await page.route('**/api/v1/auth/login', async (route) => {
     const response = await route.fetch()
     if (response.status() === 204) {
@@ -41,7 +41,7 @@ async function login(page: Page) {
   await expect(page.locator('#conteudo')).toBeVisible()
 }
 
-/** Troca o tema do sistema e espera o app gravar o `data-theme` correspondente. */
+/** Switches the system theme and waits for the app to write the matching `data-theme`. */
 async function applyScheme(page: Page, scheme: 'light' | 'dark') {
   await page.emulateMedia({ colorScheme: scheme })
   await expect(page.locator('html')).toHaveAttribute('data-theme', scheme)
@@ -59,7 +59,7 @@ async function shoot(page: Page, name: string) {
 const background = (page: Page, selector: string) =>
   page.locator(selector).evaluate((element) => getComputedStyle(element).backgroundColor)
 
-test('a base do Design System: cores, fonte local, canto zero e nenhuma requisição externa', async ({
+test('the Design System base: colors, local font, zero radius and no external request', async ({
   page,
   baseURL,
 }) => {
@@ -90,7 +90,7 @@ test('a base do Design System: cores, fonte local, canto zero e nenhuma requisi�
   expect(external).toEqual([])
 })
 
-test('? abre a gaveta de ajuda', async ({ page }) => {
+test('? opens the help drawer', async ({ page }) => {
   await page.setViewportSize(DESKTOP)
   await login(page)
   await page.keyboard.press('?')
@@ -103,14 +103,14 @@ for (const [viewport, tag] of [
   [DESKTOP, ''],
   [MOBILE, '-movel'],
 ] as const) {
-  test(`screenshots do app a ${viewport.width}×${viewport.height}`, async ({ page }) => {
+  test(`app screenshots at ${viewport.width}×${viewport.height}`, async ({ page }) => {
     test.skip(!SCREENS, 'só com E2E_SCREENSHOTS=1')
     await page.setViewportSize(viewport)
     await page.goto('/entrar')
     await expect(page.getByRole('heading', { name: 'Entrar' })).toBeVisible()
     await shoot(page, `entrar${tag}`)
 
-    // Preenchida como o quadro sign-up do DS, para a comparação lado a lado.
+    // Filled in like the DS sign-up frame, for the side-by-side comparison.
     await page.goto('/cadastro')
     await expect(page.getByRole('heading', { name: 'Criar sua conta' })).toBeVisible()
     await page.getByLabel('Nome').fill('Paulo Andrade')
@@ -132,7 +132,7 @@ for (const [viewport, tag] of [
   })
 }
 
-test('quadros de referência do Design System (examples/access.html)', async ({ page }) => {
+test('Design System reference frames (examples/access.html)', async ({ page }) => {
   test.skip(!SCREENS, 'só com E2E_SCREENSHOTS=1')
   await page.setViewportSize({ width: 4700, height: 1100 })
   await page.goto(pathToFileURL(path.join(DS_DIR, 'examples', 'access.html')).href)
@@ -146,7 +146,7 @@ test('quadros de referência do Design System (examples/access.html)', async ({ 
 
 const WEEK = '/?visao=semana&data=2026-09-21'
 
-/** Um MP4 mínimo (ftyp + moov/mvhd) com o `creation_time` dado: o import lê a data dele. */
+/** A minimal MP4 (ftyp + moov/mvhd) with the given `creation_time`: the import reads the date from it. */
 function mp4With(iso: string): Buffer {
   const box = (type: string, body: Buffer) => {
     const head = Buffer.alloc(8)
@@ -165,21 +165,21 @@ const IMPORT_FILES = [
   { name: 'meeting-03.mkv', mimeType: 'video/x-matroska', buffer: Buffer.from('sem data') },
 ]
 
-/** A cor computada de uma propriedade do primeiro elemento que casa com o seletor. */
+/** The computed color of a property of the first element matching the selector. */
 const style = (page: Page, selector: string, property: string) =>
   page
     .locator(selector)
     .first()
     .evaluate((element, name) => getComputedStyle(element).getPropertyValue(name), property)
 
-test('biblioteca, gravação e busca seguem as classes do DS', async ({ page }) => {
+test('library, recording and search follow the DS classes', async ({ page }) => {
   await page.setViewportSize(DESKTOP)
   await login(page)
   await page.goto(WEEK)
   await applyScheme(page, 'light')
   await expect(page.locator('.cal-event')).toHaveCount(10)
-  // A semana abre com o expediente (8–18) enchendo a grade: a hora é a altura visível dividida por 10.
-  // Blocos na superfície com a régua de cima, nota pontilhada.
+  // The week opens with working hours (8–18) filling the grid: an hour is the visible height divided by 10.
+  // Blocks on the surface with the top rule, dotted note.
   const fit = await page.evaluate(() => {
     const box = document.querySelector('.cal-week')!.parentElement!
     const head = (document.querySelector('.cal-head') as HTMLElement).offsetHeight
@@ -196,7 +196,7 @@ test('biblioteca, gravação e busca seguem as classes do DS', async ({ page }) 
 
   await page.getByRole('link', { name: /^Planejamento semanal/ }).click()
   await expect(page.locator('.doc')).toBeVisible()
-  // A gravação: documento na tipografia do DS e o chat na coluna de 340px.
+  // The recording: document in the DS typography and the chat in the 340px column.
   expect(await style(page, '.doc', 'font-size')).toBe('16px')
   expect(await style(page, 'aside.chat', 'width')).toBe('340px')
   expect(await style(page, '.pipeline li[data-state="done"]', 'color')).toBe('rgb(38, 36, 32)')
@@ -211,9 +211,9 @@ for (const [viewport, tag] of [
   [DESKTOP, ''],
   [MOBILE, '-movel'],
 ] as const) {
-  test(`screenshots da biblioteca, da gravação e da busca a ${viewport.width}×${viewport.height}`, async ({ page }) => {
+  test(`library, recording and search screenshots at ${viewport.width}×${viewport.height}`, async ({ page }) => {
     test.skip(!SCREENS, 'só com E2E_SCREENSHOTS=1')
-    // A linha de agora fica no sábado do quadro do DS.
+    // The now line sits on the Saturday of the DS frame.
     await page.clock.setFixedTime(new Date('2026-09-26T14:12:00Z'))
     await page.setViewportSize(viewport)
     await login(page)
@@ -266,7 +266,7 @@ for (const [viewport, tag] of [
   })
 }
 
-test('quadros de referência do Design System (examples/library.html)', async ({ page }) => {
+test('Design System reference frames (examples/library.html)', async ({ page }) => {
   test.skip(!SCREENS, 'só com E2E_SCREENSHOTS=1')
   await page.setViewportSize({ width: 4700, height: 2100 })
   await page.goto(pathToFileURL(path.join(DS_DIR, 'examples', 'library.html')).href)
