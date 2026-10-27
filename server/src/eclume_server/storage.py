@@ -1,6 +1,6 @@
-"""Armazenamento de objetos (S3/MinIO): multipart do upload, hash e leitura do áudio.
+"""Object storage (S3/MinIO): the upload's multipart, hashing and reading the audio.
 
-O boto3 é síncrono; as corrotinas daqui rodam as chamadas numa thread.
+boto3 is synchronous; the coroutines here run the calls in a thread.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ import asyncio
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime  # noqa: TC003 — campo de dataclass, resolvido em tempo de execução
+from datetime import datetime  # noqa: TC003 — a dataclass field, resolved at runtime
 from typing import TYPE_CHECKING, Any
 
 import boto3
@@ -24,41 +24,41 @@ if TYPE_CHECKING:
     from eclume_server.config import Settings
 
 _CHUNK = 1024 * 1024
-# Limite de chaves por `DeleteObjects` do S3.
+# Key limit per S3 `DeleteObjects`.
 _DELETE_BATCH = 1000
 
 
 def audio_key(owner_id: UUID, recording_id: UUID) -> str:
-    """Chave do áudio: a gravação vive sob o dono (`users/{id}/...`).
+    """The audio key: the recording lives under its owner (`users/{id}/...`).
 
-    Gravações da época da organização guardam a chave antiga (`orgs/{org}/users/...`) em
-    `recordings.audio_key`, que é sempre a fonte: o objeto não muda de lugar.
+    Recordings from the organization era keep the old key (`orgs/{org}/users/...`) in
+    `recordings.audio_key`, which is always the source: the object does not move.
     """
     return f"users/{owner_id}/recordings/{recording_id}/audio"
 
 
-# Raiz dos artefatos do worker GPU: `recordings/{recording_id}/r{revision}/…` (e as chaves antigas,
-# sem revisão, `recordings/{recording_id}/…`).
+# Root of the GPU worker artifacts: `recordings/{recording_id}/r{revision}/…` (and the old keys,
+# without a revision, `recordings/{recording_id}/…`).
 ARTIFACTS_ROOT = "recordings/"
 EMBEDDINGS_FILE = "speaker_embeddings.json"
 
 
 def artifacts_prefix(recording_id: UUID | str) -> str:
-    """Prefixo dos artefatos do worker GPU de uma gravação, de todas as revisões (contrato de jobs)."""
+    """Prefix of a recording's GPU worker artifacts, for all revisions (job contract)."""
     return f"{ARTIFACTS_ROOT}{recording_id}/"
 
 
 def revision_prefix(recording_id: UUID | str, revision: int) -> str:
-    """Prefixo dos artefatos de uma revisão."""
+    """Prefix of a revision's artifacts."""
     return f"{artifacts_prefix(recording_id)}r{revision}/"
 
 
 class StorageDeleteError(Exception):
-    """O `DeleteObjects` devolveu chaves que não saíram."""
+    """`DeleteObjects` returned keys that were not removed."""
 
 
 class MultipartGoneError(Exception):
-    """O multipart upload não existe mais no bucket (`NoSuchUpload`: vencido ou abortado)."""
+    """The multipart upload no longer exists in the bucket (`NoSuchUpload`: expired or aborted)."""
 
 
 def _no_such_upload(exc: ClientError) -> bool:
@@ -67,7 +67,7 @@ def _no_such_upload(exc: ClientError) -> bool:
 
 @dataclass(frozen=True)
 class StoredObject:
-    """Objeto do bucket com a data da última escrita."""
+    """A bucket object with the date of its last write."""
 
     key: str
     last_modified: datetime
@@ -75,7 +75,7 @@ class StoredObject:
 
 @dataclass(frozen=True)
 class PendingMultipart:
-    """Multipart upload em andamento no bucket."""
+    """A multipart upload in progress in the bucket."""
 
     key: str
     upload_id: str
@@ -84,7 +84,7 @@ class PendingMultipart:
 
 @dataclass(frozen=True)
 class StoredPart:
-    """Parte que o armazenamento já confirmou."""
+    """A part the storage has already confirmed."""
 
     part_number: int
     etag: str
@@ -93,7 +93,7 @@ class StoredPart:
 
 @dataclass(frozen=True)
 class ObjectRange:
-    """Corpo (ou trecho) de um objeto, para servir com `Range`."""
+    """Body (or slice) of an object, to serve with `Range`."""
 
     chunks: Iterator[bytes]
     content_length: int
@@ -102,10 +102,10 @@ class ObjectRange:
 
 
 class Storage:
-    """Cliente do bucket do eclume."""
+    """Client of the eclume bucket."""
 
     def __init__(self, settings: Settings) -> None:
-        """Cliente boto3 apontado para o endpoint S3 da configuração."""
+        """A boto3 client pointed at the configured S3 endpoint."""
         self.bucket = settings.s3_bucket
         self._s3 = boto3.client(
             "s3",
@@ -116,25 +116,25 @@ class Storage:
             config=Config(
                 signature_version="s3v4",
                 s3={"addressing_style": "path"},
-                # Sem o CRC32 padrão do boto3 recente: o MinIO não o exige e ele custa CPU por parte.
+                # Without recent boto3's default CRC32: MinIO does not require it and it costs CPU per part.
                 request_checksum_calculation="when_required",
                 response_checksum_validation="when_required",
             ),
         )
 
     async def head_bucket(self) -> None:
-        """O bucket responde (a sonda da saúde); falha com a exceção do boto3."""
+        """The bucket answers (the health probe); fails with the boto3 exception."""
         await asyncio.to_thread(self._s3.head_bucket, Bucket=self.bucket)
 
     async def create_multipart(self, key: str, content_type: str) -> str:
-        """Abre um multipart upload e devolve o `UploadId`."""
+        """Open a multipart upload and return the `UploadId`."""
         response = await run_in_threadpool(
             self._s3.create_multipart_upload, Bucket=self.bucket, Key=key, ContentType=content_type
         )
         return response["UploadId"]
 
     async def upload_part(self, key: str, upload_id: str, part_number: int, body: bytes | bytearray) -> str:
-        """Grava uma parte e devolve o `ETag`; multipart sumido é `MultipartGoneError`."""
+        """Write a part and return the `ETag`; a vanished multipart is `MultipartGoneError`."""
         try:
             response = await run_in_threadpool(
                 self._s3.upload_part, Bucket=self.bucket, Key=key, UploadId=upload_id, PartNumber=part_number, Body=body
@@ -146,7 +146,7 @@ class Storage:
         return response["ETag"]
 
     async def list_parts(self, key: str, upload_id: str) -> list[StoredPart]:
-        """Partes já confirmadas, em ordem; multipart sumido é `MultipartGoneError`."""
+        """Parts already confirmed, in order; a vanished multipart is `MultipartGoneError`."""
 
         def collect() -> list[StoredPart]:
             parts: list[StoredPart] = []
@@ -166,7 +166,7 @@ class Storage:
             raise
 
     async def complete_multipart(self, key: str, upload_id: str, parts: list[tuple[int, str]]) -> None:
-        """Monta o objeto a partir das partes `(número, etag)`; multipart sumido é `MultipartGoneError`."""
+        """Assemble the object from the `(number, etag)` parts; a vanished multipart is `MultipartGoneError`."""
         try:
             await run_in_threadpool(
                 self._s3.complete_multipart_upload,
@@ -181,7 +181,7 @@ class Storage:
             raise
 
     async def abort_multipart(self, key: str, upload_id: str) -> None:
-        """Descarta um multipart upload e as partes; já descartado não é erro."""
+        """Discard a multipart upload and its parts; already discarded is not an error."""
         try:
             await run_in_threadpool(self._s3.abort_multipart_upload, Bucket=self.bucket, Key=key, UploadId=upload_id)
         except ClientError as exc:
@@ -189,11 +189,11 @@ class Storage:
                 raise
 
     async def head_object(self, key: str) -> bool:
-        """Se o objeto existe."""
+        """Whether the object exists."""
         return await self.object_size(key) is not None
 
     async def object_size(self, key: str) -> int | None:
-        """O tamanho do objeto em bytes, ou `None` se ele não existe."""
+        """The object's size in bytes, or `None` if it does not exist."""
         try:
             response = await run_in_threadpool(self._s3.head_object, Bucket=self.bucket, Key=key)
         except ClientError as exc:
@@ -203,11 +203,11 @@ class Storage:
         return response["ContentLength"]
 
     async def copy_object(self, source: str, target: str) -> None:
-        """Copia o objeto dentro do bucket, no servidor (cópia gerenciada, em partes se grande)."""
+        """Copy the object within the bucket, server-side (managed copy, in parts if large)."""
         await run_in_threadpool(self._s3.copy, {"Bucket": self.bucket, "Key": source}, self.bucket, target)
 
     async def list_objects(self, prefix: str) -> list[StoredObject]:
-        """Os objetos sob `prefix`, com a data da última escrita."""
+        """The objects under `prefix`, with the date of their last write."""
 
         def listed() -> list[StoredObject]:
             objects: list[StoredObject] = []
@@ -218,7 +218,7 @@ class Storage:
         return await run_in_threadpool(listed)
 
     async def list_multipart_uploads(self, prefix: str = "") -> list[PendingMultipart]:
-        """Os multipart uploads em andamento no bucket (sob `prefix`)."""
+        """The multipart uploads in progress in the bucket (under `prefix`)."""
 
         def listed() -> list[PendingMultipart]:
             pending: list[PendingMultipart] = []
@@ -233,7 +233,7 @@ class Storage:
         return await run_in_threadpool(listed)
 
     async def sha256(self, key: str) -> str:
-        """SHA-256 (hex) do objeto, lido em streaming."""
+        """SHA-256 (hex) of the object, read as a stream."""
 
         def digest() -> str:
             body = self._s3.get_object(Bucket=self.bucket, Key=key)["Body"]
@@ -244,8 +244,8 @@ class Storage:
 
         return await run_in_threadpool(digest)
 
-    async def read_json(self, key: str) -> Any:  # noqa: ANN401 — JSON arbitrário do worker
-        """Lê e decodifica um objeto JSON."""
+    async def read_json(self, key: str) -> Any:  # noqa: ANN401 — arbitrary JSON from the worker
+        """Read and decode a JSON object."""
 
         def read() -> Any:  # noqa: ANN401
             return json.loads(self._s3.get_object(Bucket=self.bucket, Key=key)["Body"].read())
@@ -253,11 +253,11 @@ class Storage:
         return await run_in_threadpool(read)
 
     async def put_object(self, key: str, body: bytes, content_type: str) -> None:
-        """Grava um objeto pequeno de uma vez (os arquivos do Agente)."""
+        """Write a small object at once (the Agent's files)."""
         await run_in_threadpool(self._s3.put_object, Bucket=self.bucket, Key=key, Body=body, ContentType=content_type)
 
     async def open_range(self, key: str, byte_range: str | None) -> ObjectRange:
-        """Abre o objeto (ou um trecho `bytes=a-b`) para streaming."""
+        """Open the object (or a `bytes=a-b` slice) for streaming."""
         kwargs: dict[str, Any] = {"Bucket": self.bucket, "Key": key}
         if byte_range:
             kwargs["Range"] = byte_range
@@ -270,7 +270,7 @@ class Storage:
         )
 
     async def delete_keys(self, keys: list[str]) -> None:
-        """Apaga as chaves (as ausentes são ignoradas), em lotes do limite do S3; a que falha levanta."""
+        """Delete the keys (missing ones are ignored), in batches of the S3 limit; a failing one raises."""
 
         def delete() -> None:
             for start in range(0, len(keys), _DELETE_BATCH):
@@ -286,21 +286,21 @@ class Storage:
             await run_in_threadpool(delete)
 
     async def list_keys(self, prefix: str) -> list[str]:
-        """Todas as chaves sob `prefix`."""
+        """All keys under `prefix`."""
         return [obj.key for obj in await self.list_objects(prefix)]
 
     async def delete_artifacts(self, recording_id: UUID | str) -> None:
-        """Apaga os artefatos do worker GPU de uma gravação (a transcrição bruta e os embeddings)."""
+        """Delete a recording's GPU worker artifacts (the raw transcript and the embeddings)."""
         await self.delete_recording(None, recording_id)
 
     async def delete_other_revisions(self, recording_id: UUID | str, revision: int) -> None:
-        """Apaga os artefatos da gravação fora de `r{revision}/`, as chaves antigas sem revisão inclusive."""
+        """Delete the recording's artifacts outside `r{revision}/`, including the old keys without a revision."""
         keep = revision_prefix(recording_id, revision)
         keys = await self.list_keys(artifacts_prefix(recording_id))
         await self.delete_keys([key for key in keys if not key.startswith(keep)])
 
     async def delete_embedding_objects(self, recording_ids: list[UUID] | None = None) -> int:
-        """Apaga os `speaker_embeddings.json` (de toda revisão e das chaves antigas): de todo o bucket ou das gravações."""
+        """Delete the `speaker_embeddings.json` files (of every revision and the old keys): from the whole bucket or the recordings."""
         prefixes = [ARTIFACTS_ROOT] if recording_ids is None else [artifacts_prefix(rid) for rid in recording_ids]
         keys = [
             key for prefix in prefixes for key in await self.list_keys(prefix) if key.endswith(f"/{EMBEDDINGS_FILE}")
@@ -309,6 +309,6 @@ class Storage:
         return len(keys)
 
     async def delete_recording(self, key: str | None, recording_id: UUID | str) -> None:
-        """Apaga o áudio e os artefatos do worker de uma gravação, de todas as revisões."""
+        """Delete a recording's audio and worker artifacts, for all revisions."""
         keys = await self.list_keys(artifacts_prefix(recording_id))
         await self.delete_keys([key, *keys] if key else keys)
