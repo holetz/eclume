@@ -1,9 +1,9 @@
-# CLAUDE.md — eclume
+# AGENTS.md — eclume
 
 Language: en — the contract is /docs/standards/agents/communication.md
 
-Self-hosted institutional transcription service. This file is the operational pointer Claude
-loads; durable knowledge lives in `docs/`.
+Self-hosted institutional transcription service. This file is the operational pointer agents
+load; durable knowledge lives in `docs/`.
 
 ## Operating this repo
 
@@ -71,5 +71,5 @@ Point to the source instead of duplicating its prose.
 - [docs/project/](docs/project/index.md) — the repository's manual: market references and the host runbook.
 
 The specs workspace is managed by the GitHub backend (`holetz/eclume`); product direction is in
-`docs/vision/`, and epic `holetz/eclume#1` records the first build. Use the `quenching:specs:*`
-skills to query or drive that cycle and `quenching:knowledge:*` to create, edit or move knowledge.
+`docs/vision/`, and epic `holetz/eclume#1` records the first build. Use the `quenching-specs:specs:*`
+skills to query or drive that cycle and `quenching-align:knowledge:*` to create, edit or move knowledge.

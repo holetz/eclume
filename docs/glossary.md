@@ -19,7 +19,7 @@ with the definition when there is no doc.
 
 **Resolving a term.** When a word, acronym or jargon of the repository is unclear, **look here
 first** (`grep -i '<term>' docs/glossary.md`). With no entry, the term has not been defined yet —
-record it with `/quenching:knowledge:define`.
+record it with `/quenching-align:knowledge:define`.
 
 **This file is the deliberate exception to "one concept per file"**: a flat list, sorted
 alphabetically by the English term, with one sentence per definition and a link out instead of an

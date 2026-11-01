@@ -293,7 +293,7 @@ is down. `web/e2e/flaky-reporter.ts` adds to Playwright's `list` reporter a summ
 tests that only passed on retry and, in CI, one `::warning::` per test; it is a warning, not a failure.
 
 **Documentation (`docs` pillar).** `cq knowledge validate` (the conformance of the OKF bundle, with the
-`cq` of the public repository `holetz/quenching` pinned by SHA — the one of tag 6.3.0 —, through `ARG
+`cq` of the public repository `holetz/quenching` pinned by SHA — the one of tag 6.14.0 —, through `ARG
 QUENCHING_SHA` in `deploy/gate.Dockerfile` and through checkout in the `docs` job; `deploy/test_docs_check.py`
 checks that the two references are the same) and `deploy/docs_check.py`, which scans `docs/**/*.md`, the
 root `.md` files and the pillars' `README.md`/`INSTALACAO.md`: a relative link (or absolute from the
