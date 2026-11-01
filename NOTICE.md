@@ -77,18 +77,61 @@ only). No copyleft runtime package.
 ## 5. Cargo: `desktop/Cargo.lock` and `mobile/Cargo.lock`
 
 `cargo metadata --locked` resolved 714 third-party crates for the desktop workspace and 503 for the
-mobile workspace (workspace members are eclume's own code, or the vendored crates of section 6).
+mobile workspace (workspace members are eclume's own code or the vendored crates of section 6, and are not counted).
 `cargo deny` was not installed on the audit workstation, so no automated policy was run;
 `desktop/deny.toml` and `mobile/deny.toml` check advisories only.
 
-| Licence family | Desktop | Mobile | Notes |
+| Licence bucket | Desktop | Mobile | Notes |
 | --- | --- | --- | --- |
-| MIT, Apache-2.0 or both (including `OR` and `/` forms) | 640 | 405 | the bulk of the graph |
-| Unicode-3.0 | 18 | 18 | `icu_*` and `unicode-ident` data |
-| Unlicense OR MIT | 12 | 11 | `walkdir`, `same-file`, `memchr` family |
-| MPL-2.0 | 20 | 5 | desktop: `symphonia` decoders, `cssparser`, `selectors`; mobile: `cssparser`, `selectors`, `option-ext`. File-level copyleft, no modification by eclume |
-| BSD-2/3-Clause (alone or in `OR`/`AND`) | 17 | 15 | `ogg`, `opusic-sys` (bundles libopus, BSD-3-Clause), `brotli`, `subtle`, `encoding_rs` |
-| ISC, Zlib, BSL-1.0, CDLA-Permissive-2.0, 0BSD, CC0-1.0, MIT-0 | 20 | 15 | `ring` (Apache-2.0 AND ISC), `rustls-webpki`, `clipboard-win` (BSL-1.0), `webpki-roots` (CDLA-Permissive-2.0) |
+| Only MIT and/or Apache-2.0 (including `OR`, `/` and LLVM-exception forms) | 595 | 418 | the bulk of the graph |
+| Expression that offers MIT or Apache-2.0 beside other permissive terms (Zlib, Unlicense, 0BSD, BSD, ISC, CC0-1.0, MIT-0) | 63 | 49 | `ring` (Apache-2.0 AND ISC), `walkdir` (Unlicense/MIT), `miniz_oxide`, `brotli` |
+| Unicode-3.0 | 19 | 19 | `icu_*` data and `unicode-ident` |
+| MPL-2.0 | 20 | 5 | desktop: `symphonia` decoders, `cssparser`, `selectors`; mobile: `cssparser`, `selectors`, `option-ext`. File-level copyleft, unmodified by eclume |
+| BSD-3-Clause | 6 | 5 | `ogg`, `opusic-sys` (bundles libopus), `subtle`, `alloc-no-stdlib` |
+| ISC | 4 | 3 | `rustls-webpki`, `untrusted`, `libloading` |
+| Zlib | 3 | 2 | `foldhash`, `zlib-rs` |
+| BSL-1.0 | 2 | 0 | `clipboard-win`, `error-code` |
+| CDLA-Permissive-2.0 | 2 | 2 | `webpki-roots`, `webpki-root-certs` |
 
 No crate is licensed under GPL, AGPL or LGPL alone. `r-efi` lists `LGPL-2.1-or-later` only as one
 alternative of an `OR` expression that also offers MIT, so the MIT option applies.
+
+## 6. Vendored code, fonts and the noise model
+
+### Vendored Anarlog crates (desktop)
+
+Three crates under `desktop/crates/` are adapted from [Anarlog](https://github.com/fastrepl/anarlog)
+(formerly Hyprnote), MIT, `Copyright (c) 2023-present Fastrepl, Inc.`. Each carries the full licence
+text in its own `LICENSE`, and `VENDOR.md` records the pinned upstream commit and what changed.
+
+| Crate | Upstream path | Files |
+| --- | --- | --- |
+| `eclume-audio-capture` | `crates/audio-capture` | `desktop/crates/audio-capture/LICENSE`, `VENDOR.md` |
+| `eclume-resampler` | `crates/resampler` | `desktop/crates/resampler/LICENSE`, `VENDOR.md` |
+| `eclume-detect` | `crates/detect` (adapted, not copied) | `desktop/crates/detect/LICENSE`, `VENDOR.md` |
+
+### Fonts
+
+`@fontsource/archivo` (Copyright 2020 The Archivo Project Authors) and `@fontsource/ibm-plex-mono`
+(Copyright IBM Corp.) are licensed under the SIL Open Font License 1.1 and are bundled in the web
+and mobile builds. The desktop UI ships the `woff2` files in `desktop/ui/fonts/` with the licence text
+in `desktop/ui/fonts/OFL.txt`. The OFL allows bundling and redistribution with software provided the
+copyright notices and licence text travel with the fonts and the fonts are not sold on their own.
+
+### RNNoise model
+
+`worker-gpu/Dockerfile` downloads `cb.rnnn` ("conjoined-burgers", 2018-08-28) from
+[GregorR/rnnoise-models](https://github.com/GregorR/rnnoise-models), pinned by SHA-256, for the
+`arnndn` pre-processing filter. The repository carries **no licence file** and GitHub detects none
+(checked 2026-11-01): the model is not licensed for redistribution by an explicit grant. The RNNoise
+code itself is BSD-3-Clause (Xiph.Org). The model is downloaded at image build and baked into the
+image, not committed to this repository. See section 8.
+
+### System packages in images
+
+The worker image installs Debian `ffmpeg` with `apt-get` (decoding and the `arnndn` filter), run as
+a separate process. Debian's `ffmpeg` is built with GPL-licensed components; eclume invokes it by
+command line and does not link it. The images also contain the Debian base (`python:3.12-slim`),
+and the compose files pull `pgvector/pgvector:pg16` (PostgreSQL licence), `redis:7-alpine`,
+`pgsty/minio` and `caddy:2.11` (Apache-2.0) as separate containers. See section 8 for Redis and
+MinIO.
