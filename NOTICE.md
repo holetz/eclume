@@ -148,3 +148,26 @@ Downloaded at runtime or build time by the GPU worker; none is committed to the 
 
 Attribution: speaker diarization uses the pyannote.audio `community-1` pipeline, Copyright CNRS and
 Hervé Bredin, CC-BY-4.0 (https://huggingface.co/pyannote/speaker-diarization-community-1).
+
+## 8. Incompatibilities and open decisions
+
+Everything below needs the owner's decision before the public release. "Unverified" means the
+audit could not read a licence from the source and did not guess one. MIT distribution means
+shipping eclume's own code and images under MIT without putting a stronger licence on them.
+
+| # | Component | Where it ships | Licence | Why it matters | Decision needed |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `@ffmpeg/core` 0.12.x (ffmpeg compiled to WebAssembly) | web build, loaded in the browser as a fallback converter (`web/src/lib/media-convert/ffmpeg.ts`) | GPL-2.0-or-later | The build serves GPL code to users; the source offer and licence text must accompany it, and an MIT-licensed application that combines with it is a derivative-work question | Keep as a separately loaded GPL asset with source offer and notice, switch to an LGPL or non-GPL build of the core, or drop the fallback |
+| 2 | RNNoise model `cb.rnnn` | worker image (`worker-gpu/Dockerfile`) | none declared upstream | Without a grant, redistribution of the baked image is not licensed | Obtain a licence statement from the author, replace it with a model under an explicit licence (for example the RNNoise reference model, BSD-3-Clause), or stop baking it into published images |
+| 3 | `redis:7-alpine` (digest-pinned) | compose files, separate container | Redis 7.4 and later: RSALv2/SSPLv1 (not OSI open source); up to 7.2: BSD-3-Clause. Version behind the digest not read offline | A source-available licence on a shipped service image | Check the version behind the digest; pin 7.2.x or switch to Valkey (BSD-3-Clause) |
+| 4 | `pgsty/minio` | compose files, separate container | Unverified for the fork; upstream MinIO is AGPL-3.0 | Network-copyleft service, not linked into eclume | Confirm the fork licence; keep it as an unmodified separate service or document an S3 alternative |
+| 5 | NVIDIA CUDA runtime wheels (`nvidia-*-cu12`, 14 packages) | worker image, pulled by torch | NVIDIA proprietary licence (redistribution allowed under NVIDIA's terms) | Not an open-source licence | Accept and document, or state that the GPU image is not redistributed |
+| 6 | `zeroconf` | server | LGPL-2.1-or-later | Dynamic use of a pure-Python library is normally fine; the LGPL text must accompany distribution | Accept (recommended) or replace |
+| 7 | `pyannoteai-sdk` | worker image | no licence file readable | Transitive dependency of `pyannote-audio` | Confirm upstream licence |
+| 8 | Debian `ffmpeg` in the worker image | worker image, called as a subprocess | GPL components | Aggregate, not linked | Accept (recommended); keep the subprocess boundary |
+| 9 | `decko`, `stickyfill` | web development tools only | no licence declared | Not shipped in any artifact | None; recorded for completeness |
+| 10 | `community-1` pyannote weights | downloaded by each deployer | CC-BY-4.0, gated | Attribution is required; the gate stays with the deployer | Keep the attribution of section 7 in the published docs |
+
+Items 1 to 4 can block an MIT-clean release. Items 5 to 10 are acceptable once the owner confirms.
+No MIT-incompatible licence was found in the Cargo graphs (sections 5 and 6) or in the Python
+packages beyond the rows above.
