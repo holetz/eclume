@@ -38,9 +38,8 @@ their dependencies).
 A package with a compound expression is counted once, under the first family named.
 
 The seven packages without a PyPI licence field were resolved against their upstream repositories:
-`pyannote-audio` is MIT (Copyright (c) 2020 CNRS); the sibling `pyannote-*` and `pyannoteai-sdk`
-packages are published by the same project and are to be confirmed per repository (recorded in
-section 8); `torchcodec` is BSD-3-Clause (PyTorch project).
+`pyannote-audio` is MIT (Copyright (c) 2020 CNRS); `pyannote-core`, `-database`, `-metrics` and `-pipeline` are MIT (Copyright CNRS, read from their
+repositories); `pyannoteai-sdk` publishes no licence file we could read and is recorded in section 8; `torchcodec` is BSD-3-Clause (PyTorch project).
 
 Workspace members (`eclume-server`, `eclume-worker`, `eclume-agent`, the engines) are eclume's own
 code under MIT and are not third-party.
@@ -60,7 +59,7 @@ code under MIT and are not third-party.
 | MIT-0, CC0-1.0, (MIT OR CC0-1.0), (MPL-2.0 OR Apache-2.0) | 5 | |
 | OFL-1.1 | 2 | `@fontsource/archivo`, `@fontsource/ibm-plex-mono`: see section 6 |
 | Python-2.0 / CC-BY-4.0 | 2 | development only (`argparse`, `caniuse-lite`) |
-| No licence field | 2 | `decko`, `stickyfill`: development only, not shipped; confirm upstream (section 8) |
+| No licence field | 2 | `decko`, `stickyfill`: development only, not shipped; no licence declared upstream (section 8) |
 | **GPL-2.0-or-later** | 1 | `@ffmpeg/core`: runtime, shipped in the web build. **See section 8.** |
 
 ## 3. npm (mobile): `mobile/package-lock.json`
@@ -135,3 +134,17 @@ command line and does not link it. The images also contain the Debian base (`pyt
 and the compose files pull `pgvector/pgvector:pg16` (PostgreSQL licence), `redis:7-alpine`,
 `pgsty/minio` and `caddy:2.11` (Apache-2.0) as separate containers. See section 8 for Redis and
 MinIO.
+
+## 7. Model weights
+
+Downloaded at runtime or build time by the GPU worker; none is committed to the repository.
+
+| Model | Used for | Licence | Source checked | Notes |
+| --- | --- | --- | --- | --- |
+| `mobiuslabsgmbh/faster-whisper-large-v3-turbo` (CTranslate2 conversion of OpenAI `whisper-large-v3-turbo`, selected by WhisperX as `large-v3-turbo`) | ASR | MIT | Hugging Face model card, 2026-11-01 | OpenAI Whisper weights are MIT |
+| `pyannote/speaker-diarization-community-1` | diarization and speaker embeddings | CC-BY-4.0 | Hugging Face model card, 2026-11-01 | Gated: each deployer must accept the terms on Hugging Face with their own token. Attribution to pyannote is required |
+| `jonatasgrosman/wav2vec2-large-xlsr-53-portuguese` | word alignment, Portuguese | Apache-2.0 | Hugging Face model card, 2026-11-01 | Fine-tune of `facebook/wav2vec2-large-xlsr-53` (Apache-2.0) on Common Voice 6.1 (CC0) |
+| RNNoise `cb.rnnn` (conjoined-burgers) | noise suppression | no licence declared | GitHub repository, 2026-11-01 | See section 8 |
+
+Attribution: speaker diarization uses the pyannote.audio `community-1` pipeline, Copyright CNRS and
+Hervé Bredin, CC-BY-4.0 (https://huggingface.co/pyannote/speaker-diarization-community-1).
