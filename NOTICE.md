@@ -23,18 +23,19 @@ repositories named in the lockfiles.
 the GPU worker image (`worker-gpu/Dockerfile`, `--extra gpu`: WhisperX, torch, pyannote and
 their dependencies).
 
-| Licence (as reported) | Packages | Notes |
+| Licence family (as reported) | Packages | Notes |
 | --- | --- | --- |
-| MIT / MIT License | 71 | includes `ctranslate2`, `alembic`, `filelock`, `fonttools` |
-| BSD-3-Clause / BSD / BSD License | 49 | includes `torchvision`, `scikit-learn`, `numpy` (BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0) |
-| Apache-2.0 / Apache Software License / combinations | 46 | includes `asyncpg`, `boto3`, `opentelemetry-*` |
-| BSD-2-Clause | 3 | `Pygments`, `lazy-object-proxy`, `whisperx` |
-| PSF-2.0 / Python Software Foundation License | 6 | `typing_extensions`, `matplotlib`, `pywin32` |
+| MIT (incl. MIT-0, MIT-CMU) | 73 | includes eclume's own workspace members, `ctranslate2`, `alembic`, `filelock`, `fonttools`, `cffi`, `pillow` |
+| Apache-2.0 (incl. dual Apache/BSD and Apache AND MIT) | 47 | `asyncpg`, `boto3`, `opentelemetry-*`, `cryptography`, `aiohttp` |
+| BSD-2/3-Clause | 46 | `torchvision`, `scikit-learn`, `numpy` (BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0), `whisperx` (BSD-2-Clause) |
+| PSF-2.0 | 6 | `typing_extensions`, `matplotlib`, `pywin32`, `defusedxml` |
 | MPL-2.0 (file-level copyleft) | 3 | `certifi`, `fqdn`, `tqdm` (MPL-2.0 AND MIT) |
-| ISC / MIT-0 / MIT-CMU / CNRI-Python | 5 | `isoduration`, `cffi`, `pillow`, `regex` |
+| ISC | 1 | `isoduration` |
 | LGPL-2.1-or-later | 1 | `zeroconf` (server): see section 8 |
 | NVIDIA proprietary | 14 | `nvidia-*-cu12` wheels pulled by torch (GPU image only): see section 8 |
 | No licence field on PyPI | 7 | `pyannote-audio`, `-core`, `-database`, `-metrics`, `-pipeline`, `pyannoteai-sdk`, `torchcodec`: see below |
+
+A package with a compound expression is counted once, under the first family named.
 
 The seven packages without a PyPI licence field were resolved against their upstream repositories:
 `pyannote-audio` is MIT (Copyright (c) 2020 CNRS); the sibling `pyannote-*` and `pyannoteai-sdk`
@@ -57,7 +58,7 @@ code under MIT and are not third-party.
 | BSD-3-Clause / BSD-2-Clause / BSD | 20 | |
 | BlueOak-1.0.0 | 4 | development only |
 | MIT-0, CC0-1.0, (MIT OR CC0-1.0), (MPL-2.0 OR Apache-2.0) | 5 | |
-| OFL-1.1 | 2 | `@fontsource/archivo`, `@fontsource/ibm-plex-mono`: see section 5 |
+| OFL-1.1 | 2 | `@fontsource/archivo`, `@fontsource/ibm-plex-mono`: see section 6 |
 | Python-2.0 / CC-BY-4.0 | 2 | development only (`argparse`, `caniuse-lite`) |
 | No licence field | 2 | `decko`, `stickyfill`: development only, not shipped; confirm upstream (section 8) |
 | **GPL-2.0-or-later** | 1 | `@ffmpeg/core`: runtime, shipped in the web build. **See section 8.** |
@@ -72,3 +73,22 @@ only). No copyleft runtime package.
 ## 4. npm (desktop): `desktop/package-lock.json`
 
 12 locked packages, all `Apache-2.0 OR MIT`.
+
+## 5. Cargo: `desktop/Cargo.lock` and `mobile/Cargo.lock`
+
+`cargo metadata --locked` resolved 714 third-party crates for the desktop workspace and 503 for the
+mobile workspace (workspace members are eclume's own code, or the vendored crates of section 6).
+`cargo deny` was not installed on the audit workstation, so no automated policy was run;
+`desktop/deny.toml` and `mobile/deny.toml` check advisories only.
+
+| Licence family | Desktop | Mobile | Notes |
+| --- | --- | --- | --- |
+| MIT, Apache-2.0 or both (including `OR` and `/` forms) | 640 | 405 | the bulk of the graph |
+| Unicode-3.0 | 18 | 18 | `icu_*` and `unicode-ident` data |
+| Unlicense OR MIT | 12 | 11 | `walkdir`, `same-file`, `memchr` family |
+| MPL-2.0 | 20 | 5 | desktop: `symphonia` decoders, `cssparser`, `selectors`; mobile: `cssparser`, `selectors`, `option-ext`. File-level copyleft, no modification by eclume |
+| BSD-2/3-Clause (alone or in `OR`/`AND`) | 17 | 15 | `ogg`, `opusic-sys` (bundles libopus, BSD-3-Clause), `brotli`, `subtle`, `encoding_rs` |
+| ISC, Zlib, BSL-1.0, CDLA-Permissive-2.0, 0BSD, CC0-1.0, MIT-0 | 20 | 15 | `ring` (Apache-2.0 AND ISC), `rustls-webpki`, `clipboard-win` (BSL-1.0), `webpki-roots` (CDLA-Permissive-2.0) |
+
+No crate is licensed under GPL, AGPL or LGPL alone. `r-efi` lists `LGPL-2.1-or-later` only as one
+alternative of an `OR` expression that also offers MIT, so the MIT option applies.
