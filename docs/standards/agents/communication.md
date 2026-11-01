@@ -23,14 +23,14 @@ One is a variable, the other a constant — see [Why only one is declared](#why-
 ### Declaring it
 
 This repo declares its language as **one BCP-47 tag**, on a single line of its **root** harness
-file (`CLAUDE.md`):
+file (`AGENTS.md`):
 
 ```
 Language: en — the contract is /docs/standards/agents/communication.md
 ```
 
 That line carries **a value and a citation, and nothing else**. It never paraphrases the rule below:
-a harness file that restates a standard is precisely the drift `/quenching:components:harness:align` exists to remove,
+a harness file that restates a standard is precisely the drift `/quenching-align:components:harness:align` exists to remove,
 while a value plus a pointer is not a restatement. It carries **one** value — a second configuration
 key on that line is a defect, not a feature.
 
@@ -41,7 +41,7 @@ Three properties earn this form:
 - it is one line, so there is nothing to keep in sync.
 
 **Only the root harness carries the declaration.** A nested harness file
-(`docs/standards/CLAUDE.md`, `web/CLAUDE.md`, `deploy/CLAUDE.md`) loads when that folder is
+(`docs/standards/AGENTS.md`, `web/AGENTS.md`, `deploy/AGENTS.md`) loads when that folder is
 touched, not at session start, so it would give up the zero-cost property this form was chosen for.
 A tag found in a nested harness file is a mistake to report, never a second place to look.
 

@@ -28,5 +28,5 @@ canonical in kebab-case English; **the prose follows the repository's language (
 [glossary](glossary.md): `grep -i '<term>' docs/glossary.md`.
 
 The full contract (homes, types, conformance) lives in the `references/` of the `quenching` plugin; the
-bundle is operated by the `quenching:knowledge:*` commands (`/quenching:knowledge:status` shows the
+bundle is operated by the `quenching-align:knowledge:*` commands (`/quenching-align:knowledge:status` shows the
 current state).
