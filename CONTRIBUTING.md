@@ -17,12 +17,6 @@ the default branch.
 4. Open the pull request and fill in its template. A maintainer reviews every change before it is
    merged.
 
-## Sign your commits (Developer Certificate of Origin)
-
-Every commit must carry a `Signed-off-by:` line, which asserts that you wrote the change or
-otherwise have the right to submit it under the project's license, as stated in the Developer
-Certificate of Origin 1.1 (see the `DCO` file). Add it with `git commit -s`.
-
 ## Code of conduct
 
 Everyone taking part in this project is expected to follow its code of conduct
