@@ -267,6 +267,30 @@ export interface paths {
         patch: operations["updateTranscriptionPreference"];
         trace?: never;
     };
+    "/api/v1/me/locale": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the account's product locale
+         * @description Since 2.30.0. The account's product locale (`null` when it never chose one), the locale in force for this request (`effective`: the account's, else the first supported `Accept-Language`, else `default`), the default and the supported locales. Summaries and agent answers are generated in the owner's locale (`en` when `null`). Separate from the transcription language (`/me/transcription`). Any valid credential, with no scope.
+         */
+        get: operations["getAccountLocale"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the account's product locale
+         * @description Since 2.30.0. `locale` is `en`, `pt-BR` or `null` (drop the choice: requests fall back to `Accept-Language`, jobs to `en`). It applies to what is generated from now on; summaries already generated do not change. Session only.
+         */
+        patch: operations["updateAccountLocale"];
+        trace?: never;
+    };
     "/api/v1/me/audio-retention": {
         parameters: {
             query?: never;
@@ -2518,6 +2542,31 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description Since 2.30.0. Every `code` an eclume server emits on a `Problem`, with the version it
+         *     appeared in. An open enum: new codes are added additively, and a client treats an unknown
+         *     code by its HTTP `status`. `title` and `detail` are English; clients localize by `code`.
+         *     - `unauthorized`, `insufficient_scope`, `forbidden`, `not_found`, `validation_failed`,
+         *       `conflict`, `hash_mismatch`, `upload_expired`, `rate_limited` (1.0.0)
+         *     - `session_required` (1.4.0): a PAT on a session-only operation
+         *     - `email_taken`, `signup_closed` (2.0.0)
+         *     - `summary_changed`, `summary_missing`, `transcript_missing`, `chat_busy` (2.2.0)
+         *     - `invalid_pairing_code`, `notice_required` (2.3.0)
+         *     - `payload_too_large`, `upload_completing`, `internal_error` (2.14.0)
+         *     - `quota_exceeded` (2.15.0)
+         *     - `invalid_reset_link` (2.18.0)
+         *     - `unsupported_media_type` (2.23.0)
+         *     - `audio_deleted` (2.29.0)
+         *     - catalogued in 2.30.0, already emitted before: `method_not_allowed` (an HTTP method the
+         *       route does not accept), `error` (any other HTTP error with no specific code),
+         *       `tag_exists`, `skill_exists`, `builtin_field` (title and tags cannot be deleted),
+         *       `fallback_agenda_type` (the fallback agenda type cannot be deleted), `not_auto` (the
+         *       field has no automatic value to accept), `too_many_files` (the Agent conversation's
+         *       attachment limit), `action_not_proposed`, `action_expired`, `action_cancelled` (an Agent
+         *       action that is no longer `proposed`)
+         * @enum {string}
+         */
+        ProblemCode: "unauthorized" | "insufficient_scope" | "forbidden" | "session_required" | "notice_required" | "not_found" | "method_not_allowed" | "validation_failed" | "conflict" | "hash_mismatch" | "upload_expired" | "upload_completing" | "rate_limited" | "email_taken" | "signup_closed" | "summary_changed" | "summary_missing" | "transcript_missing" | "chat_busy" | "invalid_pairing_code" | "invalid_reset_link" | "payload_too_large" | "unsupported_media_type" | "internal_error" | "quota_exceeded" | "audio_deleted" | "tag_exists" | "skill_exists" | "builtin_field" | "fallback_agenda_type" | "not_auto" | "too_many_files" | "action_not_proposed" | "action_expired" | "action_cancelled" | "error";
         /** @description RFC 9457 error. The client decides by `code`, never by `title`. */
         Problem: {
             /** Format: uri-reference */
@@ -2527,18 +2576,10 @@ export interface components {
             detail?: string;
             instance?: string;
             /**
-             * @description Stable code. v1 values: `unauthorized`, `insufficient_scope`, `forbidden`,
-             *     `not_found`, `validation_failed`, `conflict`, `hash_mismatch`, `upload_expired`,
-             *     `rate_limited`; since 1.4.0, `session_required` (a PAT on a session-only operation);
-             *     since 2.0.0, `email_taken` (signup with an existing e-mail) and `signup_closed`;
-             *     since 2.2.0, `summary_changed` (the summary changed since the opened version),
-             *     `summary_missing`, `transcript_missing` and `chat_busy` (an adjustment request is already
-             *     open); since 2.3.0, `invalid_pairing_code` (pairing code nonexistent,
-             *     expired or used) and `notice_required` (session of an account that has not yet accepted the notice in
-             *     force); since 2.14.0, `payload_too_large`, `upload_completing` and `internal_error`;
-             *     since 2.15.0, `quota_exceeded` (the account's quota exceeded); since 2.18.0,
-             *     `invalid_reset_link` (password reset link nonexistent, expired or used).
-             *     New codes are added additively.
+             * @description Stable machine code, the key clients localize the error by: `title` and `detail` are
+             *     English and informative only. Since 2.30.0, the full catalog of values is the
+             *     `ProblemCode` schema; new codes are added additively, and clients tolerate an unknown
+             *     one (fall back to `status`).
              */
             code: string;
             /** @description With `payload_too_large`, the route's body ceiling in bytes (since 2.14.0); with `quota_exceeded`, the quota's limit (since 2.15.0). */
@@ -2658,6 +2699,8 @@ export interface components {
             notice_version: string | null;
             /** Format: date-time */
             notice_accepted_at: string | null;
+            /** @description Since 2.30.0. The account's product locale (`GET`/`PATCH /api/v1/me/locale`), or `null` when it never chose one. */
+            locale?: components["schemas"]["Locale"] | null;
         };
         /** @description User account as seen by the admin (the `User` plus the recording count and, since 2.15.0, the usage and the quota override). */
         AdminUser: {
@@ -2674,6 +2717,8 @@ export interface components {
             notice_version: string | null;
             /** Format: date-time */
             notice_accepted_at: string | null;
+            /** @description Since 2.30.0. The account's product locale, or `null` when it never chose one. */
+            locale?: components["schemas"]["Locale"] | null;
             recording_count: number;
             /** @description Only the fields this account overrides from the platform default (`null` in a field means no limit); `null` when the account follows the whole default. */
             quotas: components["schemas"]["QuotasOverride"] | null;
@@ -2790,6 +2835,23 @@ export interface components {
             /** @description Language (BCP 47), `auto` or `null` to return to the server default. */
             language: string | null;
         };
+        /** @description Since 2.30.0. The account's product locale, the one in force for the request, the default and the supported locales. */
+        AccountLocale: {
+            /** @description The account's choice, or `null` when it never chose one. */
+            locale: components["schemas"]["Locale"] | null;
+            effective: components["schemas"]["Locale"];
+            default: components["schemas"]["Locale"];
+            supported: components["schemas"]["Locale"][];
+        };
+        AccountLocalePatch: {
+            /** @description The new locale, or `null` to drop the choice. */
+            locale: components["schemas"]["Locale"] | null;
+        };
+        /**
+         * @description Since 2.30.0. A product locale (`en` is the default). New locales are added additively.
+         * @enum {string}
+         */
+        Locale: "en" | "pt-BR";
         /** @description Since 2.29.0. How long the audio of the account's recordings stays on the server, the platform ceiling and the window in force. */
         AudioRetention: {
             /** @description The account's choice in days; `null` is off (the default). */
@@ -5356,6 +5418,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranscriptionPreference"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getAccountLocale: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's languages; used for `effective` when the account has no locale. */
+                "Accept-Language"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current locale. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountLocale"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    updateAccountLocale: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
+                "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountLocalePatch"];
+            };
+        };
+        responses: {
+            /** @description Resulting locale. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountLocale"];
                 };
             };
             401: components["responses"]["Unauthorized"];
