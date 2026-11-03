@@ -20,6 +20,7 @@ from eclume_server.agents.prompting import TranscriptText, render_transcript, su
 from eclume_server.crypto import SecretDecryptError, decrypt
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
+from eclume_server.locale import job_locale
 from eclume_server.pagination import iso
 from eclume_server.pipeline import UNSUMMARIZED, mark_recording_changed, set_step
 from eclume_server.problems import conflict, invalid_field, not_found
@@ -665,6 +666,7 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
             return f"resumo já {summary['status']}"
         provider_row, platform_key = await load_provider(conn, summary["provider_id"])
         transcript = await transcript_text(conn, summary["transcript_id"])
+        locale = await job_locale(conn, summary["owner_id"])
         await conn.execute(
             update(t.summaries)
             .where(t.summaries.c.id == summary_id)
@@ -683,7 +685,7 @@ async def run_summary(ctx: dict[str, Any], summary_id: UUID) -> str:  # noqa: PL
     factory = provider_factory(ctx)
     try:
         async with asyncio.timeout(JOB_TIMEOUT_S):
-            completion = await summarize(factory(config), transcript, summary["instructions"])
+            completion = await summarize(factory(config), transcript, summary["instructions"], locale=locale)
     except TimeoutError:
         message = f"O resumo passou de {JOB_TIMEOUT_S // 60} min."
         return await fail_summary(engine, summary_id, PROVIDER_TIMEOUT, message, attempts)

@@ -24,6 +24,7 @@ from eclume_server.agents.prompting import summarize
 from eclume_server.crypto import SecretDecryptError
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
+from eclume_server.locale import job_locale
 from eclume_server.problems import rate_limited
 from eclume_server.queue import AGENT_QUEUE
 from eclume_server.quotas import refunding, take_agent_request
@@ -172,9 +173,10 @@ async def _field_rule(ctx: dict[str, Any], owner_id: UUID, request: dict[str, An
         provider = await _provider(ctx, conn, "fields")
         recordings = await _transcribed(conn, owner_id, [UUID(value) for value in request.get("recording_ids", [])])
         transcripts = [await transcript_text(conn, row["transcript_id"]) for row in recordings]
+        locale = await job_locale(conn, owner_id)
     items = []
     for row, transcript in zip(recordings, transcripts, strict=True):
-        values, _ = await extract_fields(provider, [field], None, transcript)
+        values, _ = await extract_fields(provider, [field], None, transcript, locale=locale)
         items.append({"recording_id": str(row["id"]), "recording_title": row["title"], "value": values["campo"]})
     return items
 
@@ -197,6 +199,7 @@ async def _agenda_type(ctx: dict[str, Any], owner_id: UUID, request: dict[str, A
             .all()
         )
         values = await title_values(conn, recording, draft)
+        locale = await job_locale(conn, owner_id)
         transcript = await transcript_text(conn, recording["transcript_id"])
     # The draft takes the place of the saved type it edits (or the one with the same name), or goes at the
     # end of the list. The fallback type does not compete: it stays when none fits or confidence is low,
@@ -217,7 +220,7 @@ async def _agenda_type(ctx: dict[str, Any], owner_id: UUID, request: dict[str, A
     fallback = candidate is None or unsure
     reserve_name = draft["name"] if draft_is_reserve else (reserve or draft["name"])
     detected_name = reserve_name if fallback else candidate
-    summary = await summarize(summarizer, transcript, draft["summary_instructions"])
+    summary = await summarize(summarizer, transcript, draft["summary_instructions"], locale=locale)
     title = recording["title"]
     if draft.get("title_pattern"):
         title = render_title(draft["title_pattern"], values) or title
