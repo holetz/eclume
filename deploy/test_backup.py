@@ -1,10 +1,10 @@
-# ruff: noqa: INP001, S101, S603, S607, D102, D103, D107, PLR2004  # testes soltos dos scripts de deploy; deploy/ não é pacote Python
-"""Testes do `backup.sh` e do `restaurar-backup.sh` com um `docker` falso no PATH.
+# ruff: noqa: INP001, S101, S603, S607, D102, D103, D107, PLR2004  # loose tests of the deploy scripts; deploy/ is not a Python package
+"""Tests of `backup.sh`, `restore-backup.sh` and `staging.sh` with a fake `docker` on PATH.
 
-O `docker` falso registra cada chamada em `chamadas.jsonl`, responde ao `ps`, `inspect` e `exec`
-do projeto `eclume` e faz de restic: `backup` e `copy` só registram, `restore` grava na pasta
-montada como alvo um snapshot com o leiaute de /eclume, e `sh -c` (a conferência do sha256) imprime
-uma linha por arquivo. `FAKE_FALHA=<subcomando>` faz o restic falhar nesse subcomando.
+The fake `docker` records each call in `calls.jsonl`, answers the `ps`, `inspect` and `exec` of the
+`eclume` project and plays restic: `backup` and `copy` only record, `restore` writes into the folder
+mounted as target a snapshot with the /eclume layout, and `sh -c` (the sha256 check) prints one line
+per file. `FAKE_FAIL=<subcommand>` makes restic fail in that subcommand.
 """
 
 from __future__ import annotations
@@ -27,28 +27,28 @@ from pathlib import Path
 
 args = sys.argv[1:]
 base = Path(os.environ["FAKE_DIR"])
-with open(base / "chamadas.jsonl", "a") as f:
+with open(base / "calls.jsonl", "a") as f:
     f.write(json.dumps(args) + "\n")
 running = os.environ.get("FAKE_RUNNING", "postgres minio caddy server worker worker-gpu").split()
 cmd = args[0] if args else ""
-raiz = Path(os.environ["FAKE_ROOT_CRT"]).read_text() if os.environ.get("FAKE_ROOT_CRT") else "C"
+root = Path(os.environ["FAKE_ROOT_CRT"]).read_text() if os.environ.get("FAKE_ROOT_CRT") else "C"
 if cmd == "compose":
-    texto = " ".join(args)
-    if "cat /data/caddy/pki" in texto:
-        print(raiz, end="")
-    elif "select audio_key" in texto:
-        print(os.environ.get("FAKE_LOTE", ""))
-    sys.exit(int(os.environ.get("FAKE_COMPOSE_SAIDA", "0")) if " build " in texto else 0)
+    text = " ".join(args)
+    if "cat /data/caddy/pki" in text:
+        print(root, end="")
+    elif "select audio_key" in text:
+        print(os.environ.get("FAKE_BATCH", ""))
+    sys.exit(int(os.environ.get("FAKE_COMPOSE_EXIT", "0")) if " build " in text else 0)
 if cmd == "image" and args[1:2] == ["inspect"]:
-    sys.exit(1 if args[2] in os.environ.get("FAKE_SEM_IMAGEM", "").split() else 0)
+    sys.exit(1 if args[2] in os.environ.get("FAKE_NO_IMAGE", "").split() else 0)
 if cmd == "ps":
-    filtros = [args[i + 1] for i, a in enumerate(args) if a == "--filter"]
-    servico = next((x.rsplit("=", 1)[1] for x in filtros if "compose.service=" in x), "")
-    projeto = next((x.rsplit("=", 1)[1] for x in filtros if "compose.project=" in x), "")
-    if projeto == "eclume" and servico in running:
-        print(f"cid-{servico}")
+    filters = [args[i + 1] for i, a in enumerate(args) if a == "--filter"]
+    service = next((x.rsplit("=", 1)[1] for x in filters if "compose.service=" in x), "")
+    project = next((x.rsplit("=", 1)[1] for x in filters if "compose.project=" in x), "")
+    if project == "eclume" and service in running:
+        print(f"cid-{service}")
 elif cmd == "stop":
-    sys.exit(1 if os.environ.get("FAKE_STOP_FALHA") else 0)
+    sys.exit(1 if os.environ.get("FAKE_STOP_FAIL") else 0)
 elif cmd == "inspect":
     print("eclume_fila-gpu\neclume_dados" if "Networks" in " ".join(args) else "minio-img")
 elif cmd == "exec":
@@ -58,49 +58,49 @@ elif cmd == "exec":
         print("DUMP")
     elif "psql" in args:
         sys.stdin.read()
-        if os.environ.get("FAKE_PSQL_FALHA") and os.environ["FAKE_PSQL_FALHA"] in " ".join(args):
+        if os.environ.get("FAKE_PSQL_FAIL") and os.environ["FAKE_PSQL_FAIL"] in " ".join(args):
             sys.exit(1)
-        arquivo = base / "bancos"
-        if not arquivo.exists():
-            arquivo.write_text(os.environ.get("FAKE_DBS", "eclume").replace(" ", "\n"))
-        bancos = set(arquivo.read_text().split())
-        falhas = [x for x in os.environ.get("FAKE_SQL_FALHA", "").split("|") if x]
+        dbs_file = base / "databases"
+        if not dbs_file.exists():
+            dbs_file.write_text(os.environ.get("FAKE_DBS", "eclume").replace(" ", "\n"))
+        dbs = set(dbs_file.read_text().split())
+        failures = [x for x in os.environ.get("FAKE_SQL_FAIL", "").split("|") if x]
         for i, a in enumerate(args):
             if a != "-c":
                 continue
             sql = args[i + 1].strip()
-            if any(x in sql for x in falhas):
-                print(f"ERROR: simulado: {sql}", file=sys.stderr)
+            if any(x in sql for x in failures):
+                print(f"ERROR: simulated: {sql}", file=sys.stderr)
                 sys.exit(1)
-            if os.environ.get("FAKE_PARA_EM") and os.environ["FAKE_PARA_EM"] in sql:
-                (base / "parado").write_text(sql)
+            if os.environ.get("FAKE_HANG_AT") and os.environ["FAKE_HANG_AT"] in sql:
+                (base / "hung").write_text(sql)
                 import time
                 time.sleep(60)
             if m := re.match(r"create database (\w+)", sql):
-                bancos.add(m[1])
+                dbs.add(m[1])
             elif m := re.match(r"drop database if exists (\w+)", sql):
-                bancos.discard(m[1])
+                dbs.discard(m[1])
             elif m := re.match(r"alter database (\w+) rename to (\w+)", sql):
-                if m[1] not in bancos or m[2] in bancos:
+                if m[1] not in dbs or m[2] in dbs:
                     print(f"ERROR: rename {sql}", file=sys.stderr)
                     sys.exit(1)
-                bancos.discard(m[1])
-                bancos.add(m[2])
+                dbs.discard(m[1])
+                dbs.add(m[2])
             elif m := re.match(r"select 1 from pg_database where datname = '(\w+)'", sql):
-                print(1 if m[1] in bancos else "", end="\n" if m[1] in bancos else "")
+                print(1 if m[1] in dbs else "", end="\n" if m[1] in dbs else "")
             elif "pg_terminate_backend" not in sql:
                 print("recordings=1 summaries=0 transcripts=1 users=1")
-            arquivo.write_text("\n".join(sorted(bancos)))
+            dbs_file.write_text("\n".join(sorted(dbs)))
         if "-c" not in args:
             print("recordings=1 summaries=0 transcripts=1 users=1")
     elif "pg_restore" in args:
         sys.stdin.read()
-        ruim = os.environ.get("FAKE_DUMP_RUIM", "")
-        if ("--list" in args and ruim == "lista") or ("--list" not in args and ruim == "restaura"):
+        bad = os.environ.get("FAKE_BAD_DUMP", "")
+        if ("--list" in args and bad == "list") or ("--list" not in args and bad == "restore"):
             print("pg_restore: error: unexpected end of file", file=sys.stderr)
             sys.exit(1)
 elif cmd == "run":
-    if "claude" in args and os.environ.get("FAKE_SEM_CLAUDE"):
+    if "claude" in args and os.environ.get("FAKE_NO_CLAUDE"):
         sys.exit(127)
     mounts = {}
     i = 1
@@ -117,7 +117,7 @@ elif cmd == "run":
             break
     image, rest = args[i], args[i + 1:]
     if image == "minio-img":
-        if "mirror" in rest and os.environ.get("FAKE_MIRROR_FALHA"):
+        if "mirror" in rest and os.environ.get("FAKE_MIRROR_FAIL"):
             sys.exit(1)
         if "mirror" in rest and "/b/.espelho" in rest:
             (mounts["/b"] / ".espelho" / "rec").mkdir(parents=True, exist_ok=True)
@@ -125,10 +125,10 @@ elif cmd == "run":
         elif "ls" in rest:
             print("[x] 5B audio.ogg")
         sys.exit(0)
-    texto = " ".join(rest)
-    sub = "restore" if "restic restore" in texto else (rest[0] if rest else "")
-    if sub == os.environ.get("FAKE_FALHA"):
-        print(f"restic {sub}: falhou", file=sys.stderr)
+    text = " ".join(rest)
+    sub = "restore" if "restic restore" in text else (rest[0] if rest else "")
+    if sub == os.environ.get("FAKE_FAIL"):
+        print(f"restic {sub}: failed", file=sys.stderr)
         sys.exit(1)
     if sub == "restore":
         out = mounts["/out"]
@@ -136,7 +136,7 @@ elif cmd == "run":
                          "eclume/minio/rec/audio.ogg": "audio",
                          "eclume/secrets/env.prod": "ECLUME_ENCRYPTION_KEY=k\n",
                          "eclume/caddy/data/caddy/pki/authorities/local/root.key": "K",
-                         "eclume/caddy/data/caddy/pki/authorities/local/root.crt": raiz}.items():
+                         "eclume/caddy/data/caddy/pki/authorities/local/root.crt": root}.items():
             p = out / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(txt)
@@ -149,14 +149,14 @@ elif cmd == "run":
 
 
 class Host:
-    """Um ECLUME_DATA_DIR temporário com o `docker` falso no PATH."""
+    """A temporary ECLUME_DATA_DIR with the fake `docker` on PATH."""
 
     def __init__(self, tmp_path: Path) -> None:
         self.data = tmp_path / "srv"
         self.secrets = self.data / "secrets"
         self.secrets.mkdir(parents=True)
         (self.secrets / "env.prod").write_text("ECLUME_MINIO_USER=u\nECLUME_MINIO_PASSWORD=p\n")
-        (self.secrets / "restic-password").write_text("senha\n")
+        (self.secrets / "restic-password").write_text("password\n")
         (self.data / "backups" / "restic").mkdir(parents=True)
         (self.data / "backups" / "restic" / "config").write_text("x")
         (self.data / "caddy" / "data" / "caddy" / "pki").mkdir(parents=True)
@@ -172,20 +172,20 @@ class Host:
             "FAKE_DIR": str(self.bin),
         }
 
-    def rodar(self, script: str, *args: str, **env: str) -> subprocess.CompletedProcess[str]:
+    def run(self, script: str, *args: str, **env: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["bash", str(DEPLOY / script), *args], env={**self.env, **env}, capture_output=True, text=True, check=False
         )
 
-    def chamadas(self) -> list[list[str]]:
-        log = self.bin / "chamadas.jsonl"
+    def calls(self) -> list[list[str]]:
+        log = self.bin / "calls.jsonl"
         return [json.loads(x) for x in log.read_text().splitlines()] if log.exists() else []
 
     def restic(self, sub: str) -> list[list[str]]:
-        return [c for c in self.chamadas() if c[0] == "run" and sub in c and "minio-img" not in c]
+        return [c for c in self.calls() if c[0] == "run" and sub in c and "minio-img" not in c]
 
-    def estado(self, etapa: str) -> dict:
-        return json.loads((self.data / "estado" / f"{etapa}.json").read_text())
+    def state(self, stage: str) -> dict:
+        return json.loads((self.data / "estado" / f"{stage}.json").read_text())
 
 
 @pytest.fixture
@@ -193,128 +193,128 @@ def host(tmp_path: Path) -> Host:
     return Host(tmp_path)
 
 
-def montagens(chamada: list[str]) -> list[str]:
-    return [chamada[i + 1] for i, a in enumerate(chamada) if a == "-v"]
+def mounts(call: list[str]) -> list[str]:
+    return [call[i + 1] for i, a in enumerate(call) if a == "-v"]
 
 
-RCLONE_FORA = "RESTIC_REPOSITORY=rclone:eclume-onedrive:eclume-restic\n"
+RCLONE_OFFSITE = "RESTIC_REPOSITORY=rclone:eclume-onedrive:eclume-restic\n"
 
 
-def populacoes(host: Host) -> list[list[str]]:
-    """As chamadas que preenchem o volume do binário do rclone (`--entrypoint true` na imagem dele)."""
+def populations(host: Host) -> list[list[str]]:
+    """The calls that fill the rclone binary volume (`--entrypoint true` on its image)."""
     return [
-        c for c in host.chamadas() if c[0] == "run" and "--entrypoint" in c and c[c.index("--entrypoint") + 1] == "true"
+        c for c in host.calls() if c[0] == "run" and "--entrypoint" in c and c[c.index("--entrypoint") + 1] == "true"
     ]
 
 
-def volume_do_rclone(host: Host) -> str:
-    """O volume preenchido uma vez, pela imagem fixada do rclone, no /usr/local/bin dela."""
-    (popular,) = populacoes(host)
-    assert popular[-1].startswith("rclone/rclone:")
-    assert "@sha256:" in popular[-1]
-    (montagem,) = montagens(popular)
-    volume, destino = montagem.split(":")
+def rclone_volume(host: Host) -> str:
+    """The volume filled once, by the pinned rclone image, at its /usr/local/bin."""
+    (populate,) = populations(host)
+    assert populate[-1].startswith("rclone/rclone:")
+    assert "@sha256:" in populate[-1]
+    (mount,) = mounts(populate)
+    volume, target = mount.split(":")
     assert volume.startswith("eclume-rclone-")
-    assert destino == "/usr/local/bin"
+    assert target == "/usr/local/bin"
     return volume
 
 
-def imagem_restic(chamada: list[str]) -> str:
-    return next(a for a in chamada if a.startswith("restic/restic:"))
+def restic_image(call: list[str]) -> str:
+    return next(a for a in call if a.startswith("restic/restic:"))
 
 
-def assert_destino_rclone(chamada: list[str], volume: str, secrets: Path) -> None:
-    """O restic do destino fora recebe o binário do rclone (só leitura) e a configuração gravável."""
-    assert f"{volume}:/usr/local/bin:ro" in montagens(chamada)
-    assert f"{secrets}/restic-rclone:/run/rclone" in montagens(chamada)
-    assert "RCLONE_CONFIG=/run/rclone/rclone.conf" in chamada
+def assert_rclone_destination(call: list[str], volume: str, secrets: Path) -> None:
+    """The off-host restic gets the rclone binary (read-only) and the writable configuration."""
+    assert f"{volume}:/usr/local/bin:ro" in mounts(call)
+    assert f"{secrets}/restic-rclone:/run/rclone" in mounts(call)
+    assert "RCLONE_CONFIG=/run/rclone/rclone.conf" in call
 
 
-def test_backup_snapshot_cifrado_sem_nada_em_claro(host: Host) -> None:
-    legado = host.data / "backups"
-    for velho in ("pg/eclume-2026-09-29.dump", "caddy/caddy-pki-2026-09-29.tgz", "minio/2026-09-29/x"):
-        (legado / velho).parent.mkdir(parents=True, exist_ok=True)
-        (legado / velho).write_text("velho")
+def test_backup_encrypted_snapshot_with_nothing_in_clear(host: Host) -> None:
+    legacy = host.data / "backups"
+    for old in ("pg/eclume-2026-09-29.dump", "caddy/caddy-pki-2026-09-29.tgz", "minio/2026-09-29/x"):
+        (legacy / old).parent.mkdir(parents=True, exist_ok=True)
+        (legacy / old).write_text("old")
 
-    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="7")
+    r = host.run("backup.sh", ECLUME_BACKUP_DAY="7")
 
     assert r.returncode == 0, r.stderr + r.stdout
     (backup,) = host.restic("backup")
     assert backup[backup.index("--host") + 1] == "eclume"
     assert "/eclume/secrets/restic-*" in backup
-    fontes = montagens(backup)
-    for destino in (
+    sources = mounts(backup)
+    for target in (
         "/eclume/pg:ro",
         "/eclume/pre-deploy:ro",
         "/eclume/minio:ro",
         "/eclume/secrets:ro",
         "/eclume/caddy/data/caddy/pki:ro",
     ):
-        assert any(m.endswith(destino) for m in fontes), destino
+        assert any(m.endswith(target) for m in sources), target
     (forget,) = host.restic("forget")
     assert forget[forget.index("--keep-daily") + 1] == "7"
     assert "--prune" in forget
-    # Nada em claro depois do snapshot: nem a pasta da rodada, nem o leiaute antigo.
-    restos = sorted(p.name for p in legado.iterdir())
-    assert restos == [".restic-cache", "minio", "pre-deploy", "restic"]
-    assert [p.name for p in (legado / "minio").iterdir()] == [".espelho"]
-    estado = host.estado("backup")
-    assert estado["ok"] is True
-    assert {"ok", "at", "detalhe"} <= estado.keys()
+    # Nothing in clear after the snapshot: neither the run folder nor the old layout.
+    leftovers = sorted(p.name for p in legacy.iterdir())
+    assert leftovers == [".restic-cache", "minio", "pre-deploy", "restic"]
+    assert [p.name for p in (legacy / "minio").iterdir()] == [".espelho"]
+    state = host.state("backup")
+    assert state["ok"] is True
+    assert {"ok", "at", "detalhe"} <= state.keys()
     assert '"ok": true' in (host.data / "estado" / "backup.json").read_text()
     assert "secrets/env.prod" in (host.data / "estado" / "secrets.sha256").read_text()
 
 
-def test_backup_sem_destino_fora_registra_falha_da_copia(host: Host) -> None:
-    r = host.rodar("backup.sh")
+def test_backup_without_offsite_destination_records_the_copy_failure(host: Host) -> None:
+    r = host.run("backup.sh")
 
     assert r.returncode == 0
     assert host.restic("copy") == []
-    assert host.estado("fora")["ok"] is False
-    assert "restic-fora.env" in host.estado("fora")["detalhe"]
+    assert host.state("fora")["ok"] is False
+    assert "restic-fora.env" in host.state("fora")["detalhe"]
 
 
-def test_backup_copia_para_fora_com_a_mesma_retencao(host: Host) -> None:
+def test_backup_copies_offsite_with_the_same_retention(host: Host) -> None:
     (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
 
-    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="3")
+    r = host.run("backup.sh", ECLUME_BACKUP_DAY="3")
 
     assert r.returncode == 0, r.stderr
-    (copia,) = host.restic("copy")
-    assert copia[copia.index("--env-file") + 1].endswith("secrets/restic-fora.env")
-    assert copia[copia.index("--from-repo") + 1] == "/repo"
+    (copy,) = host.restic("copy")
+    assert copy[copy.index("--env-file") + 1].endswith("secrets/restic-fora.env")
+    assert copy[copy.index("--from-repo") + 1] == "/repo"
     assert len(host.restic("forget")) == 2
     assert all("--prune" not in f for f in host.restic("forget"))
-    assert host.estado("fora")["ok"] is True
-    # Destino S3: nada de rclone.
-    assert populacoes(host) == []
-    assert "RCLONE_CONFIG=/run/rclone/rclone.conf" not in copia
+    assert host.state("fora")["ok"] is True
+    # S3 destination: no rclone.
+    assert populations(host) == []
+    assert "RCLONE_CONFIG=/run/rclone/rclone.conf" not in copy
 
 
-def test_backup_copia_para_destino_rclone(host: Host) -> None:
-    (host.secrets / "restic-fora.env").write_text(RCLONE_FORA)
+def test_backup_copies_to_an_rclone_destination(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text(RCLONE_OFFSITE)
 
-    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="3")
+    r = host.run("backup.sh", ECLUME_BACKUP_DAY="3")
 
     assert r.returncode == 0, r.stderr
-    volume = volume_do_rclone(host)
-    fora = [c for c in host.chamadas() if c[0] == "run" and "--env-file" in c]
-    assert [c[c.index(imagem_restic(c)) + 1] for c in fora] == ["copy", "forget"]
-    for chamada in fora:
-        assert_destino_rclone(chamada, volume, host.secrets)
-    # O repositório local não passa pelo rclone.
+    volume = rclone_volume(host)
+    offsite = [c for c in host.calls() if c[0] == "run" and "--env-file" in c]
+    assert [c[c.index(restic_image(c)) + 1] for c in offsite] == ["copy", "forget"]
+    for call in offsite:
+        assert_rclone_destination(call, volume, host.secrets)
+    # The local repository does not go through rclone.
     (backup,) = host.restic("backup")
     assert "RCLONE_CONFIG=/run/rclone/rclone.conf" not in backup
-    assert host.estado("fora")["ok"] is True
+    assert host.state("fora")["ok"] is True
 
 
-def test_backup_conferencia_de_secrets_deixa_de_fora_o_que_o_snapshot_exclui(host: Host, tmp_path: Path) -> None:
-    """O sha256 de secrets/ ignora os restic-* (inclusive a pasta do rclone), como o --exclude do snapshot."""
-    r = host.rodar("backup.sh")
+def test_backup_secrets_check_leaves_out_what_the_snapshot_excludes(host: Host, tmp_path: Path) -> None:
+    """The sha256 of secrets/ ignores the restic-* (the rclone folder included), like the snapshot's --exclude."""
+    r = host.run("backup.sh")
 
     assert r.returncode == 0, r.stderr
-    (conferencia,) = [c for c in host.restic("-c") if "sha256sum" in c[-1]]
-    raiz = tmp_path / "eclume"
+    (check,) = [c for c in host.restic("-c") if "sha256sum" in c[-1]]
+    root = tmp_path / "eclume"
     for rel in (
         "secrets/env.prod",
         "secrets/restic-password",
@@ -322,58 +322,58 @@ def test_backup_conferencia_de_secrets_deixa_de_fora_o_que_o_snapshot_exclui(hos
         "secrets/restic-rclone/rclone.conf",
         "caddy/data/caddy/pki/authorities/local/root.key",
     ):
-        (raiz / rel).parent.mkdir(parents=True, exist_ok=True)
-        (raiz / rel).write_text(rel)
-    script = conferencia[-1].replace("cd /eclume", f"cd {raiz}")
-    saida = subprocess.run(["sh", "-c", script], capture_output=True, text=True, check=True).stdout
-    assert [linha.split()[1] for linha in saida.splitlines()] == [
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(rel)
+    script = check[-1].replace("cd /eclume", f"cd {root}")
+    output = subprocess.run(["sh", "-c", script], capture_output=True, text=True, check=True).stdout
+    assert [line.split()[1] for line in output.splitlines()] == [
         "caddy/data/caddy/pki/authorities/local/root.key",
         "secrets/env.prod",
     ]
 
 
-def test_backup_falha_do_restic_deixa_ok_false(host: Host) -> None:
-    r = host.rodar("backup.sh", FAKE_FALHA="backup")
+def test_backup_restic_failure_leaves_ok_false(host: Host) -> None:
+    r = host.run("backup.sh", FAKE_FAIL="backup")
 
     assert r.returncode != 0
-    assert host.estado("backup")["ok"] is False
-    assert not list((host.data / "backups").glob(".rodada.*"))
+    assert host.state("backup")["ok"] is False
+    assert not list((host.data / "backups").glob(".run.*"))
 
 
-def test_backup_sem_postgres_falha_com_motivo(host: Host) -> None:
-    r = host.rodar("backup.sh", FAKE_RUNNING="minio")
+def test_backup_without_postgres_fails_with_a_reason(host: Host) -> None:
+    r = host.run("backup.sh", FAKE_RUNNING="minio")
 
     assert r.returncode != 0
-    assert "postgres" in host.estado("backup")["detalhe"]
+    assert "postgres" in host.state("backup")["detalhe"]
 
 
-def test_backup_sem_repositorio_inicializado_falha(host: Host) -> None:
+def test_backup_without_an_initialized_repository_fails(host: Host) -> None:
     (host.data / "backups" / "restic" / "config").unlink()
 
-    r = host.rodar("backup.sh")
+    r = host.run("backup.sh")
 
     assert r.returncode != 0
-    assert "deploy.sh" in host.estado("backup")["detalhe"]
+    assert "deploy.sh" in host.state("backup")["detalhe"]
 
 
-def test_restaurar_teste_le_o_snapshot_e_apaga_a_copia_em_claro(host: Host) -> None:
-    r = host.rodar("restaurar-backup.sh", "--teste")
+def test_restore_test_reads_the_snapshot_and_deletes_the_copy_in_clear(host: Host) -> None:
+    r = host.run("restore-backup.sh", "--test")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    assert "OK: restauração" in r.stdout
+    assert "OK: restore" in r.stdout
     (restore,) = host.restic("sh")
     assert "latest" in restore
     assert "RESTIC_REPOSITORY=/repo" in restore
-    assert any(c[:2] == ["exec", "-i"] and "pg_restore" in c for c in host.chamadas())
-    assert not list((host.data / "backups").glob(".restaurar.*"))
+    assert any(c[:2] == ["exec", "-i"] and "pg_restore" in c for c in host.calls())
+    assert not list((host.data / "backups").glob(".restore.*"))
 
 
-def sql_chamadas(host: Host) -> list[str]:
-    return [" ".join(c) for c in host.chamadas() if c[:2] == ["exec", "-i"] and "psql" in c]
+def sql_calls(host: Host) -> list[str]:
+    return [" ".join(c) for c in host.calls() if c[:2] == ["exec", "-i"] and "psql" in c]
 
 
-def indice(chamadas: list[str], trecho: str) -> int:
-    return next(i for i, c in enumerate(chamadas) if trecho in c)
+def index_of(calls: list[str], fragment: str) -> int:
+    return next(i for i, c in enumerate(calls) if fragment in c)
 
 
 @pytest.fixture
@@ -384,231 +384,239 @@ def dump_pre_deploy(host: Host) -> Path:
     return dump
 
 
-def test_restaurar_banco_valida_e_restaura_no_temporario_antes_de_parar(host: Host, dump_pre_deploy: Path) -> None:
-    r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo")
+def test_restore_database_validates_and_restores_into_the_temporary_one_before_stopping(
+    host: Host, dump_pre_deploy: Path
+) -> None:
+    r = host.run("restore-backup.sh", "--database", str(dump_pre_deploy), "--confirm")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    chamadas = [" ".join(c) for c in host.chamadas()]
-    lista = indice(chamadas, "pg_restore --list")
-    temporario = indice(chamadas, "pg_restore -U eclume -d eclume_restore_novo")
-    parada = indice(chamadas, "stop ")
-    troca = indice(chamadas, "rename to eclume_antes")
-    assert lista < temporario < parada < troca
-    assert not any("drop database eclume" in c.replace("if exists ", "") and "eclume_" not in c for c in chamadas)
-    assert [c for c in host.chamadas() if c[0] == "start"]
+    calls = [" ".join(c) for c in host.calls()]
+    listing = index_of(calls, "pg_restore --list")
+    temporary = index_of(calls, "pg_restore -U eclume -d eclume_restore_novo")
+    stop = index_of(calls, "stop ")
+    swap = index_of(calls, "rename to eclume_antes")
+    assert listing < temporary < stop < swap
+    assert not any("drop database eclume" in c.replace("if exists ", "") and "eclume_" not in c for c in calls)
+    assert [c for c in host.calls() if c[0] == "start"]
 
 
-@pytest.mark.parametrize("ruim", ["lista", "restaura"])
-@pytest.mark.parametrize("modo", ["banco", "aplicar"])
-def test_restaurar_dump_truncado_nao_toca_nos_servicos_nem_no_banco(
-    host: Host, dump_pre_deploy: Path, modo: str, ruim: str
+@pytest.mark.parametrize("bad", ["list", "restore"])
+@pytest.mark.parametrize("mode", ["database", "apply"])
+def test_restore_truncated_dump_touches_neither_the_services_nor_the_database(
+    host: Host, dump_pre_deploy: Path, mode: str, bad: str
 ) -> None:
-    args = ("--banco", str(dump_pre_deploy)) if modo == "banco" else ("--aplicar", "latest")
+    args = ("--database", str(dump_pre_deploy)) if mode == "database" else ("--apply", "latest")
 
-    r = host.rodar("restaurar-backup.sh", *args, "--confirmo", FAKE_DUMP_RUIM=ruim)
+    r = host.run("restore-backup.sh", *args, "--confirm", FAKE_BAD_DUMP=bad)
 
     assert r.returncode != 0
-    assert "FALHA" in r.stderr
-    assert [c for c in host.chamadas() if c[0] in ("stop", "start")] == []
-    sql = sql_chamadas(host)
+    assert "FAILURE" in r.stderr
+    assert [c for c in host.calls() if c[0] in ("stop", "start")] == []
+    sql = sql_calls(host)
     assert not any("rename" in c or "pg_terminate_backend" in c for c in sql)
     assert not any("drop database eclume " in c or c.endswith("drop database eclume") for c in sql)
-    assert not any("mirror" in c for c in [" ".join(c) for c in host.chamadas()])
+    assert not any("mirror" in c for c in [" ".join(c) for c in host.calls()])
 
 
-def test_restaurar_falha_na_troca_devolve_o_banco_e_sobe_os_servicos(host: Host, dump_pre_deploy: Path) -> None:
-    r = host.rodar(
-        "restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo", FAKE_PSQL_FALHA="rename to eclume_antes"
+def test_restore_failure_in_the_swap_returns_the_database_and_starts_the_services(
+    host: Host, dump_pre_deploy: Path
+) -> None:
+    r = host.run(
+        "restore-backup.sh", "--database", str(dump_pre_deploy), "--confirm", FAKE_PSQL_FAIL="rename to eclume_antes"
     )
 
     assert r.returncode != 0
-    chamadas = host.chamadas()
-    assert [c for c in chamadas if c[0] == "stop"]
-    assert [c for c in chamadas if c[0] == "start"]
-    assert "rename to eclume_antes" in " ".join(sql_chamadas(host))
+    calls = host.calls()
+    assert [c for c in calls if c[0] == "stop"]
+    assert [c for c in calls if c[0] == "start"]
+    assert "rename to eclume_antes" in " ".join(sql_calls(host))
 
 
-def bancos(host: Host) -> set[str]:
-    return set((host.bin / "bancos").read_text().split())
+def databases(host: Host) -> set[str]:
+    return set((host.bin / "databases").read_text().split())
 
 
-def religou(host: Host) -> bool:
-    return any(c[0] == "start" for c in host.chamadas())
+def restarted(host: Host) -> bool:
+    return any(c[0] == "start" for c in host.calls())
 
 
-DUAS_RENAMES = "alter database eclume_restore_novo rename to eclume|alter database eclume_antes rename to eclume"
+TWO_RENAMES = "alter database eclume_restore_novo rename to eclume|alter database eclume_antes rename to eclume"
 
 
-def test_restaurar_desfazer_que_nao_consegue_devolver_nao_apaga_nada_nem_diz_que_devolveu(
+def test_restore_undo_that_cannot_return_deletes_nothing_nor_claims_it_returned(
     host: Host, dump_pre_deploy: Path
 ) -> None:
-    r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo", FAKE_SQL_FALHA=DUAS_RENAMES)
+    r = host.run("restore-backup.sh", "--database", str(dump_pre_deploy), "--confirm", FAKE_SQL_FAIL=TWO_RENAMES)
 
     assert r.returncode != 0
-    assert bancos(host) == {"eclume_antes", "eclume_restore_novo"}
-    assert "NENHUM banco se chama eclume" in r.stderr
-    assert "foi devolvido" not in r.stderr
-    assert "eclume_antes=sim" in r.stderr
-    assert "eclume_restore_novo=sim" in r.stderr
-    assert religou(host)
+    assert databases(host) == {"eclume_antes", "eclume_restore_novo"}
+    assert "NO database is called eclume" in r.stderr
+    assert "was returned" not in r.stderr
+    assert "eclume_antes=yes" in r.stderr
+    assert "eclume_restore_novo=yes" in r.stderr
+    assert restarted(host)
 
 
-def test_restaurar_desfazer_devolve_o_antigo_e_so_entao_apaga_o_temporario(host: Host, dump_pre_deploy: Path) -> None:
-    r = host.rodar(
-        "restaurar-backup.sh",
-        "--banco",
+def test_restore_undo_returns_the_old_one_and_only_then_drops_the_temporary_one(
+    host: Host, dump_pre_deploy: Path
+) -> None:
+    r = host.run(
+        "restore-backup.sh",
+        "--database",
         str(dump_pre_deploy),
-        "--confirmo",
-        FAKE_SQL_FALHA="alter database eclume_restore_novo rename to eclume",
+        "--confirm",
+        FAKE_SQL_FAIL="alter database eclume_restore_novo rename to eclume",
     )
 
     assert r.returncode != 0
-    assert bancos(host) == {"eclume"}
-    assert "eclume=sim eclume_antes=não eclume_restore_novo=não" in r.stderr
-    assert religou(host)
+    assert databases(host) == {"eclume"}
+    assert "eclume=yes eclume_antes=no eclume_restore_novo=no" in r.stderr
+    assert restarted(host)
 
 
-def test_restaurar_sem_eclume_promove_o_restaurado_e_so_apaga_o_antes_depois(host: Host, dump_pre_deploy: Path) -> None:
-    r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo", FAKE_DBS="eclume_antes")
-
-    assert r.returncode == 0, r.stderr
-    assert bancos(host) == {"eclume"}
-    assert "não existe o banco eclume" in r.stderr
-    chamadas = sql_chamadas(host)
-    promocao = indice(chamadas, "rename to eclume")
-    assert not any("drop database if exists eclume_antes" in c for c in chamadas[:promocao])
-    assert religou(host)
-
-
-def test_restaurar_com_eclume_antes_de_tentativa_anterior_o_apaga_com_garantia(
+def test_restore_without_eclume_promotes_the_restored_one_and_only_drops_antes_afterwards(
     host: Host, dump_pre_deploy: Path
 ) -> None:
-    r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo", FAKE_DBS="eclume eclume_antes")
+    r = host.run("restore-backup.sh", "--database", str(dump_pre_deploy), "--confirm", FAKE_DBS="eclume_antes")
 
     assert r.returncode == 0, r.stderr
-    assert bancos(host) == {"eclume"}
+    assert databases(host) == {"eclume"}
+    assert "the eclume database does not exist" in r.stderr
+    calls = sql_calls(host)
+    promotion = index_of(calls, "rename to eclume")
+    assert not any("drop database if exists eclume_antes" in c for c in calls[:promotion])
+    assert restarted(host)
 
 
-def test_restaurar_pg_database_ilegivel_nao_apaga_nem_para(host: Host, dump_pre_deploy: Path) -> None:
-    r = host.rodar(
-        "restaurar-backup.sh",
-        "--banco",
+def test_restore_with_eclume_antes_from_a_previous_attempt_drops_it_with_a_guarantee(
+    host: Host, dump_pre_deploy: Path
+) -> None:
+    r = host.run("restore-backup.sh", "--database", str(dump_pre_deploy), "--confirm", FAKE_DBS="eclume eclume_antes")
+
+    assert r.returncode == 0, r.stderr
+    assert databases(host) == {"eclume"}
+
+
+def test_restore_unreadable_pg_database_neither_drops_nor_stops(host: Host, dump_pre_deploy: Path) -> None:
+    r = host.run(
+        "restore-backup.sh",
+        "--database",
         str(dump_pre_deploy),
-        "--confirmo",
+        "--confirm",
         FAKE_DBS="eclume eclume_restore_novo",
-        FAKE_SQL_FALHA="from pg_database",
+        FAKE_SQL_FAIL="from pg_database",
     )
 
     assert r.returncode != 0
-    assert bancos(host) == {"eclume", "eclume_restore_novo"}
-    assert [c for c in host.chamadas() if c[0] in ("stop", "start")] == []
+    assert databases(host) == {"eclume", "eclume_restore_novo"}
+    assert [c for c in host.calls() if c[0] in ("stop", "start")] == []
 
 
-def test_restaurar_docker_stop_falhando_religa_e_remove_o_temporario(host: Host, dump_pre_deploy: Path) -> None:
-    r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo", FAKE_STOP_FALHA="1")
-
-    assert r.returncode != 0
-    assert "docker stop falhou" in r.stderr
-    assert religou(host)
-    assert bancos(host) == {"eclume"}
-
-
-def test_restaurar_aplicar_com_mirror_falhando_religa_os_servicos(host: Host) -> None:
-    r = host.rodar("restaurar-backup.sh", "--aplicar", "latest", "--confirmo", FAKE_MIRROR_FALHA="1")
+def test_restore_failing_docker_stop_restarts_and_removes_the_temporary_one(host: Host, dump_pre_deploy: Path) -> None:
+    r = host.run("restore-backup.sh", "--database", str(dump_pre_deploy), "--confirm", FAKE_STOP_FAIL="1")
 
     assert r.returncode != 0
-    assert "espelhamento do bucket falhou" in r.stderr
-    chamadas = host.chamadas()
-    assert [c for c in chamadas if c[0] == "stop"]
-    assert religou(host)
-    assert bancos(host) == {"eclume"}
-    assert not list((host.data / "backups").glob(".restaurar.*"))
+    assert "docker stop failed" in r.stderr
+    assert restarted(host)
+    assert databases(host) == {"eclume"}
 
 
-def test_restaurar_sucesso_deixa_so_o_eclume(host: Host, dump_pre_deploy: Path) -> None:
-    r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo")
+def test_restore_apply_with_a_failing_mirror_restarts_the_services(host: Host) -> None:
+    r = host.run("restore-backup.sh", "--apply", "latest", "--confirm", FAKE_MIRROR_FAIL="1")
+
+    assert r.returncode != 0
+    assert "mirroring the bucket failed" in r.stderr
+    calls = host.calls()
+    assert [c for c in calls if c[0] == "stop"]
+    assert restarted(host)
+    assert databases(host) == {"eclume"}
+    assert not list((host.data / "backups").glob(".restore.*"))
+
+
+def test_restore_success_leaves_only_eclume(host: Host, dump_pre_deploy: Path) -> None:
+    r = host.run("restore-backup.sh", "--database", str(dump_pre_deploy), "--confirm")
 
     assert r.returncode == 0, r.stderr
-    assert bancos(host) == {"eclume"}
-    assert religou(host)
+    assert databases(host) == {"eclume"}
+    assert restarted(host)
 
 
-def test_restaurar_aplicar_exige_confirmacao(host: Host) -> None:
-    r = host.rodar("restaurar-backup.sh", "--aplicar", "latest")
+def test_restore_apply_requires_confirmation(host: Host) -> None:
+    r = host.run("restore-backup.sh", "--apply", "latest")
 
     assert r.returncode == 2
-    assert host.chamadas() == []
+    assert host.calls() == []
 
 
-def test_restaurar_aplicar_por_data_do_repositorio_fora(host: Host) -> None:
+def test_restore_apply_by_date_from_the_offsite_repository(host: Host) -> None:
     (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
 
-    r = host.rodar("restaurar-backup.sh", "--repositorio", "fora", "--aplicar", "2026-10-01", "--confirmo")
+    r = host.run("restore-backup.sh", "--repository", "offsite", "--apply", "2026-10-01", "--confirm")
 
     assert r.returncode == 0, r.stderr + r.stdout
     (restore,) = host.restic("sh")
     assert "bbbb2222" in restore
     assert "--env-file" in restore
-    paradas = [c for c in host.chamadas() if c[0] == "stop"]
-    assert paradas
-    assert [c for c in host.chamadas() if c[0] == "start"]
+    stops = [c for c in host.calls() if c[0] == "stop"]
+    assert stops
+    assert [c for c in host.calls() if c[0] == "start"]
     assert "snapshot bbbb2222" in r.stdout
 
 
-def test_restaurar_do_destino_rclone(host: Host) -> None:
-    (host.secrets / "restic-fora.env").write_text(RCLONE_FORA)
+def test_restore_from_the_rclone_destination(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text(RCLONE_OFFSITE)
 
-    r = host.rodar("restaurar-backup.sh", "--repositorio", "fora", "--aplicar", "2026-10-01", "--confirmo")
+    r = host.run("restore-backup.sh", "--repository", "offsite", "--apply", "2026-10-01", "--confirm")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    volume = volume_do_rclone(host)
+    volume = rclone_volume(host)
     (snapshots,) = host.restic("snapshots")
     (restore,) = host.restic("sh")
-    for chamada in (snapshots, restore):
-        assert_destino_rclone(chamada, volume, host.secrets)
+    for call in (snapshots, restore):
+        assert_rclone_destination(call, volume, host.secrets)
 
 
-def test_restaurar_do_repositorio_local_ignora_o_rclone(host: Host) -> None:
-    (host.secrets / "restic-fora.env").write_text(RCLONE_FORA)
+def test_restore_from_the_local_repository_ignores_rclone(host: Host) -> None:
+    (host.secrets / "restic-fora.env").write_text(RCLONE_OFFSITE)
 
-    r = host.rodar("restaurar-backup.sh", "--aplicar", "2026-10-01", "--confirmo")
+    r = host.run("restore-backup.sh", "--apply", "2026-10-01", "--confirm")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    assert populacoes(host) == []
+    assert populations(host) == []
     (restore,) = host.restic("sh")
     assert "RCLONE_CONFIG=/run/rclone/rclone.conf" not in restore
 
 
-def test_restaurar_repositorio_invalido(host: Host) -> None:
-    r = host.rodar("restaurar-backup.sh", "--repositorio", "nuvem", "--teste")
+def test_restore_invalid_repository(host: Host) -> None:
+    r = host.run("restore-backup.sh", "--repository", "cloud", "--test")
 
     assert r.returncode == 2
 
 
-def test_restaurar_host_novo_devolve_secrets_e_pki(tmp_path: Path, host: Host) -> None:
-    pasta = tmp_path / "novo"
-    (pasta / "secrets").mkdir(parents=True)
-    (pasta / "secrets" / "restic-password").write_text("senha\n")
-    (pasta / "secrets" / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
+def test_restore_new_host_returns_secrets_and_pki(tmp_path: Path, host: Host) -> None:
+    folder = tmp_path / "new"
+    (folder / "secrets").mkdir(parents=True)
+    (folder / "secrets" / "restic-password").write_text("password\n")
+    (folder / "secrets" / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
 
-    r = host.rodar("restaurar-backup.sh", "--host-novo", str(pasta), FAKE_RUNNING="")
+    r = host.run("restore-backup.sh", "--new-host", str(folder), FAKE_RUNNING="")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    assert (pasta / "secrets" / "env.prod").read_text().startswith("ECLUME_ENCRYPTION_KEY=")
-    assert (pasta / "secrets" / "restic-password").read_text() == "senha\n"
-    assert (pasta / "caddy" / "data" / "caddy" / "pki" / "authorities" / "local" / "root.key").exists()
-    assert sorted(p.name for p in pasta.iterdir()) == ["caddy", "secrets"]
+    assert (folder / "secrets" / "env.prod").read_text().startswith("ECLUME_ENCRYPTION_KEY=")
+    assert (folder / "secrets" / "restic-password").read_text() == "password\n"
+    assert (folder / "caddy" / "data" / "caddy" / "pki" / "authorities" / "local" / "root.key").exists()
+    assert sorted(p.name for p in folder.iterdir()) == ["caddy", "secrets"]
     (restore,) = host.restic("sh")
     assert "--env-file" in restore
-    assert str(pasta / "secrets" / "restic-fora.env") in restore
+    assert str(folder / "secrets" / "restic-fora.env") in restore
 
 
-def test_restaurar_host_novo_sem_credencial_do_destino(tmp_path: Path, host: Host) -> None:
-    pasta = tmp_path / "novo"
-    (pasta / "secrets").mkdir(parents=True)
-    (pasta / "secrets" / "restic-password").write_text("senha\n")
+def test_restore_new_host_without_the_destination_credential(tmp_path: Path, host: Host) -> None:
+    folder = tmp_path / "new"
+    (folder / "secrets").mkdir(parents=True)
+    (folder / "secrets" / "restic-password").write_text("password\n")
 
-    r = host.rodar("restaurar-backup.sh", "--host-novo", str(pasta))
+    r = host.run("restore-backup.sh", "--new-host", str(folder))
 
     assert r.returncode == 1
     assert "restic-fora.env" in r.stderr
@@ -619,7 +627,7 @@ AUDIO_HASH = "sha256:" + hashlib.sha256(b"audio").hexdigest()
 
 @pytest.fixture
 def staging(tmp_path: Path, host: Host) -> Host:
-    """O host com o destino fora, o estado do último backup, a raiz publicada e uma árvore do main falsa."""
+    """The host with the offsite destination, the last backup state, the published root and a fake main tree."""
     (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
     crt = tmp_path / "root.crt"
     subprocess.run(
@@ -631,7 +639,7 @@ def staging(tmp_path: Path, host: Host) -> Host:
             "rsa:2048",
             "-nodes",
             "-subj",
-            "/CN=teste",
+            "/CN=test",
             "-days",
             "1",
             "-keyout",
@@ -644,283 +652,284 @@ def staging(tmp_path: Path, host: Host) -> Host:
     )
     (host.data / "downloads").mkdir()
     (host.data / "downloads" / "eclume-root.crt").write_text(crt.read_text())
-    estado = host.data / "estado"
-    estado.mkdir()
-    linhas = [
+    state_dir = host.data / "estado"
+    state_dir.mkdir()
+    lines = [
         f"{hashlib.sha256(b'ECLUME_ENCRYPTION_KEY=k\n').hexdigest()}  secrets/env.prod",
         f"{hashlib.sha256(b'K').hexdigest()}  caddy/data/caddy/pki/authorities/local/root.key",
     ]
-    (estado / "secrets.sha256").write_text("\n".join(linhas) + "\n")
+    (state_dir / "secrets.sha256").write_text("\n".join(lines) + "\n")
     src = tmp_path / "main"
     (src / "deploy").mkdir(parents=True)
     (src / "deploy" / "docker-compose.staging.yml").write_text("")
     (src / "deploy" / "smoke_prod.py").write_text(
-        f"import sys\nopen({str(host.bin / 'smoke.args')!r}, 'w').write(' '.join(sys.argv[1:]))\nprint('OK')\n"
+        # A `main` after the English rename: its smoke_prod.py knows `--read-only`.
+        f"# --read-only\nimport sys\nopen({str(host.bin / 'smoke.args')!r}, 'w').write(' '.join(sys.argv[1:]))\nprint('OK')\n"
     )
-    for nome, corpo in {
-        "df": 'printf "Use%%\\n %s%%\\n" "${FAKE_DISCO:-40}"\n',
+    for name, body in {
+        "df": 'printf "Use%%\\n %s%%\\n" "${FAKE_DISK:-40}"\n',
         "curl": 'for a; do [[ "$a" == -d ]] && exit 0; done; echo \'{"open": true, "notice": {"version": "3"}}\'\n',
     }.items():
-        (host.bin / nome).write_text("#!/usr/bin/env bash\n" + corpo)
-        (host.bin / nome).chmod(0o755)
+        (host.bin / name).write_text("#!/usr/bin/env bash\n" + body)
+        (host.bin / name).chmod(0o755)
     host.env |= {
         "ECLUME_STAGING_SRC": str(src),
         "STAGING_DIR": str(tmp_path / "home" / "eclume-staging"),
         "FAKE_ROOT_CRT": str(crt),
-        "FAKE_LOTE": f"rec/audio.ogg|{AUDIO_HASH}",
-        # Domingo: o ensaio completo, o de sempre nestes testes.
-        "ECLUME_ENSAIO_DIA": "7",
+        "FAKE_BATCH": f"rec/audio.ogg|{AUDIO_HASH}",
+        # Sunday: the full rehearsal, the usual one in these tests.
+        "ECLUME_REHEARSAL_DAY": "7",
     }
     return host
 
 
-def compose_chamadas(host: Host) -> list[str]:
-    return [" ".join(c) for c in host.chamadas() if c[0] == "compose"]
+def compose_calls(host: Host) -> list[str]:
+    return [" ".join(c) for c in host.calls() if c[0] == "compose"]
 
 
-def test_ensaio_restaura_do_repositorio_fora_confere_e_derruba(staging: Host) -> None:
-    r = staging.rodar("staging.sh", "ensaio")
+def test_rehearsal_restores_from_the_offsite_repository_checks_and_tears_down(staging: Host) -> None:
+    r = staging.run("staging.sh", "rehearse")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    estado = staging.estado("ensaio")
-    assert estado["ok"] is True, estado
-    assert "1 áudios" in estado["detalhe"]
+    state = staging.state("ensaio")
+    assert state["ok"] is True, state
+    assert "1 audio files" in state["detalhe"]
     (restore,) = staging.restic("sh")
     assert "--env-file" in restore
     assert "latest" in " ".join(restore)
     (check,) = staging.restic("check")
     assert "--read-data-subset" in check
-    chamadas = compose_chamadas(staging)
-    assert all("-p eclume-staging" in c for c in chamadas)
-    assert any(" run --rm migrate" in c for c in chamadas)
-    assert "down -v" in chamadas[-1]
+    calls = compose_calls(staging)
+    assert all("-p eclume-staging" in c for c in calls)
+    assert any(" run --rm migrate" in c for c in calls)
+    assert "down -v" in calls[-1]
     smoke = (staging.bin / "smoke.args").read_text()
     assert "--url https://127.0.0.1:18444" in smoke
-    # Nada restaurado fica em claro depois do ensaio.
-    assert not Path(staging.env["STAGING_DIR"], "restaurado").exists()
+    # Nothing restored stays in clear after the rehearsal.
+    assert not Path(staging.env["STAGING_DIR"], "restored").exists()
 
 
-def test_ensaio_le_o_destino_rclone(staging: Host) -> None:
-    (staging.secrets / "restic-fora.env").write_text(RCLONE_FORA)
+def test_rehearsal_reads_the_rclone_destination(staging: Host) -> None:
+    (staging.secrets / "restic-fora.env").write_text(RCLONE_OFFSITE)
 
-    r = staging.rodar("staging.sh", "ensaio")
+    r = staging.run("staging.sh", "rehearse")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    assert staging.estado("ensaio")["ok"] is True
-    volume = volume_do_rclone(staging)
+    assert staging.state("ensaio")["ok"] is True
+    volume = rclone_volume(staging)
     (restore,) = staging.restic("sh")
     (check,) = staging.restic("check")
-    for chamada in (restore, check):
-        assert_destino_rclone(chamada, volume, staging.secrets)
+    for call in (restore, check):
+        assert_rclone_destination(call, volume, staging.secrets)
 
 
-def test_ensaio_content_hash_divergente_falha(staging: Host) -> None:
-    r = staging.rodar("staging.sh", "ensaio", FAKE_LOTE="rec/audio.ogg|sha256:00")
+def test_rehearsal_diverging_content_hash_fails(staging: Host) -> None:
+    r = staging.run("staging.sh", "rehearse", FAKE_BATCH="rec/audio.ogg|sha256:00")
 
     assert r.returncode != 0
-    estado = staging.estado("ensaio")
-    assert estado["ok"] is False
-    assert "content_hash" in estado["detalhe"]
-    assert "down -v" in compose_chamadas(staging)[-1]
+    state = staging.state("ensaio")
+    assert state["ok"] is False
+    assert "content_hash" in state["detalhe"]
+    assert "down -v" in compose_calls(staging)[-1]
 
 
-def test_ensaio_secrets_divergentes_falha(staging: Host) -> None:
+def test_rehearsal_diverging_secrets_fails(staging: Host) -> None:
     (staging.data / "estado" / "secrets.sha256").write_text(f"{'0' * 64}  secrets/env.prod\n")
 
-    r = staging.rodar("staging.sh", "ensaio")
+    r = staging.run("staging.sh", "rehearse")
 
     assert r.returncode != 0
-    assert "sha256" in staging.estado("ensaio")["detalhe"]
+    assert "sha256" in staging.state("ensaio")["detalhe"]
 
 
-def test_ensaio_check_do_restic_falha(staging: Host) -> None:
-    r = staging.rodar("staging.sh", "ensaio", FAKE_FALHA="check")
+def test_rehearsal_restic_check_fails(staging: Host) -> None:
+    r = staging.run("staging.sh", "rehearse", FAKE_FAIL="check")
 
     assert r.returncode != 0
-    assert "restic check" in staging.estado("ensaio")["detalhe"]
+    assert "restic check" in staging.state("ensaio")["detalhe"]
 
 
-def test_ensaio_recusa_disco_cheio(staging: Host) -> None:
-    r = staging.rodar("staging.sh", "ensaio", FAKE_DISCO="91")
+def test_rehearsal_refuses_a_full_disk(staging: Host) -> None:
+    r = staging.run("staging.sh", "rehearse", FAKE_DISK="91")
 
     assert r.returncode == 3
-    assert "disco" in staging.estado("ensaio")["detalhe"]
+    assert "disk" in staging.state("ensaio")["detalhe"]
     assert staging.restic("sh") == []
 
 
-def test_ensaio_sem_destino_fora_falha(staging: Host) -> None:
+def test_rehearsal_without_offsite_destination_fails(staging: Host) -> None:
     (staging.secrets / "restic-fora.env").unlink()
 
-    r = staging.rodar("staging.sh", "ensaio")
+    r = staging.run("staging.sh", "rehearse")
 
     assert r.returncode != 0
-    assert "restic-fora.env" in staging.estado("ensaio")["detalhe"]
+    assert "restic-fora.env" in staging.state("ensaio")["detalhe"]
 
 
-def test_subir_deixa_o_stack_e_a_conta_sem_estado(staging: Host) -> None:
-    r = staging.rodar("staging.sh", "subir")
+def test_up_leaves_the_stack_and_the_account_without_state(staging: Host) -> None:
+    r = staging.run("staging.sh", "up")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    conta = Path(staging.env["STAGING_DIR"], "conta").read_text()
-    assert "ECLUME_URL=https://127.0.0.1:18444" in conta
-    assert not any("down" in c for c in compose_chamadas(staging))
+    account = Path(staging.env["STAGING_DIR"], "conta").read_text()
+    assert "ECLUME_URL=https://127.0.0.1:18444" in account
+    assert not any("down" in c for c in compose_calls(staging))
     assert not (staging.data / "estado" / "ensaio.json").exists()
 
 
-# --- ensaio proporcional: imagens retidas, parcial na semana e completo no domingo ------------------
+# --- proportional rehearsal: kept images, partial on weekdays and full on Sunday ----------------------
 
 SHA = "a" * 40
 
 
-def docker_run(host: Host, *trechos: str) -> list[str]:
-    """As chamadas `docker run` que contêm todos os trechos."""
-    return [" ".join(c) for c in host.chamadas() if c[0] == "run" and all(t in c or t in " ".join(c) for t in trechos)]
+def docker_run(host: Host, *fragments: str) -> list[str]:
+    """The `docker run` calls that contain every fragment."""
+    return [" ".join(c) for c in host.calls() if c[0] == "run" and all(t in c or t in " ".join(c) for t in fragments)]
 
 
-def test_ensaio_reaproveita_as_imagens_retidas_do_sha_sem_build(staging: Host) -> None:
-    r = staging.rodar("staging.sh", "ensaio", ECLUME_STAGING_SHA=SHA)
-
-    assert r.returncode == 0, r.stderr + r.stdout
-    chamadas = staging.chamadas()
-    assert ["tag", f"eclume-server:{SHA}", "eclume-server:staging"] in chamadas
-    assert ["tag", f"eclume-web:{SHA}", "eclume-web:staging"] in chamadas
-    assert not any(" build " in c for c in compose_chamadas(staging))
-
-
-def test_ensaio_aceita_a_imagem_retida_com_o_nome_edge(staging: Host) -> None:
-    r = staging.rodar("staging.sh", "ensaio", ECLUME_STAGING_SHA=SHA, FAKE_SEM_IMAGEM=f"eclume-web:{SHA}")
+def test_rehearsal_reuses_the_kept_images_of_the_sha_without_build(staging: Host) -> None:
+    r = staging.run("staging.sh", "rehearse", ECLUME_STAGING_SHA=SHA)
 
     assert r.returncode == 0, r.stderr + r.stdout
-    assert ["tag", f"eclume-edge:{SHA}", "eclume-web:staging"] in staging.chamadas()
-    assert not any(" build " in c for c in compose_chamadas(staging))
+    calls = staging.calls()
+    assert ["tag", f"eclume-server:{SHA}", "eclume-server:staging"] in calls
+    assert ["tag", f"eclume-web:{SHA}", "eclume-web:staging"] in calls
+    assert not any(" build " in c for c in compose_calls(staging))
 
 
-def test_ensaio_constroi_so_o_que_nao_foi_retido(staging: Host) -> None:
-    sem = f"eclume-server:{SHA} eclume-web:{SHA} eclume-edge:{SHA}"
-    r = staging.rodar("staging.sh", "ensaio", ECLUME_STAGING_SHA=SHA, FAKE_SEM_IMAGEM=sem)
+def test_rehearsal_accepts_the_kept_image_named_edge(staging: Host) -> None:
+    r = staging.run("staging.sh", "rehearse", ECLUME_STAGING_SHA=SHA, FAKE_NO_IMAGE=f"eclume-web:{SHA}")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    (build,) = [c for c in compose_chamadas(staging) if " build " in c]
+    assert ["tag", f"eclume-edge:{SHA}", "eclume-web:staging"] in staging.calls()
+    assert not any(" build " in c for c in compose_calls(staging))
+
+
+def test_rehearsal_builds_only_what_was_not_kept(staging: Host) -> None:
+    missing = f"eclume-server:{SHA} eclume-web:{SHA} eclume-edge:{SHA}"
+    r = staging.run("staging.sh", "rehearse", ECLUME_STAGING_SHA=SHA, FAKE_NO_IMAGE=missing)
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    (build,) = [c for c in compose_calls(staging) if " build " in c]
     assert build.endswith("build server web")
-    assert not any(c[0] == "tag" for c in staging.chamadas())
+    assert not any(c[0] == "tag" for c in staging.calls())
 
 
-def _compose_staging_real(staging: Host) -> None:
-    """A árvore falsa do `main` com o compose de staging deste checkout (a borda com o SPA)."""
+def _real_staging_compose(staging: Host) -> None:
+    """The fake `main` tree with this checkout's staging compose (the edge with the SPA)."""
     real = (DEPLOY / "docker-compose.staging.yml").read_text(encoding="utf-8")
     (staging.data.parent / "main" / "deploy" / "docker-compose.staging.yml").write_text(real)
 
 
-def test_ensaio_com_a_borda_reaproveita_a_edge_retida_e_sobe_o_compose_inteiro(staging: Host) -> None:
-    _compose_staging_real(staging)
-    r = staging.rodar("staging.sh", "ensaio", ECLUME_STAGING_SHA=SHA, FAKE_SEM_IMAGEM=f"eclume-web:{SHA}")
+def test_rehearsal_with_the_edge_reuses_the_kept_edge_and_starts_the_whole_compose(staging: Host) -> None:
+    _real_staging_compose(staging)
+    r = staging.run("staging.sh", "rehearse", ECLUME_STAGING_SHA=SHA, FAKE_NO_IMAGE=f"eclume-web:{SHA}")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    assert ["tag", f"eclume-edge:{SHA}", "eclume-edge:staging"] in staging.chamadas()
-    assert not any(" build " in c for c in compose_chamadas(staging))
-    # Sem lista de serviços: nada de `web` nem de `worker-agents` a esperar.
-    (subida,) = [c for c in compose_chamadas(staging) if "--wait-timeout 300" in c]
-    assert subida.endswith("up -d --wait --wait-timeout 300")
+    assert ["tag", f"eclume-edge:{SHA}", "eclume-edge:staging"] in staging.calls()
+    assert not any(" build " in c for c in compose_calls(staging))
+    # No service list: no `web` or `worker-agents` to wait for.
+    (start,) = [c for c in compose_calls(staging) if "--wait-timeout 300" in c]
+    assert start.endswith("up -d --wait --wait-timeout 300")
 
 
-def test_ensaio_com_a_borda_sem_retida_constroi_o_caddy(staging: Host) -> None:
-    _compose_staging_real(staging)
-    sem = f"eclume-server:{SHA} eclume-web:{SHA} eclume-edge:{SHA}"
-    r = staging.rodar("staging.sh", "ensaio", ECLUME_STAGING_SHA=SHA, FAKE_SEM_IMAGEM=sem)
+def test_rehearsal_with_the_edge_and_nothing_kept_builds_caddy(staging: Host) -> None:
+    _real_staging_compose(staging)
+    missing = f"eclume-server:{SHA} eclume-web:{SHA} eclume-edge:{SHA}"
+    r = staging.run("staging.sh", "rehearse", ECLUME_STAGING_SHA=SHA, FAKE_NO_IMAGE=missing)
 
     assert r.returncode == 0, r.stderr + r.stdout
-    (build,) = [c for c in compose_chamadas(staging) if " build " in c]
+    (build,) = [c for c in compose_calls(staging) if " build " in c]
     assert build.endswith("build server caddy")
     yml = Path(staging.env["STAGING_DIR"], "cpu-shares.yml").read_text()
     assert "  caddy:\n" in yml
     assert "web" not in yml
 
 
-def test_ensaio_completo_reconstroi_o_server_retido_sem_claude(staging: Host) -> None:
-    r = staging.rodar("staging.sh", "ensaio", ECLUME_STAGING_SHA=SHA, FAKE_SEM_CLAUDE="1")
+def test_full_rehearsal_rebuilds_the_kept_server_without_claude(staging: Host) -> None:
+    r = staging.run("staging.sh", "rehearse", ECLUME_STAGING_SHA=SHA, FAKE_NO_CLAUDE="1")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    (build,) = [c for c in compose_chamadas(staging) if " build " in c]
+    (build,) = [c for c in compose_calls(staging) if " build " in c]
     assert build.endswith("build server")
-    assert ["tag", f"eclume-web:{SHA}", "eclume-web:staging"] in staging.chamadas()
+    assert ["tag", f"eclume-web:{SHA}", "eclume-web:staging"] in staging.calls()
 
 
-def test_ensaio_sem_sha_conhecido_constroi_tudo(staging: Host) -> None:
-    r = staging.rodar("staging.sh", "ensaio")
+def test_rehearsal_without_a_known_sha_builds_everything(staging: Host) -> None:
+    r = staging.run("staging.sh", "rehearse")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    assert any(c.endswith("build server web") for c in compose_chamadas(staging))
+    assert any(c.endswith("build server web") for c in compose_calls(staging))
 
 
-def test_ensaio_de_domingo_restaura_o_snapshot_inteiro_e_roda_o_smoke_completo(staging: Host) -> None:
-    r = staging.rodar("staging.sh", "ensaio", ECLUME_ENSAIO_DIA="7")
+def test_sunday_rehearsal_restores_the_whole_snapshot_and_runs_the_full_smoke(staging: Host) -> None:
+    r = staging.run("staging.sh", "rehearse", ECLUME_REHEARSAL_DAY="7")
 
     assert r.returncode == 0, r.stderr + r.stdout
     (restore,) = staging.restic("sh")
     assert "--include" not in restore
-    assert "--somente-leitura" not in (staging.bin / "smoke.args").read_text()
-    assert "parcial" not in staging.estado("ensaio")["detalhe"]
+    assert "--read-only" not in (staging.bin / "smoke.args").read_text()
+    assert "partial" not in staging.state("ensaio")["detalhe"]
 
 
-@pytest.mark.parametrize("dia", ["1", "3", "6"])
-def test_ensaio_dos_outros_dias_restaura_so_banco_secrets_caddy_e_a_amostra_de_audios(staging: Host, dia: str) -> None:
-    r = staging.rodar("staging.sh", "ensaio", ECLUME_ENSAIO_DIA=dia, ECLUME_STAGING_SHA=SHA, FAKE_SEM_CLAUDE="1")
+@pytest.mark.parametrize("day", ["1", "3", "6"])
+def test_weekday_rehearsal_restores_only_database_secrets_caddy_and_the_audio_sample(staging: Host, day: str) -> None:
+    r = staging.run("staging.sh", "rehearse", ECLUME_REHEARSAL_DAY=day, ECLUME_STAGING_SHA=SHA, FAKE_NO_CLAUDE="1")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    primeira, segunda = staging.restic("sh")
-    for caminho in ("/eclume/pg", "/eclume/secrets", "/eclume/caddy"):
-        assert caminho in primeira
-    assert "/eclume/minio" not in " ".join(primeira)
-    assert "/eclume/minio/rec/audio.ogg" in segunda
-    # O smoke de resumo e chat fica para o domingo, e a retida do server serve sem o `claude`.
-    assert "--somente-leitura" in (staging.bin / "smoke.args").read_text()
-    assert not any(" build " in c for c in compose_chamadas(staging))
-    estado = staging.estado("ensaio")
-    assert estado["ok"] is True, estado
-    assert "parcial" in estado["detalhe"]
-    assert "1 áudios" in estado["detalhe"]
-    # A fatia do `restic check` continua toda noite, senão o domingo olharia sempre a mesma.
+    first, second = staging.restic("sh")
+    for path in ("/eclume/pg", "/eclume/secrets", "/eclume/caddy"):
+        assert path in first
+    assert "/eclume/minio" not in " ".join(first)
+    assert "/eclume/minio/rec/audio.ogg" in second
+    # The summary and chat smoke waits for Sunday, and the kept server works without `claude`.
+    assert "--read-only" in (staging.bin / "smoke.args").read_text()
+    assert not any(" build " in c for c in compose_calls(staging))
+    state = staging.state("ensaio")
+    assert state["ok"] is True, state
+    assert "partial" in state["detalhe"]
+    assert "1 audio files" in state["detalhe"]
+    # The `restic check` slice goes on every night, otherwise Sunday would always look at the same one.
     assert len(staging.restic("check")) == 1
 
 
-def test_ensaio_parcial_ainda_falha_com_content_hash_divergente(staging: Host) -> None:
-    r = staging.rodar("staging.sh", "ensaio", ECLUME_ENSAIO_DIA="2", FAKE_LOTE="rec/audio.ogg|sha256:00")
+def test_partial_rehearsal_still_fails_with_a_diverging_content_hash(staging: Host) -> None:
+    r = staging.run("staging.sh", "rehearse", ECLUME_REHEARSAL_DAY="2", FAKE_BATCH="rec/audio.ogg|sha256:00")
 
     assert r.returncode != 0
-    assert "content_hash" in staging.estado("ensaio")["detalhe"]
+    assert "content_hash" in staging.state("ensaio")["detalhe"]
 
 
-def test_subir_e_sempre_a_restauracao_completa(staging: Host) -> None:
-    r = staging.rodar("staging.sh", "subir", ECLUME_ENSAIO_DIA="3")
+def test_up_is_always_the_full_restore(staging: Host) -> None:
+    r = staging.run("staging.sh", "up", ECLUME_REHEARSAL_DAY="3")
 
     assert r.returncode == 0, r.stderr + r.stdout
     (restore,) = staging.restic("sh")
     assert "--include" not in restore
 
 
-def test_staging_usa_cpu_shares_e_gomaxprocs_nos_conteineres(staging: Host) -> None:
+def test_staging_uses_cpu_shares_and_gomaxprocs_in_the_containers(staging: Host) -> None:
     (staging.data.parent / "main" / "deploy" / "docker-compose.staging.yml").write_text(
-        "x-ancora: &a\n  restart: no\n\nservices:\n  caddy:\n    image: c\n  edge:\n    image: eclume-edge:staging\n"
+        "x-anchor: &a\n  restart: no\n\nservices:\n  caddy:\n    image: c\n  edge:\n    image: eclume-edge:staging\n"
     )
 
-    r = staging.rodar("staging.sh", "ensaio")
+    r = staging.run("staging.sh", "rehearse")
 
     assert r.returncode == 0, r.stderr + r.stdout
-    for chamada in docker_run(staging, "restic"):
-        assert "--cpu-shares 256" in chamada
-        assert "GOMAXPROCS=1" in chamada
+    for call in docker_run(staging, "restic"):
+        assert "--cpu-shares 256" in call
+        assert "GOMAXPROCS=1" in call
     yml = Path(staging.env["STAGING_DIR"], "cpu-shares.yml").read_text()
     assert yml == "services:\n  caddy:\n    cpu_shares: 256\n  edge:\n    cpu_shares: 256\n"
-    assert all(f"-f {staging.env['STAGING_DIR']}/cpu-shares.yml" in c for c in compose_chamadas(staging))
+    assert all(f"-f {staging.env['STAGING_DIR']}/cpu-shares.yml" in c for c in compose_calls(staging))
 
 
-# --- backup proporcional: limites, prune dominical e rotação dos logs -----------------------------
+# --- proportional backup: limits, Sunday prune and log rotation -----------------------------------
 
 
-def test_backup_de_domingo_poda_os_dois_repositorios(host: Host) -> None:
+def test_sunday_backup_prunes_both_repositories(host: Host) -> None:
     (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
 
-    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="7")
+    r = host.run("backup.sh", ECLUME_BACKUP_DAY="7")
 
     assert r.returncode == 0, r.stderr
     forgets = host.restic("forget")
@@ -928,38 +937,38 @@ def test_backup_de_domingo_poda_os_dois_repositorios(host: Host) -> None:
     assert all("--prune" in f for f in forgets)
 
 
-def test_backup_dos_outros_dias_so_esquece_sem_prune(host: Host) -> None:
+def test_weekday_backup_only_forgets_without_prune(host: Host) -> None:
     (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
 
-    for dia in ("1", "4", "6"):
-        r = host.rodar("backup.sh", ECLUME_BACKUP_DIA=dia)
+    for day in ("1", "4", "6"):
+        r = host.run("backup.sh", ECLUME_BACKUP_DAY=day)
         assert r.returncode == 0, r.stderr
     forgets = host.restic("forget")
     assert len(forgets) == 6
     assert all("--prune" not in f and "--keep-daily" in f for f in forgets)
 
 
-def test_backup_roda_todo_conteiner_com_cpu_shares_e_um_nucleo_do_go(host: Host) -> None:
+def test_backup_runs_every_container_with_cpu_shares_and_one_go_core(host: Host) -> None:
     (host.secrets / "restic-fora.env").write_text("RESTIC_REPOSITORY=s3:https://b2.example/eclume\n")
 
-    r = host.rodar("backup.sh", ECLUME_BACKUP_DIA="2")
+    r = host.run("backup.sh", ECLUME_BACKUP_DAY="2")
 
     assert r.returncode == 0, r.stderr
-    execucoes = [c for c in host.chamadas() if c[0] == "run"]
-    assert len(execucoes) >= 5  # mc, backup, forget, sha256, copy, forget
-    for c in execucoes:
+    runs = [c for c in host.calls() if c[0] == "run"]
+    assert len(runs) >= 5  # mc, backup, forget, sha256, copy, forget
+    for c in runs:
         assert c[c.index("--cpu-shares") + 1] == "256", c
         assert "GOMAXPROCS=1" in c, c
     (backup,) = host.restic("backup")
     assert backup[backup.index("--read-concurrency") + 1] == "1"
 
 
-def test_backup_rotaciona_os_logs_grandes_e_deixa_os_pequenos(host: Host) -> None:
+def test_backup_rotates_the_big_logs_and_leaves_the_small_ones(host: Host) -> None:
     dest = host.data / "backups"
     (dest / "backup.log").write_text("x" * 3000)
     (dest / "ensaio.log").write_text("y" * 10)
 
-    r = host.rodar("backup.sh", ECLUME_LOG_MAX_KB="2", ECLUME_BACKUP_DIA="2")
+    r = host.run("backup.sh", ECLUME_LOG_MAX_KB="2", ECLUME_BACKUP_DAY="2")
 
     assert r.returncode == 0, r.stderr
     assert (dest / "backup.log.1").read_text() == "x" * 3000
@@ -968,74 +977,125 @@ def test_backup_rotaciona_os_logs_grandes_e_deixa_os_pequenos(host: Host) -> Non
     assert not (dest / "ensaio.log.1").exists()
 
 
-def test_releases_rodam_os_conteineres_com_cpu_shares_e_podam_o_dist() -> None:
-    for nome in ("release-desktop.sh", "release-movel.sh"):
-        texto = (DEPLOY / nome).read_text(encoding="utf-8")
-        assert "--cpus 2 --cpu-shares 256" in texto, nome
-        assert "ls -dt dist-* 2>/dev/null | tail -n +4 | xargs -r rm -rf" in texto, nome
-        # Cada `docker run` do release leva o peso, direto ou pelo array `comum`.
-        for linha in texto.splitlines():
-            if linha.strip().startswith("docker run ") and "comum" not in linha:
-                assert "--cpu-shares 256" in linha, (nome, linha)
+def test_releases_run_the_containers_with_cpu_shares_and_prune_dist() -> None:
+    for name in ("release-desktop.sh", "release-mobile.sh"):
+        text = (DEPLOY / name).read_text(encoding="utf-8")
+        assert "--cpus 2 --cpu-shares 256" in text, name
+        assert "ls -dt dist-* 2>/dev/null | tail -n +4 | xargs -r rm -rf" in text, name
+        # Each release `docker run` carries the weight, directly or through the `common` array.
+        for line in text.splitlines():
+            if line.strip().startswith("docker run ") and "common" not in line:
+                assert "--cpu-shares 256" in line, (name, line)
 
 
-@pytest.mark.parametrize("modo", ["banco", "aplicar"])
-def test_restaurar_nao_apaga_o_work_herdado_do_ambiente(
-    host: Host, dump_pre_deploy: Path, tmp_path: Path, modo: str
+@pytest.mark.parametrize("mode", ["database", "apply"])
+def test_restore_does_not_delete_the_work_inherited_from_the_environment(
+    host: Host, dump_pre_deploy: Path, tmp_path: Path, mode: str
 ) -> None:
-    vitima = tmp_path / "vitima"
-    vitima.mkdir()
-    (vitima / "x").write_text("x")
-    if modo == "banco":
-        r = host.rodar("restaurar-backup.sh", "--banco", str(dump_pre_deploy), "--confirmo", work=str(vitima))
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    (victim / "x").write_text("x")
+    if mode == "database":
+        r = host.run("restore-backup.sh", "--database", str(dump_pre_deploy), "--confirm", work=str(victim))
     else:
-        r = host.rodar(
-            "restaurar-backup.sh", "--aplicar", "latest", "--confirmo", work=str(vitima), FAKE_RUNNING="postgres"
-        )
+        r = host.run("restore-backup.sh", "--apply", "latest", "--confirm", work=str(victim), FAKE_RUNNING="postgres")
 
-    assert (r.returncode == 0) == (modo == "banco"), r.stderr
-    assert (vitima / "x").exists()
+    assert (r.returncode == 0) == (mode == "database"), r.stderr
+    assert (victim / "x").exists()
 
 
-def interromper_em(host: Host, dump: Path, trecho: str) -> subprocess.CompletedProcess[str]:
+def interrupt_at(host: Host, dump: Path, fragment: str) -> subprocess.CompletedProcess[str]:
     proc = subprocess.Popen(
-        ["bash", str(DEPLOY / "restaurar-backup.sh"), "--banco", str(dump), "--confirmo"],
-        env={**host.env, "FAKE_PARA_EM": trecho},
+        ["bash", str(DEPLOY / "restore-backup.sh"), "--database", str(dump), "--confirm"],
+        env={**host.env, "FAKE_HANG_AT": fragment},
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
     )
     try:
-        prazo = time.monotonic() + 20
-        while not (host.bin / "parado").exists() and time.monotonic() < prazo:
+        deadline = time.monotonic() + 20
+        while not (host.bin / "hung").exists() and time.monotonic() < deadline:
             time.sleep(0.05)
-        assert (host.bin / "parado").exists(), "o docker falso não chegou ao SQL esperado"
+        assert (host.bin / "hung").exists(), "the fake docker did not reach the expected SQL"
         os.killpg(proc.pid, signal.SIGINT)
-        saida, erro = proc.communicate(timeout=20)
+        out, err = proc.communicate(timeout=20)
     finally:
         if proc.poll() is None:
             os.killpg(proc.pid, signal.SIGKILL)
-    return subprocess.CompletedProcess(proc.args, proc.returncode, saida, erro)
+    return subprocess.CompletedProcess(proc.args, proc.returncode, out, err)
 
 
-def test_restaurar_sigint_no_segundo_rename_sem_eclume_nao_religa_e_diz_como_recuperar(
+def test_restore_sigint_at_the_second_rename_without_eclume_does_not_restart_and_says_how_to_recover(
     host: Host, dump_pre_deploy: Path
 ) -> None:
-    r = interromper_em(host, dump_pre_deploy, "alter database eclume_restore_novo rename to eclume")
+    r = interrupt_at(host, dump_pre_deploy, "alter database eclume_restore_novo rename to eclume")
 
     assert r.returncode != 0
-    assert bancos(host) == {"eclume_antes", "eclume_restore_novo"}
-    assert not religou(host)
-    assert "estado medido" in r.stderr
-    assert "eclume_antes=sim" in r.stderr
-    assert "eclume_restore_novo=sim" in r.stderr
+    assert databases(host) == {"eclume_antes", "eclume_restore_novo"}
+    assert not restarted(host)
+    assert "measured state" in r.stderr
+    assert "eclume_antes=yes" in r.stderr
+    assert "eclume_restore_novo=yes" in r.stderr
     assert "rename to eclume" in r.stderr
 
 
-def test_restaurar_sigint_com_eclume_presente_religa_os_servicos(host: Host, dump_pre_deploy: Path) -> None:
-    r = interromper_em(host, dump_pre_deploy, "alter database eclume rename to eclume_antes")
+def test_restore_sigint_with_eclume_present_restarts_the_services(host: Host, dump_pre_deploy: Path) -> None:
+    r = interrupt_at(host, dump_pre_deploy, "alter database eclume rename to eclume_antes")
 
     assert r.returncode != 0
-    assert "eclume" in bancos(host)
-    assert religou(host)
+    assert "eclume" in databases(host)
+    assert restarted(host)
+
+
+# --- deprecated pt-BR names: still read, the English one wins ----------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("env", "pruned"),
+    [({"ECLUME_BACKUP_DIA": "7"}, True), ({"ECLUME_BACKUP_DAY": "3", "ECLUME_BACKUP_DIA": "7"}, False)],
+)
+def test_backup_day_reads_the_deprecated_name_and_the_new_one_wins(
+    host: Host, env: dict[str, str], *, pruned: bool
+) -> None:
+    r = host.run("backup.sh", **env)
+
+    assert r.returncode == 0, r.stderr
+    (forget,) = host.restic("forget")
+    assert ("--prune" in forget) is pruned
+
+
+@pytest.mark.parametrize(("env", "kept"), [({"MANTER": "4"}, "4"), ({"KEEP": "5", "MANTER": "4"}, "5")])
+def test_backup_retention_reads_keep_and_the_deprecated_manter(host: Host, env: dict[str, str], kept: str) -> None:
+    r = host.run("backup.sh", **env)
+
+    assert r.returncode == 0, r.stderr
+    (forget,) = host.restic("forget")
+    assert forget[forget.index("--keep-daily") + 1] == kept
+
+
+def test_rehearsal_day_reads_the_deprecated_name(staging: Host) -> None:
+    del staging.env["ECLUME_REHEARSAL_DAY"]
+    r = staging.run("staging.sh", "rehearse", ECLUME_ENSAIO_DIA="3")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert "partial" in staging.state("ensaio")["detalhe"]
+
+
+@pytest.mark.parametrize("name", ["ECLUME_STAGING_BATCH", "ECLUME_STAGING_LOTE"])
+def test_rehearsal_batch_size_reads_the_new_and_the_deprecated_name(staging: Host, name: str) -> None:
+    r = staging.run("staging.sh", "rehearse", **{name: "5"})
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert any("limit 5" in c for c in compose_calls(staging))
+
+
+def test_partial_rehearsal_on_a_main_before_the_rename_passes_the_pt_br_read_only_flag(staging: Host) -> None:
+    """A `main` whose smoke_prod.py only knows `--somente-leitura` still gets the flag it speaks."""
+    smoke = staging.data.parent / "main" / "deploy" / "smoke_prod.py"
+    smoke.write_text(smoke.read_text().replace("# --read-only\n", ""))
+
+    r = staging.run("staging.sh", "rehearse", ECLUME_REHEARSAL_DAY="2")
+
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert "--somente-leitura" in (staging.bin / "smoke.args").read_text()

@@ -1,39 +1,42 @@
 #!/usr/bin/env bash
-# Backup diário do eclume, rodado NO HOST pelo cron do usuário dono de /srv/eclume (o deploy.sh
-# instala este script em <ECLUME_DATA_DIR>/bin/ e a linha `# eclume-backup` no crontab).
+# Daily eclume backup, run ON THE HOST by the cron of the user owning /srv/eclume (deploy.sh installs
+# this script in <ECLUME_DATA_DIR>/bin/ and the `# eclume-backup` line in the crontab).
 #
 #   <ECLUME_DATA_DIR>/bin/backup.sh
 #
-# Um snapshot restic cifrado (AES-256, senha em secrets/restic-password) no repositório local
-# <ECLUME_DATA_DIR>/backups/restic, com os caminhos fixos de /eclume:
-#   /eclume/pg/roles.sql, /eclume/pg/eclume.dump   papéis do cluster e pg_dump -Fc do banco
-#   /eclume/pre-deploy/                            dumps de antes das migrations (deploy.sh)
-#   /eclume/minio/                                 espelho do bucket (backups/minio/.espelho)
-#   /eclume/caddy/data/caddy/pki/                  CA interna do Caddy, com root.key
-#   /eclume/secrets/                               env.prod, senhas, tokens e chaves (sem restic-*)
-# Retenção: MANTER (7) diários, nos dois repositórios: o `forget` roda todo dia e o `prune` (que
-# reescreve pacotes e é a parte cara) só aos domingos. Com secrets/restic-fora.env (RESTIC_REPOSITORY
-# e a credencial do destino), o mesmo snapshot vai por `restic copy` ao repositório fora do host,
-# que usa a mesma senha; um destino rclone (o OneDrive) lê a configuração de secrets/restic-rclone/.
-# Os dumps só existem em claro numa pasta temporária durante a rodada.
+# One encrypted restic snapshot (AES-256, password in secrets/restic-password) in the local
+# repository <ECLUME_DATA_DIR>/backups/restic, with the fixed /eclume paths:
+#   /eclume/pg/roles.sql, /eclume/pg/eclume.dump   cluster roles and pg_dump -Fc of the database
+#   /eclume/pre-deploy/                            dumps from before the migrations (deploy.sh)
+#   /eclume/minio/                                 mirror of the bucket (backups/minio/.espelho)
+#   /eclume/caddy/data/caddy/pki/                  Caddy's internal CA, with root.key
+#   /eclume/secrets/                               env.prod, passwords, tokens and keys (no restic-*)
+# Retention: KEEP (7) dailies, in both repositories: the `forget` runs every day and the `prune`
+# (which rewrites packs and is the expensive part) only on Sundays. With secrets/restic-fora.env
+# (RESTIC_REPOSITORY and the destination's credential), the same snapshot goes by `restic copy` to
+# the off-host repository, which uses the same password; an rclone destination (OneDrive) reads its
+# configuration from secrets/restic-rclone/. The dumps only exist in clear in a temporary folder
+# during the run.
 #
-# Estado (contrato com o vigia.sh): estado/backup.json e estado/fora.json ({"ok", "at", "detalhe"},
-# por rename) e estado/secrets.sha256 (sha256sum de secrets/ e da PKI, caminhos relativos ao
-# ECLUME_DATA_DIR). Restauração: restaurar-backup.sh (docs/project/deploy-producao.md).
+# State (contract with watchdog.sh): estado/backup.json and estado/fora.json ({"ok", "at", "detalhe"},
+# by rename) and estado/secrets.sha256 (sha256sum of secrets/ and of the PKI, paths relative to
+# ECLUME_DATA_DIR). The folder, stage and key names are host data and stay in pt-BR.
+# Restore: restore-backup.sh (docs/project/deploy-producao.md).
+# Deprecated pt-BR variable names, still read as a fallback: MANTER, ECLUME_BACKUP_DIA.
 set -euo pipefail
 DATA_DIR="${ECLUME_DATA_DIR:-/srv/eclume}"
-MANTER="${MANTER:-7}"
-# O host também é CI e staging: todo contêiner do backup leva peso de CPU baixo e o Go do restic e
-# do mc, um núcleo. O `prune` é dominical (ECLUME_BACKUP_DIA força o dia, 1-7; 7 = domingo).
+KEEP="${KEEP:-${MANTER:-7}}"
+# The host is also CI and staging: every backup container gets a low CPU weight, and the Go of
+# restic and mc one core. The `prune` is on Sundays (ECLUME_BACKUP_DAY forces the day, 1-7; 7 = Sunday).
 CPU_SHARES=256
-DIA="${ECLUME_BACKUP_DIA:-$(date +%u)}"
+DAY="${ECLUME_BACKUP_DAY:-${ECLUME_BACKUP_DIA:-$(date +%u)}}"
 PRUNE=()
-[[ "$DIA" -ne 7 ]] || PRUNE=(--prune)
-# backup.log e ensaio.log (o cron anexa a eles) passam para <nome>.1 ao chegar neste tamanho.
+[[ "$DAY" -ne 7 ]] || PRUNE=(--prune)
+# backup.log and ensaio.log (the cron appends to them) move to <name>.1 when they reach this size.
 LOG_MAX_KB="${ECLUME_LOG_MAX_KB:-5120}"
 DEST="$DATA_DIR/backups"
 SECRETS="$DATA_DIR/secrets"
-ESTADO="$DATA_DIR/estado"
+STATE="$DATA_DIR/estado"
 REPO="$DEST/restic"
 PKI="$DATA_DIR/caddy/data/caddy/pki"
 RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
@@ -45,105 +48,105 @@ container() {
   docker ps -q --filter label=com.docker.compose.project=eclume \
     --filter "label=com.docker.compose.service=$1" | head -n 1
 }
-# estado <etapa> <true|false> <detalhe>: o json da etapa, por rename (o vigia lê o mtime).
-estado() {
-  local detalhe="${3//\\/\\\\}"
-  detalhe="${detalhe//\"/\\\"}"
-  printf '{"ok": %s, "at": "%s", "detalhe": "%s"}\n' "$2" "$(date -Iseconds)" "$detalhe" > "$ESTADO/.$1.json.tmp"
-  mv -f "$ESTADO/.$1.json.tmp" "$ESTADO/$1.json"
+# state <stage> <true|false> <detail>: the stage's json, by rename (the watchdog reads the mtime).
+state() {
+  local detail="${3//\\/\\\\}"
+  detail="${detail//\"/\\\"}"
+  printf '{"ok": %s, "at": "%s", "detalhe": "%s"}\n' "$2" "$(date -Iseconds)" "$detail" > "$STATE/.$1.json.tmp"
+  mv -f "$STATE/.$1.json.tmp" "$STATE/$1.json"
 }
-# restic como root num contêiner (lê a PKI do Caddy, dona root), com o repositório local em /repo.
+# restic as root in a container (it reads Caddy's PKI, owned by root), with the local repository in /repo.
 restic_() {
   docker run --rm --cpu-shares "$CPU_SHARES" -e GOMAXPROCS=1 -e RESTIC_REPOSITORY=/repo -e RESTIC_PASSWORD_FILE=/run/restic-password \
     -e RESTIC_CACHE_DIR=/cache -v "$REPO:/repo" -v "$DEST/.restic-cache:/cache" \
     -v "$SECRETS/restic-password:/run/restic-password:ro" "$@"
 }
 
-etapa=backup
+stage=backup
 tmp=""
-fim() {
+finish() {
   local status=$?
   [[ -z "$tmp" ]] || rm -rf "$tmp"
   if [[ "$status" -ne 0 ]]; then
-    log "ERRO na etapa $etapa (saída $status)"
-    estado "$etapa" false "${motivo:-falhou com saída $status; veja backups/backup.log}"
+    log "ERROR in stage $stage (exit $status)"
+    state "$stage" false "${reason:-failed with exit $status; see backups/backup.log}"
   fi
 }
-trap fim EXIT
-mkdir -p "$ESTADO" "$DEST/minio/.espelho" "$DEST/pre-deploy" "$DEST/.restic-cache"
-for nome in backup ensaio; do
-  if [[ -f "$DEST/$nome.log" && "$(wc -c < "$DEST/$nome.log")" -ge $((LOG_MAX_KB * 1024)) ]]; then
-    mv -f "$DEST/$nome.log" "$DEST/$nome.log.1"
+trap finish EXIT
+mkdir -p "$STATE" "$DEST/minio/.espelho" "$DEST/pre-deploy" "$DEST/.restic-cache"
+for name in backup ensaio; do
+  if [[ -f "$DEST/$name.log" && "$(wc -c < "$DEST/$name.log")" -ge $((LOG_MAX_KB * 1024)) ]]; then
+    mv -f "$DEST/$name.log" "$DEST/$name.log.1"
   fi
 done
 
-motivo="sem $SECRETS/restic-password ou repositório em $REPO (rode o deploy.sh)"
+reason="no $SECRETS/restic-password or repository in $REPO (run deploy.sh)"
 [[ -s "$SECRETS/restic-password" && -f "$REPO/config" ]] || exit 1
 pg="$(container postgres)"
 minio="$(container minio)"
-motivo="postgres ou minio do projeto eclume não está rodando"
+reason="postgres or minio of the eclume project is not running"
 [[ -n "$pg" && -n "$minio" ]] || exit 1
-unset motivo
-tmp="$(mktemp -d "$DEST/.rodada.XXXXXX")"
+unset reason
+tmp="$(mktemp -d "$DEST/.run.XXXXXX")"
 
 log "postgres: dump"
 docker exec "$pg" pg_dumpall -U eclume --roles-only > "$tmp/roles.sql"
 docker exec "$pg" pg_dump -U eclume -Fc eclume > "$tmp/eclume.dump"
 
-log "minio: espelho do bucket"
+log "minio: bucket mirror"
 user="$(sed -n 's/^ECLUME_MINIO_USER=//p' "$SECRETS/env.prod" | tail -n 1)"
 pass="$(sed -n 's/^ECLUME_MINIO_PASSWORD=//p' "$SECRETS/env.prod" | tail -n 1)"
-# A rede interna `dados` do projeto (o MinIO também está na `fila-gpu`).
+# The project's internal `dados` network (MinIO is also on `fila-gpu`).
 network="$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$minio" | grep '_dados$')"
 image="$(docker inspect -f '{{.Config.Image}}' "$minio")"
 docker run --rm --cpu-shares "$CPU_SHARES" -e GOMAXPROCS=1 --network "$network" --user "$(id -u):$(id -g)" -e HOME=/tmp \
   -e "MC_HOST_src=http://$user:$pass@minio:9000" -v "$DEST/minio:/b" --entrypoint mc "$image" \
   mirror --overwrite --remove --quiet src/eclume /b/.espelho >/dev/null
 
-log "restic: snapshot local"
-fontes=(-v "$tmp:/eclume/pg:ro" -v "$DEST/pre-deploy:/eclume/pre-deploy:ro"
+log "restic: local snapshot"
+sources=(-v "$tmp:/eclume/pg:ro" -v "$DEST/pre-deploy:/eclume/pre-deploy:ro"
   -v "$DEST/minio/.espelho:/eclume/minio:ro" -v "$SECRETS:/eclume/secrets:ro")
-[[ ! -d "$PKI" ]] || fontes+=(-v "$PKI:/eclume/caddy/data/caddy/pki:ro")
-# --host fixo: o hostname do contêiner muda a cada rodada, e o forget agrupa por host e caminhos.
-restic_ "${fontes[@]}" "$RESTIC_IMAGE" backup --host eclume --tag eclume --quiet --read-concurrency 1 \
+[[ ! -d "$PKI" ]] || sources+=(-v "$PKI:/eclume/caddy/data/caddy/pki:ro")
+# Fixed --host: the container's hostname changes on every run, and forget groups by host and paths.
+restic_ "${sources[@]}" "$RESTIC_IMAGE" backup --host eclume --tag eclume --quiet --read-concurrency 1 \
   --exclude '/eclume/secrets/restic-*' /eclume
-restic_ "$RESTIC_IMAGE" forget --host eclume --keep-daily "$MANTER" "${PRUNE[@]}" --quiet
-# A conferência do ensaio e da prova de host novo: sha256 do que o snapshot levou de secrets/ e da PKI.
-restic_ "${fontes[@]}" --entrypoint sh "$RESTIC_IMAGE" -c \
+restic_ "$RESTIC_IMAGE" forget --host eclume --keep-daily "$KEEP" "${PRUNE[@]}" --quiet
+# The check of the rehearsal and of the new-host proof: sha256 of what the snapshot took from secrets/ and the PKI.
+restic_ "${sources[@]}" --entrypoint sh "$RESTIC_IMAGE" -c \
   'cd /eclume && find secrets $(test -d caddy && echo caddy) -type f ! -path "secrets/restic-*" -exec sha256sum {} + | sort -k 2' \
-  > "$ESTADO/.secrets.sha256.tmp"
-mv -f "$ESTADO/.secrets.sha256.tmp" "$ESTADO/secrets.sha256"
-# O snapshot substitui o que o backup antigo deixava em claro.
+  > "$STATE/.secrets.sha256.tmp"
+mv -f "$STATE/.secrets.sha256.tmp" "$STATE/secrets.sha256"
+# The snapshot replaces what the old backup left in clear.
 rm -rf "$DEST/pg" "$DEST/caddy"
 find "$DEST/minio" -mindepth 1 -maxdepth 1 -name '20*' -exec rm -rf {} +
-resumo="$(du -sh "$tmp/eclume.dump" | cut -f1) de banco, $(find "$DEST/minio/.espelho" -type f | wc -l) arquivos no bucket"
-estado backup true "$resumo"
-log "ok: $resumo"
+summary="$(du -sh "$tmp/eclume.dump" | cut -f1) of database, $(find "$DEST/minio/.espelho" -type f | wc -l) files in the bucket"
+state backup true "$summary"
+log "ok: $summary"
 
-etapa=fora
+stage=fora
 if [[ ! -s "$SECRETS/restic-fora.env" ]]; then
-  log "fora: sem $SECRETS/restic-fora.env; cópia fora do host não configurada"
-  estado fora false "sem secrets/restic-fora.env: cópia fora do host não configurada"
+  log "off-host: no $SECRETS/restic-fora.env; off-host copy not configured"
+  state fora false "no secrets/restic-fora.env: off-host copy not configured"
   exit 0
 fi
-log "restic: cópia para o repositório fora do host"
-# Destino rclone (RESTIC_REPOSITORY=rclone:<remoto>:<caminho>, como o OneDrive): a imagem do restic
-# não traz o `rclone` que ele chama. O binário estático da imagem fixada entra por um volume, que o
-# Docker preenche com o /usr/local/bin dela na primeira montagem; a configuração, de
-# secrets/restic-rclone/, entra gravável porque o rclone renova o token OAuth (e a regrava como root).
-destino_rclone=()
+log "restic: copy to the off-host repository"
+# rclone destination (RESTIC_REPOSITORY=rclone:<remote>:<path>, like OneDrive): the restic image does
+# not ship the `rclone` it calls. The pinned image's static binary comes in through a volume, which
+# Docker fills with its /usr/local/bin on the first mount; the configuration, from
+# secrets/restic-rclone/, comes in writable because rclone renews the OAuth token (and rewrites it as root).
+rclone_dest=()
 if grep -q '^RESTIC_REPOSITORY=rclone:' "$SECRETS/restic-fora.env"; then
   volume="eclume-rclone-$(cut -c1-12 <<< "${RCLONE_IMAGE##*sha256:}")"
   docker run --rm --network none -v "$volume:/usr/local/bin" --entrypoint true "$RCLONE_IMAGE"
-  destino_rclone=(-v "$volume:/usr/local/bin:ro" -v "$SECRETS/restic-rclone:/run/rclone" -e RCLONE_CONFIG=/run/rclone/rclone.conf)
+  rclone_dest=(-v "$volume:/usr/local/bin:ro" -v "$SECRETS/restic-rclone:/run/rclone" -e RCLONE_CONFIG=/run/rclone/rclone.conf)
 fi
-fora_() {
-  docker run --rm --cpu-shares "$CPU_SHARES" -e GOMAXPROCS=1 --env-file "$SECRETS/restic-fora.env" "${destino_rclone[@]}" -e RESTIC_PASSWORD_FILE=/run/restic-password \
+offsite_() {
+  docker run --rm --cpu-shares "$CPU_SHARES" -e GOMAXPROCS=1 --env-file "$SECRETS/restic-fora.env" "${rclone_dest[@]}" -e RESTIC_PASSWORD_FILE=/run/restic-password \
     -e RESTIC_CACHE_DIR=/cache -v "$DEST/.restic-cache:/cache" \
     -v "$SECRETS/restic-password:/run/restic-password:ro" "$@"
 }
-fora_ -v "$REPO:/repo" "$RESTIC_IMAGE" copy --from-repo /repo \
+offsite_ -v "$REPO:/repo" "$RESTIC_IMAGE" copy --from-repo /repo \
   --from-password-file /run/restic-password --host eclume --quiet
-fora_ "$RESTIC_IMAGE" forget --host eclume --keep-daily "$MANTER" "${PRUNE[@]}" --quiet
-estado fora true "snapshot copiado; $MANTER diários retidos"
-log "ok: cópia fora do host"
+offsite_ "$RESTIC_IMAGE" forget --host eclume --keep-daily "$KEEP" "${PRUNE[@]}" --quiet
+state fora true "snapshot copied; $KEEP dailies kept"
+log "ok: off-host copy"
