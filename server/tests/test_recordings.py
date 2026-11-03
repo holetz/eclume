@@ -26,7 +26,7 @@ def test_listing_with_malformed_cursor_returns_422(
     # `["2026-01-01T00:00:00", 5]`: well-formed JSON, but the id is not text.
     response = api.get("/api/v1/recordings", params={"cursor": "WyIyMDI2LTAxLTAxVDAwOjAwOjAwIiwgNV0"})
     assert response.status_code == 422
-    assert "cursor inválido" in response.text
+    assert "invalid cursor" in response.text
 
 
 def test_list_get_and_filter(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):

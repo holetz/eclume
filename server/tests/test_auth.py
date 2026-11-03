@@ -188,7 +188,7 @@ def test_pat_neither_manages_pats_nor_reaches_the_panel(
     response = pat.get("/api/v1/tokens")
     assert response.status_code == 403
     assert response.json()["code"] == "session_required"
-    assert "só sessão" in response.json()["detail"]
+    assert "only a browser session" in response.json()["detail"]
     created = pat.post("/api/v1/tokens", json={"name": "x", "scopes": ["recordings:read"]})
     assert created.status_code == 403
     # The admin panel is not the user's: none of their credentials pass there.

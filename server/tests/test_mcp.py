@@ -136,7 +136,7 @@ def test_scopes_and_another_accounts_recording(
     stranger = token_of(as_user(make_user()).pat(*ALL_READ))
     other = call(client, stranger, "get_recording", recording_id=rid)
     assert other["isError"] is True
-    assert "inexistente" in other["content"][0]["text"]
+    assert "does not exist" in other["content"][0]["text"]
     assert call(client, stranger, "get_recording", recording_id="nao-e-uuid")["isError"] is True
 
 
