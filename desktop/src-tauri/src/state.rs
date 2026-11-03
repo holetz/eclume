@@ -2761,7 +2761,7 @@ mod tests {
     fn ca_fixada_com_certificado_a_mais_pede_nova_entrada_na_abertura() {
         use crate::account::tests::CA;
 
-        let other = include_str!("../../../server/tests/fixtures/ca-teste.pem");
+        let other = include_str!("../../../server/tests/fixtures/ca-test.pem");
         let (state, dir, pinned) = opened_with_pinned("ca-a-mais", &format!("{CA}{other}"));
         let view = state.view().unwrap();
         assert_eq!(view.connection, Connection::FirstRun);

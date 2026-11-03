@@ -689,7 +689,7 @@ pub(crate) mod tests {
         let dir = dir("trocada");
         let pinned = dir.join(pin::PINNED_FILE);
         std::fs::write(&pinned, CA).unwrap();
-        let other = include_str!("../../../server/tests/fixtures/ca-teste.pem");
+        let other = include_str!("../../../server/tests/fixtures/ca-test.pem");
         let net = Arc::new(
             ScriptNet::default()
                 .expect("inseguro GET /downloads/eclume-root.crt", pem())
@@ -722,7 +722,7 @@ pub(crate) mod tests {
         })
     }
 
-    const OTHER_CA: &str = include_str!("../../../server/tests/fixtures/ca-teste.pem");
+    const OTHER_CA: &str = include_str!("../../../server/tests/fixtures/ca-test.pem");
 
     #[test]
     fn proxima_raiz_aprendida_pela_conexao_fixada() {
@@ -800,7 +800,7 @@ pub(crate) mod tests {
     #[test]
     fn so_a_ca_fixada_com_certificado_a_mais_e_regravada() {
         let dir = dir("reparo");
-        let other = include_str!("../../../server/tests/fixtures/ca-teste.pem");
+        let other = include_str!("../../../server/tests/fixtures/ca-test.pem");
         let two = format!("{CA}{other}");
         let pinned = dir.join(pin::PINNED_FILE);
         let config = Config {
