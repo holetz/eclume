@@ -1,0 +1,8 @@
+# Expected pytest skips in CI (deploy/skips.py). Format: file::test | reason.
+# Any skip outside this list, or listed and absent, fails the python pillar.
+worker-gpu/tests/test_gpu_e2e.py::test_transcribes_the_two_voice_dialogue | needs the eclume-gpu-test compose (S4, #158)
+worker-gpu/tests/test_gpu_e2e.py::test_missing_audio_yields_transcription_failed | needs the eclume-gpu-test compose (S4, #158)
+# The real claude runs only on the host gate: public CI has no token.
+server/tests/test_agents_real.py::test_claude_cli_summarizes_the_fixture_transcript | no ECLUME_TEST_CLAUDE
+server/tests/test_agents_real.py::test_chat_reads_the_transcript_when_the_request_depends_on_it | no ECLUME_TEST_CLAUDE
+server/tests/test_agents_real.py::test_chat_about_form_does_not_read_the_transcript | no ECLUME_TEST_CLAUDE

@@ -1,0 +1,23 @@
+# pip-audit exceptions of the `audit` pillar (deploy/pillars.sh), one per line:
+#   <vulnerability id> <deadline YYYY-MM-DD> <reason>
+# After the deadline the exception stops counting and the pillar fails again. The Rust exceptions live
+# in the [advisories] ignore of desktop/deny.toml and mobile/deny.toml; for npm the path is `overrides`.
+#
+# The GPU worker's `gpu` extra (holetz/eclume#161): whisperx 3.8.6 pins torch~=2.8.0 and
+# huggingface-hub<1.0 (transformers 5 needs >=1.3), so nothing below moves by bump until whisperx
+# lets go. Models only from the fixed tables of whisperx and pyannote, cached in /srv/eclume/models.
+PYSEC-2025-193 2026-12-31 torch CVE-2025-2999/GHSA-vgrw-7cvw-pwgx: unpack_sequence, local attack; eclume does not call it; pinned by whisperx
+PYSEC-2025-194 2026-12-31 torch CVE-2025-3000/GHSA-rrmf-rvhw-rf47: torch.jit.script, local attack; nothing is compiled with jit.script; pinned by whisperx
+PYSEC-2025-195 2026-12-31 torch CVE-2025-3001/GHSA-qfhq-4f3w-5fph: torch.lstm_cell with forged arguments, local attack; pinned by whisperx
+PYSEC-2025-203 2026-12-31 torch CVE-2025-55551: DoS in torch.linalg.lu, not used; pinned by whisperx
+PYSEC-2025-204 2026-12-31 torch CVE-2025-55552: rot90 with randn_like, not used; pinned by whisperx
+PYSEC-2025-206 2026-12-31 torch CVE-2025-55554: overflow in nan_to_num().long(), not used; pinned by whisperx
+PYSEC-2026-139 2026-12-31 torch CVE-2026-4538: deserialization in the pt2 loader, local attack; the worker loads no .pt2; no fix
+PYSEC-2026-2286 2026-12-31 torch CVE-2026-24747/GHSA-63cw-57p8-fm3p: weights_only unpickler with a forged checkpoint; only pyannote's fixed checkpoints; pinned by whisperx
+PYSEC-2025-217 2026-12-31 transformers CVE-2025-14929: X-CLIP checkpoint conversion, not used; no fix
+PYSEC-2026-2288 2026-12-31 transformers CVE-2026-1839/GHSA-69w3-r845-3855: Trainer, the worker only runs inference; pinned by whisperx (hub<1.0)
+PYSEC-2026-2289 2026-12-31 transformers CVE-2026-4372/GHSA-29pf-2h5f-8g72: forged config.json; only whisperx's fixed alignment model; pinned by whisperx (hub<1.0)
+PYSEC-2026-2290 2026-12-31 transformers CVE-2026-5241/GHSA-fgcw-684q-jj6r: LightGlue, not used; pinned by whisperx (hub<1.0)
+PYSEC-2026-3929 2026-12-31 transformers CVE-2026-9856/GHSA-xrqw-3rrv-vx5w: save_pretrained, the worker saves no models; pinned by whisperx (hub<1.0)
+PYSEC-2026-4174 2026-12-31 transformers CVE-2026-80047/GHSA-x9r9-c232-4q39: custom_generate, alignment is CTC without generate; no fix
+PYSEC-2026-3740 2026-12-31 nltk CVE-2026-81726/GHSA-8mgp-746c-j5xp: artifact APIs; only the punkt_tab at the image's fixed path; no fix

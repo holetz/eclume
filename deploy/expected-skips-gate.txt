@@ -1,0 +1,4 @@
+# Expected pytest skips on the host gate (deploy/skips.py). Format: file::test | reason.
+# Here ffmpeg and the real claude run: only the GPU e2e, from the gpu-e2e pillar (S4, #158), skips.
+worker-gpu/tests/test_gpu_e2e.py::test_transcribes_the_two_voice_dialogue | needs the eclume-gpu-test compose (S4, #158)
+worker-gpu/tests/test_gpu_e2e.py::test_missing_audio_yields_transcription_failed | needs the eclume-gpu-test compose (S4, #158)
