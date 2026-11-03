@@ -207,7 +207,7 @@ fn token_fica_em_memoria_ate_sair_ou_ser_recusado() {
 
 #[test]
 fn raiz_servida_com_dois_certificados_grava_so_o_primeiro() {
-    let outra = include_str!("../../../../server/tests/fixtures/ca-teste.pem");
+    let outra = include_str!("../../../../server/tests/fixtures/ca-test.pem");
     let (dirs, _guard) = dirs_temp("ca-a-mais");
     let roteiro = Roteiro::default();
     roteiro.responde(

@@ -265,7 +265,7 @@ mod tests {
 
     const CA: &str = include_str!("../tests/fixtures/ca-teste.pem");
     const CA_SHA256: &str = "b36a35276dcebd4b810c47c567f5b240f638450ab9701d196c64e4e7c6eaa233";
-    const OTHER_CA: &str = include_str!("../../../../server/tests/fixtures/ca-teste.pem");
+    const OTHER_CA: &str = include_str!("../../../../server/tests/fixtures/ca-test.pem");
 
     fn pem(body: &str) -> Result<HttpResponse> {
         Ok(HttpResponse {

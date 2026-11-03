@@ -367,7 +367,7 @@ mod tests {
 
     #[test]
     fn ca_fixada_com_dois_certificados_e_erro_e_a_extra_soma_os_dois() {
-        let other = include_str!("../../../../server/tests/fixtures/ca-teste.pem");
+        let other = include_str!("../../../../server/tests/fixtures/ca-test.pem");
         let path = temp("duas.pem", &format!("{TEST_CA}{other}"));
         let Err(err) = trusted_roots(&TrustMode::Pinned(path.clone())) else {
             panic!("dois certificados no modo fixado tinham de ser erro");

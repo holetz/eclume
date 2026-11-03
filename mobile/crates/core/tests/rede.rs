@@ -675,7 +675,7 @@ fn reaberto_com_ca(nome: &str, ca: &str) -> (eclume_mobile_core::Core, comum::Li
 fn ca_guardada_com_certificado_a_mais_pede_nova_entrada() {
     use eclume_mobile_core::conexao::EstadoConexao;
 
-    let outra = include_str!("../../../../server/tests/fixtures/ca-teste.pem");
+    let outra = include_str!("../../../../server/tests/fixtures/ca-test.pem");
     let (core, _guard) = reaberto_com_ca("ca-a-mais", &format!("{}{outra}", comum::CA_PEM));
     let EstadoConexao::SemCredencial { motivo, .. } = core.estado().unwrap().conexao else {
         panic!("esperava a tela Entrar");
@@ -706,7 +706,7 @@ fn ca_trocada_pela_proxima_sem_parear_de_novo() {
 
     use eclume_mobile_core::{sondar as sondar_nucleo, trancar};
 
-    const OUTRA_CA: &str = include_str!("../../../../server/tests/fixtures/ca-teste.pem");
+    const OUTRA_CA: &str = include_str!("../../../../server/tests/fixtures/ca-test.pem");
     let outra = eclume_sync::pin::root_from_pem(OUTRA_CA.as_bytes()).unwrap();
     let outra = outra.sha256;
     let (nucleo, roteiro, _guard) = nucleo_conectado("proxima");
