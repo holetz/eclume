@@ -133,6 +133,15 @@ mapping to `transcricao.md`) is in [contracts/README.md](/contracts/README.md).
   English. Wire names (paths, fields, enum and `code` values, scopes, tags, components and example
   keys) stay as they were. Only descriptions change: no schema, route or validation. Patch, with no
   effect for clients.
+- **Account locale and coded errors (2.30.0, `i18n`):** `GET`/`PATCH /me/locale` (read with any
+  valid credential, write by session only) carry `{locale, effective, default, supported}`: `locale`
+  is the account's choice (`en`, `pt-BR` or `null`), `effective` is the locale in force (the
+  account's, else `Accept-Language`, else `default`), `default` is `en`. `User` and `AdminUser`
+  gain `locale` (always sent, not in `required`). The new `ProblemCode` schema enumerates every
+  problem `code` the server raises; `Problem.code` stays `type: string`, so clients keep tolerating
+  an unknown code. `title` and `detail` become English and are informative only: clients localize
+  by `code` ([i18n.md](../code/i18n.md)). Summaries and agent answers are generated in the owner's
+  locale. All additive. Minor.
 - **Chat over the base (2.7.0, `base-chat`):** `POST /base-chat` (202, with the question and up to
   10 history messages, which the client keeps) and `GET /base-chat/{chat_id}` (poll until `done` or
   `failed`), both with `summaries:read`. The state lives 1 h in Redis; another account's is 404;
