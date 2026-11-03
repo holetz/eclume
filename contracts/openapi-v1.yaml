@@ -5356,6 +5356,68 @@ components:
             $ref: "#/components/schemas/Problem"
 
   schemas:
+    ProblemCode:
+      description: |
+        Since 2.30.0. Every `code` an eclume server emits on a `Problem`, with the version it
+        appeared in. An open enum: new codes are added additively, and a client treats an unknown
+        code by its HTTP `status`. `title` and `detail` are English; clients localize by `code`.
+        - `unauthorized`, `insufficient_scope`, `forbidden`, `not_found`, `validation_failed`,
+          `conflict`, `hash_mismatch`, `upload_expired`, `rate_limited` (1.0.0)
+        - `session_required` (1.4.0): a PAT on a session-only operation
+        - `email_taken`, `signup_closed` (2.0.0)
+        - `summary_changed`, `summary_missing`, `transcript_missing`, `chat_busy` (2.2.0)
+        - `invalid_pairing_code`, `notice_required` (2.3.0)
+        - `payload_too_large`, `upload_completing`, `internal_error` (2.14.0)
+        - `quota_exceeded` (2.15.0)
+        - `invalid_reset_link` (2.18.0)
+        - `unsupported_media_type` (2.23.0)
+        - `audio_deleted` (2.29.0)
+        - catalogued in 2.30.0, already emitted before: `method_not_allowed` (an HTTP method the
+          route does not accept), `error` (any other HTTP error with no specific code),
+          `tag_exists`, `skill_exists`, `builtin_field` (title and tags cannot be deleted),
+          `fallback_agenda_type` (the fallback agenda type cannot be deleted), `not_auto` (the
+          field has no automatic value to accept), `too_many_files` (the Agent conversation's
+          attachment limit), `action_not_proposed`, `action_expired`, `action_cancelled` (an Agent
+          action that is no longer `proposed`)
+      type: string
+      enum:
+        - unauthorized
+        - insufficient_scope
+        - forbidden
+        - session_required
+        - notice_required
+        - not_found
+        - method_not_allowed
+        - validation_failed
+        - conflict
+        - hash_mismatch
+        - upload_expired
+        - upload_completing
+        - rate_limited
+        - email_taken
+        - signup_closed
+        - summary_changed
+        - summary_missing
+        - transcript_missing
+        - chat_busy
+        - invalid_pairing_code
+        - invalid_reset_link
+        - payload_too_large
+        - unsupported_media_type
+        - internal_error
+        - quota_exceeded
+        - audio_deleted
+        - tag_exists
+        - skill_exists
+        - builtin_field
+        - fallback_agenda_type
+        - not_auto
+        - too_many_files
+        - action_not_proposed
+        - action_expired
+        - action_cancelled
+        - error
+
     Problem:
       description: RFC 9457 error. The client decides by `code`, never by `title`.
       type: object
@@ -5374,18 +5436,10 @@ components:
           type: string
         code:
           description: |
-            Stable code. v1 values: `unauthorized`, `insufficient_scope`, `forbidden`,
-            `not_found`, `validation_failed`, `conflict`, `hash_mismatch`, `upload_expired`,
-            `rate_limited`; since 1.4.0, `session_required` (a PAT on a session-only operation);
-            since 2.0.0, `email_taken` (signup with an existing e-mail) and `signup_closed`;
-            since 2.2.0, `summary_changed` (the summary changed since the opened version),
-            `summary_missing`, `transcript_missing` and `chat_busy` (an adjustment request is already
-            open); since 2.3.0, `invalid_pairing_code` (pairing code nonexistent,
-            expired or used) and `notice_required` (session of an account that has not yet accepted the notice in
-            force); since 2.14.0, `payload_too_large`, `upload_completing` and `internal_error`;
-            since 2.15.0, `quota_exceeded` (the account's quota exceeded); since 2.18.0,
-            `invalid_reset_link` (password reset link nonexistent, expired or used).
-            New codes are added additively.
+            Stable machine code, the key clients localize the error by: `title` and `detail` are
+            English and informative only. Since 2.30.0, the full catalog of values is the
+            `ProblemCode` schema; new codes are added additively, and clients tolerate an unknown
+            one (fall back to `status`).
           type: string
         limit:
           description: >-

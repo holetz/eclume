@@ -1,8 +1,8 @@
 {
   "type": "https://eclume.dev/problems/payload-too-large",
-  "title": "Corpo grande demais",
+  "title": "Payload too large",
   "status": 413,
   "code": "payload_too_large",
-  "detail": "O corpo passou do limite de 65536 bytes desta rota.",
+  "detail": "The body exceeded this route's limit of 65536 bytes.",
   "limit": 65536
 }

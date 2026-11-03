@@ -201,6 +201,28 @@ def test_every_example_validates_strictly_against_the_media_type_schema(
     assert failures == []
 
 
+def test_every_problem_example_and_documented_code_is_in_the_problem_code_catalog(
+    bundle: dict[str, Any], source_spec: dict[str, Any]
+) -> None:
+    catalog = set(bundle["components"]["schemas"]["ProblemCode"]["enum"])
+    problem_codes = [
+        value["code"]
+        for label, _, value in _media_examples(bundle)
+        if "application/problem+json" in label and isinstance(value, dict) and "code" in value
+    ]
+    assert problem_codes  # guards against a walk that finds no problem example
+    documented = set(re.findall(r"`code: ([a-z_]+)`", yaml.safe_dump(source_spec)))
+    assert set(problem_codes) <= catalog
+    assert documented <= catalog, documented - catalog
+
+
+def test_problem_examples_are_english(bundle: dict[str, Any]) -> None:
+    for label, _, value in _media_examples(bundle):
+        if "application/problem+json" in label:
+            text = " ".join(str(value.get(key, "")) for key in ("title", "detail"))
+            assert not re.search(r"[ãâáàçéêíóôõú]", text, re.IGNORECASE), (label, text)
+
+
 def test_every_fixture_is_referenced_by_an_example(source_spec: dict[str, Any]) -> None:
     referenced = {Path(example["externalValue"]).name for example in source_spec["components"]["examples"].values()}
     on_disk = {path.name for path in FIXTURES.iterdir()}

@@ -1,12 +1,12 @@
 {
   "type": "https://eclume.dev/problems/validation-failed",
-  "title": "Requisição inválida",
+  "title": "Invalid request",
   "status": 422,
   "code": "validation_failed",
   "errors": [
     {
       "field": "sha256",
-      "message": "deve ter 64 caracteres hexadecimais minúsculos"
+      "message": "must be 64 lowercase hexadecimal characters"
     }
   ]
 }
