@@ -1,21 +1,21 @@
-# ruff: noqa: INP001  # script solto, chamado pelos scripts de deploy e pelos workflows; deploy/ não é pacote
-"""Lógica do gate de qualidade do eclume (status `eclume/gate` no commit), só com a stdlib.
+# ruff: noqa: INP001  # loose script, called by the deploy scripts and the workflows; deploy/ is not a package
+"""Logic of the eclume quality gate (the `eclume/gate` status on the commit), stdlib only.
 
-Subcomandos, todos com a entrada no stdin:
+Subcommands, all reading stdin:
 
-- `decidir` — o status combinado do commit (`gh api repos/<repo>/commits/<sha>/status`); sai 0 só
-  quando o `eclume/gate` mais recente está em `success` e, senão, diz o estado e sai 1;
-- `descricao` — uma linha `<pilar> <código de saída>` por pilar executado (`--duracao <s>`,
-  `--log <caminho>`, `--dispensados a,b` e `--desde <sha>` para os pilares que o diff não exigiu);
-  imprime o estado final (`success`, `failure` ou `error`) e, na linha seguinte,
-  a descrição do status, com no máximo 140 caracteres;
-- `pilares` — os pilares que o diff `--desde <sha-verde>` até `--sha` exige (`--repo` aponta a raiz
-  do git), ou que os caminhos do stdin exigem (`--stdin`, um por linha, para quem não tem o git);
-  `--todos` ou diff impossível rodam todos; um pilar por linha, na ordem de `PILARES`;
-- `alvos-do-push` — o stdin do hook de pre-push; imprime o SHA de cada atualização de
-  `refs/heads/main`, ignorando a ref apagada.
+- `decide` — the commit's combined status (`gh api repos/<repo>/commits/<sha>/status`); exits 0 only
+  when the latest `eclume/gate` is `success` and otherwise states the state and exits 1;
+- `describe` — one `<pillar> <exit code>` line per pillar run (`--duration <s>`, `--log <path>`,
+  `--skipped a,b` and `--since <sha>` for the pillars the diff did not require); prints the final
+  state (`success`, `failure` or `error`) and, on the next line, the status description, at most
+  140 characters;
+- `pillars` — the pillars the diff `--since <green-sha>` to `--sha` requires (`--repo` points at the
+  git root), or that the stdin paths require (`--stdin`, one per line, for callers without git);
+  `--all` or an impossible diff runs all of them; one pillar per line, in `PILLARS` order;
+- `push-targets` — the pre-push hook's stdin; prints the SHA of each update of `refs/heads/main`,
+  ignoring a deleted ref.
 
-Contrato: docs/standards/code/monorepo.md.
+Contract: docs/standards/code/monorepo.md.
 """
 
 from __future__ import annotations
@@ -27,8 +27,8 @@ import subprocess
 import sys
 from typing import Any
 
-CONTEXTO = "eclume/gate"
-PILARES = (
+CONTEXT = "eclume/gate"
+PILLARS = (
     "python",
     "contracts",
     "web",
@@ -37,22 +37,22 @@ PILARES = (
     "mobile",
     "docs",
     "windows",
-    "auditoria",
+    "audit",
     "android",
     "gpu-e2e",
 )
-# Pilares que só o gate roda: a CI não tem o xwin, a rede da auditoria, o SDK Android (o build
-# do APK verificado leva perto de 15 min) a cada PR nem a GPU do gpu-e2e.
-SO_NO_GATE = ("windows", "auditoria", "android", "gpu-e2e")
-# Saída de um pilar que não pôde provar (GPU ocupada além da espera): sem prova, nunca verde nem falha.
-INCONCLUSIVO = 75
-LIMITE_DESCRICAO = 140
+# Pillars only the gate runs: CI has no xwin, no network for the audit, no Android SDK (the verified
+# APK build takes about 15 min) on every PR and no GPU for gpu-e2e.
+GATE_ONLY = ("windows", "audit", "android", "gpu-e2e")
+# Exit code of a pillar that could not prove (GPU busy past the wait): no proof, never green nor failure.
+INCONCLUSIVE = 75
+DESCRIPTION_LIMIT = 140
 
-# Caminhos que exigem cada pilar: o mesmo mapa dos filtros do `.github/workflows/ci.yml` (o
-# `deploy/test_gate.py` falha se os dois divergirem) mais os três pilares que só o gate roda.
-_CI = (".github/workflows/ci.yml", ".github/actions/**", "deploy/pilares.sh")
+# Paths that require each pillar: the same map as the `.github/workflows/ci.yml` filters
+# (`deploy/test_gate.py` fails if the two diverge) plus the pillars only the gate runs.
+_CI = (".github/workflows/ci.yml", ".github/actions/**", "deploy/pillars.sh")
 _UV = ("pyproject.toml", "uv.lock", ".python-version")
-_DEPENDENCIAS = (
+_DEPENDENCIES = (
     "pyproject.toml",
     "uv.lock",
     "web/package.json",
@@ -67,7 +67,7 @@ _DEPENDENCIAS = (
     "mobile/**/Cargo.toml",
     "mobile/Cargo.lock",
     "mobile/deny.toml",
-    "deploy/auditoria-excecoes.txt",
+    "deploy/audit-exceptions.txt",
 )
 _DESKTOP = (
     *_CI,
@@ -83,7 +83,7 @@ _MOBILE = (
     "web/src/lib/vocabulario.js",
     "web/src/lib/vocabulario.d.ts",
 )
-FILTROS: dict[str, tuple[str, ...]] = {
+FILTERS: dict[str, tuple[str, ...]] = {
     "python": (
         *_CI,
         *_UV,
@@ -116,12 +116,12 @@ FILTROS: dict[str, tuple[str, ...]] = {
     "desktop": _DESKTOP,
     "mobile": _MOBILE,
     "docs": (*_CI, "docs/**", "**/*.md", "deploy/docs_check.py", "deploy/test_docs_check.py"),
-    # Só do gate: o código só-Windows é o do desktop; o APK é o do mobile; a auditoria lê as
-    # dependências (e as exceções).
+    # Gate only: the Windows-only code is the desktop's; the APK is the mobile's; the audit reads the
+    # dependencies (and the exceptions).
     "windows": _DESKTOP,
-    "auditoria": (*_CI, *_DEPENDENCIAS),
+    "audit": (*_CI, *_DEPENDENCIES),
     "android": _MOBILE,
-    # A prova CUDA: o worker-gpu, os engines, o schema da transcrição, o compose de teste e o script.
+    # The CUDA proof: worker-gpu, the engines, the transcript schema, the test compose and the script.
     "gpu-e2e": (
         *_CI,
         "worker-gpu/**",
@@ -131,9 +131,9 @@ FILTROS: dict[str, tuple[str, ...]] = {
         "deploy/gpu-e2e.sh",
     ),
 }
-# Mudou algum destes, o gate roda todos os pilares: o próprio gate e os scripts de deploy, o lock e
-# a toolchain (uma versão nova de ferramenta pode quebrar qualquer pilar).
-GATILHOS_DE_TODOS = (
+# When any of these changes, the gate runs every pillar: the gate itself and the deploy scripts, the
+# locks and the toolchain (a new tool version can break any pillar).
+TRIGGERS_OF_ALL = (
     "deploy/**",
     ".github/workflows/ci.yml",
     "pyproject.toml",
@@ -144,187 +144,187 @@ GATILHOS_DE_TODOS = (
     "**/Cargo.lock",
     "**/package-lock.json",
 )
-ALVO = "refs/heads/main"
-SHA_NULO = "0" * 40
+TARGET = "refs/heads/main"
+NULL_SHA = "0" * 40
 
 
-def estado_do_gate(combinado: dict[str, Any]) -> str | None:
-    """Estado do `eclume/gate` no status combinado (o mais recente por contexto), ou None."""
-    for status in combinado.get("statuses") or []:
-        if status.get("context") == CONTEXTO:
+def gate_state(combined: dict[str, Any]) -> str | None:
+    """State of `eclume/gate` in the combined status (the latest per context), or None."""
+    for status in combined.get("statuses") or []:
+        if status.get("context") == CONTEXT:
             return status.get("state")
     return None
 
 
-def decidir(combinado: dict[str, Any]) -> tuple[bool, str]:
-    """(liberado, mensagem) para publicar o commit do status combinado."""
-    estado = estado_do_gate(combinado)
-    if estado == "success":
-        return True, f"{CONTEXTO} = success"
-    if estado is None:
-        return False, f"{CONTEXTO} ausente no commit (rode bash deploy/gate.sh)"
-    return False, f"{CONTEXTO} = {estado}, não success"
+def decide(combined: dict[str, Any]) -> tuple[bool, str]:
+    """(cleared, message) for publishing the commit of the combined status."""
+    state = gate_state(combined)
+    if state == "success":
+        return True, f"{CONTEXT} = success"
+    if state is None:
+        return False, f"{CONTEXT} missing on the commit (run bash deploy/gate.sh)"
+    return False, f"{CONTEXT} = {state}, not success"
 
 
-def _duracao(segundos: int) -> str:
-    minutos, seg = divmod(max(segundos, 0), 60)
-    return f"{minutos}min{seg:02d}s" if minutos else f"{seg}s"
+def _duration(seconds: int) -> str:
+    minutes, sec = divmod(max(seconds, 0), 60)
+    return f"{minutes}min{sec:02d}s" if minutes else f"{sec}s"
 
 
-def _regex_do_glob(glob: str) -> re.Pattern[str]:
-    """O glob dos filtros da CI (`**` atravessa pastas, `*` não) como expressão regular."""
-    saida = []
+def _glob_regex(glob: str) -> re.Pattern[str]:
+    """A CI filter glob (`**` crosses folders, `*` does not) as a regular expression."""
+    out = []
     i = 0
     while i < len(glob):
         if glob.startswith("**/", i):
-            saida.append("(?:.*/)?")
+            out.append("(?:.*/)?")
             i += 3
         elif glob.startswith("**", i):
-            saida.append(".*")
+            out.append(".*")
             i += 2
         elif glob[i] == "*":
-            saida.append("[^/]*")
+            out.append("[^/]*")
             i += 1
         else:
-            saida.append(re.escape(glob[i]))
+            out.append(re.escape(glob[i]))
             i += 1
-    return re.compile("".join(saida) + r"\Z")
+    return re.compile("".join(out) + r"\Z")
 
 
-def casa(caminho: str, globs: tuple[str, ...]) -> bool:
-    """O caminho (relativo à raiz, com `/`) casa algum dos globs."""
-    return any(_regex_do_glob(g).match(caminho) for g in globs)
+def matches(path: str, globs: tuple[str, ...]) -> bool:
+    """The path (relative to the root, with `/`) matches one of the globs."""
+    return any(_glob_regex(g).match(path) for g in globs)
 
 
-def pilares_exigidos(arquivos: list[str] | None) -> list[str]:
-    """Pilares que o conjunto de arquivos alterados exige; `None` (diff desconhecido) exige todos."""
-    if arquivos is None:
-        return list(PILARES)
-    arquivos = [a.strip().replace("\\", "/") for a in arquivos if a.strip()]
-    if any(casa(a, GATILHOS_DE_TODOS) for a in arquivos):
-        return list(PILARES)
-    return [p for p in PILARES if any(casa(a, FILTROS[p]) for a in arquivos)]
+def required_pillars(files: list[str] | None) -> list[str]:
+    """Pillars the set of changed files requires; `None` (unknown diff) requires all of them."""
+    if files is None:
+        return list(PILLARS)
+    files = [f.strip().replace("\\", "/") for f in files if f.strip()]
+    if any(matches(f, TRIGGERS_OF_ALL) for f in files):
+        return list(PILLARS)
+    return [p for p in PILLARS if any(matches(f, FILTERS[p]) for f in files)]
 
 
-def arquivos_alterados(desde: str, ate: str, repo: str = ".") -> list[str] | None:
-    """Arquivos que mudaram de `desde` a `ate`, ou None se o git não consegue dizer."""
+def changed_files(since: str, until: str, repo: str = ".") -> list[str] | None:
+    """Files that changed from `since` to `until`, or None when git cannot say."""
     try:
-        saida = subprocess.run(  # noqa: S603
-            ["git", "-C", repo, "diff", "--name-only", "--no-renames", "-z", f"{desde}..{ate}"],  # noqa: S607
+        out = subprocess.run(  # noqa: S603
+            ["git", "-C", repo, "diff", "--name-only", "--no-renames", "-z", f"{since}..{until}"],  # noqa: S607
             check=True,
             capture_output=True,
         ).stdout
     except (OSError, subprocess.CalledProcessError):
         return None
-    return [a for a in saida.decode("utf-8", "replace").split("\0") if a]
+    return [f for f in out.decode("utf-8", "replace").split("\0") if f]
 
 
-def descricao(
-    resultados: dict[str, int],
-    duracao_s: int,
+def describe(
+    results: dict[str, int],
+    duration_s: int,
     log: str,
-    dispensados: tuple[str, ...] = (),
-    desde: str = "",
+    skipped: tuple[str, ...] = (),
+    since: str = "",
 ) -> tuple[str, str]:
-    """(estado, descrição) do status a partir do código de saída de cada pilar.
+    """(state, description) of the status from each pillar's exit code.
 
-    Os `dispensados` são os pilares que o diff desde o último SHA verde (`desde`) não exigiu: não
-    contam como faltando e a descrição diz quais rodaram e quantos ficaram de fora.
+    The `skipped` pillars are the ones the diff since the last green SHA (`since`) did not require:
+    they do not count as missing, and the description says which ran and how many were left out.
     """
-    inconclusivos = [p for p in PILARES if resultados.get(p) == INCONCLUSIVO and p == "gpu-e2e"]
-    falharam = [p for p in PILARES if resultados.get(p, 0) != 0 and p not in inconclusivos]
-    faltam = [p for p in PILARES if p not in resultados and p not in dispensados]
-    if falharam:
-        estado, resumo = "failure", "falhou: " + ", ".join(falharam)
-    elif faltam or inconclusivos:
-        sem_prova = [p for p in PILARES if p in faltam or p in inconclusivos]
-        estado, resumo = "error", "sem prova: " + ", ".join(sem_prova)
-        if inconclusivos:
-            resumo += " (inconclusivo: GPU ocupada)"
-    elif dispensados:
-        rodaram = [p for p in PILARES if p in resultados]
-        base = f"{len(rodaram)} verdes ({', '.join(rodaram)})" if rodaram else "nenhum pilar exigido"
-        estado, resumo = "success", f"{base}; {len(dispensados)} dispensados desde {desde[:7] or 'o último verde'}"
+    inconclusive = [p for p in PILLARS if results.get(p) == INCONCLUSIVE and p == "gpu-e2e"]
+    failed = [p for p in PILLARS if results.get(p, 0) != 0 and p not in inconclusive]
+    missing = [p for p in PILLARS if p not in results and p not in skipped]
+    if failed:
+        state, summary = "failure", "failed: " + ", ".join(failed)
+    elif missing or inconclusive:
+        unproved = [p for p in PILLARS if p in missing or p in inconclusive]
+        state, summary = "error", "no proof: " + ", ".join(unproved)
+        if inconclusive:
+            summary += " (inconclusive: GPU busy)"
+    elif skipped:
+        ran = [p for p in PILLARS if p in results]
+        base = f"{len(ran)} green ({', '.join(ran)})" if ran else "no pillar required"
+        state, summary = "success", f"{base}; {len(skipped)} skipped since {since[:7] or 'the last green'}"
     else:
-        estado, resumo = "success", f"{len(PILARES)} pilares verdes"
-    texto = f"{resumo} · {_duracao(duracao_s)} · log {log}"
-    if len(texto) > LIMITE_DESCRICAO:
-        cauda = f" · {_duracao(duracao_s)}"
-        texto = resumo[: LIMITE_DESCRICAO - len(cauda) - 1] + "…" + cauda
-    return estado, texto
+        state, summary = "success", f"{len(PILLARS)} pillars green"
+    text = f"{summary} · {_duration(duration_s)} · log {log}"
+    if len(text) > DESCRIPTION_LIMIT:
+        tail = f" · {_duration(duration_s)}"
+        text = summary[: DESCRIPTION_LIMIT - len(tail) - 1] + "…" + tail
+    return state, text
 
 
-def ler_resultados(linhas: list[str]) -> dict[str, int]:
-    """`<pilar> <código>` por linha → {pilar: código}; linha vazia é ignorada."""
-    resultados: dict[str, int] = {}
-    for linha in linhas:
-        partes = linha.split()
-        if not partes:
+def read_results(lines: list[str]) -> dict[str, int]:
+    """`<pillar> <code>` per line → {pillar: code}; a blank line is ignored."""
+    results: dict[str, int] = {}
+    for line in lines:
+        parts = line.split()
+        if not parts:
             continue
-        if len(partes) != 2 or partes[0] not in PILARES or not partes[1].isdigit():  # noqa: PLR2004
-            raise ValueError(f"linha de resultado inválida: {linha!r}")
-        resultados[partes[0]] = int(partes[1])
-    return resultados
+        if len(parts) != 2 or parts[0] not in PILLARS or not parts[1].isdigit():  # noqa: PLR2004
+            raise ValueError(f"invalid result line: {line!r}")
+        results[parts[0]] = int(parts[1])
+    return results
 
 
-def alvos_do_push(linhas: list[str]) -> list[str]:
-    """SHAs empurrados para `refs/heads/main` (formato do stdin do pre-push), sem a ref apagada."""
-    alvos = []
-    for linha in linhas:
-        partes = linha.split()
-        if len(partes) != 4:  # noqa: PLR2004
+def push_targets(lines: list[str]) -> list[str]:
+    """SHAs pushed to `refs/heads/main` (the pre-push stdin format), without a deleted ref."""
+    targets = []
+    for line in lines:
+        parts = line.split()
+        if len(parts) != 4:  # noqa: PLR2004
             continue
-        _ref_local, sha_local, ref_remota, _sha_remoto = partes
-        if ref_remota == ALVO and sha_local != SHA_NULO:
-            alvos.append(sha_local)
-    return alvos
+        _local_ref, local_sha, remote_ref, _remote_sha = parts
+        if remote_ref == TARGET and local_sha != NULL_SHA:
+            targets.append(local_sha)
+    return targets
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Ponto de entrada da linha de comando."""
+    """Command-line entry point."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    sub = parser.add_subparsers(dest="comando", required=True)
-    sub.add_parser("decidir")
-    desc = sub.add_parser("descricao")
-    desc.add_argument("--duracao", type=int, default=0)
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("decide")
+    desc = sub.add_parser("describe")
+    desc.add_argument("--duration", type=int, default=0)
     desc.add_argument("--log", default="")
-    desc.add_argument("--dispensados", default="")
-    desc.add_argument("--desde", default="")
-    pil = sub.add_parser("pilares")
-    pil.add_argument("--desde", default="")
+    desc.add_argument("--skipped", default="")
+    desc.add_argument("--since", default="")
+    pil = sub.add_parser("pillars")
+    pil.add_argument("--since", default="")
     pil.add_argument("--sha", default="HEAD")
     pil.add_argument("--repo", default=".")
-    pil.add_argument("--todos", action="store_true")
+    pil.add_argument("--all", action="store_true")
     pil.add_argument("--stdin", action="store_true")
-    sub.add_parser("alvos-do-push")
+    sub.add_parser("push-targets")
     args = parser.parse_args(argv)
-    # O Python da estação Windows escreveria no código de página do console.
+    # The Windows workstation's Python would write in the console's code page.
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
-    if args.comando == "pilares":
-        arquivos: list[str] | None = None
-        if args.stdin and not args.todos:
-            arquivos = sys.stdin.read().splitlines()
-        elif args.desde and not args.todos:
-            arquivos = arquivos_alterados(args.desde, args.sha, args.repo)
-        sys.stdout.writelines(f"{p}\n" for p in pilares_exigidos(arquivos))
+    if args.command == "pillars":
+        files: list[str] | None = None
+        if args.stdin and not args.all:
+            files = sys.stdin.read().splitlines()
+        elif args.since and not args.all:
+            files = changed_files(args.since, args.sha, args.repo)
+        sys.stdout.writelines(f"{p}\n" for p in required_pillars(files))
         return 0
-    entrada = sys.stdin.read()
+    data = sys.stdin.read()
 
-    if args.comando == "decidir":
+    if args.command == "decide":
         try:
-            combinado = json.loads(entrada or "{}")
+            combined = json.loads(data or "{}")
         except json.JSONDecodeError:
-            combinado = {}
-        liberado, mensagem = decidir(combinado)
-        sys.stdout.write(mensagem + "\n")
-        return 0 if liberado else 1
-    if args.comando == "descricao":
-        dispensados = tuple(p for p in args.dispensados.split(",") if p)
-        estado, texto = descricao(ler_resultados(entrada.splitlines()), args.duracao, args.log, dispensados, args.desde)
-        sys.stdout.write(f"{estado}\n{texto}\n")
+            combined = {}
+        cleared, message = decide(combined)
+        sys.stdout.write(message + "\n")
+        return 0 if cleared else 1
+    if args.command == "describe":
+        skipped = tuple(p for p in args.skipped.split(",") if p)
+        state, text = describe(read_results(data.splitlines()), args.duration, args.log, skipped, args.since)
+        sys.stdout.write(f"{state}\n{text}\n")
         return 0
-    sys.stdout.writelines(f"{sha}\n" for sha in alvos_do_push(entrada.splitlines()))
+    sys.stdout.writelines(f"{sha}\n" for sha in push_targets(data.splitlines()))
     return 0
 
 
