@@ -69,7 +69,7 @@ async function openWithFiles() {
 }
 
 describe('modal Importar', () => {
-  it('abre sobre a biblioteca, lê a data de cada arquivo e mostra a origem', async () => {
+  it('opens over the library, reads the date of each file and shows the source', async () => {
     const { user, dialog } = await openWithFiles()
     expect(within(dialog).getByText('Biblioteca')).toHaveClass('kicker')
     expect(dialog).toHaveClass('dialog', 'dialog-lg')
@@ -96,7 +96,7 @@ describe('modal Importar', () => {
     expect(within(dialog).getByRole('button', { name: 'Enviar arquivos' })).toBeDisabled()
   })
 
-  it('escolhe o idioma de cada arquivo, partindo do padrão da conta', async () => {
+  it('picks the language of each file, starting from the account default', async () => {
     vi.mocked(runUpload).mockResolvedValue({ recordingId: '01928f3a-1c00-7a00-8000-000000000401', deduplicated: false })
     const { user, dialog } = await openWithFiles()
     const m4a = within(dialog).getByLabelText('Idioma de kickoff-guion.m4a')
@@ -109,7 +109,7 @@ describe('modal Importar', () => {
     expect(vi.mocked(runUpload).mock.calls[1][0].language).toBeUndefined()
   })
 
-  it('avisa quando os metadados trazem só o dia', async () => {
+  it('warns when the metadata carries only the day', async () => {
     vi.mocked(readRecordedAt).mockResolvedValue({ at: METADATA, source: 'metadata', precision: 'day', detail: 'date' })
     const { dialog } = await openWithFiles()
     const m4a = within(dialog).getByLabelText('Início da gravação de kickoff-guion.m4a')
@@ -117,7 +117,7 @@ describe('modal Importar', () => {
     expect(m4a).toHaveAttribute('data-warning', 'true')
   })
 
-  it('envia com a data confirmada, mostra a situação e o link, e atualiza a biblioteca', async () => {
+  it('uploads with the confirmed date, shows the status and the link, and refreshes the library', async () => {
     let finish!: (value: { recordingId: string; deduplicated: boolean }) => void
     vi.mocked(runUpload)
       .mockImplementationOnce(
@@ -137,8 +137,8 @@ describe('modal Importar', () => {
       recordedAtSource: 'file_metadata',
     })
 
-    // Fechar durante o envio só esconde o modal; a faixa da biblioteca acompanha.
-    // O "Fechar" do rodapé (o do cabeçalho faz o mesmo).
+    // Closing during upload only hides the modal; the library strip follows along.
+    // The footer "Fechar" (the header one does the same).
     await user.click(within(dialog).getAllByRole('button', { name: 'Fechar' }).at(-1)!)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     const band = await screen.findByText(/Enviando 1 de 2 arquivos/)
@@ -150,7 +150,7 @@ describe('modal Importar', () => {
     await waitFor(() => expect(http.requests('GET /api/v1/recordings').length).toBeGreaterThan(before))
     expect(vi.mocked(runUpload).mock.calls[1][0].recordedAtSource).toBe('user')
 
-    // A linha enviada oferece ligar o aviso do navegador; a permissão só é pedida no clique.
+    // The uploaded row offers to turn on the browser notification; permission is only asked on click.
     const requestPermission = vi.fn(async () => 'granted' as const)
     vi.stubGlobal('Notification', { permission: 'default', requestPermission })
     await user.click(screen.getByRole('button', { name: 'Importar arquivos' }))
@@ -172,7 +172,7 @@ describe('modal Importar', () => {
     expect(within(reopened).getByText(/Já estava na biblioteca ·/)).toBeInTheDocument()
   }, 20_000)
 
-  it('linha que falhou mostra o motivo em texto visível e tenta de novo', async () => {
+  it('a failed row shows the reason in visible text and retries', async () => {
     vi.mocked(runUpload).mockRejectedValue(new Error('O servidor recusou o arquivo.'))
     const { user, dialog } = await openWithFiles()
     await user.click(within(dialog).getByRole('button', { name: 'Enviar 2 arquivos' }))
@@ -183,14 +183,14 @@ describe('modal Importar', () => {
     expect(within(failed[0]).getByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument()
   })
 
-  it('/importar leva ao modal aberto sobre a biblioteca', async () => {
+  it('/importar leads to the modal open over the library', async () => {
     mockLibrary()
     renderApp('/importar')
     expect(await screen.findByRole('dialog', { name: 'Importar arquivos' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1, name: 'Biblioteca' })).toBeInTheDocument()
   })
 
-  it('sem conexão segura, avisa e não deixa escolher arquivo', async () => {
+  it('without a secure connection, warns and does not allow choosing a file', async () => {
     vi.mocked(checkEnvironment).mockReturnValue({ secureContext: false, webCodecs: false, subtleCrypto: false })
     mockLibrary()
     renderApp('/?importar=1')

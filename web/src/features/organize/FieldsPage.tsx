@@ -11,14 +11,14 @@ import { Switch } from '../../shared/Switch'
 export function FieldsPage() {
   useHelpTopic('campos')
   const fields = useFields()
-  // Só os campos do usuário: o título vem dos tipos de agenda (padrão e regra do assunto) e as tags
-  // têm cadastro próprio, em Tags.
+  // Only the user fields: the title comes from the agenda types (pattern and subject rule) and the tags
+  // have their own registry, in Tags.
   const items = [...(fields.data?.items ?? [])]
     .filter((field) => field.builtin === null)
     .sort((a, b) => a.position - b.position)
   const { selected, select, apply, setDirty, discardDialog } = useGuardedSelection('campo')
   const current = selected === NEW ? null : (items.find((f) => f.id === selected) ?? (selected ? undefined : items[0]))
-  // Sem campos e sem escolha não há painel: o texto ocupa o lugar da lista até o Novo campo.
+  // With no fields and no selection there is no panel: the text takes the place of the list until Novo campo.
   const missing = selected !== null && selected !== NEW && current === undefined
 
   return (

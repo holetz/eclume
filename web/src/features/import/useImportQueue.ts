@@ -1,6 +1,6 @@
-// A fila do import: vários arquivos, cada um com o início da gravação lido dos metadados e confirmado
-// pela pessoa, convertidos e enviados um por vez. O áudio convertido fica em memória enquanto a
-// página está aberta, para retomar o envio que falhou.
+// The import queue: several files, each with the recording start read from the metadata and confirmed
+// by the person, converted and uploaded one at a time. The converted audio stays in memory while the
+// page is open, to resume the upload that failed.
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { errorMessage } from '../../api/problem'
@@ -24,11 +24,11 @@ type ItemState =
   | { kind: 'canceled' }
 
 export interface ImportDate {
-  /** Valor de `<input type=datetime-local>`, na hora local: `AAAA-MM-DDTHH:MM`. */
+  /** Value of `<input type=datetime-local>`, in local time: `YYYY-MM-DDTHH:MM`. */
   value: string
   /**
-   * `metadata` (lida do arquivo), `metadata_day` (só o dia no arquivo, a hora da modificação),
-   * `file_date` (data de modificação) ou `user` (editada).
+   * `metadata` (read from the file), `metadata_day` (only the day in the file, the time from the modification),
+   * `file_date` (modification date) or `user` (edited).
    */
   source: 'metadata' | 'metadata_day' | 'file_date' | 'user'
   detail: string
@@ -39,24 +39,24 @@ export interface ImportItem {
   file: File
   probe: MediaProbe | null
   date: ImportDate
-  /** Idioma da transcrição deste arquivo (ou `auto`); sem ele, vale o da conta. */
+  /** Transcription language of this file (or `auto`); without it, the account's applies. */
   language?: string
   state: ItemState
 }
 
 export interface ImportQueue {
   items: ImportItem[]
-  /** Há arquivo convertendo ou subindo. */
+  /** A file is converting or uploading. */
   sending: boolean
   add: (files: Iterable<File>) => void
   setDate: (id: string, value: string) => void
-  /** Muda um arquivo da fila (o idioma, no modal). */
+  /** Changes a file in the queue (the language, in the modal). */
   edit: (id: string, change: (item: ImportItem) => ImportItem) => void
   remove: (id: string) => void
   send: () => void
   cancel: (id: string) => void
   retry: (id: string) => void
-  /** Tira da fila o que já terminou (enviado ou cancelado). */
+  /** Removes from the queue what has already finished (uploaded or canceled). */
   clearFinished: () => void
 }
 
@@ -67,19 +67,19 @@ interface Runtime {
   canceled?: boolean
 }
 
-/** Nome do arquivo sem a extensão, para o nome do Opus. */
+/** File name without the extension, for the Opus name. */
 function fileStem(name: string): string {
   const dot = name.lastIndexOf('.')
   return (dot > 0 ? name.slice(0, dot) : name).trim() || 'gravação'
 }
 
-/** `AAAA-MM-DDTHH:MM` na hora local, o formato do `datetime-local`. */
+/** `YYYY-MM-DDTHH:MM` in local time, the `datetime-local` format. */
 export function toLocalInput(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-/** A origem que o upload manda: dos metadados sem edição, ou confirmada pela pessoa. */
+/** The source the upload sends: from the metadata without editing, or confirmed by the person. */
 export function recordedAtSource(date: ImportDate): 'file_metadata' | 'user' {
   return date.source === 'metadata' || date.source === 'metadata_day' ? 'file_metadata' : 'user'
 }
@@ -99,8 +99,8 @@ export function useImportQueue(): ImportQueue {
   const runtime = useRef(new Map<string, Runtime>())
   const running = useRef(false)
 
-  // A fila vive no ref, a fonte da verdade do laço de envio (que não espera o React renderizar); o
-  // estado só espelha o ref para a tela.
+  // The queue lives in the ref, the source of truth of the upload loop (which does not wait for React to render); the
+  // state only mirrors the ref for the screen.
   const commit = useCallback((next: ImportItem[]) => {
     itemsRef.current = next
     setItems(next)
@@ -135,7 +135,7 @@ export function useImportQueue(): ImportQueue {
           update(item.id, (current) => ({
             ...current,
             probe: probed,
-            // Uma data já editada pela pessoa não é trocada pela leitura.
+            // A date already edited by the person is not replaced by the reading.
             date:
               current.date.source === 'user'
                 ? current.date
@@ -167,7 +167,7 @@ export function useImportQueue(): ImportQueue {
     [commit],
   )
 
-  /** Converte (se ainda não) e envia um arquivo; devolve quando termina, falha ou é cancelado. */
+  /** Converts (if not yet) and uploads a file; returns when it finishes, fails or is canceled. */
   const process = useCallback(
     async (id: string) => {
       const entry = runtime.current.get(id) ?? {}
@@ -212,7 +212,7 @@ export function useImportQueue(): ImportQueue {
         void queryClient.invalidateQueries({ queryKey: ['recordings'] })
       } catch (error) {
         if (entry.canceled) return
-        // Upload expirado ou abortado no servidor: a próxima tentativa começa outro.
+        // Upload expired or aborted on the server: the next attempt starts another one.
         if (error instanceof UploadError && error.code === 'upload_gone') entry.uploadId = undefined
         setState(id, { kind: 'error', message: describe(error), resumable: Boolean(entry.uploadId) })
       } finally {
@@ -222,7 +222,7 @@ export function useImportQueue(): ImportQueue {
     [queryClient, setState],
   )
 
-  /** Processa os arquivos prontos, um por vez, até a fila esvaziar. */
+  /** Processes the ready files, one at a time, until the queue empties. */
   const drain = useCallback(async () => {
     if (running.current) return
     running.current = true

@@ -49,15 +49,15 @@ function Value({ item }: { item: FieldValue }) {
   return <span>{value}</span>
 }
 
-/** O valor do campo em edição, pelo tipo: texto, lista separada por vírgula ou escolha. */
+/** The value of the field being edited, by type: text, comma-separated list or choice. */
 function draftOf(item: FieldValue): string {
   if (Array.isArray(item.value)) return item.value.join(', ')
   return item.value ?? ''
 }
 
 /**
- * Onde se edita a regra do campo: o campo personalizado em Campos personalizados; os embutidos levam
- * ao dono, o título ao tipo de agenda da gravação e as tags a Tags.
+ * Where the field's rule is edited: the custom field in Campos personalizados; the built-ins lead
+ * to the owner, the title to the recording's agenda type and the tags to Tags.
  */
 function ruleLink(field: FieldValue['field'], agendaTypeId: string | undefined): string {
   if (field.builtin === 'tags') return '/tags'
@@ -304,9 +304,9 @@ interface FieldsPanelProps {
 }
 
 /**
- * O painel de campos (componente "Filled fields", variante A): o valor de cada campo com o selo de
- * origem, Aceitar e Editar; o tipo de agenda com Trocar; coleções; e os dados antigos. Os locutores
- * ficam no bloco deles, acima da transcrição.
+ * The fields panel (component "Filled fields", variant A): each field's value with the origin
+ * badge, Aceitar and Editar; the agenda type with Trocar; collections; and the legacy data. The speakers
+ * stay in their own block, above the transcript.
  */
 export function FieldsPanel({ recording, onChangeType }: FieldsPanelProps) {
   const fields = useRecordingFields(recording.id)

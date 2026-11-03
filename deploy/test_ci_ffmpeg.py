@@ -35,4 +35,7 @@ def test_action_caches_the_packages_and_bounds_each_step() -> None:
     action = yaml.safe_load((ROOT / ".github/actions/ffmpeg/action.yml").read_text(encoding="utf-8"))
     composite = action["runs"]["steps"]
     assert any(str(step.get("uses", "")).startswith("actions/cache@") for step in composite)
-    assert all("timeout-minutes" in step for step in composite if "run" in step)
+    scripts = [step for step in composite if "run" in step]
+    # Composite actions reject `timeout-minutes`, so each script bounds itself with `timeout`.
+    assert not any("timeout-minutes" in step for step in composite)
+    assert all(str(step["run"]).lstrip().startswith("timeout ") for step in scripts)

@@ -1,6 +1,6 @@
-// A cópia do resumo para colar em outro app (o Teams): o HTML sai do mesmo `react-markdown` da tela,
-// com os títulos em negrito, porque o Teams não guarda o estilo de título ao colar; o texto puro é o
-// Markdown sem as hashtags dos títulos, para quem não aceita HTML.
+// The summary copy to paste into another app (Teams): the HTML comes out of the same `react-markdown` as the screen,
+// with the headings in bold, because Teams does not keep the heading style on paste; the plain text is the
+// Markdown without the heading hashes, for whoever does not accept HTML.
 import { createElement, Fragment, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { safeMarkdown } from '../../app/markdown'
@@ -9,7 +9,7 @@ const boldTitle = ({ children }: { children?: ReactNode }) => createElement('p',
 
 const TITLES = safeMarkdown({ h1: boldTitle, h2: boldTitle, h3: boldTitle, h4: boldTitle, h5: boldTitle, h6: boldTitle })
 
-/** O Markdown sem o prefixo `#` das linhas de título; o que está em bloco de código fica como está. */
+/** The Markdown without the `#` prefix of the heading lines; whatever is in a code block stays as it is. */
 function withoutTitleMarks(markdown: string): string {
   let fenced = false
   return markdown
@@ -22,7 +22,7 @@ function withoutTitleMarks(markdown: string): string {
 }
 
 export async function summaryClipboard(title: string, markdown: string): Promise<{ html: string; text: string }> {
-  // Só a cópia usa o renderizador de servidor; fora do bundle inicial.
+  // Only the copy uses the server renderer; outside the initial bundle.
   const { renderToStaticMarkup } = await import('react-dom/server')
   const html = renderToStaticMarkup(
     createElement(

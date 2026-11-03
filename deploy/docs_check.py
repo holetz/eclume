@@ -60,11 +60,11 @@ EXCECOES: tuple[Excecao, ...] = (
     Excecao("docs/project/deploy-producao.md", "web/test-results/prod", "saída da prova de produção do Playwright"),
     Excecao(
         "docs/standards/agents/communication.md",
-        "docs/standards/CLAUDE.md",
-        "exemplo hipotético de CLAUDE.md por pasta",
+        "docs/standards/AGENTS.md",
+        "exemplo hipotético de AGENTS.md por pasta",
     ),
-    Excecao("docs/standards/agents/communication.md", "web/CLAUDE.md", "exemplo hipotético de CLAUDE.md por pasta"),
-    Excecao("docs/standards/agents/communication.md", "deploy/CLAUDE.md", "exemplo hipotético de CLAUDE.md por pasta"),
+    Excecao("docs/standards/agents/communication.md", "web/AGENTS.md", "exemplo hipotético de AGENTS.md por pasta"),
+    Excecao("docs/standards/agents/communication.md", "deploy/AGENTS.md", "exemplo hipotético de AGENTS.md por pasta"),
 )
 
 LINK = re.compile(r"(?<!!)\[(?:[^\]\[]|\[[^\]]*\])*\]\((?P<alvo>[^)\s]+)(?:\s+\"[^\"]*\")?\)")

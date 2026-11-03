@@ -1,6 +1,6 @@
-// Acessibilidade das telas principais pelo axe (WCAG 2.1 A e AA), no tema claro e no escuro, contra
-// o mock (Prism) como os outros E2E. O axe confere o contraste do texto renderizado; o das bordas de
-// controle (1.4.11) fica com o teste de tokens do eclume.css.
+// Accessibility of the main screens through axe (WCAG 2.1 A and AA), in the light and dark themes, against
+// the mock (Prism) like the other E2E. Axe checks the contrast of the rendered text; that of control
+// borders (1.4.11) is left to the eclume.css tokens test.
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 
@@ -8,7 +8,7 @@ const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
 const SCHEMES = ['light', 'dark'] as const
 
 test.beforeEach(async ({ page, baseURL }) => {
-  // O mock não emite cookies: o login bem-sucedido ganha os que o servidor real poria.
+  // The mock sets no cookies: a successful login gets the ones the real server would set.
   await page.route('**/api/v1/auth/login', async (route) => {
     const response = await route.fetch()
     if (response.status() === 204) {
@@ -32,7 +32,7 @@ test.beforeEach(async ({ page, baseURL }) => {
   })
 })
 
-/** Roda o axe nos dois temas e falha listando regra, impacto e alvos de cada violação. */
+/** Runs axe in both themes and fails listing the rule, impact and targets of each violation. */
 async function expectAccessible(page: Page, screen: string) {
   for (const scheme of SCHEMES) {
     await page.emulateMedia({ colorScheme: scheme })
@@ -45,7 +45,7 @@ async function expectAccessible(page: Page, screen: string) {
   }
 }
 
-test('telas do usuário sem violação WCAG 2.1 A/AA, claro e escuro', async ({ page }) => {
+test('user screens without WCAG 2.1 A/AA violations, light and dark', async ({ page }) => {
   await page.goto('/entrar')
   await expect(page.getByRole('heading', { name: 'Entrar' })).toBeVisible()
   await expectAccessible(page, 'entrar')
@@ -73,7 +73,7 @@ test('telas do usuário sem violação WCAG 2.1 A/AA, claro e escuro', async ({ 
   }
 })
 
-test('telas do admin sem violação WCAG 2.1 A/AA, claro e escuro', async ({ page }) => {
+test('admin screens without WCAG 2.1 A/AA violations, light and dark', async ({ page }) => {
   await page.goto('/admin/usuarios')
   await expect(page.getByRole('heading', { name: 'Entrar como admin' })).toBeVisible()
   await page.getByLabel('E-mail').fill('admin@example.com')

@@ -3,8 +3,8 @@ import { ImportContext } from './importContext'
 import { useImportQueue } from './useImportQueue'
 
 /**
- * Monta a fila de importação no shell. Enquanto um arquivo converte ou sobe, sair da página pede
- * confirmação ao navegador.
+ * Mounts the import queue in the shell. While a file converts or uploads, leaving the page asks the
+ * browser for confirmation.
  */
 export function ImportProvider({ children }: { children: ReactNode }) {
   const queue = useImportQueue()

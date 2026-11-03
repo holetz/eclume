@@ -113,7 +113,7 @@ export function PeoplePage() {
   )
 }
 
-/** A primeira linha da tabela: nome, empresa e Adicionar. Enter num dos campos também envia. */
+/** The first table row: name, company and Adicionar. Enter in one of the fields also submits. */
 function NewPersonRow({ span }: { span: number }) {
   const create = useCreatePerson()
   const [name, setName] = useState('')
@@ -243,7 +243,7 @@ function PersonCell({ person, column }: { person: Person; column: PersonColumn }
   }
 }
 
-/** O botão Colunas: um popover com uma caixa por coluna; Esc e o clique fora fecham. */
+/** The Colunas button: a popover with one box per column; Esc and a click outside close it. */
 function ColumnsMenu({ columns, onChange }: { columns: PersonColumn[]; onChange: (columns: PersonColumn[]) => void }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)

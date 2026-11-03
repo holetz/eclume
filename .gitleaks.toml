@@ -1,0 +1,17 @@
+# Gitleaks configuration. Extends the default ruleset; the allowlist below only
+# covers reviewed fake fixtures (sample values shared by the API contract
+# examples and the tests). Never allowlist a rule globally.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Reviewed fake sample credentials in API contract fixtures, OpenAPI examples and tests"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^contracts/fixtures/(signup-request|token-created|device-credential)\.json$''',
+  '''^contracts/openapi-v1\.bundled\.yaml$''',
+  '''^desktop/crates/sync/src/devices\.rs$''',
+  '''^server/tests/test_(signup|recordings)\.py$''',
+  '''^web/src/features/auth/ResetPasswordPage\.test\.tsx$''',
+]

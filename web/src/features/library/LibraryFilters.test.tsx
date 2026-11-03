@@ -26,7 +26,7 @@ function mockLibrary() {
   })
 }
 
-/** A query da última consulta da semana (as leituras incrementais `?since=` ficam de fora). */
+/** The query of the week's last request (the incremental `?since=` reads are left out). */
 function lastQuery(http: ReturnType<typeof mockFetch>): URLSearchParams {
   const requests = http
     .requests('GET /api/v1/recordings')
@@ -38,8 +38,8 @@ function group(name: string) {
   return screen.getByRole('group', { name })
 }
 
-describe('painel de filtros', () => {
-  it('filtra pelos participantes: empresa, área e tag de um mesmo participante', async () => {
+describe('filter panel', () => {
+  it('filters by participants: company, department and tag of one same participant', async () => {
     const http = mockFetch({
       'GET /api/v1/me': () => fixtures.me(),
       'GET /api/v1/recordings': () => fixtures.recordingWeekPage(),
@@ -69,7 +69,7 @@ describe('painel de filtros', () => {
     expect(within(participants).getByRole('checkbox', { name: 'Agro Sul' })).not.toBeChecked()
   })
 
-  it('mostra os grupos do DS, com os campos próprios do usuário', async () => {
+  it('shows the DS groups, with the user\'s own fields', async () => {
     mockLibrary()
     renderApp(WEEK)
     const panel = await screen.findByRole('complementary', { name: 'Filtros' })
@@ -83,14 +83,14 @@ describe('painel de filtros', () => {
     expect(within(group('Pessoas')).getByRole('combobox', { name: 'Filtrar por pessoa' })).toBeInTheDocument()
     expect(await within(panel).findByRole('checkbox', { name: 'Metalúrgica Serra Azul' })).not.toBeChecked()
     expect(within(group('Coleções')).getByRole('link', { name: 'Gerenciar coleções' })).toHaveAttribute('href', '/colecoes')
-    // Os embutidos (título e tags) não viram grupo; "Cliente" é escolha e "Projeto" é texto.
+    // The built-in ones (title and tags) do not become groups; "Cliente" is a choice and "Projeto" is text.
     expect(await within(panel).findByRole('group', { name: 'Cliente' })).toBeInTheDocument()
     expect(within(group('Cliente')).getByRole('checkbox', { name: 'Serra Azul' })).toBeInTheDocument()
     expect(within(group('Projeto')).getByRole('textbox', { name: 'Projeto' })).toHaveAttribute('placeholder', 'Qualquer valor')
     expect(within(panel).queryByRole('group', { name: 'Título' })).not.toBeInTheDocument()
   })
 
-  it('cada filtro vai para a URL e para a requisição, e Limpar mantém a visão e a data', async () => {
+  it('each filter goes to the URL and to the request, and Clear keeps the view and the date', async () => {
     const user = userEvent.setup()
     const http = mockLibrary()
     renderApp(WEEK)
@@ -98,7 +98,7 @@ describe('painel de filtros', () => {
 
     await user.click(within(group('Tipo')).getByRole('checkbox', { name: 'Notas' }))
     await waitFor(() => expect(lastQuery(http).getAll('kind')).toEqual(['meeting']))
-    // O último marcado do grupo não sai.
+    // The last checked one in the group does not leave.
     expect(within(group('Tipo')).getByRole('checkbox', { name: 'Reuniões' })).toBeDisabled()
 
     await user.click(within(group('Situação')).getByRole('checkbox', { name: 'Pronta' }))
@@ -126,7 +126,7 @@ describe('painel de filtros', () => {
 
     expect(within(panel).getByRole('heading', { name: /Filtros/ })).toHaveTextContent('Filtros8')
     await user.click(within(panel).getByRole('button', { name: 'Limpar filtros' }))
-    // A consulta sem filtros já estava em cache: a prova é o painel zerado e a requisição limpa de antes.
+    // The query without filters was already cached: the proof is the cleared panel and the clean request from before.
     await waitFor(() => expect(within(panel).getByRole('heading', { name: /Filtros/ })).toHaveTextContent(/^Filtros$/))
     const query = http
       .requests('GET /api/v1/recordings')
@@ -137,7 +137,7 @@ describe('painel de filtros', () => {
     expect(screen.getByRole('radio', { name: 'Semana' })).toBeChecked()
   }, 20_000)
 
-  it('recolhe e lembra o estado, e a biblioteca volta à última visão e aos últimos filtros', async () => {
+  it('collapses and remembers the state, and the library returns to the last view and the last filters', async () => {
     const user = userEvent.setup()
     const http = mockLibrary()
     const { unmount } = renderApp(`${WEEK}&tag=programa-liderancas`)
@@ -159,7 +159,7 @@ describe('painel de filtros', () => {
     await waitFor(() => expect(lastQuery(http).getAll('tag')).toEqual(['programa-liderancas']))
   })
 
-  it('em tela estreita, os filtros abrem num diálogo pela barra', async () => {
+  it('on a narrow screen, the filters open in a dialog from the bar', async () => {
     vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 56rem)' }))
     const user = userEvent.setup()
     const http = mockLibrary()

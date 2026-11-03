@@ -30,7 +30,7 @@ function mockLibrary(
   })
 }
 
-/** As consultas da biblioteca, sem a pergunta "a conta tem alguma?" do cartão Primeiros passos. */
+/** The library queries, without the "does the account have any?" question of the First steps card. */
 function libraryQueries(http: ReturnType<typeof mockLibrary>) {
   return http
     .requests('GET /api/v1/recordings')
@@ -38,19 +38,19 @@ function libraryQueries(http: ReturnType<typeof mockLibrary>) {
     .filter((query) => query.has('from') || query.get('limit') !== '1')
 }
 
-/** O item da semana pelo nome do link que o ocupa (o item leva a posição e o estado). */
+/** The week item by the name of the link that fills it (the item carries the position and the status). */
 function event(name: RegExp | string) {
   return screen.getByRole('link', { name }).closest('[role="listitem"]') as HTMLElement
 }
 
-/** Só o relógio é falso: hoje é sábado, 26/09/2026, 11:12. */
+/** Only the clock is fake: today is Saturday, 2026-09-26, 11:12. */
 function saturdayMorning() {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date(2026, 8, 26, 11, 12))
 }
 
-describe('biblioteca na semana', () => {
-  it('mostra a semana pedida, com cabeçalho, barra e as gravações no dia e na hora', async () => {
+describe('library in the week', () => {
+  it('shows the requested week, with header, bar and the recordings on their day and time', async () => {
     saturdayMorning()
     const http = mockLibrary()
     renderApp(WEEK)
@@ -86,12 +86,12 @@ describe('biblioteca na semana', () => {
     expect(summarizing).toHaveAttribute('data-status', 'processing')
     expect(within(summarizing).getByText('Resumindo')).toBeInTheDocument()
 
-    // Duas reuniões sobrepostas na quinta dividem a coluna.
+    // Two overlapping meetings on Thursday split the column.
     expect(event(/^Revisão trimestral/).style.getPropertyValue('--lanes')).toBe('2')
     expect(event(/^1:1 Bruno \/ Carla/).style.getPropertyValue('--lane')).toBe('1')
     expect(event(/^Onboarding/).style.getPropertyValue('--lanes')).toBe('1')
 
-    // Hoje (sábado) marcado, com a linha de agora na coluna dele.
+    // Today (Saturday) marked, with the now line in its column.
     const heads = document.querySelectorAll('.cal-head[aria-current="date"]')
     expect(heads).toHaveLength(1)
     expect(heads[0]).toHaveTextContent('sáb26')
@@ -99,12 +99,12 @@ describe('biblioteca na semana', () => {
     expect(saturday.querySelector('.cal-now')).not.toBeNull()
     expect(document.querySelectorAll('.cal-now')).toHaveLength(1)
 
-    // O dia inteiro na grade, com rótulo também na meia-noite do fim.
+    // The whole day in the grid, with a label also at the closing midnight.
     const hours = document.querySelectorAll('.cal-hours span')
     expect(hours).toHaveLength(25)
     expect(hours[0]).toHaveTextContent('00:00')
     expect(hours[24]).toHaveTextContent('24:00')
-    // O expediente (8–18) destacado.
+    // The working hours (8–18) highlighted.
     const work = [...document.querySelectorAll('.cal-hours span[data-work]')].map((span) => span.textContent)
     expect(work).toEqual(['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'])
     expect((document.querySelector('.cal-week') as HTMLElement).style.getPropertyValue('--cal-start')).toBe('0')
@@ -115,7 +115,7 @@ describe('biblioteca na semana', () => {
     expect(query.get('sort')).toBe('recorded_asc')
   })
 
-  it('anda entre as semanas e volta para hoje', async () => {
+  it('moves between weeks and back to today', async () => {
     saturdayMorning()
     const http = mockLibrary()
     renderApp(WEEK)
@@ -135,7 +135,7 @@ describe('biblioteca na semana', () => {
     expect(froms).toContain('2026-09-14T03:00:00.000Z')
   })
 
-  it('dá zoom na semana pelos botões e por Ctrl + roda, sem passar do dia inteiro na tela', async () => {
+  it('zooms the week through the buttons and Ctrl + wheel, without going past the whole day on screen', async () => {
     saturdayMorning()
     mockLibrary()
     renderApp(WEEK)
@@ -145,24 +145,24 @@ describe('biblioteca na semana', () => {
     const hourPx = () => parseFloat(week.style.getPropertyValue('--cal-hour'))
     const zoomOut = screen.getByRole('button', { name: 'Diminuir o zoom' })
 
-    // Abre enquadrando a faixa de trabalho (8–18): cabe mais que o dia inteiro.
+    // It opens framing the working band (8–18): more than the whole day fits.
     const initial = hourPx()
     await user.click(screen.getByRole('button', { name: 'Aumentar o zoom' }))
     expect(hourPx()).toBeGreaterThan(initial)
 
     fireEvent.wheel(week, { deltaY: 100, ctrlKey: true })
     expect(hourPx()).toBeCloseTo(initial)
-    // A roda sem Ctrl só rola.
+    // The wheel without Ctrl only scrolls.
     fireEvent.wheel(week, { deltaY: 100 })
     expect(hourPx()).toBeCloseTo(initial)
 
-    // O mínimo é o dia inteiro na altura da semana: dali o botão de diminuir desliga.
+    // The minimum is the whole day in the week height: from there the zoom-out button turns off.
     for (let i = 0; i < 10 && !(zoomOut as HTMLButtonElement).disabled; i++) await user.click(zoomOut)
     expect(zoomOut).toBeDisabled()
     expect(hourPx() * 24).toBeCloseTo(initial * 10)
   })
 
-  it('segue o expediente e a visão de abertura escolhidos na tela Ambiente', async () => {
+  it('follows the working hours and the opening view chosen on the Environment screen', async () => {
     saturdayMorning()
     mockLibrary()
     localStorage.setItem('eclume-expediente', '7-20')
@@ -177,9 +177,9 @@ describe('biblioteca na semana', () => {
     expect(work.at(-1)).toBe('20:00')
   })
 
-  it('mostra o carregamento, o erro com nova tentativa e o período vazio', async () => {
+  it('shows the loading, the error with retry and the empty period', async () => {
     let fail = true
-    // A primeira resposta espera o teste conferir o carregamento: sem isso, o erro chega antes.
+    // The first response waits for the test to check the loading: without it, the error arrives first.
     let answer = () => {}
     const held = new Promise<void>((resolve) => (answer = resolve))
     mockLibrary(async (request) => {
@@ -187,7 +187,7 @@ describe('biblioteca na semana', () => {
         await held
         return problem('internal', 500, { detail: 'O servidor não respondeu.' })
       }
-      // Nada nesta semana, mas a conta tem gravações.
+      // Nothing this week, but the account has recordings.
       return new URL(request.url).searchParams.has('from') ? { items: [], next_cursor: null } : fixtures.recordingPage()
     })
     renderApp(WEEK)
@@ -203,7 +203,7 @@ describe('biblioteca na semana', () => {
     expect(document.querySelector('.cal-week')).not.toBeNull()
   })
 
-  it('conta sem gravações convida a importar, a instalar os apps e a conferir os tipos de agenda', async () => {
+  it('an account without recordings invites to import, to install the apps and to review the agenda types', async () => {
     const http = mockLibrary(() => ({ items: [], next_cursor: null }))
     renderApp(WEEK)
     const heading = await screen.findByRole('heading', { name: 'Nenhuma gravação ainda' })
@@ -213,14 +213,14 @@ describe('biblioteca na semana', () => {
     expect(within(empty).getByRole('link', { name: 'tipo de agenda' })).toHaveAttribute('href', '/config/agendas')
     expect(within(empty).getByRole('button', { name: 'Importar arquivos' })).toBeInTheDocument()
     expect(document.querySelector('.cal-week')).toBeNull()
-    // A pergunta "tem alguma?" vai sem período e sem filtro.
+    // The "any?" question goes without a period and without a filter.
     const any = http.requests('GET /api/v1/recordings').map((r) => new URL(r.url).searchParams)
     expect(any.some((query) => query.get('limit') === '1' && !query.has('from'))).toBe(true)
   })
 })
 
-describe('releitura no foco', () => {
-  it('voltar para a aba relê as gravações do período', async () => {
+describe('re-read on focus', () => {
+  it('returning to the tab re-reads the recordings of the period', async () => {
     saturdayMorning()
     const http = mockLibrary()
     renderApp(WEEK)
@@ -235,18 +235,18 @@ describe('releitura no foco', () => {
   })
 })
 
-describe('filtros e restauração da biblioteca', () => {
+describe('library filters and restore', () => {
   const COLLECTION = '01928f3a-1c00-7a00-8000-000000000801'
   const LAST = `eclume-biblioteca-ultima:${fixtures.me().user.id}`
   const VIEW_LABELS: Record<string, string> = { semana: 'Semana', mes: 'Mês', lista: 'Lista' }
 
-  /** A query da última requisição de gravações do período (a que a tela mostra agora). */
+  /** The query of the last recordings request of the period (the one the screen shows now). */
   function lastRangeQuery(http: ReturnType<typeof mockLibrary>) {
     const ranges = http.requests('GET /api/v1/recordings').filter((r) => new URL(r.url).searchParams.has('from'))
     return new URL(ranges.at(-1)!.url).searchParams
   }
 
-  it('restaura a última biblioteca uma vez e deixa desmarcar a coleção', async () => {
+  it('restores the last library once and lets the collection be unchecked', async () => {
     saturdayMorning()
     const http = mockLibrary()
     localStorage.setItem(LAST, `visao=semana&data=2026-09-21&colecao=${COLLECTION}`)
@@ -259,13 +259,13 @@ describe('filtros e restauração da biblioteca', () => {
     await userEvent.click(collection)
     await waitFor(() => expect(collection).not.toBeChecked())
     await waitFor(() => expect(lastRangeQuery(http).has('collection')).toBe(false))
-    // A URL fica como o filtro a deixou: nem a coleção volta, nem a visão é trocada.
+    // The URL stays as the filter left it: neither does the collection come back, nor is the view changed.
     expect(screen.getByRole('radio', { name: 'Semana' })).toBeChecked()
     expect(screen.getByText('21–27 de setembro de 2026')).toBeInTheDocument()
     expect(localStorage.getItem(LAST)).toBe('visao=semana&data=2026-09-21')
   })
 
-  it('a última biblioteca é por conta: a de outra conta e a chave global antiga não voltam', async () => {
+  it('the last library is per account: another account\'s and the old global key do not come back', async () => {
     saturdayMorning()
     mockLibrary()
     localStorage.setItem('eclume-biblioteca-ultima', `colecao=${COLLECTION}`)
@@ -286,18 +286,18 @@ describe('filtros e restauração da biblioteca', () => {
     renderApp('/')
 
     const tag = await screen.findByRole('button', { name: 'cliente-metalurgica' })
-    // A guardada só é gravada depois que a abertura escolhida chegou à URL.
+    // The stored one is only written after the chosen opening reached the URL.
     await waitFor(() => expect(localStorage.getItem(LAST)).toBe(`visao=${opening}`))
     await userEvent.click(tag)
     await waitFor(() => expect(tag).toHaveAttribute('aria-pressed', 'true'))
-    // Dá tempo de um efeito de restauração, se ainda houvesse, sobrescrever a URL.
+    // Time for a restore effect, if one still existed, to overwrite the URL.
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(tag).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('radio', { name: VIEW_LABELS[opening] })).toBeChecked()
     expect(localStorage.getItem(LAST)).toBe(`visao=${opening}&tag=cliente-metalurgica`)
   })
 
-  it('tirar o último filtro, deixando a URL vazia, limpa a última biblioteca guardada', async () => {
+  it('removing the last filter, leaving the URL empty, clears the stored last library', async () => {
     mockLibrary()
     renderApp('/?tag=cliente-metalurgica')
 
@@ -311,8 +311,8 @@ describe('filtros e restauração da biblioteca', () => {
   })
 })
 
-describe('releitura incremental com gravação em andamento', () => {
-  it('lê só o que mudou por ?since= e grava no cache, sem reler o período inteiro', async () => {
+describe('incremental re-read with a recording in progress', () => {
+  it('reads only what changed through ?since= and writes it to the cache, without re-reading the whole period', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(2026, 8, 26, 11, 12))
     const page = fixtures.recordingWeekPage()
@@ -333,17 +333,17 @@ describe('releitura incremental com gravação em andamento', () => {
     expect(incremental.get('sort')).toBe('recorded_asc')
     expect(await screen.findByRole('link', { name: /Já terminou/ })).toBeInTheDocument()
 
-    // Nada mais em andamento: sem novas leituras.
+    // Nothing in progress anymore: no new reads.
     await act(() => vi.advanceTimersByTimeAsync(60_000))
     expect(ranged()).toHaveLength(2)
   })
 })
 
-describe('biblioteca no mês e na lista', () => {
-  it('mostra o mês com até três gravações por dia, e o dia abre a semana', async () => {
+describe('library in the month and the list', () => {
+  it('shows the month with up to three recordings per day, and the day opens the week', async () => {
     saturdayMorning()
     const page = fixtures.recordingWeekPage()
-    // Mais duas no dia 24 (quinta): quatro no dia, três visíveis e "+1".
+    // Two more on the 24th (Thursday): four on the day, three visible and "+1".
     page.items.push(
       { ...page.items[6], id: '01928f3a-1c00-7a00-8000-0000000004b1', title: 'Extra 1' },
       { ...page.items[6], id: '01928f3a-1c00-7a00-8000-0000000004b2', title: 'Extra 2' },
@@ -374,7 +374,7 @@ describe('biblioteca no mês e na lista', () => {
     expect(screen.getByRole('radio', { name: 'Semana' })).toBeChecked()
   })
 
-  it('anda de mês em mês', async () => {
+  it('moves month by month', async () => {
     mockLibrary()
     renderApp('/?visao=mes&data=2026-09-21')
     await screen.findByText('Setembro de 2026')
@@ -385,7 +385,7 @@ describe('biblioteca no mês e na lista', () => {
     expect(await screen.findByText('Agosto de 2026')).toBeInTheDocument()
   })
 
-  it('lista por dia, da mais recente, com o estado e Carregar mais', async () => {
+  it('lists by day, newest first, with the status and Carregar mais', async () => {
     saturdayMorning()
     const recent = fixtures.recordingWeekPage()
     recent.items.reverse()
@@ -415,7 +415,7 @@ describe('biblioteca no mês e na lista', () => {
     expect(query.has('from')).toBe(false)
   })
 
-  it('avisa quantas gravações precisam de você e Ver liga o filtro na lista', async () => {
+  it('tells how many recordings need you and Ver turns the filter on in the list', async () => {
     const http = mockLibrary(() => fixtures.recordingWeekPage(), 2)
     renderApp(WEEK)
     const band = await screen.findByRole('status', { name: 'Precisam de você' })
@@ -428,14 +428,14 @@ describe('biblioteca no mês e na lista', () => {
     expect(screen.getByRole('checkbox', { name: 'Aguardando locutores' })).toBeChecked()
   })
 
-  it('sem gravação esperando, nada de aviso', async () => {
+  it('with no recording waiting, no notice', async () => {
     mockLibrary()
     renderApp(WEEK)
     await screen.findByRole('button', { name: 'Próxima semana' })
     expect(screen.queryByRole('status', { name: 'Precisam de você' })).not.toBeInTheDocument()
   })
 
-  it('em tela estreita, sem visão na URL, abre na lista', async () => {
+  it('on a narrow screen, with no view in the URL, opens in the list', async () => {
     vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 56rem)' }))
     mockLibrary()
     renderApp('/')

@@ -10,9 +10,9 @@ beforeAll(() => preloadRoute('/config/campos'))
 
 afterEach(() => vi.unstubAllGlobals())
 
-const CLIENTE = '01928f3a-1c00-7a00-8000-000000000d03'
+const CLIENT = '01928f3a-1c00-7a00-8000-000000000d03'
 
-/** API de campos com estado, como o servidor. */
+/** Stateful fields API, like the server. */
 function mockFields(
   overrides: Record<string, Parameters<typeof mockFetch>[0][string]> = {},
   initial: Schemas['Field'][] = fixtures.fieldPage().items,
@@ -52,14 +52,14 @@ function mockFields(
 const list = () => screen.findByRole('list', { name: 'Campos' })
 const row = (name: string) => within(screen.getByRole('list', { name: 'Campos' })).getByRole('button', { name }).closest('li')!
 
-describe('campos personalizados', () => {
-  it('lista só os campos do usuário, com o Automático, e abre o primeiro no painel', async () => {
+describe('custom fields', () => {
+  it('lists only the user fields, with Automático, and opens the first one in the panel', async () => {
     mockFields()
     renderApp('/config/campos')
     expect(await screen.findByRole('heading', { level: 1, name: 'Campos personalizados' })).toBeInTheDocument()
     expect(screen.getByText('Regras', { selector: '.kicker' })).toBeInTheDocument()
     await list()
-    // O título vem dos tipos de agenda e as tags têm cadastro próprio: nenhum dos dois aparece aqui.
+    // The title comes from the agenda types and the tags have their own registry: neither shows up here.
     const fields = within(screen.getByRole('list', { name: 'Campos' }))
     expect(fields.getAllByRole('listitem').map((li) => within(li).getByRole('button').textContent)).toEqual([
       'Cliente',
@@ -69,7 +69,7 @@ describe('campos personalizados', () => {
     expect(fields.queryByRole('button', { name: 'Tags' })).toBeNull()
     expect(screen.queryByText(/Embutido/)).not.toBeInTheDocument()
     const main = within(screen.getByRole('main'))
-    // O texto aponta para a visão geral, e não para as telas de cada etapa.
+    // The text points to the overview, and not to the screens of each stage.
     expect(main.getByRole('link', { name: 'Processamento automático' })).toHaveAttribute('href', '/config/automacao')
     expect(main.queryByRole('link', { name: 'Tipos de agenda' })).not.toBeInTheDocument()
     expect(main.queryByRole('link', { name: 'Tags' })).not.toBeInTheDocument()
@@ -85,7 +85,7 @@ describe('campos personalizados', () => {
     expect(within(panel).getByRole('button', { name: 'Salvar' })).toBeDisabled()
   })
 
-  it('sem campos do usuário, o texto ocupa o lugar da lista e o painel só abre pelo Novo campo', async () => {
+  it('with no user fields, the text takes the place of the list and the panel only opens through Novo campo', async () => {
     const [title, tags] = fixtures.fieldPage().items
     mockFields({}, [title, tags])
     renderApp('/config/campos')
@@ -100,14 +100,14 @@ describe('campos personalizados', () => {
     expect(screen.getByRole('form', { name: 'Novo campo' })).toBeInTheDocument()
   })
 
-  it('o endereço de um campo embutido (Tags) avisa que o campo não existe mais', async () => {
+  it('the address of a built-in field (Tags) warns that the field no longer exists', async () => {
     mockFields()
     renderApp('/config/campos?campo=01928f3a-1c00-7a00-8000-000000000d02')
     expect(await screen.findByText('Este campo não existe mais. Escolha outro na lista.')).toBeInTheDocument()
     expect(screen.queryByRole('form')).not.toBeInTheDocument()
   })
 
-  it('o Automático grava na hora e volta atrás se o servidor recusar', async () => {
+  it('Automático saves at once and reverts if the server refuses', async () => {
     const http = mockFields({
       'PATCH /api/v1/fields/:id': () => problem('forbidden', 403),
     })
@@ -120,9 +120,9 @@ describe('campos personalizados', () => {
     await waitFor(() => expect(toggle).toBeChecked())
   })
 
-  it('edita a regra de um campo de escolha e salva só o que o contrato pede', async () => {
+  it('edits the rule of a choice field and saves only what the contract asks for', async () => {
     const http = mockFields()
-    renderApp(`/config/campos?campo=${CLIENTE}`)
+    renderApp(`/config/campos?campo=${CLIENT}`)
     const panel = await screen.findByRole('form', { name: 'Editar Cliente' })
     expect(within(panel).getByRole('radio', { name: 'Escolha' })).toBeChecked()
     const options = within(panel).getByRole('list', { name: 'Opções' })
@@ -147,7 +147,7 @@ describe('campos personalizados', () => {
     await waitFor(() => expect(within(panel).getByRole('button', { name: 'Salvar' })).toBeDisabled())
   })
 
-  it('cria um campo novo pelo rascunho; Escolha exige uma opção', async () => {
+  it('creates a new field from the draft; Choice requires an option', async () => {
     const http = mockFields()
     renderApp('/config/campos')
     await list()
@@ -171,7 +171,7 @@ describe('campos personalizados', () => {
     expect(within(row('Fase do projeto')).getByRole('button', { name: 'Fase do projeto' })).toHaveAttribute('aria-current', 'true')
   })
 
-  it('pede para descartar as alterações antes de trocar de campo', async () => {
+  it('asks to discard the changes before switching fields', async () => {
     mockFields()
     renderApp('/config/campos')
     await list()
@@ -193,7 +193,7 @@ describe('campos personalizados', () => {
     expect(await screen.findByRole('form', { name: 'Editar Projeto' })).toBeInTheDocument()
   })
 
-  it('pede para descartar as alterações antes de sair da rota', async () => {
+  it('asks to discard the changes before leaving the route', async () => {
     mockFields()
     renderApp('/config/campos')
     await list()
@@ -210,12 +210,12 @@ describe('campos personalizados', () => {
     )
   })
 
-  it('mostra o erro 422 no campo certo', async () => {
+  it('shows the 422 error on the right field', async () => {
     mockFields({
       'PATCH /api/v1/fields/:id': () =>
         problem('validation_failed', 422, { errors: [{ field: 'name', message: 'já existe um campo com este nome' }] }),
     })
-    renderApp(`/config/campos?campo=${CLIENTE}`)
+    renderApp(`/config/campos?campo=${CLIENT}`)
     const panel = await screen.findByRole('form', { name: 'Editar Cliente' })
     const name = within(panel).getByLabelText('Nome')
     await userEvent.clear(name)
@@ -225,9 +225,9 @@ describe('campos personalizados', () => {
     expect(name).toHaveAccessibleDescription('já existe um campo com este nome')
   })
 
-  it('exclui um campo do usuário depois de confirmar', async () => {
+  it('deletes a user field after confirming', async () => {
     const http = mockFields()
-    renderApp(`/config/campos?campo=${CLIENTE}`)
+    renderApp(`/config/campos?campo=${CLIENT}`)
     const panel = await screen.findByRole('form', { name: 'Editar Cliente' })
     await userEvent.click(within(panel).getByRole('button', { name: 'Excluir campo' }))
     const dialog = screen.getByRole('dialog', { name: 'Excluir Cliente?' })
@@ -240,15 +240,15 @@ describe('campos personalizados', () => {
   })
 })
 
-describe('testar numa gravação', () => {
+describe('test on a recording', () => {
   const queued = () => ({ ...fixtures.previewFieldRule(), status: 'queued', items: [] })
 
-  it('roda o rascunho nas últimas gravações, mostra a espera e o valor de cada uma, sem salvar', async () => {
+  it('runs the draft on the latest recordings, shows the wait and the value of each one, without saving', async () => {
     const http = mockFields({
       'POST /api/v1/fields/preview': () => queued(),
       'GET /api/v1/previews/:id': () => fixtures.previewFieldRule(),
     })
-    renderApp(`/config/campos?campo=${CLIENTE}`)
+    renderApp(`/config/campos?campo=${CLIENT}`)
     const panel = await screen.findByRole('form', { name: 'Editar Cliente' })
     const rule = within(panel).getByLabelText('Como identificar')
     await userEvent.clear(rule)
@@ -278,7 +278,7 @@ describe('testar numa gravação', () => {
     expect(within(panel).getByRole('button', { name: 'Salvar' })).toBeEnabled()
   })
 
-  it('explica quando nenhum agente preenche campos', async () => {
+  it('explains when no agent fills fields', async () => {
     mockFields({
       'POST /api/v1/fields/preview': () => ({
         ...queued(),
@@ -286,7 +286,7 @@ describe('testar numa gravação', () => {
         error: { code: 'no_provider', message: 'Nenhum provider serve a finalidade fields.' },
       }),
     })
-    renderApp(`/config/campos?campo=${CLIENTE}`)
+    renderApp(`/config/campos?campo=${CLIENT}`)
     const panel = await screen.findByRole('form', { name: 'Editar Cliente' })
     await userEvent.click(within(panel).getByRole('button', { name: 'Testar numa gravação' }))
     expect(await within(panel).findByRole('alert')).toHaveTextContent(
@@ -294,7 +294,7 @@ describe('testar numa gravação', () => {
     )
   })
 
-  it('mostra a falha do agente e o erro da API', async () => {
+  it('shows the agent failure and the API error', async () => {
     let calls = 0
     mockFields({
       'POST /api/v1/fields/preview': () =>
@@ -302,7 +302,7 @@ describe('testar numa gravação', () => {
           ? { ...queued(), status: 'failed', error: { code: 'provider_error', message: 'O agente não respondeu.' } }
           : problem('rate_limited', 429),
     })
-    renderApp(`/config/campos?campo=${CLIENTE}`)
+    renderApp(`/config/campos?campo=${CLIENT}`)
     const panel = await screen.findByRole('form', { name: 'Editar Cliente' })
     const button = within(panel).getByRole('button', { name: 'Testar numa gravação' })
     await userEvent.click(button)
@@ -311,7 +311,7 @@ describe('testar numa gravação', () => {
     expect(await within(panel).findByText('Muitas requisições seguidas. Aguarde um instante e tente de novo.')).toBeInTheDocument()
   })
 
-  it('avisa quando ainda não há gravações transcritas', async () => {
+  it('warns when there are no transcribed recordings yet', async () => {
     mockFields({ 'POST /api/v1/fields/preview': () => ({ ...queued(), status: 'done' }) })
     renderApp('/config/campos')
     const panel = await screen.findByRole('form', { name: 'Editar Cliente' })

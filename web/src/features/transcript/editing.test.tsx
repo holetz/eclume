@@ -20,8 +20,8 @@ async function openPage() {
   return openSpeakers()
 }
 
-describe('edição da transcrição', () => {
-  it('renomeia um locutor e atualiza as falas dele', async () => {
+describe('transcript editing', () => {
+  it('renames a speaker and updates their segments', async () => {
     document.cookie = 'eclume_csrf=abc; path=/'
     const http = mockTranscriptApi({
       'PATCH /api/v1/transcripts/:id/speakers/:speaker': async (request) => {
@@ -36,14 +36,14 @@ describe('edição da transcrição', () => {
     await userEvent.type(input, 'Joana Prado{Enter}')
 
     expect(await within(panel).findByText('Joana Prado')).toBeInTheDocument()
-    const falas = screen.getByRole('list', { name: 'Falas' })
-    expect(within(falas).getAllByText('Joana Prado')).toHaveLength(3)
+    const segmentList = screen.getByRole('list', { name: 'Falas' })
+    expect(within(segmentList).getAllByText('Joana Prado')).toHaveLength(3)
     const request = http.requests('PATCH /api/v1/transcripts/:id/speakers/:speaker')[0]
     expect(new URL(request.url).pathname).toMatch(/\/speakers\/S3$/)
     expect(request.headers.get(CSRF_HEADER)).toBe('abc')
   })
 
-  it('mostra o erro de uma renomeação recusada', async () => {
+  it('shows the error of a refused rename', async () => {
     mockTranscriptApi({
       'PATCH /api/v1/transcripts/:id/speakers/:speaker': () => problem('forbidden', 403),
     })
@@ -53,7 +53,7 @@ describe('edição da transcrição', () => {
     expect(await within(panel).findByRole('alert')).toHaveTextContent(/permissão/)
   })
 
-  it('mescla locutores e passa a mostrar a transcrição devolvida', async () => {
+  it('merges speakers and then shows the returned transcript', async () => {
     const merged = fixtures.transcript()
     merged.speakers = merged.speakers.filter((s) => s.id !== 'S3')
     merged.segments = merged.segments.map((s) => (s.speaker_id === 'S3' ? { ...s, speaker_id: 'S2' } : s))
@@ -63,10 +63,10 @@ describe('edição da transcrição', () => {
     const panel = await openPage()
     await userEvent.click(within(panel).getByRole('button', { name: 'Mesclar locutores' }))
     await userEvent.selectOptions(within(panel).getByLabelText('Manter o locutor'), 'S2')
-    const mesclar = within(panel).getByRole('button', { name: 'Mesclar' })
-    expect(mesclar).toBeDisabled()
+    const mergeButton = within(panel).getByRole('button', { name: 'Mesclar' })
+    expect(mergeButton).toBeDisabled()
     await userEvent.click(within(panel).getByRole('checkbox', { name: 'Locutor 3' }))
-    await userEvent.click(mesclar)
+    await userEvent.click(mergeButton)
 
     expect(await within(panel).findByText('Locutor 3 mesclado em Locutor 2.')).toBeInTheDocument()
     expect(within(panel).queryByRole('button', { name: 'Renomear Locutor 3' })).not.toBeInTheDocument()
@@ -74,7 +74,7 @@ describe('edição da transcrição', () => {
     expect(body).toEqual({ source_speaker_ids: ['S3'], target_speaker_id: 'S2' })
   })
 
-  it('corrige o texto de uma fala', async () => {
+  it('corrects the text of a segment', async () => {
     const http = mockTranscriptApi({
       'PATCH /api/v1/transcripts/:id/segments/:segment': async (request) => {
         const body = (await request.json()) as { text: string }
@@ -82,26 +82,26 @@ describe('edição da transcrição', () => {
       },
     })
     await openPage()
-    const falas = screen.getByRole('list', { name: 'Falas' })
-    await userEvent.click(within(falas).getByRole('button', { name: 'Corrigir a fala de Locutor 2 em 00:00:12' }))
-    const field = within(falas).getByLabelText('Texto da fala de Locutor 2 em 00:00:12')
+    const segmentList = screen.getByRole('list', { name: 'Falas' })
+    await userEvent.click(within(segmentList).getByRole('button', { name: 'Corrigir a fala de Locutor 2 em 00:00:12' }))
+    const field = within(segmentList).getByLabelText('Texto da fala de Locutor 2 em 00:00:12')
     await userEvent.clear(field)
     await userEvent.type(field, 'Texto corrigido.{Control>}{Enter}{/Control}')
 
-    expect(await within(falas).findByText('Texto corrigido.')).toBeInTheDocument()
-    expect(within(falas).queryByRole('textbox')).not.toBeInTheDocument()
+    expect(await within(segmentList).findByText('Texto corrigido.')).toBeInTheDocument()
+    expect(within(segmentList).queryByRole('textbox')).not.toBeInTheDocument()
     const request = http.requests('PATCH /api/v1/transcripts/:id/segments/:segment')[0]
     expect(new URL(request.url).pathname).toMatch(/\/segments\/seg-0002$/)
     expect(await request.json()).toEqual({ text: 'Texto corrigido.' })
   })
 
-  it('Esc cancela a correção sem chamar a API', async () => {
+  it('Esc cancels the correction without calling the API', async () => {
     const http = mockTranscriptApi()
     await openPage()
-    const falas = screen.getByRole('list', { name: 'Falas' })
-    await userEvent.click(within(falas).getByRole('button', { name: 'Corrigir a fala de Locutor 2 em 00:00:12' }))
-    await userEvent.type(within(falas).getByRole('textbox'), ' extra{Escape}')
-    expect(within(falas).queryByRole('textbox')).not.toBeInTheDocument()
+    const segmentList = screen.getByRole('list', { name: 'Falas' })
+    await userEvent.click(within(segmentList).getByRole('button', { name: 'Corrigir a fala de Locutor 2 em 00:00:12' }))
+    await userEvent.type(within(segmentList).getByRole('textbox'), ' extra{Escape}')
+    expect(within(segmentList).queryByRole('textbox')).not.toBeInTheDocument()
     expect(http.calls.some((r) => r.method === 'PATCH')).toBe(false)
   })
 })

@@ -37,7 +37,7 @@ const VIEWS: { value: LibraryView; label: string }[] = [
   { value: 'lista', label: 'Lista' },
 ]
 
-// O modal (e o conversor de mídia que ele puxa) carrega só quando abre.
+// The modal (and the media converter it pulls in) loads only when it opens.
 const ImportDialog = lazy(() => import('../import/ImportDialog').then((module) => ({ default: module.ImportDialog })))
 
 const NARROW = '(max-width: 56rem)'
@@ -46,7 +46,7 @@ function matchesNarrow(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia(NARROW).matches
 }
 
-/** Se a tela está estreita (abaixo de 56rem), acompanhando a mudança de largura. */
+/** Whether the screen is narrow (below 56rem), following width changes. */
 function useNarrow(): boolean {
   return useSyncExternalStore((onChange) => {
     const query = typeof window.matchMedia === 'function' ? window.matchMedia(NARROW) : null
@@ -63,29 +63,29 @@ export function LibraryPage() {
   const narrow = useNarrow()
   const [collapsed, setCollapsed] = useState(() => readStored(STORAGE_KEYS.filtersCollapsed) === '1')
   const [filtersOpen, setFiltersOpen] = useState(false)
-  // A biblioteca aberta sem parâmetros volta à última visão e aos últimos filtros, ou abre na visão
-  // escolhida na tela Ambiente. A restauração acontece uma vez só: o `setParams` do roteador muda de
-  // identidade a cada mudança da URL, e um efeito que o use sem essa trava sobrescreveria cada filtro.
+  // The library opened without parameters returns to the last view and the last filters, or opens in the view
+  // chosen on the Environment screen. The restore happens only once: the router's `setParams` changes
+  // identity on every URL change, and an effect using it without this latch would overwrite every filter.
   const [opening] = useState(readLibraryOpening)
   const userId = useMe().data?.user.id ?? ''
   const [restoring, setRestoring] = useState(
     () => params.size === 0 && (opening !== 'ultima' || Boolean(readLastLibrary(userId))),
   )
-  // A restauração termina quando a URL restaurada chega: dali em diante, filtro tirado é filtro tirado.
+  // The restore ends when the restored URL arrives: from then on, a removed filter is a removed filter.
   if (restoring && params.size > 0) setRestoring(false)
   useEffect(() => {
     if (!restoring) return
     const next = opening === 'ultima' ? (readLastLibrary(userId) ?? '') : { visao: opening }
     setParams(new URLSearchParams(next), { replace: true })
   }, [restoring, opening, setParams, userId])
-  // Tirar o último filtro deixa a URL vazia: a guardada também se limpa, senão ressuscitaria na próxima
-  // visita. Durante a restauração a URL vazia é só a de partida, e a guardada ainda vai ser lida.
+  // Removing the last filter leaves the URL empty: the stored one is cleared too, otherwise it would come back on the next
+  // visit. During the restore the empty URL is only the starting one, and the stored one is still to be read.
   useEffect(() => {
     if (restoring) return
     writeLastLibrary(userId, rememberedSearch(params) || null)
   }, [restoring, params, userId])
 
-  // O aviso que a gravação excluída deixa ao voltar para a biblioteca.
+  // The notice a deleted recording leaves when returning to the library.
   const notice = (useLocation().state as { notice?: string } | null)?.notice
   const importQueue = useImportContext()
   const importing = params.get('importar') === '1'
@@ -99,7 +99,7 @@ export function LibraryPage() {
   const current = view === 'lista' ? list : range
   const items = (view === 'lista' ? list.data?.pages.flatMap((page) => page.items) : range.data?.items) ?? []
   const emptyPeriod = current.isSuccess && items.length === 0
-  // Decide entre "nada neste período" e a biblioteca vazia.
+  // Decides between "nothing in this period" and the empty library.
   const anyRecording = useHasAnyRecording(emptyPeriod && activeFilterCount(filters) === 0)
   const emptyLibrary = anyRecording.data === false
 
@@ -112,7 +112,7 @@ export function LibraryPage() {
     setParams(next)
   }
 
-  // Abrir e fechar o modal Importar não empilha histórico: Voltar não o reabre.
+  // Opening and closing the Import modal does not stack history: Back does not reopen it.
   function setImporting(open: boolean) {
     const next = new URLSearchParams(params)
     if (open) next.set('importar', '1')
@@ -305,7 +305,7 @@ export function LibraryPage() {
   )
 }
 
-/** A faixa da fila de importação, enquanto há arquivo convertendo ou subindo. */
+/** The import queue strip, while a file is converting or uploading. */
 function ImportBand({ items, onOpen }: { items: ImportItem[]; onOpen: () => void }) {
   const active = items.filter((item) => item.state.kind !== 'canceled')
   const current = active.findIndex((item) => item.state.kind === 'converting' || item.state.kind === 'uploading')
@@ -323,8 +323,8 @@ function ImportBand({ items, onOpen }: { items: ImportItem[]; onOpen: () => void
 }
 
 /**
- * "Precisam de você": quantas gravações esperam você nomear os locutores (a conta exige), com o
- * atalho que liga o filtro na lista.
+ * "Precisam de você": how many recordings wait for you to name the speakers (the account requires it), with the
+ * shortcut that turns the filter on in the list.
  */
 function NeedsYouBand({ onShow }: { onShow: () => void }) {
   const naming = useSpeakerNaming()

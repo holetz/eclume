@@ -3,11 +3,11 @@ import { createPlaybackClock, PlaybackContext, RATES, type Playback, type Playba
 
 interface PlaybackProviderProps {
   recordingId: string
-  /** Duração conhecida da gravação, até o áudio carregar os metadados. */
+  /** The recording's known duration, until the audio loads its metadata. */
   durationMs: number | null
-  /** Instante inicial (`?t=`), sem tocar. */
+  /** Initial instant (`?t=`), without playing. */
   startMs?: number | null
-  /** O áudio já foi apagado pela retenção: não há `<audio>` nem pedido à rota, que responde 410. */
+  /** The audio has already been deleted by retention: there is no `<audio>` nor a request to the route, which answers 410. */
   audioDeleted?: boolean
   children: ReactNode
 }
@@ -15,10 +15,10 @@ interface PlaybackProviderProps {
 const OPUS = 'audio/ogg; codecs=opus'
 
 /**
- * Guarda o `<audio>` único da gravação e expõe tempo, estado e comandos pelo contexto. O `src` é a
- * rota da API, que responde 302 para uma URL assinada de 1 h: quando ela vence no meio da escuta, o
- * erro do `<audio>` pede uma assinatura nova (outro `src`) e retoma do mesmo instante, tocando se
- * tocava, uma vez sozinho; se falhar de novo, o erro vai para o player.
+ * Holds the recording's single `<audio>` and exposes time, state and commands through the context. The `src` is the
+ * API route, which answers 302 to a signed URL valid for 1 h: when it expires mid-listening, the
+ * `<audio>` error asks for a new signature (another `src`) and resumes from the same instant, playing if it
+ * was playing, once on its own; if it fails again, the error goes to the player.
  */
 export function PlaybackProvider({ recordingId, durationMs, startMs = null, audioDeleted = false, children }: PlaybackProviderProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -29,20 +29,20 @@ export function PlaybackProvider({ recordingId, durationMs, startMs = null, audi
   const [error, setError] = useState<PlaybackError | null>(null)
   const [renewal, setRenewal] = useState(0)
   const src = `/api/v1/recordings/${recordingId}/audio${renewal ? `?renovacao=${renewal}` : ''}`
-  // Se a pessoa queria ouvir (tocou e não pausou), para retomar tocando depois da renovação.
+  // Whether the person wanted to listen (played and did not pause), to resume playing after the renewal.
   const wantsPlay = useRef(false)
   const loaded = useRef(false)
   const renewed = useRef(false)
   const resumeAt = useRef<number | null>(null)
 
   useEffect(() => {
-    // Sem mídia carregada, o navegador guarda o instante como posição inicial da reprodução.
+    // With no media loaded, the browser keeps the instant as the playback's starting position.
     if (startMs !== null && audioRef.current) audioRef.current.currentTime = startMs / 1000
   }, [startMs])
 
   const seek = useCallback((ms: number, play = false) => {
     const audio = audioRef.current
-    // O player mostra o instante buscado antes de o áudio carregar.
+    // The player shows the sought instant before the audio loads.
     clock.set(ms)
     if (!audio) return
     audio.currentTime = ms / 1000
@@ -73,7 +73,7 @@ export function PlaybackProvider({ recordingId, durationMs, startMs = null, audi
   }, [renew])
 
   function handleError(audio: HTMLAudioElement) {
-    // Nunca carregou e o navegador diz que não toca Ogg Opus: renovar não resolve.
+    // Never loaded and the browser says it does not play Ogg Opus: renewing does not help.
     if (!loaded.current && audio.canPlayType(OPUS) === '') {
       setError('format')
       return
@@ -121,7 +121,7 @@ export function PlaybackProvider({ recordingId, durationMs, startMs = null, audi
           onTimeUpdate={(event) => clock.set(event.currentTarget.currentTime * 1000)}
           onPlay={() => setPlaying(true)}
           onPlaying={() => {
-            // Tocou de novo: uma próxima expiração tem direito à sua renovação automática.
+            // Played again: a next expiry is entitled to its own automatic renewal.
             renewed.current = false
           }}
           onPause={() => setPlaying(false)}

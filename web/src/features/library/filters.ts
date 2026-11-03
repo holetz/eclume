@@ -1,4 +1,4 @@
-// Os filtros e a visão da biblioteca vivem na URL, em pt-BR, e viram a query de `GET /recordings`.
+// The library filters and view live in the URL, in pt-BR, and become the query of `GET /recordings`.
 import type { Schemas } from '../../api/client'
 
 type Kind = Schemas['RecordingKind']
@@ -7,17 +7,17 @@ type Status = Schemas['RecordingStatus']
 export type LibraryView = 'semana' | 'mes' | 'lista'
 export type KindParam = 'reuniao' | 'nota'
 export type StatusParam = 'pronta' | 'processando' | 'falhou'
-/** O que a gravação espera de você para seguir (`Recording.awaiting`), na URL em pt-BR. */
+/** What the recording awaits from you to move on (`Recording.awaiting`), in the URL in pt-BR. */
 export type NeedsParam = 'locutores'
 
 export const KINDS: Record<KindParam, Kind> = { reuniao: 'meeting', nota: 'note' }
 
-/** "Precisam de você" → `awaiting` do contrato. */
+/** "Precisam de você" → the contract's `awaiting`. */
 export const NEEDS: Record<NeedsParam, 'speakers'> = { locutores: 'speakers' }
 
 /**
- * Situação da tela → estados do contrato. "Processando" junta envio, fila e transcrição; uma
- * gravação transcrita com o resumo ainda em andamento conta como pronta no filtro do servidor.
+ * Screen status → contract states. "Processando" joins upload, queue and transcription; a
+ * transcribed recording with the summary still in progress counts as ready in the server filter.
  */
 export const STATUS_GROUPS: Record<StatusParam, Status[]> = {
   pronta: ['transcribed'],
@@ -31,13 +31,13 @@ export interface LibraryFilters {
   tag: string[]
   person: string[]
   collection: string[]
-  /** `<field_id>:<valor>`. */
+  /** `<field_id>:<value>`. */
   field: string[]
-  /** Atributos de um mesmo participante (pessoa ligada a um locutor). */
+  /** Attributes of one same participant (a person linked to a speaker). */
   personCompany: string[]
   personDepartment: string[]
   personTag: string[]
-  /** Precisam de você: a gravação parada à espera dos nomes dos locutores. */
+  /** Need you: the recording stopped waiting for the speakers' names. */
   needs: NeedsParam[]
 }
 
@@ -81,7 +81,7 @@ export function readView(params: URLSearchParams): LibraryView | null {
   return VIEWS.includes(view as LibraryView) ? (view as LibraryView) : null
 }
 
-/** Troca os filtros na URL, mantendo visão, data e o resto. */
+/** Replaces the filters in the URL, keeping view, date and the rest. */
 export function writeFilters(params: URLSearchParams, filters: LibraryFilters): URLSearchParams {
   const next = new URLSearchParams(params)
   for (const [key, param] of Object.entries(FILTER_PARAMS) as [keyof LibraryFilters, string][]) {
@@ -104,14 +104,14 @@ export const NO_FILTERS: LibraryFilters = {
   needs: [],
 }
 
-/** Quantos filtros estão ligados (um por valor escolhido). */
+/** How many filters are on (one per chosen value). */
 export function activeFilterCount(filters: LibraryFilters): number {
   return Object.values(filters).reduce((total, values) => total + values.length, 0)
 }
 
 type RecordingsQuery = NonNullable<import('../../api/schema.gen').operations['listRecordings']['parameters']['query']>
 
-/** A parte de filtros da query de `GET /recordings`. Um grupo com tudo marcado não manda o parâmetro. */
+/** The filter part of the `GET /recordings` query. A group with everything checked does not send the parameter. */
 export function filtersToQuery(filters: LibraryFilters): RecordingsQuery {
   const query: RecordingsQuery = {}
   const kinds = filters.kind.map((kind) => KINDS[kind])
@@ -130,7 +130,7 @@ export function filtersToQuery(filters: LibraryFilters): RecordingsQuery {
   return query
 }
 
-/** A query string que a biblioteca lembra (sem o modal Importar). */
+/** The query string the library remembers (without the Import modal). */
 export function rememberedSearch(params: URLSearchParams): string {
   const next = new URLSearchParams(params)
   next.delete('importar')

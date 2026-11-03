@@ -25,7 +25,7 @@ const EMPTY: AgendaTypeDraft = {
   summary_instructions: '',
 }
 
-// Os marcadores que todo padrão de título aceita; os campos do usuário entram pela chave.
+// The placeholders every title pattern accepts; the user's fields come in through their key.
 const BASE_MARKERS = ['{assunto}', '{data}', '{tipo}']
 
 function draftOf(type: AgendaType | null): AgendaTypeDraft {
@@ -34,18 +34,18 @@ function draftOf(type: AgendaType | null): AgendaTypeDraft {
   return { name, title_pattern, title_instructions, identify, default_tags, summary_instructions }
 }
 
-/** O rascunho no formato do contrato: sem espaços nas pontas do nome, e padrão vazio vira `null`. */
+/** The draft in the contract's shape: no spaces at the ends of the name, and an empty pattern becomes `null`. */
 function cleanDraft(draft: AgendaTypeDraft): AgendaTypeDraft {
   return { ...draft, name: draft.name.trim(), title_pattern: draft.title_pattern?.trim() || null }
 }
 
 interface AgendaTypeEditorProps {
-  /** O tipo salvo, ou `null` para o rascunho de um tipo novo. */
+  /** The saved agenda type, or `null` for the draft of a new agenda type. */
   type: AgendaType | null
   onDirtyChange: (dirty: boolean) => void
   onSaved: (type: AgendaType) => void
   onDeleted: () => void
-  /** Um pedido do chat do resumo, acrescentado ao rascunho das instruções do resumo, sem salvar. */
+  /** A request from the summary chat, appended to the draft of the summary instructions, without saving. */
   summaryAddition?: string
 }
 
@@ -59,7 +59,7 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
   )
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [picking, setPicking] = useState(false)
-  // O rascunho que a pré-visualização em tela usou: editar depois disso a invalida.
+  // The draft the on-screen preview used: editing after that invalidates it.
   const [previewedDraft, setPreviewedDraft] = useState<string | null>(null)
   const save = useSaveAgendaType()
   const preview = usePreview(startAgendaTypePreview)
@@ -71,7 +71,7 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
   const complete = draft.name.trim() !== '' && draft.summary_instructions.trim() !== ''
   const canSave = dirty && complete && !save.isPending
   const previewing = preview.state === 'queued' || preview.state === 'running'
-  // O tipo padrão fica com a gravação quando nenhum outro se encaixa: não sai e não concorre.
+  // The fallback agenda type keeps the recording when no other one fits: it does not leave and does not compete.
   const fallback = type?.fallback === true
   const markers = [
     ...BASE_MARKERS,
@@ -82,7 +82,7 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
 
   const set = (changes: Partial<AgendaTypeDraft>) => setDraft((current) => ({ ...current, ...changes }))
 
-  /** Insere o marcador na posição do cursor do padrão de título e devolve o foco a ele. */
+  /** Inserts the placeholder at the cursor position of the title pattern and returns focus to it. */
   function insertMarker(marker: string) {
     const input = titleInput.current
     const value = draft.title_pattern ?? ''
@@ -312,7 +312,7 @@ function DeleteAgendaTypeDialog({
             type="button"
             className="btn btn-danger"
             disabled={remove.isPending}
-            // A lista recarrega antes do fim do mutate e desmonta este painel: a promessa segue mesmo assim.
+            // The list reloads before the mutate ends and unmounts this panel: the promise carries on anyway.
             onClick={() => remove.mutateAsync(type.id).then(onDeleted, () => {})}
           >
             Excluir tipo

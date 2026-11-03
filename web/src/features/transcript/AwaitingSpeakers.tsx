@@ -7,16 +7,16 @@ import { recordingKey, useContinueWithoutNames, useTranscript } from './queries'
 
 type Recording = Schemas['Recording']
 
-/** Quem está ligado a quem, numa chave só: muda quando um locutor ganha ou perde pessoa. */
+/** Who is linked to whom, in a single key: it changes when a speaker gains or loses a person. */
 function linksOf(speakers: { id: string; person?: { id: string } | null }[] | undefined): string {
   return (speakers ?? []).map((speaker) => `${speaker.id}:${speaker.person?.id ?? ''}`).join('|')
 }
 
 /**
- * O aviso da gravação parada à espera dos nomes dos locutores (etapa `speakers` em `waiting`):
- * leva ao painel de locutores e oferece Seguir sem nomear. Ligar uma pessoa no painel muda a
- * transcrição em cache; aí a gravação é relida, e o servidor já terá soltado a cadeia se o último
- * locutor ganhou nome.
+ * The notice of a recording stopped waiting for the speakers' names (`speakers` step in `waiting`):
+ * it leads to the speakers panel and offers Seguir sem nomear. Linking a person in the panel changes the
+ * cached transcript; then the recording is re-read, and the server will already have released the chain if the last
+ * speaker got a name.
  */
 export function AwaitingSpeakers({ recording }: { recording: Recording }) {
   const waiting = recording.pipeline.some((step) => step.step === 'speakers' && step.state === 'waiting')

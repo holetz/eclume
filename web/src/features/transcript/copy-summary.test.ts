@@ -19,26 +19,26 @@ const MARKDOWN = [
   '',
 ].join('\n')
 
-describe('cópia do resumo para o Teams', () => {
-  it('põe o título da gravação e os títulos de seção em negrito, sem cabeçalhos', async () => {
+describe('summary copy for Teams', () => {
+  it('puts the recording title and the section headings in bold, without headers', async () => {
     const { html } = await summaryClipboard('Alinhamento do programa', MARKDOWN)
     expect(html.startsWith('<p><strong>Alinhamento do programa</strong></p>')).toBe(true)
     expect(html).toContain('<p><strong>Ata da reunião</strong></p>')
     expect(html).toContain('<p><strong>Decisões</strong></p>')
     expect(html).toContain('<p><strong>Próximos passos</strong></p>')
     expect(html).not.toMatch(/<h[1-6]/)
-    // O `#` de dentro de um bloco de código é conteúdo, não título.
+    // The `#` inside a code block is content, not a heading.
     expect(html.replace(/<pre>[\s\S]*<\/pre>/, '')).not.toContain('#')
   })
 
-  it('mantém listas, ênfase e links formatados', async () => {
+  it('keeps lists, emphasis and links formatted', async () => {
     const { html } = await summaryClipboard('Título', MARKDOWN)
     expect(html).toContain('<li>Três <strong>turmas</strong> de 12 gestores</li>')
     expect(html).toContain('<a href="https://exemplo.com/plano" target="_blank" rel="noopener noreferrer">o plano</a>')
     expect(html).toContain('<em>ênfase</em>')
   })
 
-  it('no texto puro tira as hashtags dos títulos e deixa o código como está', async () => {
+  it('in plain text removes the heading hashes and leaves the code as it is', async () => {
     const { text } = await summaryClipboard('Alinhamento do programa', MARKDOWN)
     expect(text.startsWith('Alinhamento do programa\n\nAta da reunião\n\nDecisões\n')).toBe(true)
     expect(text).not.toMatch(/^#{1,6} (Ata|Decisões|Próximos)/m)
@@ -46,13 +46,13 @@ describe('cópia do resumo para o Teams', () => {
     expect(text).toContain('- Três **turmas** de 12 gestores')
   })
 
-  it('trata o título como texto, nunca como Markdown ou HTML', async () => {
+  it('treats the title as text, never as Markdown or HTML', async () => {
     const { html, text } = await summaryClipboard('Reunião *A* <b>1:1</b>', 'Corpo')
     expect(html.startsWith('<p><strong>Reunião *A* &lt;b&gt;1:1&lt;/b&gt;</strong></p>')).toBe(true)
     expect(text.startsWith('Reunião *A* <b>1:1</b>\n\nCorpo')).toBe(true)
   })
 
-  it('não deixa HTML cru do Markdown chegar à cópia', async () => {
+  it('does not let raw HTML from the Markdown reach the copy', async () => {
     const { html } = await summaryClipboard('Título', 'Antes\n\n<script>alert(1)</script>\n\nDepois')
     expect(html).not.toContain('<script')
     expect(html).toContain('Depois')

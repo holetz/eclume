@@ -1,10 +1,10 @@
-// A pergunta "a conta tem alguma gravação?", num módulo próprio: o shell a faz em toda tela (o
-// destaque do Agente) sem puxar as consultas da biblioteca para o JS inicial.
+// The question "does the account have any recording?", in a module of its own: the shell asks it on every screen (the
+// Agent highlight) without pulling the library queries into the initial JS.
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import { unwrap } from '../../api/problem'
 
-/** Se a conta tem alguma gravação; `enabled` adia a consulta até alguém precisar dela. */
+/** Whether the account has any recording; `enabled` defers the query until someone needs it. */
 export function useHasAnyRecording(enabled = true) {
   return useQuery({
     queryKey: ['recordings', 'any'],

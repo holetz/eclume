@@ -8,4 +8,4 @@ writes it.
 the commands live in [../code/](../code/index.md). One standard per file; each with
 `type: standard` and a derived `resource:`.
 
-* [communication.md](communication.md) — the declared language (`en`, on the `Language:` line of the root `CLAUDE.md`) and the agents' conduct contract
+* [communication.md](communication.md) — the declared language (`en`, on the `Language:` line of the root `AGENTS.md`) and the agents' conduct contract

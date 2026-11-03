@@ -1,20 +1,20 @@
-// Filtros da busca: o que fica na URL (em pt-BR) e o que vai para `GET /api/v1/search`.
+// Search filters: what stays in the URL (in pt-BR) and what goes to `GET /api/v1/search`.
 import type { operations } from '../../api/schema.gen'
 
 type SearchQuery = NonNullable<operations['search']['parameters']['query']>
 
-/** Período rápido: últimos 7 ou 30 dias, este ano; vazio usa o intervalo livre (`de`/`ate`). */
+/** Quick period: last 7 or 30 days, this year; empty uses the free range (`de`/`ate`). */
 export type Period = '' | '7d' | '30d' | 'ano'
 
 export interface SearchFilters {
   q: string
   person: string
   period: Period
-  from: string // AAAA-MM-DD, dia local inclusivo
-  to: string // AAAA-MM-DD, dia local inclusivo
+  from: string // YYYY-MM-DD, local day, inclusive
+  to: string // YYYY-MM-DD, local day, inclusive
   tag: string
   collection: string
-  /** `<field_id>:<valor>`, repetível. */
+  /** `<field_id>:<value>`, repeatable. */
   field: string[]
 }
 
@@ -64,7 +64,7 @@ export function paramsFromFilters(filters: SearchFilters): URLSearchParams {
   return params
 }
 
-/** Há o que buscar: termos ou uma pessoa (o contrato exige um dos dois). */
+/** There is something to search: terms or a person (the contract requires one of the two). */
 export function isSearchable(filters: SearchFilters): boolean {
   return filters.q.trim() !== '' || filters.person !== ''
 }
@@ -74,7 +74,7 @@ function localMidnight(day: string, plusDays = 0): string {
   return new Date(year, month - 1, date + plusDays).toISOString()
 }
 
-/** O início do período rápido, na meia-noite local: hoje e os 6 ou 29 dias antes, ou 1º de janeiro. */
+/** The start of the quick period, at local midnight: today and the 6 or 29 days before, or January 1st. */
 export function periodStart(period: Exclude<Period, ''>, now: Date = new Date()): string {
   if (period === 'ano') return new Date(now.getFullYear(), 0, 1).toISOString()
   const days = period === '7d' ? 6 : 29
@@ -82,8 +82,8 @@ export function periodStart(period: Exclude<Period, ''>, now: Date = new Date())
 }
 
 /**
- * A consulta da API: o período rápido vira `from` (sem `to`); sem ele, as datas locais do intervalo
- * viram `from` no início do dia e `to` no início do dia seguinte.
+ * The API query: the quick period becomes `from` (without `to`); without it, the local dates of the range
+ * become `from` at the start of the day and `to` at the start of the next day.
  */
 export function apiQuery(filters: SearchFilters, now: Date = new Date()): SearchQuery {
   const query: SearchQuery = {}

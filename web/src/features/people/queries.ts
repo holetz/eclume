@@ -1,5 +1,5 @@
-// Consultas do diretório de pessoas. Toda chave começa em ['people'], para uma mutação invalidar
-// o diretório inteiro de uma vez (contagens e nomes aparecem em várias telas).
+// Queries of the people directory. Every key starts at ['people'], so that a mutation invalidates
+// the whole directory at once (counts and names show up on several screens).
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
@@ -23,7 +23,7 @@ export function usePeople(q: string) {
   })
 }
 
-/** Cadastra uma pessoa e atualiza o diretório. */
+/** Registers a person and updates the directory. */
 export function useCreatePerson() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -53,7 +53,7 @@ export function usePersonTranscripts(id: string) {
   })
 }
 
-/** As falas da pessoa, em ordem cronológica (`GET /search?person=`). */
+/** The person's utterances, in chronological order (`GET /search?person=`). */
 export function usePersonSegments(id: string) {
   return useInfiniteQuery({
     queryKey: [...PEOPLE_KEY, id, 'segments'],
@@ -68,12 +68,12 @@ export function usePersonSegments(id: string) {
   })
 }
 
-/** Link que abre a gravação no instante da fala. */
+/** Link that opens the recording at the instant of the utterance. */
 export function recordingAt(recordingId: string, ms: number): string {
   return `/gravacoes/${recordingId}?t=${Math.max(0, Math.floor(ms))}`
 }
 
-/** Empresas, áreas e tags de pessoa em uso: sugestões do cadastro e o filtro Participantes. */
+/** Companies, departments and person tags in use: suggestions for the record and the Participantes filter. */
 export function usePersonFacets() {
   return useQuery({
     queryKey: [...PEOPLE_KEY, 'facets'],
@@ -81,7 +81,7 @@ export function usePersonFacets() {
   })
 }
 
-/** Até 200 pessoas em ordem alfabética, para escolher numa lista (filtro da busca). */
+/** Up to 200 people in alphabetical order, to choose from a list (search filter). */
 export function usePeopleOptions() {
   return useQuery({
     queryKey: [...PEOPLE_KEY, 'options'],
@@ -93,7 +93,7 @@ export type VoiceAssignment = Schemas['VoiceAssignment']
 
 const VOICE_ASSIGNMENT_KEY = ['me', 'voice-assignment'] as const
 
-/** A atribuição automática de locutores da conta: liga-desliga e limiar. */
+/** The account's automatic speaker assignment: toggle and threshold. */
 export function useVoiceAssignment() {
   return useQuery({
     queryKey: VOICE_ASSIGNMENT_KEY,
@@ -111,10 +111,10 @@ export function useUpdateVoiceAssignment() {
 
 export type SpeakerNaming = Schemas['SpeakerNamingPreference']
 
-/** Chave da marcação obrigatória dos locutores; a gravação a invalida ao seguir sem nomear. */
+/** Key of the required speaker naming; a recording invalidates it when it proceeds without naming. */
 export const SPEAKER_NAMING_KEY = ['me', 'speaker-naming'] as const
 
-/** Se a conta exige nomear os locutores antes da cadeia por agente e quantas gravações esperam. */
+/** Whether the account requires naming the speakers before the agent chain, and how many recordings are waiting. */
 export function useSpeakerNaming() {
   return useQuery({
     queryKey: SPEAKER_NAMING_KEY,
@@ -122,7 +122,7 @@ export function useSpeakerNaming() {
   })
 }
 
-/** Liga ou desliga a marcação; desligar solta as gravações paradas, então a biblioteca é relida. */
+/** Turns speaker naming on or off; turning it off releases the stopped recordings, so the library is reread. */
 export function useUpdateSpeakerNaming() {
   const queryClient = useQueryClient()
   return useMutation({

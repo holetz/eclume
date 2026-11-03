@@ -41,3 +41,15 @@ The server has a GTX 1660 Super with 6 GB of VRAM, Turing TU116 architecture and
 - **No resident Ollama.** A local LLM does not fit next to the ASR. This production summarizes with
   `claude -p` (image with `ECLUME_CLAUDE_CLI=1`); the product does not require the CLI, and an API or Ollama,
   which only runs with the ASR queue empty, serve just as well.
+
+## Models used by the GPU worker
+
+Weights are downloaded by the worker and never committed. The full audit, with the sources checked
+and the open decisions, is in the root [NOTICE.md](../../NOTICE.md).
+
+| Model | Role | License |
+|---|---|---|
+| `large-v3-turbo` (faster-whisper conversion of OpenAI Whisper) | ASR | MIT |
+| pyannote `speaker-diarization-community-1` | Diarization and speaker embeddings | CC-BY-4.0 (gated: accept the terms on Hugging Face) |
+| `jonatasgrosman/wav2vec2-large-xlsr-53-portuguese` | Word alignment (pt) | Apache-2.0 |
+| RNNoise `cb.rnnn` (conjoined-burgers) | Noise suppression before ASR | None declared upstream; owner decision pending (see NOTICE.md) |

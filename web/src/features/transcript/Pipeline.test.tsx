@@ -8,7 +8,7 @@ import { Pipeline } from './Pipeline'
 
 type Queue = NonNullable<Schemas['Job']['queue']>
 
-const EM_12_MIN = () => new Date(Date.now() + 12 * 60_000 + 20_000).toISOString()
+const IN_12_MIN = () => new Date(Date.now() + 12 * 60_000 + 20_000).toISOString()
 
 function waiting(queue: Partial<Queue> | null) {
   const recording = fixtures.recordingQueued()
@@ -35,24 +35,24 @@ function waiting(queue: Partial<Queue> | null) {
   return screen.getByRole('status')
 }
 
-describe('a espera na fila', () => {
-  it('mostra a posição e a previsão rotulada como estimativa', () => {
-    expect(waiting({ ahead: 2, estimated_start_at: EM_12_MIN() })).toHaveTextContent(
+describe('the wait in the queue', () => {
+  it('shows the position and the forecast labelled as an estimate', () => {
+    expect(waiting({ ahead: 2, estimated_start_at: IN_12_MIN() })).toHaveTextContent(
       '3ª na fila · começa em cerca de 12 min (estimativa)',
     )
   })
 
-  it('sem histórico, só a posição', () => {
+  it('with no history, only the position', () => {
     expect(waiting({ ahead: 0 })).toHaveTextContent(/^1ª na fila$/)
   })
 
-  it('atrás das gravações da própria conta', () => {
+  it('behind the account\'s own recordings', () => {
     expect(waiting({ reason: 'account_turn', account_ahead: 2 })).toHaveTextContent(
       'Atrás de 2 gravações suas que chegaram antes.',
     )
   })
 
-  it('na janela de minutos, diz quando libera', () => {
+  it('in the minutes window, says when it frees up', () => {
     const at = new Date()
     at.setHours(23, 59, 0, 0)
     expect(waiting({ reason: 'quota_window', resumes_at: at.toISOString() })).toHaveTextContent(
@@ -60,7 +60,7 @@ describe('a espera na fila', () => {
     )
   })
 
-  it('com o processador fora do ar, diz desde quando e que a gravação está guardada', () => {
+  it('with the processor down, says since when and that the recording is stored', () => {
     const since = new Date()
     since.setHours(0, 2, 0, 0)
     const status = waiting({ ahead: 1, processor: { online: false, offline_since: since.toISOString() } })
@@ -69,7 +69,7 @@ describe('a espera na fila', () => {
     )
   })
 
-  it('servidor anterior à 2.16.0: a frase genérica', () => {
+  it('server older than 2.16.0: the generic sentence', () => {
     expect(waiting(null)).toHaveTextContent('Aguardando a vez na fila de transcrição.')
   })
 })

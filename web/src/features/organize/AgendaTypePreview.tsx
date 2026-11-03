@@ -1,5 +1,5 @@
-// "Pré-visualizar numa gravação": o tipo em rascunho numa gravação transcrita (detecção, título,
-// tags e resumo), sem gravar nada.
+// "Pré-visualizar numa gravação": the draft agenda type on a transcribed recording (detection, title,
+// tags and summary), without saving anything.
 import { useQuery } from '@tanstack/react-query'
 import { useId, useState } from 'react'
 import Markdown from 'react-markdown'
@@ -22,7 +22,7 @@ function useTranscribedRecordings() {
   })
 }
 
-/** O diálogo que escolhe entre as 20 gravações transcritas mais recentes. */
+/** The dialog that chooses among the 20 most recent transcribed recordings. */
 export function RecordingPicker({ onPick, onClose }: { onPick: (recordingId: string) => void; onClose: () => void }) {
   const id = useId()
   const recordings = useTranscribedRecordings()
@@ -79,13 +79,13 @@ export function RecordingPicker({ onPick, onClose }: { onPick: (recordingId: str
 
 const percent = (confidence: number | null) => (confidence === null ? '' : ` (confiança ${Math.round(confidence * 100)}%)`)
 
-/** O resultado da pré-visualização, ou a espera, a falha e o aviso de rascunho mudado. */
+/** The preview result, or the wait, the failure and the changed-draft notice. */
 export function AgendaPreviewResult({
   preview: run,
   stale,
 }: {
   preview: PreviewRun<Schemas['AgendaTypePreviewRequest']>
-  /** O rascunho mudou desde que a pré-visualização começou. */
+  /** The draft changed since the preview started. */
   stale: boolean
 }) {
   const { state, preview, elapsedMs, error } = run
