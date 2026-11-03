@@ -96,7 +96,7 @@ async def check_collections(conn: AsyncConnection, collection_ids: list[UUID]) -
         return
     found = set((await conn.execute(select(t.collections.c.id).where(t.collections.c.id.in_(wanted)))).scalars())
     if wanted - found:
-        raise invalid_field("collection_ids", "coleção inexistente")
+        raise invalid_field("collection_ids", "collection does not exist")
 
 
 async def edit_collections(conn: AsyncConnection, recording_id: UUID, *, add: list[UUID], remove: list[UUID]) -> bool:
@@ -132,7 +132,7 @@ async def change_agenda_type(conn: AsyncConnection, recording_id: UUID, agenda_t
             (await conn.execute(select(t.agenda_types).where(t.agenda_types.c.id == agenda_type_id))).mappings().first()
         )
         if agenda_type is None:
-            raise invalid_field("agenda_type_id", "tipo de agenda inexistente ou sem acesso")
+            raise invalid_field("agenda_type_id", "agenda type does not exist or is not accessible")
     current = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().one()
     await apply_type(conn, current, agenda_type, "edited" if agenda_type is not None else None)
     revision = await current_revision(conn, recording_id)

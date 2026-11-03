@@ -102,18 +102,18 @@ def _pdf_text(data: bytes) -> str:
     from pypdf.errors import PdfReadError  # noqa: PLC0415
 
     if not data.startswith(b"%PDF"):
-        raise FileRejectedError("O arquivo não é um PDF.")
+        raise FileRejectedError("The file is not a PDF.")
     try:
         reader = PdfReader(BytesIO(data))
         if reader.is_encrypted:
-            raise FileRejectedError("O PDF está protegido por senha.")
+            raise FileRejectedError("The PDF is password-protected.")
         pages = []
         for page in reader.pages[:MAX_PDF_PAGES]:
             pages.append(page.extract_text() or "")
             if sum(len(text) for text in pages) > MAX_TEXT_CHARS:
                 break
     except (PdfReadError, ValueError, KeyError, TypeError) as exc:
-        raise FileRejectedError("O PDF não pôde ser lido.") from exc
+        raise FileRejectedError("The PDF could not be read.") from exc
     return "\n\n".join(pages)
 
 
@@ -121,17 +121,17 @@ def _docx_text(data: bytes) -> str:
     try:
         with zipfile.ZipFile(BytesIO(data)) as archive:
             if "word/document.xml" not in archive.namelist():
-                raise FileRejectedError("O arquivo não é um documento do Word (.docx).")
+                raise FileRejectedError("The file is not a Word document (.docx).")
             if sum(info.file_size for info in archive.infolist()) > MAX_DOCX_UNZIPPED:
                 raise FileRejectedError("O documento descompactado passa do limite.")
     except zipfile.BadZipFile as exc:
-        raise FileRejectedError("O arquivo não é um documento do Word (.docx).") from exc
+        raise FileRejectedError("The file is not a Word document (.docx).") from exc
     from docx import Document  # noqa: PLC0415 — the worker does not read DOCX
 
     try:
         doc = Document(BytesIO(data))
     except Exception as exc:
-        raise FileRejectedError("O documento não pôde ser lido.") from exc
+        raise FileRejectedError("The document could not be read.") from exc
     lines = [paragraph.text for paragraph in doc.paragraphs]
     for table in doc.tables:
         lines.extend(" | ".join(cell.text.strip() for cell in row.cells) for row in table.rows)
@@ -142,14 +142,14 @@ def extract_text(name: str, data: bytes) -> Extracted:
     """The attachment's text; `FileRejectedError` outside the list or with content that does not match."""
     ext = extension(name)
     if ext not in INPUT_TYPES:
-        raise FileRejectedError(f"Tipo não aceito. Anexe {ACCEPTED}.")
+        raise FileRejectedError(f"Type not accepted. Attach {ACCEPTED}.")
     if ext == "pdf":
         text = _pdf_text(data)
     elif ext == "docx":
         text = _docx_text(data)
     else:
         if b"\x00" in data[:8192]:
-            raise FileRejectedError("O arquivo não é de texto.")
+            raise FileRejectedError("The file is not text.")
         text = _decode(data)
     text = _XML_INVALID.sub("", text.replace("\r\n", "\n")).strip()
     truncated = len(text) > MAX_TEXT_CHARS

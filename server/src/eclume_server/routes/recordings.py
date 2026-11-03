@@ -88,7 +88,7 @@ class RetranscribeRequest(BaseModel):
     @model_validator(mode="after")
     def _ordered(self) -> RetranscribeRequest:
         if self.min_speakers and self.max_speakers and self.min_speakers > self.max_speakers:
-            msg = "min_speakers não pode passar de max_speakers"
+            msg = "min_speakers cannot exceed max_speakers"
             raise ValueError(msg)
         return self
 
@@ -155,10 +155,10 @@ async def update_recording(recording_id: UUID, body: RecordingPatch, principal: 
     """
     values = body.model_dump(exclude_unset=True)
     if not values:
-        raise invalid_field("body", "informe ao menos um campo")
+        raise invalid_field("body", "send at least one field")
     for field, value in values.items():
         if value is None and field != "agenda_type_id":
-            raise invalid_field(field, "não pode ser nulo")
+            raise invalid_field(field, "cannot be null")
     type_changed = "agenda_type_id" in values
     agenda_type_id = values.pop("agenda_type_id", None)
     if "recorded_at" in values:
@@ -201,7 +201,7 @@ async def delete_recording(recording_id: UUID, principal: Deleter, ctx: Ctx) -> 
 
 def audio_deleted() -> ApiProblemError:
     """410 — the audio was deleted by retention; the transcript remains."""
-    return ApiProblemError(410, "audio_deleted", "O áudio desta gravação foi apagado pela política de retenção.")
+    return ApiProblemError(410, "audio_deleted", "The audio of this recording was deleted by the retention policy.")
 
 
 @router.get("/recordings/{recording_id}/audio", status_code=302)
@@ -233,9 +233,9 @@ async def stream_audio(
         or not sig
         or not signature_matches(ctx.settings.secret_key, sig, "audio", recording_id, expires)
     ):
-        raise unauthorized("URL de áudio inválida.")
+        raise unauthorized("Invalid audio URL.")
     if expires < time.time():
-        raise forbidden("URL de áudio expirada.")
+        raise forbidden("Expired audio URL.")
     async with system_tx(ctx.engine) as conn:
         found = (
             await conn.execute(
@@ -245,7 +245,7 @@ async def stream_audio(
             )
         ).first()
     if found is None:
-        raise not_found("Gravação inexistente.")
+        raise not_found("Recording does not exist.")
     key, deleted_at = found
     if key is None or deleted_at is not None:
         raise audio_deleted()
@@ -268,7 +268,7 @@ async def retranscribe(
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await lock_recording(conn, recording_id)
         if row["job_state"] in {"queued", "running"}:
-            raise conflict("Já há um job de transcrição em andamento.")
+            raise conflict("A transcription job is already in progress.")
         if body is not None and body.language is not None:
             await conn.execute(
                 update(t.recordings).where(t.recordings.c.id == recording_id).values(language=body.language)
@@ -297,7 +297,7 @@ async def continue_without_names(recording_id: UUID, principal: Writer, ctx: Ctx
         await get_visible(conn, recording_id)
         revision = await release(conn, recording_id, CONTINUED)
         if revision is None:
-            raise conflict("A gravação não está esperando os nomes dos locutores.")
+            raise conflict("The recording is not waiting for the speaker names.")
         refreshed = await get_visible(conn, recording_id)
     await ctx.queue.enqueue_step("detect_agenda_type", recording_id, revision)
     return (await render(ctx, principal.user_id, [refreshed]))[0]

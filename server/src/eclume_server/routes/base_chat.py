@@ -56,5 +56,5 @@ async def read_base_chat(chat_id: UUID, principal: Reader, ctx: Ctx) -> dict[str
     """The question's state; the client polls until `done` or `failed`."""
     chat = await get_chat(ctx.queue.pool, chat_id, principal.user_id)
     if chat is None:
-        raise not_found("Pergunta inexistente, expirada ou de outra conta.")
+        raise not_found("Question does not exist, expired or belongs to another account.")
     return chat

@@ -34,13 +34,13 @@ async def retry_job(job_id: UUID, ctx: Ctx) -> dict[str, Any]:
     async with system_tx(ctx.engine) as conn:
         recording_id = (await conn.execute(select(jobs.c.recording_id).where(jobs.c.id == job_id))).scalar()
         if recording_id is None:
-            raise not_found("Job inexistente.")
+            raise not_found("Job does not exist.")
         # Lock the recording before reading the state: a second concurrent request gets 409.
         row = await lock_recording(conn, recording_id)
         if row["job_id"] != job_id:
-            raise conflict("A gravação já tem um job mais recente que este.")
+            raise conflict("The recording already has a job newer than this one.")
         if row["job_state"] != "failed":
-            raise conflict("Só um job que falhou pode ser retentado.")
+            raise conflict("Only a failed job can be retried.")
         revision = await start_next_revision(conn, row, row["language"])
         new_job = (
             await conn.execute(

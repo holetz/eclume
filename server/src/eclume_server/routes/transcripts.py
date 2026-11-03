@@ -124,10 +124,10 @@ def _patch_values(body: BaseModel) -> dict[str, Any]:
     """Fields sent (`minProperties: 1`); `null` only holds where the schema allows it."""
     values = body.model_dump(exclude_unset=True)
     if not values:
-        raise invalid_field("body", "informe ao menos um campo")
+        raise invalid_field("body", "send at least one field")
     for field, value in values.items():
         if value is None and field != "person_id":
-            raise invalid_field(field, "não pode ser nulo")
+            raise invalid_field(field, "cannot be null")
     return values
 
 
@@ -151,12 +151,12 @@ async def update_speaker(
         where = (t.speakers.c.transcript_id == transcript_id, t.speakers.c.speaker_id == speaker_id)
         current = (await conn.execute(select(t.speakers.c.person_id).where(*where))).first()
         if current is None:
-            raise not_found("Locutor inexistente nesta transcrição.")
+            raise not_found("Speaker does not exist in this transcript.")
         if values.get("person_id") is not None:
             try:
                 person = await get_person(conn, values["person_id"])
             except ApiProblemError as exc:
-                raise invalid_field("person_id", "pessoa inexistente") from exc
+                raise invalid_field("person_id", "person does not exist") from exc
             values.setdefault("label", person["name"])
         if "person_id" in values:
             # Linking, confirming or unlinking is a person's decision: it stops being an automatic link.
@@ -200,16 +200,18 @@ async def merge_speakers(transcript_id: UUID, body: SpeakerMerge, principal: Edi
     """Moves the segments of the source speakers to the target one and deletes the source ones."""
     sources = set(body.source_speaker_ids)
     if len(sources) != len(body.source_speaker_ids):
-        raise invalid_field("source_speaker_ids", "ids repetidos")
+        raise invalid_field("source_speaker_ids", "repeated ids")
     if body.target_speaker_id in sources:
-        raise invalid_field("source_speaker_ids", "o destino não pode estar entre as origens")
+        raise invalid_field("source_speaker_ids", "the target cannot be among the sources")
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await editable_transcript(conn, transcript_id)
         existing = await _speaker_ids(conn, transcript_id)
         if body.target_speaker_id not in existing:
-            raise invalid_field("target_speaker_id", "locutor inexistente")
+            raise invalid_field("target_speaker_id", "speaker does not exist")
         if not sources <= existing:
-            raise invalid_field("source_speaker_ids", f"locutor inexistente: {', '.join(sorted(sources - existing))}")
+            raise invalid_field(
+                "source_speaker_ids", f"speaker does not exist: {', '.join(sorted(sources - existing))}"
+            )
         await conn.execute(
             update(t.segments)
             .where(t.segments.c.transcript_id == transcript_id, t.segments.c.speaker_id.in_(sources))
@@ -240,9 +242,9 @@ async def update_segment(
         await editable_transcript(conn, transcript_id)
         current = (await conn.execute(select(t.segments.c.speaker_id).where(*where))).scalar()
         if current is None:
-            raise not_found("Segmento inexistente nesta transcrição.")
+            raise not_found("Segment does not exist in this transcript.")
         if "speaker_id" in values and values["speaker_id"] not in await _speaker_ids(conn, transcript_id):
-            raise invalid_field("speaker_id", "locutor inexistente")
+            raise invalid_field("speaker_id", "speaker does not exist")
         if "text" in values:
             values["words"] = None
         await conn.execute(update(t.segments).where(*where).values(**values))

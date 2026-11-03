@@ -178,14 +178,14 @@ async def recording_transcript(conn: AsyncConnection, recording_id: UUID) -> Row
     """The user's recording transcript: 404 without the recording, 409 `transcript_missing` without a transcript."""
     visible = (await conn.execute(select(t.recordings.c.id).where(t.recordings.c.id == recording_id))).first()
     if visible is None:
-        raise not_found("Gravação inexistente ou sem acesso.")
+        raise not_found("Recording does not exist or is not accessible.")
     transcript = (
         (await conn.execute(select(t.transcripts).where(t.transcripts.c.recording_id == recording_id)))
         .mappings()
         .first()
     )
     if transcript is None:
-        raise conflict("A gravação ainda não tem transcrição.", code=TRANSCRIPT_MISSING)
+        raise conflict("The recording has no transcript yet.", code=TRANSCRIPT_MISSING)
     return transcript
 
 
@@ -195,13 +195,13 @@ async def summary_provider(conn: AsyncConnection, provider_id: UUID | None) -> R
     if provider_id is None:
         provider = await provider_for(conn, "summaries")
         if provider is None:
-            raise invalid_field(field, "a plataforma não tem provider de resumos; informe provider_id")
+            raise invalid_field(field, "the platform has no summary provider; send provider_id")
         return provider
     row = (await conn.execute(select(*PROVIDER_PUBLIC).where(t.agent_providers.c.id == provider_id))).mappings().first()
     if row is None:
-        raise invalid_field(field, "provider inexistente")
+        raise invalid_field(field, "provider does not exist")
     if not row["enabled"]:
-        raise invalid_field(field, "provider desabilitado")
+        raise invalid_field(field, "provider disabled")
     return row
 
 
@@ -215,10 +215,10 @@ async def summary_agenda_type(conn: AsyncConnection, transcript: Row, agenda_typ
             )
         ).scalar()
         if agenda_type_id is None:
-            raise invalid_field(field, "a gravação não tem tipo de agenda; informe agenda_type_id")
+            raise invalid_field(field, "the recording has no agenda type; send agenda_type_id")
     row = (await conn.execute(select(t.agenda_types).where(t.agenda_types.c.id == agenda_type_id))).mappings().first()
     if row is None:
-        raise invalid_field(field, "tipo de agenda inexistente ou sem acesso")
+        raise invalid_field(field, "agenda type does not exist or is not accessible")
     return row
 
 
@@ -320,7 +320,9 @@ async def edit_summary(
     await lock_versions(conn, transcript["id"])
     current = await current_version(conn, transcript["id"])
     if base_version != (current["version"] if current else 0):
-        raise conflict("O resumo mudou desde a versão aberta; abra a atual e edite de novo.", code=SUMMARY_CHANGED)
+        raise conflict(
+            "The summary changed since the opened version; open the current one and edit again.", code=SUMMARY_CHANGED
+        )
     return await add_version(
         conn, transcript=transcript, content_md=content_md, origin="manual", base=current, created_by=created_by
     )
@@ -340,7 +342,7 @@ async def revert_summary(conn: AsyncConnection, transcript: Row, created_by: UUI
     await lock_versions(conn, transcript["id"])
     generated = await generated_version(conn, transcript["id"])
     if generated is None:
-        raise conflict("Não há versão gerada para voltar.", code=SUMMARY_MISSING)
+        raise conflict("There is no generated version to go back to.", code=SUMMARY_MISSING)
     return await add_version(
         conn,
         transcript=transcript,

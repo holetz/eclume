@@ -86,9 +86,9 @@ async def update_user(user_id: UUID, body: UserPatch, ctx: Ctx) -> dict[str, Any
     """
     sent = body.model_dump(exclude_unset=True)
     if not sent:
-        raise invalid_field("body", "informe ao menos um campo")
+        raise invalid_field("body", "send at least one field")
     if sent.get("active", False) is None:
-        raise invalid_field("active", "não pode ser nulo")
+        raise invalid_field("active", "cannot be null")
     values: dict[str, Any] = {}
     if "active" in sent:
         values["active"] = body.active
@@ -97,7 +97,7 @@ async def update_user(user_id: UUID, body: UserPatch, ctx: Ctx) -> dict[str, Any
     async with system_tx(ctx.engine) as conn:
         changed = await conn.execute(update(t.users).where(t.users.c.id == user_id).values(**values))
         if changed.rowcount == 0:
-            raise not_found("Usuário inexistente.")
+            raise not_found("User does not exist.")
         if body.active is False:
             await conn.execute(delete(t.sessions).where(t.sessions.c.user_id == user_id))
             await expire_password_resets(conn, user_id)
@@ -117,9 +117,9 @@ async def create_user_password_reset(user_id: UUID, request: Request, admin: Adm
     async with system_tx(ctx.engine) as conn:
         active = (await conn.execute(select(t.users.c.active).where(t.users.c.id == user_id))).scalar()
         if active is None:
-            raise not_found("Usuário inexistente.")
+            raise not_found("User does not exist.")
         if not active:
-            raise conflict("Conta desativada não recebe link de redefinição.")
+            raise conflict("A deactivated account does not receive a reset link.")
         return await create_password_reset(conn, user_id, admin.admin_id, url)
 
 
@@ -132,7 +132,7 @@ async def delete_user(user_id: UUID, ctx: Ctx) -> Response:
     async with system_tx(ctx.engine) as conn:
         open_jobs = await open_jobs_of(conn, user_id)
         if not await purge_user(conn, user_id):
-            raise not_found("Usuário inexistente.")
+            raise not_found("User does not exist.")
     # The GPU does not keep transcribing what the deleted account had queued or in progress.
     await ctx.queue.request_cancel(open_jobs)
     return Response(status_code=204)

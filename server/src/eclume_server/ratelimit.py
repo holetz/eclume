@@ -41,7 +41,7 @@ async def count_attempt(ctx: AppContext, key: str, limit: int) -> None:
     await redis.expire(full_key, WINDOW_SECONDS, nx=True)
     if count > limit:
         retry_after = max(await redis.ttl(full_key), 1)
-        raise rate_limited("Tentativas demais; espere a janela de um minuto reabrir.", retry_after)
+        raise rate_limited("Too many attempts; wait for the one-minute window to reopen.", retry_after)
 
 
 def client_ip(request: Request) -> str:
@@ -63,12 +63,14 @@ async def check_login(ctx: AppContext, scope: str, email: str, ip: str) -> None:
     redis = ctx.queue.pool
     pair, account, known = _keys(scope, email, ip)
     if int(await redis.get(pair) or 0) >= ctx.settings.login_failures_per_pair:
-        raise rate_limited("Tentativas erradas demais nesta conta; espere a janela reabrir.", await _ttl(ctx, pair))
+        raise rate_limited(
+            "Too many failed attempts on this account; wait for the window to reopen.", await _ttl(ctx, pair)
+        )
     if int(await redis.get(account) or 0) >= ctx.settings.login_failures_per_account:
         last_ok = await redis.zscore(known, ip)
         if last_ok is None or last_ok < time.time() - KNOWN_IP_SECONDS:
             raise rate_limited(
-                "Tentativas erradas demais nesta conta; espere a janela reabrir.", await _ttl(ctx, account)
+                "Too many failed attempts on this account; wait for the window to reopen.", await _ttl(ctx, account)
             )
 
 
@@ -105,7 +107,7 @@ async def check_signups(ctx: AppContext, ip: str) -> None:
     if await redis.zcard(key) >= ctx.settings.signups_per_ip_per_day:
         [(_, oldest)] = await redis.zrange(key, 0, 0, withscores=True)
         retry_after = max(int(oldest + SIGNUP_WINDOW_SECONDS - now), 1)
-        raise rate_limited("Cadastros demais a partir deste endereço hoje; tente amanhã.", retry_after)
+        raise rate_limited("Too many signups from this address today; try tomorrow.", retry_after)
 
 
 async def signup_created(ctx: AppContext, ip: str) -> None:

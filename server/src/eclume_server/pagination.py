@@ -65,15 +65,15 @@ _FLAT_LIST = re.compile(rf"\[\s*{_JSON_STRING}(?:\s*,\s*{_JSON_STRING})*\s*\]", 
 def _decode_json(cursor: str) -> object:
     """The JSON inside a base64url cursor; too large, or invalid or nested base64, UTF-8, format or JSON, becomes 422 on the `cursor` field."""
     if len(cursor) > MAX_CURSOR_LENGTH:
-        raise invalid_field("cursor", "cursor inválido")
+        raise invalid_field("cursor", "invalid cursor")
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
         text = base64.urlsafe_b64decode(padded).decode()
         if not _FLAT_LIST.fullmatch(text):
-            raise invalid_field("cursor", "cursor inválido")
+            raise invalid_field("cursor", "invalid cursor")
         return json.loads(text)
     except ValueError as exc:
-        raise invalid_field("cursor", "cursor inválido") from exc
+        raise invalid_field("cursor", "invalid cursor") from exc
 
 
 def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
@@ -82,7 +82,7 @@ def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
     try:
         return datetime.fromisoformat(sort_value), UUID(row_id)
     except ValueError as exc:
-        raise invalid_field("cursor", "cursor inválido") from exc
+        raise invalid_field("cursor", "invalid cursor") from exc
 
 
 def encode_position(*values: object) -> str:
@@ -94,7 +94,7 @@ def decode_position(cursor: str, size: int) -> list[str]:
     """The `size` values of an `encode_position` cursor; an invalid one becomes 422 on the `cursor` field."""
     values = _decode_json(cursor)
     if not isinstance(values, list) or len(values) != size or not all(isinstance(v, str) for v in values):
-        raise invalid_field("cursor", "cursor inválido")
+        raise invalid_field("cursor", "invalid cursor")
     return values
 
 
@@ -104,7 +104,7 @@ def decode_ordered_position(cursor: str) -> tuple[int, UUID]:
     try:
         return int(position), UUID(row_id)
     except ValueError as exc:
-        raise invalid_field("cursor", "cursor inválido") from exc
+        raise invalid_field("cursor", "invalid cursor") from exc
 
 
 def decode_named_position(cursor: str) -> tuple[str, UUID]:
@@ -113,7 +113,7 @@ def decode_named_position(cursor: str) -> tuple[str, UUID]:
     try:
         return name, UUID(row_id)
     except ValueError as exc:
-        raise invalid_field("cursor", "cursor inválido") from exc
+        raise invalid_field("cursor", "invalid cursor") from exc
 
 
 def page(items: list[dict[str, Any]], rows: list[Any], limit: int, sort_key: str) -> dict[str, Any]:

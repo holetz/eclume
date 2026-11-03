@@ -112,7 +112,7 @@ async def create_chat(  # noqa: PLR0913 — the request, the credential and the 
     `agent_quota` (403 `quota_exceeded`).
     """
     if await _open_count(redis, owner_id) >= MAX_OPEN:
-        raise rate_limited(f"Já há {MAX_OPEN} perguntas em andamento; espere uma terminar.")
+        raise rate_limited(f"There are already {MAX_OPEN} questions in progress; wait for one to finish.")
     async with refunding(redis, owner_id) as charge:
         charge.token = await take_agent_request(redis, owner_id, agent_quota)
         chat_id = uuid4()

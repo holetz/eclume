@@ -108,7 +108,7 @@ async def open_request(conn: AsyncConnection, transcript: Row, message: str, use
         )
     )
     if busy.first() is not None:
-        raise conflict("Já há um pedido de ajuste em andamento nesta gravação.", code=CHAT_BUSY)
+        raise conflict("An adjustment request is already in progress on this recording.", code=CHAT_BUSY)
     current = await current_version(conn, transcript["id"])
     # `clock_timestamp()`: the request and the reply are born in the same transaction and need an order.
     base = {
@@ -146,7 +146,7 @@ async def open_request(conn: AsyncConnection, transcript: Row, message: str, use
                 .one()
             )
     except IntegrityError as exc:
-        raise conflict("Já há um pedido de ajuste em andamento nesta gravação.", code=CHAT_BUSY) from exc
+        raise conflict("An adjustment request is already in progress on this recording.", code=CHAT_BUSY) from exc
     return request, reply
 
 

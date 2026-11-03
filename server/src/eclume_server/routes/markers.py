@@ -94,7 +94,7 @@ async def patch_marker(marker_id: UUID, body: MarkerPatch, principal: Writer, ct
         if row is not None:
             await touch_recording(conn, row["recording_id"])
     if row is None:
-        raise not_found("Marcador inexistente ou sem acesso.")
+        raise not_found("Marker does not exist or is not accessible.")
     return marker_json(row)
 
 
@@ -108,5 +108,5 @@ async def delete_marker(marker_id: UUID, principal: Writer, ctx: Ctx) -> Respons
         if recording_id is not None:
             await touch_recording(conn, recording_id)
     if recording_id is None:
-        raise not_found("Marcador inexistente ou sem acesso.")
+        raise not_found("Marker does not exist or is not accessible.")
     return Response(status_code=204)

@@ -37,7 +37,7 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 Reader = Annotated[Principal, Depends(requires("people:read"))]
 Writer = Annotated[Principal, Depends(requires("people:write"))]
 TranscriptReader = Annotated[Principal, Depends(requires("people:read", "transcripts:read"))]
-EMAIL_TAKEN = "Já existe uma pessoa sua com este e-mail."
+EMAIL_TAKEN = "You already have a person with this e-mail."
 
 
 PersonTag = Annotated[str, Field(min_length=1, max_length=MAX_PERSON_TAG)]
@@ -142,10 +142,10 @@ async def update_person(person_id: UUID, body: PersonPatch, principal: Writer, c
     """Edit name, e-mail, notes and attributes; renaming bumps the `updated_at` of the transcripts they speak in."""
     values = body.model_dump(exclude_unset=True)
     if not values:
-        raise invalid_field("body", "informe ao menos um campo")
+        raise invalid_field("body", "send at least one field")
     for field in ("name", "tags"):
         if field in values and values[field] is None:
-            raise invalid_field(field, "não pode ser nulo")
+            raise invalid_field(field, "cannot be null")
     try:
         async with user_tx(ctx.engine, principal.user_id) as conn:
             await get_person(conn, person_id)
@@ -165,7 +165,7 @@ async def delete_person(person_id: UUID, principal: Writer, ctx: Ctx) -> Respons
     async with user_tx(ctx.engine, principal.user_id) as conn:
         result = await conn.execute(delete(t.people).where(t.people.c.id == person_id))
     if result.rowcount == 0:
-        raise not_found("Pessoa inexistente ou sem acesso.")
+        raise not_found("Person does not exist or is not accessible.")
     return Response(status_code=204)
 
 

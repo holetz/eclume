@@ -50,7 +50,7 @@ async def admin_login(
         or not admin["active"]
     ):
         await login_failed(ctx, "admin", body.email, ip)
-        raise unauthorized("E-mail ou senha incorretos.")
+        raise unauthorized("Wrong e-mail or password.")
     await login_succeeded(ctx, "admin", body.email, ip)
     values: dict[str, Any] = {"last_login_at": now}
     if needs_rehash(admin["password_hash"]):

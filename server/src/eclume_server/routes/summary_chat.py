@@ -68,7 +68,7 @@ async def list_summary_chat(
         query = query.where(tuple_(m.created_at, m.id) > decode_cursor(cursor))
     async with user_tx(ctx.engine, principal.user_id) as conn:
         if (await conn.execute(select(t.recordings.c.id).where(t.recordings.c.id == recording_id))).first() is None:
-            raise not_found("Gravação inexistente ou sem acesso.")
+            raise not_found("Recording does not exist or is not accessible.")
         rows = list((await conn.execute(query)).mappings().all())
     return page([chat_message_json(row) for row in rows], rows, limit, "created_at")
 
@@ -83,5 +83,5 @@ async def get_summary_chat_message(message_id: UUID, principal: Reader, ctx: Ctx
             .first()
         )
     if row is None:
-        raise not_found("Mensagem inexistente ou sem acesso.")
+        raise not_found("Message does not exist or is not accessible.")
     return chat_message_json(row)

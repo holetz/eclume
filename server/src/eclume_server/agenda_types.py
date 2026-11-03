@@ -115,10 +115,10 @@ def changes_of(body: AgendaTypePatch) -> dict[str, Any]:
     """The fields sent; refuses an empty body and `null` where the schema does not accept it."""
     values = body.model_dump(exclude_unset=True)
     if not values:
-        raise invalid_field("body", "informe ao menos um campo")
+        raise invalid_field("body", "send at least one field")
     for field in (*REQUIRED, "include_for_new_users"):
         if field in values and values[field] is None:
-            raise invalid_field(field, "não pode ser nulo")
+            raise invalid_field(field, "cannot be null")
     if "default_tags" in values:
         values["default_tags"] = list(dict.fromkeys(values["default_tags"]))
     return values
@@ -137,7 +137,7 @@ async def get_agenda_type(conn: AsyncConnection, agenda_type_id: UUID) -> Row:
     """The transaction user's type (RLS only shows theirs), or 404."""
     row = (await conn.execute(select(t.agenda_types).where(t.agenda_types.c.id == agenda_type_id))).mappings().first()
     if row is None:
-        raise not_found("Tipo de agenda inexistente ou sem acesso.")
+        raise not_found("Agenda type does not exist or is not accessible.")
     return row
 
 

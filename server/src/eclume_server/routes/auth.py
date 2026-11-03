@@ -55,7 +55,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection
 
-WRONG_PASSWORD = "E-mail ou senha incorretos."  # noqa: S105 — a message, not a password
+WRONG_PASSWORD = "Wrong e-mail or password."  # noqa: S105 — a message, not a password
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 router = APIRouter()
@@ -65,7 +65,7 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 def check_email(value: str) -> str:
     """`format: email` validation for request bodies."""
     if not EMAIL_RE.match(value):
-        msg = "e-mail inválido"
+        msg = "invalid e-mail"
         raise ValueError(msg)
     return value
 
@@ -98,7 +98,7 @@ class NoticeAccept(BaseModel):
 
 def _check_notice(version: str) -> None:
     if version != NOTICE_VERSION:
-        raise invalid_field("notice_version", f"aceite o aviso em vigor (versão {NOTICE_VERSION})")
+        raise invalid_field("notice_version", f"accept the notice in force (version {NOTICE_VERSION})")
 
 
 @router.get("/health")
@@ -150,9 +150,9 @@ async def signup(
 ) -> Response:
     """Creates the account with the notice acceptance and opens the session, like the login."""
     if not ctx.settings.signup_open:
-        raise ApiProblemError(403, "signup_closed", "O cadastro está fechado nesta instalação.")
+        raise ApiProblemError(403, "signup_closed", "Signup is closed on this installation.")
     if not body.name.strip():
-        raise invalid_field("name", "não pode ser vazio")
+        raise invalid_field("name", "cannot be empty")
     _check_notice(body.notice_version)
     ip = client_ip(request)
     await check_signups(ctx, ip)
@@ -168,7 +168,7 @@ async def signup(
                 notice_version=body.notice_version,
             )
         except EmailTakenError as exc:
-            raise conflict("Já existe uma conta com este e-mail.", code="email_taken") from exc
+            raise conflict("An account with this e-mail already exists.", code="email_taken") from exc
         locale = parse_accept_language(request.headers.get("accept-language"))
         await conn.execute(update(t.users).where(t.users.c.id == user_id).values(last_login_at=now, locale=locale))
         response = await _open_session(conn, ctx, user_id, now)
@@ -209,7 +209,7 @@ def _invalid_reset_link() -> ApiProblemError:
     return ApiProblemError(
         401,
         "invalid_reset_link",
-        "Este link venceu ou já foi usado. Peça outro a quem administra o servidor.",
+        "This link expired or was already used. Ask the server's administrator for another one.",
         headers={"WWW-Authenticate": 'Bearer realm="eclume"'},
     )
 
@@ -244,7 +244,7 @@ async def logout(
 ) -> Response:
     """Ends the current session and removes the cookies."""
     if principal.session_id is None:
-        raise forbidden("Logout exige sessão.")
+        raise forbidden("Logout requires a session.")
     async with system_tx(ctx.engine) as conn:
         await conn.execute(delete(t.sessions).where(t.sessions.c.id == principal.session_id))
     response = Response(status_code=204)

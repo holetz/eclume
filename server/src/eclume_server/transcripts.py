@@ -445,7 +445,7 @@ async def load_transcript(conn: AsyncConnection, transcript_id: UUID, *, words: 
     """The user's full transcript (schema v1), or 404."""
     row = (await conn.execute(transcript_select().where(t.transcripts.c.id == transcript_id))).mappings().first()
     if row is None:
-        raise not_found("Transcrição inexistente ou sem acesso.")
+        raise not_found("Transcript does not exist or is not accessible.")
     speakers = (await load_speakers(conn, [transcript_id]))[transcript_id]
     segments = (
         (
@@ -513,7 +513,7 @@ async def editable_transcript(conn: AsyncConnection, transcript_id: UUID) -> Row
     """The user's transcript (under RLS, only the owner sees it), or 404."""
     row = (await conn.execute(transcript_select().where(t.transcripts.c.id == transcript_id))).mappings().first()
     if row is None:
-        raise not_found("Transcrição inexistente ou sem acesso.")
+        raise not_found("Transcript does not exist or is not accessible.")
     return row
 
 

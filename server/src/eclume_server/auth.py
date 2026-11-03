@@ -86,7 +86,7 @@ async def _from_pat(ctx: AppContext, secret: str, *, via_mcp: bool = False) -> P
             or (row["expires_at"] is not None and row["expires_at"] <= now)
             or not row["active"]
         ):
-            raise unauthorized("PAT inválido, expirado ou revogado.")
+            raise unauthorized("Invalid, expired or revoked PAT.")
         # Use through MCP counts the connected assistants on the Health screen. Each mark is only
         # rewritten when the stored one is older than `USED_AT_RESOLUTION`: the PAT does not write to
         # the database on every request.
@@ -105,7 +105,7 @@ async def _from_pat(ctx: AppContext, secret: str, *, via_mcp: bool = False) -> P
 def _check_csrf(request: Request, expected: str, cookie: str) -> None:
     if request.method in _MUTATING and not hmac.compare_digest(request.headers.get(CSRF_HEADER, ""), expected):
         # Without the double-submit the session is not a complete credential: 401, which every operation declares.
-        raise unauthorized(f"O header {CSRF_HEADER} deve repetir o cookie {cookie}.")
+        raise unauthorized(f"The {CSRF_HEADER} header must repeat the {cookie} cookie.")
 
 
 async def _from_session(ctx: AppContext, token: str, request: Request) -> Principal:
@@ -121,7 +121,7 @@ async def _from_session(ctx: AppContext, token: str, request: Request) -> Princi
     async with system_tx(ctx.engine) as conn:
         row = (await conn.execute(query)).mappings().first()
     if row is None:
-        raise unauthorized("Sessão inválida ou expirada.")
+        raise unauthorized("Invalid or expired session.")
     _check_csrf(request, row["csrf_token"], CSRF_COOKIE)
     pending = row["notice_version"] != NOTICE_VERSION
     return Principal(row["user_id"], "session", ALL_SCOPES, session_id=row["id"], notice_pending=pending)
@@ -190,10 +190,10 @@ def requires_any(*scopes: str) -> Callable[[Request, AppContext], Awaitable[Prin
 async def require_admin(request: Request, ctx: Annotated[AppContext, Depends(get_ctx)]) -> AdminPrincipal:
     """Dependency of the admin routes: only the admin session; a PAT or a user session is 401."""
     if request.headers.get("Authorization") is not None:
-        raise unauthorized("O painel admin aceita só a sessão de admin.")
+        raise unauthorized("The admin panel accepts only the admin session.")
     token = request.cookies.get(ADMIN_SESSION_COOKIE)
     if not token:
-        raise unauthorized("Entre com a conta de admin.")
+        raise unauthorized("Sign in with the admin account.")
     query = (
         select(t.admin_sessions.c.id, t.admin_sessions.c.csrf_token, t.admins.c.id.label("admin_id"))
         .join(t.admins, t.admins.c.id == t.admin_sessions.c.admin_id)
@@ -206,7 +206,7 @@ async def require_admin(request: Request, ctx: Annotated[AppContext, Depends(get
     async with system_tx(ctx.engine) as conn:
         row = (await conn.execute(query)).mappings().first()
     if row is None:
-        raise unauthorized("Sessão de admin inválida ou expirada.")
+        raise unauthorized("Invalid or expired admin session.")
     _check_csrf(request, row["csrf_token"], ADMIN_CSRF_COOKIE)
     return AdminPrincipal(row["admin_id"], row["id"])
 

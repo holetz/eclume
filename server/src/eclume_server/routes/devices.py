@@ -83,7 +83,7 @@ async def get_pairing_code(pairing_code_id: UUID, principal: SessionUser, ctx: C
         query = t.pairing_codes.select().where(t.pairing_codes.c.id == pairing_code_id)
         row = (await conn.execute(query)).mappings().first()
     if row is None:
-        raise not_found("Código de pareamento inexistente ou sem acesso.")
+        raise not_found("Pairing code does not exist or is not accessible.")
     return pairing_code_json(row)
 
 
@@ -101,7 +101,7 @@ async def pair_device(
             raise ApiProblemError(
                 401,
                 "invalid_pairing_code",
-                "Código de pareamento inválido, vencido ou já usado.",
+                "Pairing code invalid, expired or already used.",
                 headers={"WWW-Authenticate": 'Bearer realm="eclume"'},
             )
         server = server_info(ctx.settings, str(request.base_url))

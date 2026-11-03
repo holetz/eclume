@@ -61,7 +61,7 @@ async def reject_speaker_suggestion(
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await editable_transcript(conn, transcript_id)
         if not await reject(conn, principal, SpeakerKey(transcript_id, speaker_id), person_id):
-            raise not_found("Sugestão inexistente ou já decidida.")
+            raise not_found("Suggestion does not exist or was already decided.")
         await bump_revision(conn, transcript_id)
         return await speaker_response(conn, transcript_id, speaker_id)
 
@@ -144,7 +144,7 @@ async def delete_voice_sample(
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await get_person(conn, person_id)
         if not await forget_sample(conn, person_id, SpeakerKey(transcript_id, speaker_id)):
-            raise not_found("Amostra inexistente ou sem acesso.")
+            raise not_found("Sample does not exist or is not accessible.")
     return Response(status_code=204)
 
 
@@ -191,9 +191,9 @@ async def patch_voice_assignment(body: VoiceAssignmentPatch, principal: Member, 
     """
     values = body.model_dump(exclude_unset=True)
     if any(value is None for value in values.values()):
-        raise invalid_field("body", "os campos não aceitam null")
+        raise invalid_field("body", "the fields do not accept null")
     if not values:
-        raise invalid_field("body", "informe ao menos um campo")
+        raise invalid_field("body", "send at least one field")
     columns = {
         "enabled": "voice_auto_assign",
         "threshold": "voice_auto_threshold",

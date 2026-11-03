@@ -84,7 +84,7 @@ async def create_preview(
     `quota_exceeded`).
     """
     if await _open_count(redis, owner_id) >= MAX_OPEN:
-        raise rate_limited(f"Já há {MAX_OPEN} pré-visualizações em andamento; espere uma terminar.")
+        raise rate_limited(f"There are already {MAX_OPEN} previews in progress; wait for one to finish.")
     async with refunding(redis, owner_id) as charge:
         charge.token = await take_agent_request(redis, owner_id, agent_quota)
         preview_id = uuid4()

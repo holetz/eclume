@@ -136,7 +136,7 @@ def render_srt(export: Export) -> str:
 def render_md(export: Export) -> str:
     """`# Título`, the line with the date and the agenda type, and the current summary; without a summary, 409."""
     if export.summary_md is None:
-        raise conflict("A gravação ainda não tem resumo.", code=SUMMARY_MISSING)
+        raise conflict("The recording has no summary yet.", code=SUMMARY_MISSING)
     subtitle = " · ".join(part for part in (export.date, export.agenda_type) if part)
     return f"# {export.title}\n\n{subtitle}\n\n{export.summary_md.strip()}\n"
 

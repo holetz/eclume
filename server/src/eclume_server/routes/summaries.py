@@ -61,14 +61,14 @@ async def _transcript(conn: AsyncConnection, transcript_id: UUID) -> Row:
     """The user's transcript, or 404."""
     row = (await conn.execute(select(t.transcripts).where(t.transcripts.c.id == transcript_id))).mappings().first()
     if row is None:
-        raise not_found("Transcrição inexistente ou sem acesso.")
+        raise not_found("Transcript does not exist or is not accessible.")
     return row
 
 
 async def _summary(conn: AsyncConnection, summary_id: UUID) -> Row:
     row = (await conn.execute(select(t.summaries).where(t.summaries.c.id == summary_id))).mappings().first()
     if row is None:
-        raise not_found("Resumo inexistente ou sem acesso.")
+        raise not_found("Summary does not exist or is not accessible.")
     return row
 
 
@@ -136,7 +136,7 @@ async def delete_summary(summary_id: UUID, principal: Writer, ctx: Ctx) -> Respo
         if transcript_id is not None:
             await touch_recording(conn, transcript_id)
     if transcript_id is None:
-        raise not_found("Resumo inexistente ou sem acesso.")
+        raise not_found("Summary does not exist or is not accessible.")
     return Response(status_code=204)
 
 

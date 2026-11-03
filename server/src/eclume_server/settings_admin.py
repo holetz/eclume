@@ -191,17 +191,17 @@ def changes_of(body: AdminSettingsPatch) -> dict[str, dict[str, Any]]:
     """The fields sent, per block, with UUIDs as text; refuse `null` where the schema does not accept it."""
     sent = body.model_dump(exclude_unset=True, mode="json")
     if not any(sent.get(block) for block in BLOCKS):
-        raise invalid_field("body", "informe ao menos um campo")
+        raise invalid_field("body", "send at least one field")
     for block, fields in sent.items():
         if fields is None:
-            raise invalid_field(block, "não pode ser nulo")
+            raise invalid_field(block, "cannot be null")
         for field, value in fields.items():
             if value is None and field not in _NULLABLE[block]:
-                raise invalid_field(f"{block}.{field}", "não pode ser nulo")
+                raise invalid_field(f"{block}.{field}", "cannot be null")
             if block == "preprocessing":
                 for name, step_value in value.items():
                     if step_value is None:
-                        raise invalid_field(f"{block}.{field}.{name}", "não pode ser nulo")
+                        raise invalid_field(f"{block}.{field}.{name}", "cannot be null")
     return sent
 
 
@@ -223,14 +223,14 @@ def validate_merged(merged: dict[str, dict[str, Any]], changes: dict[str, dict[s
     """
     asr, diarization = merged["asr"], merged["diarization"]
     if asr.get("engine") == "openai-compatible" and not asr.get("endpoint_url"):
-        raise invalid_field("asr.endpoint_url", "obrigatória com a engine openai-compatible")
+        raise invalid_field("asr.endpoint_url", "required with the openai-compatible engine")
     low, high = diarization.get("min_speakers"), diarization.get("max_speakers")
     touches_voice = "voice_identification" in changes or "diarization" in changes
     if touches_voice and merged["voice_identification"].get("enabled") and not diarization.get("enabled"):
         # The voiceprint is per speaker: without the separation, there is nothing to compare.
-        raise invalid_field("voice_identification.enabled", "exige a separação de locutores ligada")
+        raise invalid_field("voice_identification.enabled", "requires speaker separation turned on")
     if low is not None and high is not None and low > high:
-        raise invalid_field("diarization.min_speakers", "não pode passar de max_speakers")
+        raise invalid_field("diarization.min_speakers", "cannot exceed max_speakers")
 
 
 async def secret_encrypted(conn: AsyncConnection, name: str) -> str | None:

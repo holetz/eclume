@@ -25,7 +25,7 @@ def _offset(cursor: str | None) -> int:
         return 0
     (value,) = decode_position(cursor, 1)
     if not value.isdigit():
-        raise invalid_field("cursor", "cursor inválido")
+        raise invalid_field("cursor", "invalid cursor")
     return int(value)
 
 
@@ -46,7 +46,7 @@ async def search_segments(
     """Excerpts by relevance (`q`) or, with `person` alone, the person's utterances in chronological order."""
     q = q.strip() if q else None
     if not q and person is None:
-        raise invalid_field("q", "informe q ou person")
+        raise invalid_field("q", "send q or person")
     offset = _offset(cursor)
     filters = SearchFilters(q, person, date_from, date_to, tag, collection, tuple(field or ()))
     async with user_tx(ctx.engine, principal.user_id) as conn:

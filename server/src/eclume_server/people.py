@@ -78,7 +78,7 @@ async def get_person(conn: AsyncConnection, person_id: UUID) -> Any:  # noqa: AN
     """The user's person, or 404."""
     row = (await conn.execute(person_select().where(t.people.c.id == person_id))).mappings().first()
     if row is None:
-        raise not_found("Pessoa inexistente ou sem acesso.")
+        raise not_found("Person does not exist or is not accessible.")
     return row
 
 

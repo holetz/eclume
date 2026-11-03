@@ -55,13 +55,13 @@ def notice() -> dict[str, str]:
 
 def _check_email(email: str) -> None:
     if not _EMAIL_RE.match(email):
-        msg = f"e-mail inválido: {email}"
+        msg = f"invalid e-mail: {email}"
         raise AccountError(msg)
 
 
 def _check_password(password: str) -> None:
     if len(password) < MIN_PASSWORD:
-        msg = f"a senha precisa de ao menos {MIN_PASSWORD} caracteres"
+        msg = f"the password needs at least {MIN_PASSWORD} characters"
         raise AccountError(msg)
 
 
@@ -87,7 +87,7 @@ async def create_user(
     role: the account does not exist yet for RLS.
     """
     _check_email(email)
-    msg = f"e-mail já cadastrado: {email}"
+    msg = f"e-mail already registered: {email}"
     if await email_taken(conn, email):
         raise EmailTakenError(msg)
     accepted = {"notice_version": notice_version, "notice_accepted_at": datetime.now(UTC)} if notice_version else {}
@@ -263,7 +263,7 @@ async def create_admin(conn: AsyncConnection, *, email: str, name: str, password
     password_hash = await new_password_hash(password)
     taken = await conn.execute(select(t.admins.c.id).where(func.lower(t.admins.c.email) == email.lower()))
     if taken.first() is not None:
-        msg = f"admin já cadastrado: {email}"
+        msg = f"admin already registered: {email}"
         raise AccountError(msg)
     return (
         await conn.execute(
@@ -284,7 +284,7 @@ async def set_admin_password(conn: AsyncConnection, *, email: str, password: str
         )
     ).scalar()
     if admin_id is None:
-        msg = f"admin inexistente: {email}"
+        msg = f"admin does not exist: {email}"
         raise AccountError(msg)
     await conn.execute(delete(t.admin_sessions).where(t.admin_sessions.c.admin_id == admin_id))
     return admin_id
