@@ -175,3 +175,13 @@ def test_wait_and_interval_read_the_deprecated_names_and_the_new_ones_win(
     assert (result.returncode == 75) is inconclusive, result.stderr
     # ECLUME_GPU_E2E_INTERVALO=0 was read: no default 30 s sleep between the two checks.
     assert time.monotonic() - started < 20
+
+
+def test_every_deploy_path_the_script_names_exists() -> None:
+    """The skip check runs inside the container, out of reach of the stubs: its paths must exist."""
+    import re  # noqa: PLC0415  # only this static check needs it
+
+    text = (DEPLOY / "gpu-e2e.sh").read_text(encoding="utf-8")
+    named = set(re.findall(r"\bdeploy/[\w.-]+\.(?:py|sh|txt|yml)\b", text))
+    assert "deploy/skips.py" in named
+    assert [p for p in sorted(named) if not (DEPLOY.parent / p).exists()] == []

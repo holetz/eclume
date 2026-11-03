@@ -4,7 +4,7 @@
 # eclume-gpu-test), runs the 2 tests of worker-gpu/tests/test_gpu_e2e.py with ECLUME_GPU_E2E=1 in a
 # container of the eclume-gate image (--network host: ports 16379 and 19000 are already on 127.0.0.1)
 # and tears the compose down with `down -v` on every path. A skip counts as a failure
-# (deploy/pulos-esperados-gpu-e2e.txt is empty). Runs on the GPU host, with its local docker;
+# (deploy/expected-skips-gpu-e2e.txt is empty). Runs on the GPU host, with its local docker;
 # gate-host.sh calls it outside the pillars container. Contract: docs/standards/code/monorepo.md.
 #
 # Before starting, it waits for a free GPU: the `busy` signal of the production worker-gpu (gpu_busy,
@@ -87,7 +87,7 @@ docker run --rm --name eclume-gpu-test-pytest --network host -u 1000:1000 \
   -v "$ROOT:/src" -v "$CACHE_HOME:/tmp/.cache" -w /src "$IMG" \
   bash -c "set -e; uv sync --all-packages --locked; \
     uv run pytest worker-gpu/tests/test_gpu_e2e.py -v -s --junitxml=$junit; \
-    python3 deploy/pulos.py $junit deploy/pulos-esperados-gpu-e2e.txt"
+    python3 deploy/skips.py $junit deploy/expected-skips-gpu-e2e.txt"
 code=$?
 set -e
 rm -f "$ROOT/.gpu-e2e-junit.xml"
