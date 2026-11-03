@@ -2,7 +2,7 @@
 type: standard
 title: Monorepo layout and commands per pillar
 description: Each eclume pillar sits at the root with its own toolchain — uv workspace (server, worker-gpu, engines), npm in web/, cargo workspace in desktop/ and the mobile app in mobile/ (npm and its own cargo workspace that uses the desktop crates) — and these are the build, lint and test commands that CI, the host gate and the specs use.
-resource: pyproject.toml, web/package.json, desktop/Cargo.toml, mobile/Cargo.toml, mobile/package.json, .github/workflows/ci.yml, .github/actions/ffmpeg/action.yml, .github/workflows/desktop-plataformas.yml, deploy/pilares.sh, deploy/gate.sh, deploy/gate-host.sh, deploy/pulos.py, web/e2e/flaky-reporter.ts, .githooks/pre-push, .nvmrc, desktop/rust-toolchain.toml, mobile/rust-toolchain.toml, .github/dependabot.yml, deploy/fixacoes.py
+resource: pyproject.toml, web/package.json, desktop/Cargo.toml, mobile/Cargo.toml, mobile/package.json, .github/workflows/ci.yml, .github/actions/ffmpeg/action.yml, .github/workflows/desktop-platforms.yml, deploy/pillars.sh, deploy/gate.sh, deploy/gate-host.sh, deploy/skips.py, web/e2e/flaky-reporter.ts, .githooks/pre-push, .nvmrc, desktop/rust-toolchain.toml, mobile/rust-toolchain.toml, .github/dependabot.yml, deploy/pins.py
 tags: [code, monorepo, toolchain, ci, gate]
 timestamp: 2026-10-01
 audience: both
@@ -34,7 +34,7 @@ the host, with the table of equivalents, is in
 | `contracts/` | OpenAPI v1 and the transcript JSON Schema | — |
 | `deploy/` | dev, test and production compose files, server and web images, deploy and backup scripts ([deploy-producao.md](../../project/deploy-producao.md)) | Docker compose |
 | `docs/` | OKF bundle | `cq knowledge` |
-| `design-system/` | the eclume Design System, exported from Claude Design and versioned: `styles.css` (the source of the three copies of `eclume.css`), components, examples and `sincronizar.py` ([web-design-system.md](web-design-system.md)) | stdlib Python, in `uv run pytest` |
+| `design-system/` | the eclume Design System, exported from Claude Design and versioned: `styles.css` (the source of the three copies of `eclume.css`), components, examples and `sync.py` ([web-design-system.md](web-design-system.md)) | stdlib Python, in `uv run pytest` |
 
 ## Python — uv workspace
 
@@ -49,7 +49,7 @@ the host, with the table of equivalents, is in
   install it, and CI and the dev machine stay without torch. Only the GPU worker image installs `gpu`.
 - ruff runs with `select = ["ALL"]`; a new ignore goes in with its reason commented beside it, and the
   generated projection in `.design/build/` is left out.
-- The pytest `testpaths` include `design-system`: `test_sincronizar.py` fails when a copy
+- The pytest `testpaths` include `design-system`: `test_sync.py` fails when a copy
   of `eclume.css` diverges from the source.
 
 ```bash
@@ -176,7 +176,7 @@ of SQLite. The NDK compiler and linker come in through `CC_aarch64_linux_android
 `AR_aarch64_linux_android` and `CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER`; on the host,
 `android-env.sh` exports them by name, with the NDK `bin` at the end of `PATH`. There is no
 `mobile/.cargo/config.toml`: a `CC` by name in it would also apply inside `tauri android build`,
-which does not find it in its `PATH`. The release APK comes out of the host, through `deploy/release-movel.sh`
+which does not find it in its `PATH`. The release APK comes out of the host, through `deploy/release-mobile.sh`
 ([mobile-distribuicao.md](mobile-distribuicao.md)), and is proved at every gate in the `android` pillar.
 
 ## Support services — `deploy/docker-compose.dev.yml`
@@ -197,7 +197,7 @@ Each toolchain has one source, and everything that runs the pillar reads it:
 
 - **Rust**: `desktop/rust-toolchain.toml` and `mobile/rust-toolchain.toml`, with the same exact version
   (`channel`), `clippy` and `rustfmt` (and the Android targets on mobile). `rustup` reads the file of the folder
-  cargo runs from: `deploy/pilares.sh` enters `desktop/` or `mobile/`, CI runs
+  cargo runs from: `deploy/pillars.sh` enters `desktop/` or `mobile/`, CI runs
   `rustup toolchain install` there, and the build image (`desktop/build.Dockerfile`) installs Rust from the
   file and carries the version in the tag (`eclume-desktop-build:<versão>`, likewise `-windows` and `eclume-gate`).
 - **Node**: the major in `.nvmrc` (`node-version-file` in the workflows, `engines.node` in the
@@ -213,7 +213,7 @@ Each toolchain has one source, and everything that runs the pillar reads it:
 - **NDK** `28.2.13676358`, the one in `mobile/scripts/android-sdk.sh`: CI installs it through `sdkmanager` and
   passes it to the `mobile` pillar in `ECLUME_ANDROID_NDK` (the gate mounts the host's).
 
-`deploy/fixacoes.py` (with `deploy/test_fixacoes.py`) fails if any of these pins regresses and
+`deploy/pins.py` (with `deploy/test_pins.py`) fails if any of these pins regresses and
 if a directory with a manifest is left without an entry in `.github/dependabot.yml`.
 
 **Updates.** Dependabot opens weekly PRs, grouped by ecosystem and with a wait
@@ -223,31 +223,31 @@ rust-toolchain; alerts and security updates are on in the repository. A Dependab
 only goes in with `eclume/gate` = `success` on its SHA (`bash deploy/gate.sh <ref>`). A major
 (Python, Node, Postgres, Tauri) is decided in its own PR.
 
-**Audit.** The gate's `auditoria` pillar runs `pip-audit` over `uv export --locked --all-extras`
+**Audit.** The gate's `audit` pillar runs `pip-audit` over `uv export --locked --all-extras`
 (with the extras: the `gpu` of `eclume-worker-gpu` is what the GPU worker image installs, and without it
 torch, transformers and nltk stayed out of the audit, holetz/eclume#161),
 `npm audit --omit=dev --audit-level=high` in `web`, `mobile` and `desktop` and
 `cargo deny --locked check advisories` in `desktop` and `mobile`, with pinned-version tools
-in the gate image. An exception only with a reason and a deadline: `deploy/auditoria-excecoes.txt` (Python; once expired,
+in the gate image. An exception only with a reason and a deadline: `deploy/audit-exceptions.txt` (Python; once expired,
 it stops applying), the `[advisories] ignore` of `desktop/deny.toml` and `mobile/deny.toml` (Rust) and
 `overrides` in `package.json` (npm).
 
-## CI and gate — `deploy/pilares.sh`, `.github/workflows/ci.yml` and `deploy/gate.sh`
+## CI and gate — `deploy/pillars.sh`, `.github/workflows/ci.yml` and `deploy/gate.sh`
 
-The proof commands of each pillar live in a single place, `deploy/pilares.sh <pilar>`
-(`--lista` lists the eleven: `python`, `contracts`, `web`, `web-browser`, `desktop`, `mobile`,
-`docs`, `windows`, `auditoria`, `android` and `gpu-e2e`), with `--locked` on uv and cargo, `gen:api -- --check` and
+The proof commands of each pillar live in a single place, `deploy/pillars.sh <pilar>`
+(`--list` lists the eleven: `python`, `contracts`, `web`, `web-browser`, `desktop`, `mobile`,
+`docs`, `windows`, `audit`, `android` and `gpu-e2e`), with `--locked` on uv and cargo, `gen:api -- --check` and
 `budget` after the build in `web`, `playwright install webkit firefox` in `web-browser` and
 `CARGO_PROFILE_DEV_DEBUG=line-tables-only` in the cargo pillars (the `Bus error` at link time; local dev
 keeps full debuginfo). The caller prepares the environment — the script brings up no service and reads the
 services and the mock from `ECLUME_TEST_*` and `ECLUME_MOCK_URL`. CI and the gate call the same script;
 `deploy/test_gate.py` fails if a CI job stops calling its pillar or if `windows`,
-`auditoria` or `android` enter CI.
+`audit` or `android` enter CI.
 
-`python` also exercises `deploy.sh --voltar`: `deploy/test_deploy_voltar.py` runs the script for
-real (`--plan --voltar` and the refusals for an unknown migration and a missing retained image) in a
+`python` also exercises `deploy.sh --rollback`: `deploy/test_deploy_rollback.py` runs the script for
+real (`--plan --rollback` and the refusals for an unknown migration and a missing retained image) in a
 throwaway repository, with `docker`, `ssh` and `gh` replaced by stubs on `PATH`. Breaking the
-`--voltar` branch of the script fails the pillar; the write branch (bringing up the retained trio) stays proved only by
+`--rollback` branch of the script fails the pillar; the write branch (bringing up the retained trio) stays proved only by
 the host smoke test. On Windows the test skips for lack of a POSIX `bash`.
 
 **CI (a warning, not a publication requirement).** Independent `ubuntu-24.04` jobs, on `pull_request`,
@@ -255,7 +255,7 @@ on `push` to `main`, by hand and nightly (`schedule` at 06:00 UTC): `python`, `c
 `web-browser`, `desktop`, `mobile` and `docs`, each with its own setup (actions, apt, services of
 `deploy/docker-compose.test.yml` in `python`, mock in `contracts` and `web-browser`, Chromium
 dependencies in `desktop`, WebKit and Firefox ones in `web-browser`) and one call to
-`bash deploy/pilares.sh <job>`. `web-browser` uses the runner's Google Chrome (`E2E_CHANNEL=chrome`)
+`bash deploy/pillars.sh <job>`. `web-browser` uses the runner's Google Chrome (`E2E_CHANNEL=chrome`)
 and Playwright's WebKit and Firefox, with the system dependencies of `playwright install-deps`
 (in the gate, already in `deploy/gate.Dockerfile`); `python` runs with `ECLUME_TEST_REQUIRE_SERVICES=1`, so
 the server suite never skips; `desktop` prints `df -h` and `free -m` before cargo.
@@ -267,20 +267,20 @@ ceiling and cancelled it with no test failure; the healthy suite takes about 8 m
 ceiling stays and `deploy/test_ci_ffmpeg.py` fails if an inline install returns.
 
 With the repository private, Actions minutes have a quota, so CI only runs what changed: a change only
-in `.design/`, `.impeccable/` or `.claude/` does not trigger the workflow, and the `mudancas` job
+in `.design/`, `.impeccable/` or `.claude/` does not trigger the workflow, and the `changes` job
 (`dorny/paths-filter`) turns each job on only when its pillar, or something it depends on, was touched:
 a documentation-only change (`docs/`, any `.md`) turns on only `docs`; `python` and `web` also
 run with `contracts/`, `python` with `design-system/**` and the three copies of `eclume.css`, `desktop` with `web/src/styles/eclume.css` and the help articles, `mobile` with `desktop/crates/` and `python` with `deploy/**` (a PR that touches only `deploy/` runs
 the `test_*.py` there) and the release workflows. `python` covers each folder of the pytest `testpaths`
 with a `<prefixo>/**` glob, and `deploy/test_gate.py` fails, naming the folder, if one is left out of the
-filter. Changing `ci.yml` or `deploy/pilares.sh`, or
+filter. Changing `ci.yml` or `deploy/pillars.sh`, or
 triggering the workflow by hand, runs every job; so does the nightly, but only when `main` changed since the
 last green nightly. Each job has `timeout-minutes`. When creating a new dependency between pillars,
 add the path to the filter of the job that consumes it.
 
 **Documented skips and flaky tests.** The `python` pillar runs pytest with `--junitxml` and passes the report
-to `deploy/pulos.py`, which compares it with the environment's versioned list (`ECLUME_PULOS`: `ci`, the
-default, or `gate`): `deploy/pulos-esperados-ci.txt` and `deploy/pulos-esperados-gate.txt`, one line
+to `deploy/skips.py`, which compares it with the environment's versioned list (`ECLUME_SKIPS`: `ci`, the
+default, or `gate`): `deploy/expected-skips-ci.txt` and `deploy/expected-skips-gate.txt`, one line
 `arquivo::teste | motivo` per skip. A skip outside the list fails the pillar, and so does a listed skip that stopped
 occurring (the list does not rot). In CI the expected skips are the 2 of `test_gpu_e2e.py`
 (`gpu-e2e` pillar, S4) and the 3 of `test_agents_real.py`; `ffmpeg` is installed in the job so the 9 preprocessing
@@ -317,23 +317,23 @@ each in a container of the `eclume-gate:<versão do Rust>` image (`deploy/gate.D
 commit: `pending` while it runs, `success` only with the required pillars green (the description says which
 ran and how many were waived), `failure` naming the pillars that failed and `error` when the
 gate cannot prove; the log stays in
-`~/eclume-gate/logs/<sha>.log` on the host (`bash deploy/gate.sh --estado <sha>`). `--pilares a,b` runs
-a subset and never publishes; `--todos` publishes running all eleven.
+`~/eclume-gate/logs/<sha>.log` on the host (`bash deploy/gate.sh --status <sha>`). `--pillars a,b` runs
+a subset and never publishes; `--all` publishes running all eleven.
 
 **The gate is proportional.** After the lock, the host finds the closest green SHA in the commit's
 history (`eclume/gate` = `success`, up to 30 commits back), lists the files that changed since it
-(`gh api compare`) and `python3 deploy/gate.py pilares --stdin` returns the pillars required by the path
-map of `FILTROS` — the same as the `ci.yml` filters for the seven CI pillars (
+(`gh api compare`) and `python3 deploy/gate.py pillars --stdin` returns the pillars required by the path
+map of `FILTERS` — the same as the `ci.yml` filters for the seven CI pillars (
 `deploy/test_gate.py` fails if they diverge), plus `windows` (the `desktop` paths), `android` (the
-`mobile` ones) and `auditoria` (manifests, locks, `deny.toml` and the exceptions). A change in `deploy/`, in
+`mobile` ones) and `audit` (manifests, locks, `deny.toml` and the exceptions). A change in `deploy/`, in
 `ci.yml`, in a lock or in a toolchain (`rust-toolchain.toml`, `.nvmrc`, `.python-version`) runs all of them,
 and so does having no findable green SHA (first run, rewritten history) or a truncated diff.
 Each pillar outside the diff is waived, not missing: the status only becomes `success` with all the
 required ones green, and a diff that touches no pillar (only `.design/`, `.claude/`) publishes `success`
 with "nenhum pilar exigido" (no pillar required), so the deploy is never left without a status. The waiver holds by
-transitivity (each green proved the whole state at that SHA); `--todos` forces the full proof.
+transitivity (each green proved the whole state at that SHA); `--all` forces the full proof.
 
-**Superseded SHA.** The pre-push hook passes `--superavel`: after the lock, if GitHub's `main`
+**Superseded SHA.** The pre-push hook passes `--supersedable`: after the lock, if GitHub's `main`
 is already ahead of the SHA (`compare` = `ahead`), the host publishes `eclume/gate` = `error`
 "superado por <sha>" (superseded by <sha>) and exits without running; the deploy uses the tip, which has its own gate and whose diff
 since the last green covers the abandoned SHA. A gate requested by hand (`bash deploy/gate.sh <ref>`)
@@ -341,7 +341,7 @@ is never abandoned, and neither is one whose tip is equal, behind, divergent or 
 On every run the host prunes logs older than 30 days, build images of another Rust version
 (`eclume-gate`, `eclume-desktop-build`, `eclume-desktop-build-windows`, `eclume-mobile-build`) and
 abandoned `src-*` trees. The `windows` (`cargo xwin clippy` of the desktop for
-`x86_64-pc-windows-msvc`, `-D warnings`), `auditoria` and `android` pillars are gate-only. `android`
+`x86_64-pc-windows-msvc`, `-D warnings`), `audit` and `android` pillars are gate-only. `android`
 receives the SDK, the NDK and the JDK from the host's `mobile/scripts/android-sdk.sh`, read-only
 (`ECLUME_ANDROID_SDK`, `ECLUME_ANDROID_NDK`, `ECLUME_ANDROID_JDK`), and the Gradle cache in
 `~/eclume-gate/cache/gradle`; it compiles the minified (R8) release APK with a throwaway key
@@ -352,18 +352,17 @@ class with the native methods in the dex, through the SDK's `apkanalyzer`).
 **The `gpu-e2e` pillar (gate-only, holetz/eclume#158).** It proves the CUDA path (WhisperX and diarization on the
 6 GB GTX 1660, `eclume:gpu` queue, MinIO), which no other pillar touches: staging runs the worker on
 CPU. Required by a change in `worker-gpu/**`, `engines/**`, `contracts/transcript.schema.json`,
-`deploy/docker-compose.gpu-test.yml`, `deploy/gpu-e2e.sh`, `deploy/pilares.sh` and `ci.yml` (and by
+`deploy/docker-compose.gpu-test.yml`, `deploy/gpu-e2e.sh`, `deploy/pillars.sh` and `ci.yml` (and by
 any change in `deploy/`, which runs all of them). It needs the host's docker and GPU, so
 `gate-host.sh` runs it on the host, outside the other pillars' container: `deploy/gpu-e2e.sh` brings up the
 `eclume-gpu-test` compose (its own ports and volumes; the models of `/srv/eclume/models` are
 shared), runs the 2 tests of `worker-gpu/tests/test_gpu_e2e.py` with `ECLUME_GPU_E2E=1` in an
 `eclume-gate` container with `--network host`, checks the skips against an empty list
-(`deploy/pulos-esperados-gpu-e2e.txt`: a skip is a failure) and tears the compose down with `down -v` on every
+(`deploy/expected-skips-gpu-e2e.txt`: a skip is a failure) and tears the compose down with `down -v` on every
 path. Before bringing it up, it waits for the GPU to be free (the production worker's `busy`, `gpu_busy` in
 `deploy/gpu-lib.sh`, the same as `deploy.sh`'s, and free VRAM above `ECLUME_GPU_E2E_VRAM_MIN_MIB`,
-4096) in 30 s loops up to `ECLUME_GPU_E2E_ESPERA` minutes (20); past the limit, it exits **75**
-(inconclusive) without bringing anything up and without stopping production, and the gate publishes `error` "sem prova: gpu-e2e
-(inconclusivo: GPU ocupada)" (no proof: gpu-e2e (inconclusive: GPU busy)), never `success`: whoever reads `eclume/gate` keeps requiring `success`. Apart
+4096) in 30 s loops up to `ECLUME_GPU_E2E_WAIT` minutes (20); past the limit, it exits **75**
+(inconclusive) without bringing anything up and without stopping production, and the gate publishes `error` "no proof: gpu-e2e", never `success`: whoever reads `eclume/gate` keeps requiring `success`. Apart
 from 75, a non-zero exit is `failure`. The 4096 MiB minimum is the test's peak (3876 MiB) plus
 headroom, not an empty host: idle, the host already uses ~0.9 GB with the graphical session and the driver holds
 ~400 MiB that never show as free, so 5120 MiB would leave the pillar inconclusive whenever the
@@ -372,21 +371,21 @@ goes up. The first run downloads models and builds the
 worker image (~8 GB, cached afterwards). The pillar does not mount the `~/.claude` credentials.
 
 No path that publishes accepts a SHA without `eclume/gate` = `success`: `deploy/deploy.sh`,
-`deploy/release-desktop.sh --publicar`, `deploy/release-movel.sh --publicar` and
-`desktop-release.yml`. The emergency exit is `--sem-gate "<motivo>"`, per invocation, in
-`deploy.sh`, `release-desktop.sh` and `release-movel.sh`:
+`deploy/release-desktop.sh --publish`, `deploy/release-mobile.sh --publish` and
+`desktop-release.yml`. The emergency exit is `--skip-gate "<motivo>"`, per invocation, in
+`deploy.sh`, `release-desktop.sh` and `release-mobile.sh`:
 it waives only the status (clean tree and commit on GitHub are still required) and leaves on the commit the status
 `eclume/gate-dispensa` = `failure` with the reason. The release workflow has no waiver.
 
 **Pre-push hook.** `.githooks/pre-push`, enabled once per clone with
-`git config core.hooksPath .githooks`, fires `bash deploy/gate.sh --fundo --superavel <sha>` for each
+`git config core.hooksPath .githooks`, fires `bash deploy/gate.sh --background --supersedable <sha>` for each
 update of `refs/heads/main` in the push: the gate runs on the host in the background and the push never waits
 nor fails because of it (an unreachable host becomes a warning). Work branches run the gate by hand.
 
 macOS and Windows stay out of PR CI while the repository is private; the desktop's Windows-only code
 compiles at every gate (`windows` pillar), and the manual workflow
-`.github/workflows/desktop-plataformas.yml` runs a `cargo check` of the desktop on a real Windows on
-demand (`gh workflow run desktop-plataformas.yml`); macOS stays out until the repository becomes
+`.github/workflows/desktop-platforms.yml` runs a `cargo check` of the desktop on a real Windows on
+demand (`gh workflow run desktop-platforms.yml`); macOS stays out until the repository becomes
 public. The desktop installers come out of the host, through `deploy/release-desktop.sh`, without spending Actions
 minutes; `.github/workflows/desktop-release.yml` is the alternative, by hand only. The process is in
 [desktop-distribuicao.md](desktop-distribuicao.md).
