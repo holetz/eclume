@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# E2E do web contra o backend real, num stack efêmero (deploy/docker-compose.e2e.yml, projeto
-# eclume-e2e). Roda NO HOST GPU, onde estão o daemon Docker, o Google Chrome e o login do Claude:
+# Web E2E against the real backend, on an ephemeral stack (deploy/docker-compose.e2e.yml, project
+# eclume-e2e). Runs ON THE GPU HOST, where the Docker daemon, Google Chrome and the Claude login are:
 #
-#   remote-run . 'bash deploy/e2e-real.sh'        # da estação de dev
-#   bash deploy/e2e-real.sh [--manter-imagens]     # no próprio host
+#   remote-run . 'bash deploy/e2e-real.sh'        # from the dev workstation
+#   bash deploy/e2e-real.sh [--keep-images]        # on the host itself
 #
-# Constrói server e borda (com o SPA) do checkout (`:e2e`), gera a raiz descartável restrita a
-# 127.0.0.1 com o `eclume-server ca gerar` da imagem, sobe o stack, migra (o migrador liga o papel
-# eclume_server),
-# confere o HTTPS por essa raiz, cria uma conta de admin descartável pelo CLI (o usuário nasce pelo
-# cadastro, no próprio teste), converte a fixture de fala em WAV e roda `npm run test:e2e:real`.
-# Sai sempre com `down -v` (dados, raiz e o modelo baixado somem) e apaga as imagens `:e2e`, a não
-# ser com --manter-imagens. Nada toca o projeto `eclume` de produção.
+# Builds server and edge (with the SPA) from the checkout (`:e2e`), generates the disposable root
+# restricted to 127.0.0.1 with the image's `eclume-server ca gerar`, starts the stack, migrates (the
+# migrator enables the eclume_server role), checks HTTPS through that root, creates a disposable admin
+# account through the CLI (the user is born through signup, in the test itself), converts the speech
+# fixture to WAV and runs `npm run test:e2e:real`. It always leaves with `down -v` (data, root and the
+# downloaded model are gone) and deletes the `:e2e` images, unless --keep-images. Nothing touches the
+# production `eclume` project.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -19,15 +19,15 @@ cd "$ROOT"
 KEEP_IMAGES=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --manter-imagens) KEEP_IMAGES=1; shift ;;
+    --keep-images) KEEP_IMAGES=1; shift ;;
     --help|-h) sed -n '2,14p' "$0"; exit 0 ;;
-    *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
+    *) echo "Unknown flag: $1 (see --help)" >&2; exit 2 ;;
   esac
 done
 
-# O token de longa duração do Claude vem do env de produção guardado no host (holetz/eclume#28) ou,
-# sem ele, do provider `claude-cli` cadastrado no painel de produção (holetz/eclume#29), aberto pelo
-# próprio server de produção: o texto cifrado e a chave de cifra nunca saem do container.
+# Claude's long-lived token comes from the production env kept on the host (holetz/eclume#28) or,
+# without it, from the `claude-cli` provider registered in the production panel (holetz/eclume#29),
+# opened by the production server itself: the ciphertext and the encryption key never leave the container.
 if [[ -z "${ECLUME_CLAUDE_OAUTH_TOKEN:-}" && -r /srv/eclume/secrets/env.prod ]]; then
   ECLUME_CLAUDE_OAUTH_TOKEN="$(sed -n 's/^ECLUME_CLAUDE_OAUTH_TOKEN=//p' /srv/eclume/secrets/env.prod | tail -1)"
 fi
@@ -63,11 +63,11 @@ PY
 )"
 fi
 export ECLUME_CLAUDE_OAUTH_TOKEN
-[[ -n "${ECLUME_CLAUDE_OAUTH_TOKEN:-}" ]] || { echo "Sem ECLUME_CLAUDE_OAUTH_TOKEN (claude setup-token): o resumo falharia." >&2; exit 2; }
+[[ -n "${ECLUME_CLAUDE_OAUTH_TOKEN:-}" ]] || { echo "No ECLUME_CLAUDE_OAUTH_TOKEN (claude setup-token): the summary would fail." >&2; exit 2; }
 COMPOSE=(docker compose -p eclume-e2e -f deploy/docker-compose.e2e.yml)
-# Fora de web/test-results: o Playwright limpa aquela pasta ao começar.
+# Outside web/test-results: Playwright cleans that folder when it starts.
 WORK="$(mktemp -d)"
-# A raiz descartável do Caddy (CA `eclume`, como a produção virada); some com o $WORK.
+# Caddy's disposable root (CA `eclume`, like the switched production); gone with $WORK.
 export ECLUME_E2E_CA_DIR="$WORK/ca"
 
 cleanup() {
@@ -80,36 +80,36 @@ cleanup() {
 trap cleanup EXIT
 
 pct="$(df --output=pcent / | tail -n 1 | tr -dc 0-9)"
-(( pct < 90 )) || { echo "Disco em ${pct}%: acima de 90%, E2E recusado." >&2; exit 3; }
+(( pct < 90 )) || { echo "Disk at ${pct}%: above 90%, E2E refused." >&2; exit 3; }
 
-echo "Construindo server e borda (:e2e)…" >&2
+echo "Building server and edge (:e2e)…" >&2
 BUILDKIT_PROGRESS=plain "${COMPOSE[@]}" build server caddy
 mkdir -m 700 "$ECLUME_E2E_CA_DIR"
 docker run --rm --network none --user "$(id -u):$(id -g)" -v "$ECLUME_E2E_CA_DIR:/ca" eclume-server:e2e \
   eclume-server ca gerar --pasta /ca --host 127.0.0.1 --nomes '' >&2
-echo "Subindo o stack eclume-e2e…" >&2
+echo "Starting the eclume-e2e stack…" >&2
 "${COMPOSE[@]}" up -d --wait --wait-timeout 120 postgres redis minio
 "${COMPOSE[@]}" run --rm minio-init
 "${COMPOSE[@]}" run --rm migrate
 "${COMPOSE[@]}" up -d --wait --wait-timeout 180 server worker-cpu worker caddy
-# O Caddy emite pela raiz restrita: o HTTPS valida com ela e só com ela.
+# Caddy issues through the constrained root: HTTPS validates with it and only with it.
 curl -fsS -o /dev/null --cacert "$ECLUME_E2E_CA_DIR/raiz.crt" https://127.0.0.1:18443/api/v1/health \
-  || { echo "O Caddy do e2e não serve uma cadeia da raiz restrita." >&2; exit 1; }
+  || { echo "The e2e Caddy does not serve a chain of the constrained root." >&2; exit 1; }
 
 ADMIN_EMAIL="admin-e2e@eclume.invalid"
 ADMIN_PASSWORD="$(openssl rand -hex 16)"
 printf '%s\n' "$ADMIN_PASSWORD" | "${COMPOSE[@]}" run --rm -T migrate \
   eclume-server admin create --email "$ADMIN_EMAIL" --name "Admin E2E" --password-stdin >/dev/null
 
-# Fala real (duas vozes sintéticas em pt): WAV para exercitar a conversão no navegador.
-ffmpeg -loglevel error -y -i worker-gpu/tests/fixtures/two-voices.ogg -ar 48000 -ac 1 "$WORK/duas-vozes.wav"
+# Real speech (two synthetic voices in pt): WAV to exercise the conversion in the browser.
+ffmpeg -loglevel error -y -i worker-gpu/tests/fixtures/two-voices.ogg -ar 48000 -ac 1 "$WORK/two-voices.wav"
 
 [[ -d web/node_modules ]] || npm --prefix web ci --no-audit --no-fund
 ECLUME_E2E_URL=https://127.0.0.1:18443 ECLUME_E2E_ADMIN_EMAIL="$ADMIN_EMAIL" ECLUME_E2E_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
-  ECLUME_E2E_AUDIO="$WORK/duas-vozes.wav" E2E_CHANNEL="${E2E_CHANNEL:-chrome}" \
+  ECLUME_E2E_AUDIO="$WORK/two-voices.wav" E2E_CHANNEL="${E2E_CHANNEL:-chrome}" \
   npm --prefix web run test:e2e:real || {
     status=$?
-    echo "E2E falhou; logs do worker e do worker CPU:" >&2
+    echo "E2E failed; logs of the worker and the CPU worker:" >&2
     "${COMPOSE[@]}" logs --tail 60 worker worker-cpu >&2 || true
     exit "$status"
   }

@@ -2,7 +2,7 @@
 #   1. baixa o NSIS da versão publicada em /downloads e instala em silêncio;
 #   2. abre o app com a porta de depuração do WebView2 e captura a primeira execução, que precisa
 #      mostrar o servidor embutido no instalador ("Veio com este instalador");
-#   3. entra com a conta de teste (ECLUME_PROVA_EMAIL e ECLUME_PROVA_SENHA);
+#   3. entra com a conta de teste (ECLUME_PROOF_EMAIL e ECLUME_PROOF_PASSWORD; ECLUME_PROVA_* ainda vale);
 #   4. grava uma nota pelo atalho global Ctrl+Alt+N, falando um texto pela voz do Windows nos
 #      alto-falantes, e espera ela parar no silêncio e subir;
 #   5. confere pela API (prova_nota.py) que a nota está na biblioteca com kind=note,
@@ -27,9 +27,10 @@ $dados = Join-Path $env:APPDATA "io.github.holetz.eclume"
 $exe = Join-Path $env:LOCALAPPDATA "eclume\eclume-desktop.exe"
 $env:CDP_PORT = "$Porta"
 
-$email = $env:ECLUME_PROVA_EMAIL
-$senha = $env:ECLUME_PROVA_SENHA
-if (-not $email -or -not $senha) { throw "defina ECLUME_PROVA_EMAIL e ECLUME_PROVA_SENHA" }
+# ECLUME_PROVA_EMAIL/ECLUME_PROVA_SENHA are the deprecated pt-BR names, still read.
+$email = if ($env:ECLUME_PROOF_EMAIL) { $env:ECLUME_PROOF_EMAIL } else { $env:ECLUME_PROVA_EMAIL }
+$senha = if ($env:ECLUME_PROOF_PASSWORD) { $env:ECLUME_PROOF_PASSWORD } else { $env:ECLUME_PROVA_SENHA }
+if (-not $email -or -not $senha) { throw "set ECLUME_PROOF_EMAIL and ECLUME_PROOF_PASSWORD" }
 
 function Passo([string]$texto) { Write-Host "== $texto" }
 

@@ -1,9 +1,10 @@
-// Prova da biblioteca e da gravação (holetz/eclume#37) no staging (holetz/eclume#91), no navegador
-// real e com a conta descartável do `staging.sh subir`: import de um M4A pelo modal com a data dos
-// metadados, o evento na semana certa, o pipeline até o resumo, a edição, o chat, o DOCX e a exclusão.
-//   ECLUME_PROVA_URL (padrão https://127.0.0.1:18444), ECLUME_E2E_EMAIL, ECLUME_E2E_PASSWORD e
-//   ECLUME_E2E_AUDIO (um M4A com creation_time 2026-09-21T12:00:00Z). Recusa a URL de produção.
-// Roda com playwright.real.config.ts; os screenshots, claro e escuro, ficam em test-results/prod/.
+// Proof of the library and the recording (holetz/eclume#37) on staging (holetz/eclume#91), in the
+// real browser and with the disposable account of `staging.sh up`: import of an M4A through the modal
+// with the metadata date, the event in the right week, the pipeline up to the summary, the edit, the
+// chat, the DOCX and the deletion.
+//   ECLUME_PROOF_URL (default https://127.0.0.1:18444), ECLUME_E2E_EMAIL, ECLUME_E2E_PASSWORD and
+//   ECLUME_E2E_AUDIO (an M4A with creation_time 2026-09-21T12:00:00Z). Refuses the production URL.
+// Runs with playwright.real.config.ts; the screenshots, light and dark, stay in test-results/prod/.
 import { readFileSync } from 'node:fs'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 
@@ -11,7 +12,8 @@ const EMAIL = process.env.ECLUME_E2E_EMAIL ?? ''
 const PASSWORD = process.env.ECLUME_E2E_PASSWORD ?? ''
 const AUDIO = process.env.ECLUME_E2E_AUDIO ?? ''
 const SHOTS = 'test-results/prod'
-const URL_BASE = process.env.ECLUME_PROVA_URL ?? 'https://127.0.0.1:18444'
+// ECLUME_PROVA_URL is the deprecated pt-BR name, still read.
+const URL_BASE = process.env.ECLUME_PROOF_URL ?? process.env.ECLUME_PROVA_URL ?? 'https://127.0.0.1:18444'
 const WEEK = '/?visao=semana&data=2026-09-21'
 
 // O creation_time do M4A é 12:00 UTC: 09:00 em Brasília, na segunda 21/09/2026.
