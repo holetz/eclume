@@ -1,29 +1,29 @@
-# Release do app desktop do eclume pelo GitHub Actions: gera os instaladores de Linux e, se
-# pedido, Windows, assina os pacotes do updater com a chave minisign (secrets TAURI_SIGNING_*),
-# monta latest.json, instaladores.json e SHA256SUMS e publica um GitHub Release (privado, como o
-# repo). Os clientes baixam do servidor eclume, não do GitHub: deploy/publicar-desktop.sh copia o
-# release para /srv/eclume/downloads no host. Contrato: docs/standards/code/desktop-distribuicao.md.
+# Release of the eclume desktop app through GitHub Actions: builds the Linux installers and, when
+# asked, the Windows ones, signs the updater packages with the minisign key (TAURI_SIGNING_* secrets),
+# assembles latest.json, instaladores.json and SHA256SUMS and publishes a GitHub Release (private,
+# like the repo). Clients download from the eclume server, not from GitHub: deploy/publish-desktop.sh
+# copies the release to /srv/eclume/downloads on the host. Contract: docs/standards/code/desktop-distribuicao.md.
 #
-# O caminho principal é o release no host (deploy/release-desktop.sh), que não gasta minutos de
-# Actions. Este workflow é a alternativa e só roda à mão: a tag desktop-v* que o release no host
-# cria não o dispara. Com o repo privado, o minuto de Windows custa 2× (entrada `windows`,
-# desligada por padrão) e o macOS fica fora até o repositório ficar público. No dispatch,
-# `publicar: false` é ensaio (os artefatos ficam no run).
+# The main path is the release on the host (deploy/release-desktop.sh), which spends no Actions
+# minutes. This workflow is the alternative and only runs by hand: the desktop-v* tag that the host
+# release creates does not fire it. With the repo private, a Windows minute costs 2x (the `windows`
+# input) and macOS stays out until the repository is public. On dispatch, `publish: false` is a
+# dry run (the artifacts stay on the run).
 name: desktop-release
 
 on:
   workflow_dispatch:
     inputs:
-      publicar:
-        description: "Criar a tag desktop-v<versão do tauri.conf.json> e publicar o release"
+      publish:
+        description: "Create the desktop-v<tauri.conf.json version> tag and publish the release"
         type: boolean
         default: false
       windows:
-        description: "Incluir o Windows (2× o custo do Linux; desmarque para só Linux)"
+        description: "Include Windows (2x the cost of Linux; untick for Linux only)"
         type: boolean
         default: true
-      notas:
-        description: "Notas do release, que o app mostra no aviso \"Atualizado para X\" (vazio: a seção da versão no desktop/CHANGELOG.md)"
+      notes:
+        description: "Release notes, which the app shows in the \"Updated to X\" notice (empty: the version's section in desktop/CHANGELOG.md)"
         type: string
         default: ""
 
@@ -35,64 +35,64 @@ permissions:
   contents: read
 
 jobs:
-  plano:
+  plan:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       statuses: read
     outputs:
-      versao: ${{ steps.plano.outputs.versao }}
-      tag: ${{ steps.plano.outputs.tag }}
-      publicar: ${{ steps.plano.outputs.publicar }}
-      matriz: ${{ steps.plano.outputs.matriz }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      publish: ${{ steps.plan.outputs.publish }}
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version-file: .python-version
-      - id: plano
+      - id: plan
         env:
-          PUBLICAR: ${{ inputs.publicar }}
+          PUBLISH: ${{ inputs.publish }}
           WINDOWS: ${{ inputs.windows }}
         run: |
-          versao=$(python3 -c "import json; print(json.load(open('desktop/src-tauri/tauri.conf.json'))['version'])")
-          tag="desktop-v$versao"
-          matriz=$(WINDOWS="$WINDOWS" python3 - <<'EOF'
+          version=$(python3 -c "import json; print(json.load(open('desktop/src-tauri/tauri.conf.json'))['version'])")
+          tag="desktop-v$version"
+          matrix=$(WINDOWS="$WINDOWS" python3 - <<'EOF'
           import json, os
-          alvos = [{"plataforma": "linux", "os": "ubuntu-24.04", "bundles": "appimage,deb"}]
+          targets = [{"platform": "linux", "os": "ubuntu-24.04", "bundles": "appimage,deb"}]
           if os.environ["WINDOWS"] == "true":
-              alvos.append({"plataforma": "windows", "os": "windows-2025", "bundles": "nsis,msi"})
-          print(json.dumps({"include": alvos}))
+              targets.append({"platform": "windows", "os": "windows-2025", "bundles": "nsis,msi"})
+          print(json.dumps({"include": targets}))
           EOF
           )
           {
-            echo "versao=$versao"
+            echo "version=$version"
             echo "tag=$tag"
-            echo "publicar=$PUBLICAR"
-            echo "matriz=$matriz"
+            echo "publish=$PUBLISH"
+            echo "matrix=$matrix"
           } >> "$GITHUB_OUTPUT"
-          echo "versão $versao, tag $tag, publicar=$PUBLICAR, matriz: $matriz"
-      # Publicar exige o gate do host verde neste commit (status eclume/gate); sem dispensa aqui:
-      # quem precisa dispensar publica pelo host (--sem-gate). Contrato: docs/standards/code/monorepo.md.
-      - name: Gate do commit
-        if: steps.plano.outputs.publicar == 'true'
+          echo "version $version, tag $tag, publish=$PUBLISH, matrix: $matrix"
+      # Publishing needs the host gate green on this commit (status eclume/gate); no waiver here:
+      # whoever needs a waiver publishes from the host (--skip-gate). Contract: docs/standards/code/monorepo.md.
+      - name: Commit gate
+        if: steps.plan.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/status" | python3 deploy/gate.py decidir
+        run: gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/status" | python3 deploy/gate.py decide
 
   build:
-    needs: plano
+    needs: plan
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.plano.outputs.matriz) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Dependências de sistema do Tauri 2 e da captura de áudio
-        if: matrix.plataforma == 'linux'
+      - name: System dependencies of Tauri 2 and audio capture
+        if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -102,49 +102,49 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
-      # O Rust de desktop/rust-toolchain.toml (versão, componentes e alvos), pelo rustup do runner.
-      - name: Rust de desktop/rust-toolchain.toml
+      # The Rust of desktop/rust-toolchain.toml (version, components and targets), through the runner's rustup.
+      - name: Rust from desktop/rust-toolchain.toml
         working-directory: desktop
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: desktop
           key: release
-      # A CLI do Tauri de desktop/package-lock.json, instalada sem scripts e sem os secrets no passo.
-      - name: CLI do Tauri
+      # The Tauri CLI from desktop/package-lock.json, installed without scripts and without the secrets in the step.
+      - name: Tauri CLI
         run: npm --prefix desktop ci --ignore-scripts --no-audit --no-fund
-      - name: Build e bundle
+      - name: Build and bundle
         working-directory: desktop/src-tauri
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # O servidor embutido no instalador (config::embedded_server): endereço e impressão
-          # digital da CA raiz, gravados pela holetz/eclume#35 como variáveis do repositório.
+          # The server embedded in the installer (config::embedded_server): address and root CA
+          # fingerprint, stored by holetz/eclume#35 as repository variables.
           ECLUME_SERVER_URL: ${{ vars.ECLUME_SERVER_URL }}
           ECLUME_SERVER_CA_SHA256: ${{ vars.ECLUME_SERVER_CA_SHA256 }}
-          # linuxdeploy sem FUSE e sem o strip que falha em binários com .relr.dyn.
+          # linuxdeploy without FUSE and without the strip that fails on binaries with .relr.dyn.
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
         run: npx --no-install tauri build --ci --bundles "${{ matrix.bundles }}"
-      - name: Juntar os artefatos
+      - name: Gather the artifacts
         run: |
           bundle=desktop/target/release/bundle
-          mkdir -p saida
+          mkdir -p out
           shopt -s nullglob
           for f in "$bundle"/appimage/*.AppImage* "$bundle"/deb/*.deb* "$bundle"/nsis/*-setup.exe* \
                    "$bundle"/msi/*.msi*; do
-            cp "$f" saida/
+            cp "$f" out/
           done
-          ls -la saida
-          test -n "$(ls saida)"
+          ls -la out
+          test -n "$(ls out)"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: desktop-${{ matrix.plataforma }}
-          path: saida/
+          name: desktop-${{ matrix.platform }}
+          path: out/
           if-no-files-found: error
 
   release:
-    needs: [plano, build]
+    needs: [plan, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -158,30 +158,30 @@ jobs:
           pattern: desktop-*
           path: dist
           merge-multiple: true
-      - name: Montar latest.json, instaladores.json e SHA256SUMS
+      - name: Assemble latest.json, instaladores.json and SHA256SUMS
         env:
-          VERSAO: ${{ needs.plano.outputs.versao }}
+          VERSION: ${{ needs.plan.outputs.version }}
           BASE_URL: ${{ vars.ECLUME_DOWNLOADS_URL }}
-          NOTAS: ${{ inputs.notas }}
+          NOTES: ${{ inputs.notes }}
         run: |
-          [ -n "$BASE_URL" ] || { echo "Defina a variável de repositório ECLUME_DOWNLOADS_URL." >&2; exit 1; }
-          [ -n "$NOTAS" ] || NOTAS="$(python3 deploy/versao.py notas desktop "$VERSAO")"
+          [ -n "$BASE_URL" ] || { echo "Set the ECLUME_DOWNLOADS_URL repository variable." >&2; exit 1; }
+          [ -n "$NOTES" ] || NOTES="$(python3 deploy/version.py notes desktop "$VERSION")"
           cp desktop/INSTALACAO.md dist/
-          python3 desktop/scripts/manifestos_release.py --artefatos dist --versao "$VERSAO" \
-            --base-url "$BASE_URL" --notas "$NOTAS"
+          python3 desktop/scripts/manifestos_release.py --artefatos dist --versao "$VERSION" \
+            --base-url "$BASE_URL" --notas "$NOTES"
           cat dist/latest.json
           ls -la dist
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-${{ needs.plano.outputs.versao }}
+          name: release-${{ needs.plan.outputs.version }}
           path: dist/
-      - name: Publicar o GitHub Release
-        if: needs.plano.outputs.publicar == 'true'
+      - name: Publish the GitHub Release
+        if: needs.plan.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.plano.outputs.tag }}
-          VERSAO: ${{ needs.plano.outputs.versao }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          VERSION: ${{ needs.plan.outputs.version }}
         run: |
           gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "eclume desktop $VERSAO" \
-            --notes "Instaladores do app desktop do eclume $VERSAO. Os clientes baixam de /downloads/ no servidor eclume (deploy/publicar-desktop.sh)."
+            --title "eclume desktop $VERSION" \
+            --notes "Installers of the eclume desktop app $VERSION. Clients download from /downloads/ on the eclume server (deploy/publish-desktop.sh)."
