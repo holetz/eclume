@@ -1,4 +1,4 @@
-"""Configuração do worker, lida do ambiente."""
+"""Worker configuration, read from the environment."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ DEFAULT_QUEUE = "eclume:default"
 
 @dataclass(frozen=True)
 class WorkerConfig:
-    """Variáveis `ECLUME_*` do worker GPU."""
+    """`ECLUME_*` variables of the GPU worker."""
 
     redis_url: str = "redis://localhost:6379/0"
     s3_bucket: str = "eclume"
@@ -24,34 +24,34 @@ class WorkerConfig:
     s3_access_key: str | None = None
     s3_secret_key: str | None = None
     s3_region: str = "us-east-1"
-    # Engine forçada no processo (dev sem GPU: `cpu`); vazia, vale `options.engine` do job.
+    # Engine forced on the process (dev without a GPU: `cpu`); when empty, the job's `options.engine` applies.
     engine: str | None = None
     device: str = "cuda"
-    # Lote inicial fixo do ASR; vazio, a engine o escolhe pela VRAM livre.
+    # Fixed initial ASR batch; when empty, the engine picks it from the free VRAM.
     batch_size: int | None = None
     model_idle_seconds: float = 300.0
-    # ASR residente entre jobs (engine whisperx-local) enquanto houver essa VRAM livre com ele
-    # carregado; `ECLUME_KEEP_ASR_RESIDENT=0` volta a um modelo por vez.
+    # ASR resident between jobs (whisperx-local engine) while this much VRAM is free with it
+    # loaded; `ECLUME_KEEP_ASR_RESIDENT=0` goes back to one model at a time.
     keep_asr_resident: bool = True
     resident_min_free_mb: int = 2500
-    # Após a descarga ociosa, encerra o processo se o torch foi importado: o torch, o CTranslate2
-    # e as arenas do glibc não devolvem a RAM, e o contêiner sobe de novo sem eles.
-    # `ECLUME_RECYCLE_ON_IDLE=0` mantém o processo.
+    # After the idle unload, exit the process if torch was imported: torch, CTranslate2 and the
+    # glibc arenas do not give the RAM back, and the container comes up again without them.
+    # `ECLUME_RECYCLE_ON_IDLE=0` keeps the process.
     recycle_on_idle: bool = True
     job_timeout_seconds: int = 6 * 3600
-    work_dir: Path = Path("/tmp/eclume-work")  # noqa: S108 — diretório de trabalho do container
+    work_dir: Path = Path("/tmp/eclume-work")  # noqa: S108 — container working directory
     remote_base_url: str | None = None
     remote_api_key: str | None = None
     remote_model: str | None = None
-    # As mesmas do server: abrem o token do HF que chega cifrado nas `options` do job.
+    # The same as the server's: they open the HF token that arrives encrypted in the job `options`.
     encryption_key: str | None = None
     secret_key: str | None = None
-    # Modelo do RNNoise (`arnndn`) do pré-processamento; sem ele, a redução de ruído usa `afftdn`.
+    # RNNoise model (`arnndn`) for preprocessing; without it, noise reduction uses `afftdn`.
     rnnoise_model: str | None = None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> WorkerConfig:
-        """Lê o ambiente; ausências usam os padrões acima."""
+        """Read the environment; missing values use the defaults above."""
         env = os.environ if env is None else env
         defaults = cls()
 

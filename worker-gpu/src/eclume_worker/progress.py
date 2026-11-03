@@ -1,8 +1,8 @@
-"""Progresso do job em Redis: `HSET eclume:progress:{recording_id}` com TTL de 1 dia.
+"""Job progress in Redis: `HSET eclume:progress:{recording_id}` with a 1-day TTL.
 
-O `pct` é o geral do job, monotônico, com uma faixa por etapa. `started_at` é o início do job,
-igual em toda gravação do hash. `revision` diz de qual revisão é o progresso, para o server ignorar
-o de outra revisão.
+`pct` is the job's overall percentage, monotonic, with one range per stage. `started_at` is the
+job start, the same on every write of the hash. `revision` says which revision the progress belongs
+to, so the server ignores another revision's.
 """
 
 from __future__ import annotations
@@ -26,12 +26,12 @@ STAGE_RANGES: dict[str, tuple[float, float]] = {
 
 
 def progress_key(recording_id: str) -> str:
-    """Chave do hash de progresso."""
+    """Key of the progress hash."""
     return f"eclume:progress:{recording_id}"
 
 
 def overall_pct(stage: str, stage_pct: float) -> int:
-    """Converte o percentual da etapa no percentual geral do job."""
+    """Convert the stage percentage into the job's overall percentage."""
     low, high = STAGE_RANGES[stage]
     fraction = min(100.0, max(0.0, stage_pct)) / 100
     return int(low + (high - low) * fraction)
@@ -46,7 +46,7 @@ def _rfc3339(moment: datetime) -> str:
 
 
 class ProgressReporter:
-    """Grava o progresso só quando o `pct` geral ou a etapa mudam."""
+    """Write the progress only when the overall `pct` or the stage changes."""
 
     def __init__(
         self,
@@ -55,7 +55,7 @@ class ProgressReporter:
         revision: int,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
-        """`redis` é o cliente assíncrono do arq."""
+        """`redis` is arq's async client."""
         self.redis = redis
         self.recording_id = recording_id
         self.key = progress_key(recording_id)
@@ -67,11 +67,11 @@ class ProgressReporter:
 
     @property
     def stage(self) -> str | None:
-        """A última etapa registrada (a da falha, quando o job falha)."""
+        """The last stage recorded (the failing one, when the job fails)."""
         return self._last[0] if self._last else None
 
     async def report(self, stage: str, stage_pct: float = 0.0) -> None:
-        """Registra a etapa; o `pct` nunca recua."""
+        """Record the stage; `pct` never goes back."""
         self._pct = max(self._pct, overall_pct(stage, stage_pct))
         if self._last == (stage, self._pct):
             return

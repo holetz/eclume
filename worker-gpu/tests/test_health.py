@@ -1,4 +1,4 @@
-"""Heartbeat do worker GPU em `eclume:gpu:health`."""
+"""GPU worker heartbeat on `eclume:gpu:health`."""
 
 from __future__ import annotations
 
@@ -95,7 +95,7 @@ def _registry(tmp_path: Path) -> EngineRegistry:
     return registry
 
 
-def test_campos_com_gpu_e_modelo_residente(tmp_path: Path):
+def test_fields_with_gpu_and_resident_model(tmp_path: Path):
     registry = _registry(tmp_path)
     fields = heartbeat_fields(WorkerConfig(), registry, GPU, datetime(2026, 9, 25, 12, 0, 5, tzinfo=UTC))
     assert fields == {
@@ -112,7 +112,7 @@ def test_campos_com_gpu_e_modelo_residente(tmp_path: Path):
     }
 
 
-def test_job_em_curso_publica_busy_e_job_id(tmp_path: Path):
+def test_running_job_publishes_busy_and_job_id(tmp_path: Path):
     registry = _registry(tmp_path)
     registry.current_job = "transcribe:rec-1:2"
     fields = heartbeat_fields(WorkerConfig(), registry, None, datetime(2026, 9, 25, 12, 0, 5, tzinfo=UTC))
@@ -123,32 +123,32 @@ def test_job_em_curso_publica_busy_e_job_id(tmp_path: Path):
     assert "job_id" not in fields
 
 
-def test_sem_nvml_sai_sem_gpu_e_a_engine_do_ambiente_vence():
+def test_without_nvml_leaves_out_the_gpu_and_the_environment_engine_wins():
     registry = EngineRegistry(WorkerConfig(), hf_token=lambda: None)
     fields = heartbeat_fields(WorkerConfig(engine="cpu", device="cpu"), registry, None, datetime.now(UTC))
     assert "gpu_name" not in fields
     assert (fields["engine"], fields["device"], fields["models"]) == ("cpu", "cpu", "[]")
 
 
-def test_publica_com_ttl_e_retira_no_desligamento(tmp_path: Path):
+def test_publishes_with_ttl_and_withdraws_on_shutdown(tmp_path: Path):
     redis = FakeRedis()
     registry = _registry(tmp_path)
     asyncio.run(publish(redis, WorkerConfig(), registry, FakeVram(GPU)))
     assert redis.hashes[HEALTH_KEY]["gpu_name"] == GPU["gpu_name"]
     assert redis.ttl[HEALTH_KEY] == HEALTH_TTL_SECONDS
-    # A GPU que some (NVML falhou) não deixa campo velho para trás.
+    # A GPU that disappears (NVML failed) leaves no stale field behind.
     asyncio.run(publish(redis, WorkerConfig(), registry, FakeVram(None)))
     assert "gpu_name" not in redis.hashes[HEALTH_KEY]
     asyncio.run(withdraw(redis))
     assert HEALTH_KEY not in redis.hashes
 
 
-def test_loop_sobrevive_a_uma_falha(tmp_path: Path):
+def test_loop_survives_a_failure(tmp_path: Path):
     redis = FakeRedis()
     registry = _registry(tmp_path)
 
-    # A terceira leitura só acontece depois de a segunda ter publicado.
-    terceira = threading.Event()
+    # The third reading only happens after the second has published.
+    third = threading.Event()
 
     class Flaky:
         calls = 0
@@ -159,22 +159,22 @@ def test_loop_sobrevive_a_uma_falha(tmp_path: Path):
                 msg = "NVML_ERROR_UNKNOWN"
                 raise RuntimeError(msg)
             if Flaky.calls >= 3:
-                terceira.set()
+                third.set()
             return GPU
 
     async def go() -> None:
         task = asyncio.create_task(heartbeat_loop(redis, WorkerConfig(), registry, Flaky(), every=0.01))
-        # Espera com prazo, não um tempo fixo: cada volta passa por `asyncio.to_thread`, e num runner
-        # carregado 0,1 s não bastava para a segunda volta acontecer.
-        await asyncio.to_thread(terceira.wait, 5)
+        # Wait with a deadline, not a fixed time: each round goes through `asyncio.to_thread`, and on a
+        # loaded runner 0.1 s was not enough for the second round to happen.
+        await asyncio.to_thread(third.wait, 5)
         task.cancel()
 
     asyncio.run(go())
-    assert Flaky.calls >= 2  # a primeira falhou e a segunda publicou
+    assert Flaky.calls >= 2  # the first failed and the second published
     assert HEALTH_KEY in redis.hashes
 
 
-class _RedisDaSonda:
+class _ProbeRedis:
     def __init__(self, keys: set[str]) -> None:
         self.keys = keys
 
@@ -185,14 +185,15 @@ class _RedisDaSonda:
         pass
 
 
-def test_sonda_sai_0_com_heartbeat_e_1_sem(monkeypatch: pytest.MonkeyPatch):
+def test_probe_exits_0_with_heartbeat_and_1_without(monkeypatch: pytest.MonkeyPatch):
     keys: set[str] = set()
-    monkeypatch.setattr(health.Redis, "from_url", staticmethod(lambda _url: _RedisDaSonda(keys)))
-    assert health.main(["--sonda"]) == 1
+    monkeypatch.setattr(health.Redis, "from_url", staticmethod(lambda _url: _ProbeRedis(keys)))
+    assert health.main(["--probe"]) == 1
     keys.add(HEALTH_KEY)
-    assert health.main(["--sonda"]) == 0
+    assert health.main(["--probe"]) == 0
+    assert health.main(["--sonda"]) == 0  # the former flag name, still used by the compose file
 
 
-def test_sonda_sai_1_sem_redis(monkeypatch: pytest.MonkeyPatch):
+def test_probe_exits_1_without_redis(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ECLUME_REDIS_URL", "redis://127.0.0.1:1/0")
-    assert health.main(["--sonda"]) == 1
+    assert health.main(["--probe"]) == 1

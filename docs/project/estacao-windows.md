@@ -159,6 +159,6 @@ reopened. The system audio reached the server muted because of a defect in the m
 fixed. This machine's microphone array delivers digital silence, and that is the driver's doing.
 
 After the fix (0.1.2, published by `desktop-release`), the updater took the app from 0.1.1 to
-0.1.2 and reopened it. A 35 s manual recording with `duas-vozes.ogg` playing on the speakers came out
+0.1.2 and reopened it. A 35 s manual recording with `two-voices.ogg` playing on the speakers came out
 at 86 KB (before, 18 KB muted) and reached the server transcribed with 13 segments and 2 speakers, the
 same result as the fixture uploaded directly. `eclume.log` recorded the opening, the recording and the sync.

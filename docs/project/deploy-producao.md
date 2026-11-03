@@ -328,7 +328,7 @@ without long cache), the `404` without `immutable` of a nonexistent `/assets/*` 
 deploy must not come back as an `index.html` cached for a year), `/downloads/latest.json`
 and open signup with the notice, signs in through the admin session (picks the already-registered summaries provider, registering none;
 it fails saying what to register if there is none) and the user one, with the same e-mail and the same password (`--admin-email` and `ECLUME_SMOKE_ADMIN_PASSWORD`
-when they differ), and sends `worker-gpu/tests/fixtures/duas-vozes.ogg` through the multipart
+when they differ), and sends `worker-gpu/tests/fixtures/two-voices.ogg` through the multipart
 upload. Then it waits for the transcription with 2 speakers and a `done` summary. On that recording,
 it proves the summary-centered recording (holetz/eclume#34): edits the summary by hand (`manual` version),
 asks the chat "Diga quem fala primeiro na reunião e acrescente isso no início do resumo" and waits for the
@@ -367,7 +367,7 @@ chat for an adjustment, downloads the DOCX (`PK` signature) and deletes the proo
 stay on the host in `~/build/<folder>/test-results/prod/`.
 
 ```bash
-remote-run . 'ffmpeg -loglevel error -y -i worker-gpu/tests/fixtures/duas-vozes.ogg -c:a aac -metadata creation_time=2026-09-21T12:00:00Z /tmp/eclume-prova.m4a && npm --prefix web ci && . ~/eclume-staging/conta && ECLUME_E2E_EMAIL="$ECLUME_EMAIL" ECLUME_E2E_PASSWORD="$ECLUME_PASSWORD" ECLUME_E2E_AUDIO=/tmp/eclume-prova.m4a npx --prefix web playwright test -c web/playwright.real.config.ts producao.spec.ts'
+remote-run . 'ffmpeg -loglevel error -y -i worker-gpu/tests/fixtures/two-voices.ogg -c:a aac -metadata creation_time=2026-09-21T12:00:00Z /tmp/eclume-prova.m4a && npm --prefix web ci && . ~/eclume-staging/conta && ECLUME_E2E_EMAIL="$ECLUME_EMAIL" ECLUME_E2E_PASSWORD="$ECLUME_PASSWORD" ECLUME_E2E_AUDIO=/tmp/eclume-prova.m4a npx --prefix web playwright test -c web/playwright.real.config.ts producao.spec.ts'
 ```
 
 **MCP and pairing** (`deploy/smoke_mcp.py`, with the `mcp` SDK, so through `uv run`): checks that the

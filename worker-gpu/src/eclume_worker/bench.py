@@ -1,16 +1,16 @@
-"""Benchmark de uma engine num arquivo de áudio.
+"""Benchmark of an engine on an audio file.
 
 ```bash
 python -m eclume_worker.bench /data/bench.ogg --engine whisperx-local --no-diarize
 ```
 
-Imprime um JSON com o fator de tempo real (processamento ÷ duração), os minutos de
-processamento por hora de áudio e a VRAM de pico acima da linha de base. Com `--transcript`,
-grava também o `transcript.raw.json` para inspeção. `--repeat N` roda N jobs seguidos na mesma
-engine (como o worker faz) e lista o tempo de cada um em `runs_s`: com o ASR residente, do segundo
-em diante não há carga do modelo; `--single-slot` mede o comportamento antigo, um modelo por vez.
-Com `--reference texto.txt`, o JSON traz também `quality`: WER e CER do texto reconhecido contra a
-referência, com a normalização pt-BR de `eclume_worker.wer`.
+Prints a JSON with the real-time factor (processing ÷ duration), the processing minutes per hour
+of audio and the peak VRAM above the baseline. With `--transcript`, it also writes the
+`transcript.raw.json` for inspection. `--repeat N` runs N jobs in a row on the same engine (as the
+worker does) and lists each one's time in `runs_s`: with the ASR resident, from the second on there
+is no model load; `--single-slot` measures the old behaviour, one model at a time. With
+`--reference text.txt`, the JSON also carries `quality`: WER and CER of the recognized text against
+the reference, with the pt-BR normalization of `eclume_worker.wer`.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Argumentos do CLI."""
+    """CLI arguments."""
     parser = argparse.ArgumentParser(prog="python -m eclume_worker.bench", description=__doc__.splitlines()[0])
     parser.add_argument("audio", type=Path)
     parser.add_argument("--engine", default="whisperx-local")
@@ -47,18 +47,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--compute-type")
     parser.add_argument("--language", default="pt")
     parser.add_argument("--device", default="cuda")
-    parser.add_argument("--batch-size", type=int, help="lote inicial fixo do ASR (padrão: pela VRAM livre)")
+    parser.add_argument("--batch-size", type=int, help="fixed initial ASR batch (default: from the free VRAM)")
     parser.add_argument("--no-diarize", action="store_true")
     parser.add_argument("--no-embeddings", action="store_true")
-    parser.add_argument("--reference", type=Path, help="texto de referência (UTF-8) para medir WER e CER")
-    parser.add_argument("--transcript", type=Path, help="grava o transcript.raw.json neste caminho")
-    parser.add_argument("--repeat", type=int, default=1, help="jobs seguidos na mesma engine (padrão: 1)")
-    parser.add_argument("--single-slot", action="store_true", help="um modelo por vez, sem o ASR residente")
+    parser.add_argument("--reference", type=Path, help="reference text (UTF-8) to measure WER and CER")
+    parser.add_argument("--transcript", type=Path, help="write the transcript.raw.json to this path")
+    parser.add_argument("--repeat", type=int, default=1, help="jobs in a row on the same engine (default: 1)")
+    parser.add_argument("--single-slot", action="store_true", help="one model at a time, without the resident ASR")
     return parser.parse_args(argv)
 
 
 def _quality(reference: str, hypothesis: str) -> dict[str, Any]:
-    """WER e CER com as contagens que os explicam."""
+    """WER and CER with the counts that explain them."""
 
     def block(counts: EditCounts) -> dict[str, Any]:
         return {
@@ -73,7 +73,7 @@ def _quality(reference: str, hypothesis: str) -> dict[str, Any]:
 
 
 def run(args: argparse.Namespace, factory: Callable[..., Engine] = get_engine) -> dict[str, Any]:
-    """Roda a engine uma vez e devolve as medidas."""
+    """Run the engine once and return the measurements."""
     kwargs: dict[str, Any] = {}
     if args.engine == "whisperx-local":
         kwargs = {
@@ -137,7 +137,7 @@ def run(args: argparse.Namespace, factory: Callable[..., Engine] = get_engine) -
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Ponto de entrada do CLI."""
+    """CLI entry point."""
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
     report = run(parse_args(argv))
     sys.stdout.write(json.dumps(report, ensure_ascii=False) + "\n")

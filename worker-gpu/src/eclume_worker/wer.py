@@ -1,9 +1,10 @@
-"""WER e CER em português do Brasil, com distância de edição própria.
+"""WER and CER for Brazilian Portuguese, with its own edit distance.
 
-Normalização (a mesma para referência e hipótese): NFC, minúsculas, e toda pontuação vira espaço,
-exceto o hífen entre letras ("guarda-chuva" é uma palavra) e o apóstrofo entre letras. Números
-e símbolos não são expandidos. Os acentos são preservados: "é" e "e" são palavras diferentes em
-português, e perder o acento é erro de ASR. No CER, o espaço entre palavras conta como um caractere.
+Normalization (the same for reference and hypothesis): NFC, lowercase, and all punctuation becomes
+a space, except the hyphen between letters ("guarda-chuva" is one word) and the apostrophe between
+letters. Numbers and symbols are not expanded. Accents are preserved: "é" and "e" are different
+words in Portuguese, and losing the accent is an ASR error. In the CER, the space between words
+counts as one character.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ _PUNCT_RE = re.compile(r"[^\w\x00]+")
 
 @dataclass(frozen=True)
 class EditCounts:
-    """Contagens de uma comparação: substituições, remoções e inserções sobre `reference_len`."""
+    """Counts of a comparison: substitutions, deletions and insertions over `reference_len`."""
 
     substitutions: int
     deletions: int
@@ -32,19 +33,19 @@ class EditCounts:
 
     @property
     def errors(self) -> int:
-        """Soma de substituições, remoções e inserções."""
+        """Sum of substitutions, deletions and insertions."""
         return self.substitutions + self.deletions + self.insertions
 
     @property
     def rate(self) -> float | None:
-        """Taxa de erro; `None` com referência vazia e hipótese não vazia."""
+        """Error rate; `None` with an empty reference and a non-empty hypothesis."""
         if self.reference_len == 0:
             return None if self.errors else 0.0
         return self.errors / self.reference_len
 
 
 def normalize(text: str) -> str:
-    """Texto normalizado: palavras em minúsculas separadas por um espaço."""
+    """Normalized text: lowercase words separated by a single space."""
     text = unicodedata.normalize("NFC", text).lower()
     text = _JOIN_RE.sub(_INNER_JOINER, text)
     text = _PUNCT_RE.sub(" ", text).replace(_INNER_JOINER, "-")
@@ -52,10 +53,10 @@ def normalize(text: str) -> str:
 
 
 def _cost_row(reference: Sequence[str], hypothesis: Sequence[str], *, reverse: bool) -> list[int]:
-    """Última linha de custo da referência contra os prefixos da hipótese.
+    """Last cost row of the reference against the hypothesis prefixes.
 
-    Com `reverse`, ambas são lidas de trás para frente, então `row[k]` é o custo dos últimos `k`
-    itens da hipótese contra a referência inteira.
+    With `reverse`, both are read back to front, so `row[k]` is the cost of the last `k` items of
+    the hypothesis against the whole reference.
     """
     hyp = hypothesis[::-1] if reverse else hypothesis
     ref = reference[::-1] if reverse else reference
@@ -71,12 +72,12 @@ def _cost_row(reference: Sequence[str], hypothesis: Sequence[str], *, reverse: b
 
 
 def edit_counts(reference: Sequence[str], hypothesis: Sequence[str]) -> EditCounts:
-    """Levenshtein com as contagens de S, D e I de um alinhamento de menor custo.
+    """Levenshtein with the S, D and I counts of a minimum-cost alignment.
 
-    Algoritmo de Hirschberg: memória linear no tamanho da hipótese e tempo quadrático. A referência
-    é partida ao meio; o corte da hipótese que minimiza `custo(esq) + custo(dir)` separa dois
-    subproblemas independentes, e as folhas somam a distância ótima. Num empate o alinhamento
-    escolhido pode diferir do de uma matriz completa, mas o total de erros é o mesmo.
+    Hirschberg's algorithm: memory linear in the hypothesis size and quadratic time. The reference
+    is split in half; the hypothesis cut that minimizes `cost(left) + cost(right)` separates two
+    independent subproblems, and the leaves add up to the optimal distance. On a tie the chosen
+    alignment may differ from a full matrix's, but the total of errors is the same.
     """
     rows = len(reference)
     start = 0
@@ -110,20 +111,20 @@ def edit_counts(reference: Sequence[str], hypothesis: Sequence[str]) -> EditCoun
 
 
 def word_counts(reference: str, hypothesis: str) -> EditCounts:
-    """Contagens por palavra, depois de normalizar os dois textos."""
+    """Per-word counts, after normalizing both texts."""
     return edit_counts(normalize(reference).split(), normalize(hypothesis).split())
 
 
 def char_counts(reference: str, hypothesis: str) -> EditCounts:
-    """Contagens por caractere, depois de normalizar os dois textos."""
+    """Per-character counts, after normalizing both texts."""
     return edit_counts(list(normalize(reference)), list(normalize(hypothesis)))
 
 
 def wer(reference: str, hypothesis: str) -> float | None:
-    """Taxa de erro de palavras."""
+    """Word error rate."""
     return word_counts(reference, hypothesis).rate
 
 
 def cer(reference: str, hypothesis: str) -> float | None:
-    """Taxa de erro de caracteres."""
+    """Character error rate."""
     return char_counts(reference, hypothesis).rate

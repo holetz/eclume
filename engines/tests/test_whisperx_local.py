@@ -1,4 +1,4 @@
-"""Engine `whisperx-local` sobre um módulo `whisperx` fake: a forma das chamadas e as regras."""
+"""Engine `whisperx-local` over a fake `whisperx` module: the shape of the calls and the rules."""
 
 from __future__ import annotations
 
@@ -30,11 +30,11 @@ from eclume_engines.whisperx_local import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-AUDIO = Path("/tmp/audio.ogg")  # noqa: S108 — o fake não abre o arquivo
+AUDIO = Path("/tmp/audio.ogg")  # noqa: S108 — the fake does not open the file
 
 
 class FakeAudio:
-    """Só o `len` do array de amostras importa para a engine."""
+    """Only the `len` of the samples array matters to the engine."""
 
     def __init__(self, samples: int) -> None:
         self.samples = samples
@@ -46,7 +46,7 @@ class FakeAudio:
 class FakeVram:
     def __init__(self, free: int | None = 6000) -> None:
         self.free = free
-        self.used = [400, 2610, 2610, 3250, 3250, 4230]  # antes/depois de cada carga: ASR, alinhador, pyannote
+        self.used = [400, 2610, 2610, 3250, 3250, 4230]  # before/after each load: ASR, aligner, pyannote
 
     def free_mb(self) -> int | None:
         return self.free
@@ -62,7 +62,7 @@ class FakeVram:
 
 
 class FakeAlignModel:
-    """Instância de classe: `object()` não aceita `weakref`."""
+    """Class instance: `object()` does not accept `weakref`."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -71,14 +71,14 @@ class FakeAsrOptions:
 
 
 class FakeWhisperX:
-    """Registra as chamadas; `oom_batches` define os lotes que estouram a memória."""
+    """Record the calls; `oom_batches` defines the batches that run out of memory."""
 
     def __init__(self, oom_batches: set[int] | None = None, oom_models: set[str] | None = None) -> None:
         self.calls: list[tuple[str, Any]] = []
         self.oom_batches = oom_batches or set()
         self.oom_models = oom_models or set()
-        self.hotwords: list[str | None] = []  # as hotwords vistas pelo ASR em cada transcribe
-        self.models: list[tuple[str, weakref.ref]] = []  # (papel, referência fraca) de cada modelo criado
+        self.hotwords: list[str | None] = []  # the hotwords the ASR saw in each transcribe
+        self.models: list[tuple[str, weakref.ref]] = []  # (role, weak reference) of each model created
 
     def track(self, kind: str, model: Any) -> Any:
         self.models.append((kind, weakref.ref(model)))
@@ -119,7 +119,7 @@ class FakeWhisperX:
                         {"start": 0.0, "end": 2.0, "text": " Olá, tudo bem?"},
                         {"start": 2.5, "end": 4.0, "text": " Tudo ótimo."},
                     ],
-                    # Sem idioma pedido, o WhisperX devolve o detectado.
+                    # With no requested language, WhisperX returns the detected one.
                     "language": language or "en",
                 }
 
@@ -191,7 +191,7 @@ class FakeWhisperX:
 
 
 class EmptyCacheSpy:
-    """`torch` fake: a cada `empty_cache`, anota quais modelos criados pelo `source` ainda estão vivos."""
+    """Fake `torch`: on each `empty_cache`, note which models created by `source` are still alive."""
 
     def __init__(self) -> None:
         self.source: FakeWhisperX | None = None
@@ -229,11 +229,11 @@ def engine(token: str | None = "hf_x", free: int | None = 6000) -> WhisperXLocal
     return WhisperXLocalEngine(hf_token=token, device="cuda", vram=FakeVram(free))
 
 
-def test_fabrica_devolve_a_engine_whisperx():
+def test_factory_returns_the_whisperx_engine():
     assert get_engine("whisperx-local", vram=FakeVram()).name == "whisperx-local"
 
 
-def test_pipeline_completo_com_diarizacao_e_embeddings(fake: FakeWhisperX):
+def test_full_pipeline_with_diarization_and_embeddings(fake: FakeWhisperX):
     stages: list[tuple[str, float]] = []
     result = engine().transcribe(
         AUDIO, EngineOptions(min_speakers=2, max_speakers=3), lambda s, p: stages.append((s, p))
@@ -274,11 +274,11 @@ def test_pipeline_completo_com_diarizacao_e_embeddings(fake: FakeWhisperX):
     assert [w.text for w in first.words] == ["Olá,", "tudo", "bem?"]
     assert first.confidence == pytest.approx(0.8)
     assert second.words[1].start is None
-    assert second.words[2].score is None  # NaN vira ausência
+    assert second.words[2].score is None  # NaN becomes absence
     assert [s for s, _ in stages] == ["asr", "asr", "align", "diarize", "diarize", "embed"]
 
 
-def test_sem_token_degrada_para_um_locutor(fake: FakeWhisperX):
+def test_without_token_degrades_to_one_speaker(fake: FakeWhisperX):
     result = engine(token=None).transcribe(AUDIO, EngineOptions())
     assert "DiarizationPipeline" not in fake.names()
     assert result.warnings == [WARN_NO_TOKEN]
@@ -288,13 +288,13 @@ def test_sem_token_degrada_para_um_locutor(fake: FakeWhisperX):
     assert all(s.speaker is None for s in result.segments)
 
 
-def test_sem_diarizacao_pedida_nao_avisa(fake: FakeWhisperX):
+def test_without_requested_diarization_no_warning(fake: FakeWhisperX):
     result = engine(token=None).transcribe(AUDIO, EngineOptions(diarize=False))
     assert result.warnings == []
     assert "DiarizationPipeline" not in fake.names()
 
 
-def test_diarizacao_sem_embeddings(fake: FakeWhisperX):
+def test_diarization_without_embeddings(fake: FakeWhisperX):
     result = engine().transcribe(AUDIO, EngineOptions(embeddings=False))
     assert dict(fake.calls)["diarize"]["return_embeddings"] is False
     assert result.speaker_embeddings == {}
@@ -302,7 +302,7 @@ def test_diarizacao_sem_embeddings(fake: FakeWhisperX):
     assert result.diarization_model == DIARIZATION_MODEL
 
 
-def test_oom_reduz_o_lote_pela_metade(monkeypatch: pytest.MonkeyPatch):
+def test_oom_halves_the_batch(monkeypatch: pytest.MonkeyPatch):
     fake = FakeWhisperX(oom_batches={4, 2})
     install(monkeypatch, fake)
     result = engine().transcribe(AUDIO, EngineOptions(diarize=False))
@@ -315,27 +315,27 @@ def test_oom_reduz_o_lote_pela_metade(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.parametrize(
     ("kwargs", "free"),
     [({"oom_batches": {4}}, 6000), ({"oom_models": {"large-v3-turbo"}}, 3000)],
-    ids=["lote-pela-metade", "queda-para-medium"],
+    ids=["halve-the-batch", "fall-back-to-medium"],
 )
-def test_oom_no_asr_libera_o_modelo_antes_da_recarga(
+def test_oom_in_the_asr_frees_the_model_before_the_reload(
     monkeypatch: pytest.MonkeyPatch, spy: EmptyCacheSpy, kwargs: dict, free: int
 ):
     fake = FakeWhisperX(**kwargs)
     spy.source = fake
     install(monkeypatch, fake)
     engine(free=free).transcribe(AUDIO, EngineOptions(diarize=False))
-    # Cada ASR que estourou deixa um `empty_cache`; nele o modelo já está inalcançável.
-    recuos = sum(kind == "asr" for kind, _ in fake.models) - 1
-    assert recuos >= 1
-    assert all("asr" not in alive for alive in spy.snapshots[:recuos]), spy.snapshots
+    # Each ASR that blew up leaves an `empty_cache`; in it the model is already unreachable.
+    retreats = sum(kind == "asr" for kind, _ in fake.models) - 1
+    assert retreats >= 1
+    assert all("asr" not in alive for alive in spy.snapshots[:retreats]), spy.snapshots
 
 
-def test_lote_fixo_no_construtor(fake: FakeWhisperX):
+def test_fixed_batch_in_the_constructor(fake: FakeWhisperX):
     eng = WhisperXLocalEngine(hf_token=None, vram=FakeVram(6000), batch_size=4)
     assert eng.transcribe(AUDIO, EngineOptions(diarize=False)).batch_size == 4
 
 
-def test_oom_persistente_cai_para_medium(monkeypatch: pytest.MonkeyPatch):
+def test_persistent_oom_falls_back_to_medium(monkeypatch: pytest.MonkeyPatch):
     fake = FakeWhisperX(oom_models={"large-v3-turbo"})
     install(monkeypatch, fake)
     result = engine(free=3000).transcribe(AUDIO, EngineOptions(diarize=False))
@@ -345,7 +345,7 @@ def test_oom_persistente_cai_para_medium(monkeypatch: pytest.MonkeyPatch):
     assert result.warnings == [WARN_BATCH_REDUCED, WARN_FALLBACK_MEDIUM]
 
 
-def test_oom_ate_no_medium_falha_com_out_of_memory(monkeypatch: pytest.MonkeyPatch):
+def test_oom_even_on_medium_fails_with_out_of_memory(monkeypatch: pytest.MonkeyPatch):
     fake = FakeWhisperX(oom_models={"large-v3-turbo", "medium"})
     install(monkeypatch, fake)
     with pytest.raises(EngineError) as info:
@@ -353,13 +353,13 @@ def test_oom_ate_no_medium_falha_com_out_of_memory(monkeypatch: pytest.MonkeyPat
     assert info.value.code == "out_of_memory"
 
 
-def test_float16_e_recusado(fake: FakeWhisperX):
+def test_float16_is_refused(fake: FakeWhisperX):
     result = engine().transcribe(AUDIO, EngineOptions(compute_type="float16", diarize=False))
     assert result.compute_type == "int8_float16"
     assert result.warnings == [WARN_FLOAT16_REJECTED]
 
 
-def test_compute_type_recusado_pelo_backend_recua_para_int8(monkeypatch: pytest.MonkeyPatch):
+def test_compute_type_refused_by_the_backend_falls_back_to_int8(monkeypatch: pytest.MonkeyPatch):
     fake = FakeWhisperX()
     original = fake.load_model
 
@@ -375,7 +375,7 @@ def test_compute_type_recusado_pelo_backend_recua_para_int8(monkeypatch: pytest.
     assert result.compute_type == "int8"
 
 
-def test_erro_de_decodificacao(monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX):
+def test_decode_error(monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX):
     def boom(_path: str) -> None:
         msg = "ffmpeg: invalid data"
         raise RuntimeError(msg)
@@ -386,7 +386,7 @@ def test_erro_de_decodificacao(monkeypatch: pytest.MonkeyPatch, fake: FakeWhispe
     assert info.value.code == "audio_decode_failed"
 
 
-def test_falha_da_diarizacao_com_token_falha_o_job(monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX):
+def test_diarization_failure_with_a_token_fails_the_job(monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX):
     original = sys.modules["whisperx.diarize"].DiarizationPipeline
 
     class Boom(original):
@@ -401,19 +401,21 @@ def test_falha_da_diarizacao_com_token_falha_o_job(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.parametrize(
-    "erro",
+    "error",
     [
-        AttributeError("'NoneType' object has no attribute 'to'"),  # pyannote 4 devolve None num 403
+        AttributeError("'NoneType' object has no attribute 'to'"),  # pyannote 4 returns None on a 403
         RuntimeError("403 Client Error: Cannot access gated repo. Not in the authorized list."),
-        type("GatedRepoError", (Exception,), {})("acesso negado"),
+        type("GatedRepoError", (Exception,), {})("access denied"),
     ],
 )
-def test_sem_acesso_ao_modelo_gated_degrada(monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX, erro: Exception):
-    class SemAcesso:
+def test_without_access_to_the_gated_model_degrades(
+    monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX, error: Exception
+):
+    class NoAccess:
         def __init__(self, **_kw: Any) -> None:
-            raise erro
+            raise error
 
-    monkeypatch.setattr(sys.modules["whisperx.diarize"], "DiarizationPipeline", SemAcesso)
+    monkeypatch.setattr(sys.modules["whisperx.diarize"], "DiarizationPipeline", NoAccess)
     result = engine().transcribe(AUDIO, EngineOptions())
     assert result.warnings == [WARN_NO_ACCESS]
     assert result.diarization_model is None
@@ -421,12 +423,12 @@ def test_sem_acesso_ao_modelo_gated_degrada(monkeypatch: pytest.MonkeyPatch, fak
     assert all(s.speaker is None for s in result.segments)
 
 
-def test_asr_fica_residente_entre_jobs_e_a_etapa_sai(fake: FakeWhisperX):
+def test_asr_stays_resident_between_jobs_and_the_stage_leaves(fake: FakeWhisperX):
     eng = engine()
     eng.transcribe(AUDIO, EngineOptions())
     assert [m["kind"] for m in eng.loaded_models()] == ["asr"]
     eng.transcribe(AUDIO, EngineOptions())
-    # O segundo job não recarrega o ASR; alinhador e pyannote voltam a cada job.
+    # The second job does not reload the ASR; the aligner and pyannote come back on each job.
     assert fake.names().count("load_model") == 1
     assert fake.names().count("load_align_model") == 2
     assert fake.names().count("DiarizationPipeline") == 2
@@ -434,7 +436,7 @@ def test_asr_fica_residente_entre_jobs_e_a_etapa_sai(fake: FakeWhisperX):
     assert eng.loaded_models() == []
 
 
-def test_vram_apertada_descarrega_o_asr_antes_da_etapa(fake: FakeWhisperX):
+def test_tight_vram_unloads_the_asr_before_the_stage(fake: FakeWhisperX):
     eng = engine(free=1500)
     eng.transcribe(AUDIO, EngineOptions())
     eng.transcribe(AUDIO, EngineOptions())
@@ -442,7 +444,7 @@ def test_vram_apertada_descarrega_o_asr_antes_da_etapa(fake: FakeWhisperX):
     assert eng.loaded_models() == []
 
 
-def test_lugar_unico_como_antes(fake: FakeWhisperX):
+def test_single_slot_as_before(fake: FakeWhisperX):
     eng = WhisperXLocalEngine(hf_token="hf_x", device="cuda", vram=FakeVram(), keep_asr_resident=False)
     eng.transcribe(AUDIO, EngineOptions())
     assert [m["kind"] for m in eng.loaded_models()] == ["diarization"]
@@ -450,7 +452,7 @@ def test_lugar_unico_como_antes(fake: FakeWhisperX):
     assert fake.names().count("load_model") == 2
 
 
-def test_oom_na_etapa_com_asr_residente_descarrega_e_repete(monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX):
+def test_oom_in_the_stage_with_resident_asr_unloads_and_repeats(monkeypatch: pytest.MonkeyPatch, fake: FakeWhisperX):
     eng = engine()
     tries = []
     original = fake.align
@@ -468,7 +470,7 @@ def test_oom_na_etapa_com_asr_residente_descarrega_e_repete(monkeypatch: pytest.
     assert result.segments
 
 
-def test_oom_na_etapa_libera_a_etapa_antes_de_repetir(
+def test_oom_in_the_stage_frees_the_stage_before_repeating(
     monkeypatch: pytest.MonkeyPatch, spy: EmptyCacheSpy, fake: FakeWhisperX
 ):
     spy.source = fake
@@ -486,16 +488,14 @@ def test_oom_na_etapa_libera_a_etapa_antes_de_repetir(
     monkeypatch.setattr(sys.modules["whisperx"], "align", align_oom_once)
     eng.transcribe(AUDIO, EngineOptions(diarize=False))
     assert tries == [["asr", "alignment"], ["alignment"]]
-    # O alinhador que estourou já está inalcançável no primeiro `empty_cache` do recuo.
+    # The aligner that blew up is already unreachable on the first `empty_cache` of the retreat.
     assert spy.snapshots
     assert "alignment" not in spy.snapshots[0], spy.snapshots
 
 
-@pytest.mark.parametrize(
-    ("stage", "codigo"), [("alignment", "alignment_failed"), ("diarization", "diarization_failed")]
-)
-def test_etapa_que_falha_sai_da_gpu(
-    monkeypatch: pytest.MonkeyPatch, spy: EmptyCacheSpy, fake: FakeWhisperX, stage: str, codigo: str
+@pytest.mark.parametrize(("stage", "code"), [("alignment", "alignment_failed"), ("diarization", "diarization_failed")])
+def test_failing_stage_leaves_the_gpu(
+    monkeypatch: pytest.MonkeyPatch, spy: EmptyCacheSpy, fake: FakeWhisperX, stage: str, code: str
 ):
     spy.source = fake
     msg = "shape mismatch"
@@ -516,39 +516,39 @@ def test_etapa_que_falha_sai_da_gpu(
     eng = engine()
     with pytest.raises(EngineError) as info:
         eng.transcribe(AUDIO, EngineOptions())
-    assert info.value.code == codigo
+    assert info.value.code == code
     assert [m["kind"] for m in eng.loaded_models()] == ["asr"]
-    # No último `empty_cache` (a saída da etapa que falhou) só o ASR residente está vivo.
+    # On the last `empty_cache` (the exit of the failed stage) only the resident ASR is alive.
     assert spy.snapshots[-1] == ("asr",), spy.snapshots
 
 
 @pytest.mark.parametrize(("free", "batch"), [(None, 4), (6000, 4), (3500, 4), (3499, 2), (1000, 2)])
-def test_lote_inicial_pela_vram_livre(free: int | None, batch: int):
+def test_initial_batch_from_the_free_vram(free: int | None, batch: int):
     assert initial_batch_size(free) == batch
 
 
-def test_token_do_ambiente_vence_o_arquivo(tmp_path: Path):
-    arquivo = tmp_path / "hf_token"
-    arquivo.write_text("hf_arquivo\n")
-    assert resolve_hf_token({"HF_TOKEN": " hf_env ", "ECLUME_HF_TOKEN_FILE": str(arquivo)}) == "hf_env"
-    assert resolve_hf_token({"ECLUME_HF_TOKEN_FILE": str(arquivo)}) == "hf_arquivo"
+def test_environment_token_wins_over_the_file(tmp_path: Path):
+    file = tmp_path / "hf_token"
+    file.write_text("hf_file\n")
+    assert resolve_hf_token({"HF_TOKEN": " hf_env ", "ECLUME_HF_TOKEN_FILE": str(file)}) == "hf_env"
+    assert resolve_hf_token({"ECLUME_HF_TOKEN_FILE": str(file)}) == "hf_file"
 
 
-def test_sem_token_devolve_none(tmp_path: Path):
-    assert resolve_hf_token({"ECLUME_HF_TOKEN_FILE": str(tmp_path / "nao-existe")}) is None
-    vazio = tmp_path / "vazio"
-    vazio.write_text("  \n")
-    assert resolve_hf_token({"ECLUME_HF_TOKEN_FILE": str(vazio)}) is None
+def test_without_token_returns_none(tmp_path: Path):
+    assert resolve_hf_token({"ECLUME_HF_TOKEN_FILE": str(tmp_path / "does-not-exist")}) is None
+    empty = tmp_path / "empty"
+    empty.write_text("  \n")
+    assert resolve_hf_token({"ECLUME_HF_TOKEN_FILE": str(empty)}) is None
 
 
-def test_modelo_residente_para_o_heartbeat(fake: FakeWhisperX):
+def test_resident_model_for_the_heartbeat(fake: FakeWhisperX):
     eng = WhisperXLocalEngine(hf_token="hf_x", device="cuda", vram=FakeVram(), keep_asr_resident=False)
     assert eng.loaded_models() == []
     eng.transcribe(AUDIO, EngineOptions(diarize=False))
     (aligner,) = eng.loaded_models()
     assert aligner["kind"] == "alignment"
     assert aligner["name"] == "jonatasgrosman/wav2vec2-large-xlsr-53-portuguese"
-    assert aligner["vram_mb"] == 640  # 3250 - 2610 do FakeVram
+    assert aligner["vram_mb"] == 640  # 3250 - 2610 of FakeVram
     assert aligner["loaded_at"].endswith("Z")
     eng.transcribe(AUDIO, EngineOptions(model="large-v3"))
     assert [m["kind"] for m in eng.loaded_models()] == ["diarization"]
@@ -556,34 +556,34 @@ def test_modelo_residente_para_o_heartbeat(fake: FakeWhisperX):
     assert eng.loaded_models() == []
 
 
-def test_heartbeat_declara_o_asr_residente(fake: FakeWhisperX):
+def test_heartbeat_declares_the_resident_asr(fake: FakeWhisperX):
     eng = engine()
     eng.transcribe(AUDIO, EngineOptions(diarize=False))
     (asr,) = eng.loaded_models()
     assert (asr["kind"], asr["name"], asr["vram_mb"]) == ("asr", "large-v3-turbo", 2210)  # 2610 - 400
 
 
-def test_opcoes_do_admin_lote_recuo_e_modelo_de_diarizacao(monkeypatch: pytest.MonkeyPatch):
+def test_admin_options_batch_fallback_and_diarization_model(monkeypatch: pytest.MonkeyPatch):
     fake = FakeWhisperX(oom_models={"large-v3"})
     install(monkeypatch, fake)
     options = EngineOptions(
-        model="large-v3", batch_size=2, fallback_model="small", diarization_model="pyannote/outro-pipeline"
+        model="large-v3", batch_size=2, fallback_model="small", diarization_model="pyannote/other-pipeline"
     )
     result = engine().transcribe(AUDIO, options)
     transcribes = [args[:2] for name, args in fake.calls if name == "transcribe"]
     assert transcribes == [("large-v3", 2), ("large-v3", 1), ("small", 2)]
     assert result.model == "small"
     assert WARN_FALLBACK_MEDIUM in result.warnings
-    assert ("DiarizationPipeline", ("pyannote/outro-pipeline", "hf_x", "cuda")) in fake.calls
-    assert result.diarization_model == "pyannote/outro-pipeline"
+    assert ("DiarizationPipeline", ("pyannote/other-pipeline", "hf_x", "cuda")) in fake.calls
+    assert result.diarization_model == "pyannote/other-pipeline"
 
 
-def test_lote_do_ambiente_vence_o_do_admin(fake: FakeWhisperX):
+def test_environment_batch_wins_over_the_admin_one(fake: FakeWhisperX):
     eng = WhisperXLocalEngine(hf_token=None, vram=FakeVram(6000), batch_size=8)
     assert eng.transcribe(AUDIO, EngineOptions(diarize=False, batch_size=2)).batch_size == 8
 
 
-def test_sem_idioma_detecta_e_alinha_pelo_detectado(fake: FakeWhisperX):
+def test_without_language_detects_and_aligns_by_the_detected_one(fake: FakeWhisperX):
     result = engine().transcribe(AUDIO, EngineOptions(language=None, diarize=False))
     assert result.language == "en"
     calls = dict(fake.calls)
@@ -592,22 +592,22 @@ def test_sem_idioma_detecta_e_alinha_pelo_detectado(fake: FakeWhisperX):
     assert calls["load_align_model"][0] == "en"
 
 
-def test_vocabulario_vira_hotwords_so_no_job_e_nao_recarrega(fake: FakeWhisperX):
+def test_vocabulary_becomes_hotwords_only_in_the_job_and_does_not_reload(fake: FakeWhisperX):
     eng = engine()
-    eng.transcribe(AUDIO, EngineOptions(vocabulary=("Ana Souza", "Unicred")))
+    eng.transcribe(AUDIO, EngineOptions(vocabulary=("Ana Souza", "Acme")))
     eng.transcribe(AUDIO, EngineOptions())
     eng.transcribe(AUDIO, EngineOptions(vocabulary=("Outra Conta",)))
-    assert fake.hotwords == ["Ana Souza Unicred", None, "Outra Conta"]
+    assert fake.hotwords == ["Ana Souza Acme", None, "Outra Conta"]
     assert fake.names().count("load_model") == 1
 
 
-def test_hotwords_voltam_ao_normal_quando_o_asr_estoura_a_memoria(monkeypatch: pytest.MonkeyPatch):
+def test_hotwords_go_back_to_normal_when_the_asr_runs_out_of_memory(monkeypatch: pytest.MonkeyPatch):
     fake = FakeWhisperX(oom_batches={8})
     install(monkeypatch, fake)
     engine().transcribe(AUDIO, EngineOptions(vocabulary=("Ana",), batch_size=8))
     assert set(fake.hotwords) == {"Ana"}
 
 
-def test_opcoes_do_job_trazem_o_vocabulario():
+def test_job_options_carry_the_vocabulary():
     assert EngineOptions.from_mapping({"vocabulary": ["Ana", " ", "Bia"]}).vocabulary == ("Ana", "Bia")
     assert EngineOptions.from_mapping({}).vocabulary == ()

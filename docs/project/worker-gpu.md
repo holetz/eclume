@@ -89,7 +89,7 @@ docker --context gpu-host run --rm --gpus all -v /srv/eclume/models:/models \
 ### ASR resident between jobs (holetz/eclume#26)
 
 Measured on 2026-09-25 with the production image, the stack's worker idle (no model loaded) and
-5,396 MiB free: the fixture `duas-vozes.ogg` (30.4 s), three consecutive jobs on the same engine
+5,396 MiB free: the fixture `two-voices.ogg` (30.4 s), three consecutive jobs on the same engine
 (`python -m eclume_worker.bench a.ogg --repeat 3`, with and without `--single-slot`). Without a Hugging Face
 token on the host, diarization does not run; pyannote would be reloaded on every job in both modes,
 so the difference below is the ASR load.

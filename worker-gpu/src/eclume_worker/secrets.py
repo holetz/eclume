@@ -1,8 +1,8 @@
-"""Abre os segredos que o server manda cifrados nas `options` do job (hoje, `hf_token_encrypted`).
+"""Open the secrets the server sends encrypted in the job `options` (today, `hf_token_encrypted`).
 
-Mesmo formato de `eclume_server.crypto`, descrito no contrato de jobs: `v1:` + base64(nonce de 12
-bytes + cifra AES-256-GCM + tag). A chave é `ECLUME_ENCRYPTION_KEY` (base64 de 32 bytes) ou, sem
-ela, o HKDF-SHA256 de `ECLUME_SECRET_KEY` com `info=eclume-secrets-v1` — as mesmas do server.
+Same format as `eclume_server.crypto`, described in the job contract: `v1:` + base64(12-byte
+nonce + AES-256-GCM ciphertext + tag). The key is `ECLUME_ENCRYPTION_KEY` (base64 of 32 bytes) or,
+without it, the HKDF-SHA256 of `ECLUME_SECRET_KEY` with `info=eclume-secrets-v1` — the same as the server's.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ _KEY_BYTES = 32
 
 
 class SecretError(ValueError):
-    """O segredo não abre: sem chave no worker, chave diferente da do server ou dado corrompido."""
+    """The secret does not open: no key on the worker, a key different from the server's, or corrupted data."""
 
 
 def _key(encryption_key: str | None, secret_key: str | None) -> bytes:
@@ -43,7 +43,7 @@ def _key(encryption_key: str | None, secret_key: str | None) -> bytes:
 
 
 def open_secret(token: str, *, encryption_key: str | None, secret_key: str | None) -> str:
-    """Texto em claro do segredo cifrado pelo server."""
+    """Plaintext of the secret encrypted by the server."""
     if not token.startswith(_PREFIX):
         msg = "formato de segredo desconhecido"
         raise SecretError(msg)

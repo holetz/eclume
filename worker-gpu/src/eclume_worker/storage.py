@@ -1,4 +1,4 @@
-"""Acesso ao S3/MinIO: baixa o áudio e grava os artefatos do job."""
+"""S3/MinIO access: download the audio and write the job's artifacts."""
 
 from __future__ import annotations
 
@@ -15,17 +15,17 @@ _CHUNK = 1024 * 1024
 
 
 def transcript_key(recording_id: str, revision: int) -> str:
-    """Chave do `transcript.raw.json` da revisão no bucket."""
+    """Bucket key of the revision's `transcript.raw.json`."""
     return f"recordings/{recording_id}/r{revision}/transcript.raw.json"
 
 
 def embeddings_key(recording_id: str, revision: int) -> str:
-    """Chave do `speaker_embeddings.json` da revisão no bucket."""
+    """Bucket key of the revision's `speaker_embeddings.json`."""
     return f"recordings/{recording_id}/r{revision}/speaker_embeddings.json"
 
 
 def sha256_file(path: Path) -> str:
-    """Hash do arquivo no formato do contrato (`sha256:<hex>`)."""
+    """File hash in the contract format (`sha256:<hex>`)."""
     digest = hashlib.sha256()
     with path.open("rb") as fh:
         while chunk := fh.read(_CHUNK):
@@ -34,17 +34,17 @@ def sha256_file(path: Path) -> str:
 
 
 class ArtifactStore:
-    """Operações síncronas do boto3; o worker as chama por `asyncio.to_thread`."""
+    """Synchronous boto3 operations; the worker calls them through `asyncio.to_thread`."""
 
-    def __init__(self, client: Any, bucket: str) -> None:  # noqa: ANN401 — cliente S3 do boto3
-        """`client` é um `boto3.client("s3")` já configurado."""
+    def __init__(self, client: Any, bucket: str) -> None:  # noqa: ANN401 — boto3 S3 client
+        """`client` is an already configured `boto3.client("s3")`."""
         self.client = client
         self.bucket = bucket
 
     @classmethod
     def from_config(cls, config: WorkerConfig) -> ArtifactStore:
-        """Cria o cliente S3 do boto3 (endpoint do MinIO em dev e no host)."""
-        import boto3  # noqa: PLC0415 — o import do boto3 custa ~0,5 s; só o worker o usa
+        """Create the boto3 S3 client (MinIO endpoint in dev and on the host)."""
+        import boto3  # noqa: PLC0415 — importing boto3 costs ~0.5 s; only the worker uses it
 
         client = boto3.client(
             "s3",
@@ -56,11 +56,11 @@ class ArtifactStore:
         return cls(client, config.s3_bucket)
 
     def download(self, key: str, dest: Path) -> None:
-        """Baixa `key` para `dest`."""
+        """Download `key` to `dest`."""
         dest.parent.mkdir(parents=True, exist_ok=True)
         self.client.download_file(self.bucket, key, str(dest))
 
     def put_json(self, key: str, document: dict[str, Any]) -> None:
-        """Grava um JSON UTF-8, sobrescrevendo (reprocessar a mesma revisão sobrescreve)."""
+        """Write a UTF-8 JSON, overwriting (reprocessing the same revision overwrites)."""
         body = json.dumps(document, ensure_ascii=False, separators=(",", ":")).encode()
         self.client.put_object(Bucket=self.bucket, Key=key, Body=body, ContentType="application/json")

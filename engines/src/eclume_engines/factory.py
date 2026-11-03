@@ -1,4 +1,4 @@
-"""Fábrica de engines por nome, sem importar dependência pesada antes da hora."""
+"""Engine factory by name, without importing a heavy dependency ahead of time."""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ DEFAULT_ENGINE = "whisperx-local"
 
 
 class UnknownEngineError(ValueError):
-    """Nome de engine fora de `ENGINES`."""
+    """Engine name outside `ENGINES`."""
 
 
-def get_engine(name: str | None = None, **kwargs: Any) -> Engine:  # noqa: ANN401 — kwargs repassados ao construtor
-    """Instancia a engine `name` (padrão `whisperx-local`) com os argumentos do construtor."""
+def get_engine(name: str | None = None, **kwargs: Any) -> Engine:  # noqa: ANN401 — kwargs passed through to the constructor
+    """Instantiate the engine `name` (default `whisperx-local`) with the constructor arguments."""
     name = name or DEFAULT_ENGINE
     try:
         target = ENGINES[name]

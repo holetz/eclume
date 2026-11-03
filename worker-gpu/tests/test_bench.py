@@ -1,4 +1,4 @@
-"""CLI de benchmark com engine fake."""
+"""Benchmark CLI with a fake engine."""
 
 from __future__ import annotations
 
@@ -40,12 +40,12 @@ class FakeEngine:
         self.unloaded = True
 
 
-def test_benchmark_mede_e_grava_transcript(tmp_path: Path, monkeypatch: Any):
+def test_benchmark_measures_and_writes_the_transcript(tmp_path: Path, monkeypatch: Any):
     monkeypatch.delenv("HF_TOKEN", raising=False)
-    monkeypatch.setenv("ECLUME_HF_TOKEN_FILE", str(tmp_path / "sem-token"))
+    monkeypatch.setenv("ECLUME_HF_TOKEN_FILE", str(tmp_path / "no-token"))
     audio = tmp_path / "bench.ogg"
     audio.write_bytes(b"OggS")
-    saida = tmp_path / "t.json"
+    output = tmp_path / "t.json"
     engines: list[FakeEngine] = []
 
     def factory(name: str, **kwargs: Any) -> FakeEngine:
@@ -53,7 +53,7 @@ def test_benchmark_mede_e_grava_transcript(tmp_path: Path, monkeypatch: Any):
         engines.append(FakeEngine(**kwargs))
         return engines[-1]
 
-    report = run(parse_args([str(audio), "--no-diarize", "--transcript", str(saida)]), factory=factory)
+    report = run(parse_args([str(audio), "--no-diarize", "--transcript", str(output)]), factory=factory)
 
     [engine] = engines
     assert engine.kwargs == {"device": "cuda", "hf_token": None, "batch_size": None, "keep_asr_resident": True}
@@ -65,26 +65,26 @@ def test_benchmark_mede_e_grava_transcript(tmp_path: Path, monkeypatch: Any):
     assert report["realtime_factor"] is not None
     assert report["minutes_per_audio_hour"] == round(report["realtime_factor"] * 60, 2)
     assert report["speakers"] == 1
-    Draft202012Validator(SCHEMA, format_checker=FormatChecker()).validate(json.loads(saida.read_text()))
+    Draft202012Validator(SCHEMA, format_checker=FormatChecker()).validate(json.loads(output.read_text()))
 
 
 def _factory(name: str, **kwargs: Any) -> FakeEngine:
     return FakeEngine(**kwargs)
 
 
-def test_benchmark_sem_reference_nao_traz_quality(tmp_path: Path):
+def test_benchmark_without_reference_has_no_quality(tmp_path: Path):
     audio = tmp_path / "bench.ogg"
     audio.write_bytes(b"OggS")
     assert "quality" not in run(parse_args([str(audio), "--no-diarize"]), factory=_factory)
 
 
-def test_benchmark_mede_wer_e_cer_contra_a_referencia(tmp_path: Path):
+def test_benchmark_measures_wer_and_cer_against_the_reference(tmp_path: Path):
     audio = tmp_path / "bench.ogg"
     audio.write_bytes(b"OggS")
-    referencia = tmp_path / "ref.txt"
-    referencia.write_text("Oi, tudo.", encoding="utf-8")
+    reference = tmp_path / "ref.txt"
+    reference.write_text("Oi, tudo.", encoding="utf-8")
 
-    report = run(parse_args([str(audio), "--no-diarize", "--reference", str(referencia)]), factory=_factory)
+    report = run(parse_args([str(audio), "--no-diarize", "--reference", str(reference)]), factory=_factory)
 
     assert report["quality"]["wer"] == {
         "rate": 0.5,

@@ -1,4 +1,4 @@
-"""Engine `openai-compatible` contra `httpx.MockTransport`."""
+"""Engine `openai-compatible` against `httpx.MockTransport`."""
 
 from __future__ import annotations
 
@@ -29,11 +29,11 @@ VERBOSE_OPENAI = {
 }
 
 
-def engine_com(handler: object, **kw: object) -> object:
+def engine_with(handler: object, **kw: object) -> object:
     return get_engine(
         "openai-compatible",
         base_url="http://speaches:8000/",
-        api_key="segredo",
+        api_key="secret",
         transport=httpx.MockTransport(handler),
         **kw,
     )
@@ -41,27 +41,27 @@ def engine_com(handler: object, **kw: object) -> object:
 
 @pytest.fixture
 def audio(tmp_path: Path) -> Path:
-    path = tmp_path / "gravacao.ogg"
+    path = tmp_path / "recording.ogg"
     path.write_bytes(b"OggS-fake")
     return path
 
 
-def test_envia_verbose_json_e_converte_palavras_do_topo(audio: Path):
-    pedidos: list[httpx.Request] = []
+def test_sends_verbose_json_and_converts_top_level_words(audio: Path):
+    requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        pedidos.append(request)
+        requests.append(request)
         return httpx.Response(200, json=VERBOSE_OPENAI)
 
-    result = engine_com(handler).transcribe(audio, EngineOptions(model="large-v3-turbo", diarize=False))
+    result = engine_with(handler).transcribe(audio, EngineOptions(model="large-v3-turbo", diarize=False))
 
-    [pedido] = pedidos
-    assert pedido.url == "http://speaches:8000/v1/audio/transcriptions"
-    assert pedido.headers["Authorization"] == "Bearer segredo"
-    corpo = pedido.content.decode()
-    for campo in ('name="model"', "large-v3-turbo", "verbose_json", 'name="timestamp_granularities[]"', "OggS-fake"):
-        assert campo in corpo
-    assert corpo.count('name="timestamp_granularities[]"') == 2
+    [request] = requests
+    assert request.url == "http://speaches:8000/v1/audio/transcriptions"
+    assert request.headers["Authorization"] == "Bearer secret"
+    body = request.content.decode()
+    for field in ('name="model"', "large-v3-turbo", "verbose_json", 'name="timestamp_granularities[]"', "OggS-fake"):
+        assert field in body
+    assert body.count('name="timestamp_granularities[]"') == 2
 
     assert result.engine == "openai-compatible"
     assert result.model == "large-v3-turbo"
@@ -73,18 +73,18 @@ def test_envia_verbose_json_e_converte_palavras_do_topo(audio: Path):
     assert first.confidence == pytest.approx(0.8187, abs=1e-3)
 
 
-def test_palavras_dentro_dos_segmentos_nao_duplicam(audio: Path):
-    corpo = {
+def test_words_inside_segments_are_not_duplicated(audio: Path):
+    body = {
         "duration": 1.0,
         "segments": [{"start": 0.0, "end": 1.0, "text": "Oi", "words": [{"word": "Oi", "start": 0.0, "end": 0.5}]}],
         "words": [{"word": "Oi", "start": 0.0, "end": 0.5}],
     }
-    result = engine_com(lambda _r: httpx.Response(200, json=corpo)).transcribe(audio, EngineOptions())
+    result = engine_with(lambda _r: httpx.Response(200, json=body)).transcribe(audio, EngineOptions())
     assert [w.text for w in result.segments[0].words] == ["Oi"]
     assert result.warnings == ["diarization_unavailable_remote"]
 
 
-def test_erro_http_vira_asr_failed(audio: Path):
+def test_http_error_becomes_asr_failed(audio: Path):
     with pytest.raises(EngineError) as info:
-        engine_com(lambda _r: httpx.Response(503, text="indisponível")).transcribe(audio, EngineOptions())
+        engine_with(lambda _r: httpx.Response(503, text="unavailable")).transcribe(audio, EngineOptions())
     assert info.value.code == "asr_failed"

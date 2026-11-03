@@ -1,8 +1,8 @@
-"""Montagem do `transcript.raw.json` e do `speaker_embeddings.json` a partir do `EngineResult`.
+"""Assembly of `transcript.raw.json` and `speaker_embeddings.json` from the `EngineResult`.
 
-O raw segue `contracts/transcript.schema.json`. Os campos de identidade que só o server conhece
-(`id`, `title`, `owner`, `recorded_at`, `source`, `created_at`, `updated_at`) saem provisórios,
-só para o arquivo validar; o server os sobrescreve na ingestão (docs/standards/api/jobs-transcricao.md).
+The raw file follows `contracts/transcript.schema.json`. The identity fields only the server knows
+(`id`, `title`, `owner`, `recorded_at`, `source`, `created_at`, `updated_at`) are provisional, just
+so the file validates; the server overwrites them on ingestion (docs/standards/api/jobs-transcricao.md).
 """
 
 from __future__ import annotations
@@ -25,9 +25,9 @@ def _ms(seconds: float) -> int:
 
 
 def speaker_map(result: EngineResult) -> dict[str | None, str]:
-    """Rótulo bruto da diarização → `S<n>`, pela ordem da primeira fala.
+    """Raw diarization label → `S<n>`, in order of first speech.
 
-    Sem diarização (nenhum rótulo), o mapa é `{None: "S1"}`: um locutor só.
+    Without diarization (no label), the map is `{None: "S1"}`: a single speaker.
     """
     mapping: dict[str | None, str] = {}
     for segment in sorted(result.segments, key=lambda s: s.start):
@@ -37,7 +37,7 @@ def speaker_map(result: EngineResult) -> dict[str | None, str]:
 
 
 def _segment_speakers(result: EngineResult, mapping: dict[str | None, str]) -> list[str]:
-    """Id de locutor por segmento; sem rótulo, herda o anterior (ou o primeiro que aparecer)."""
+    """Speaker id per segment; with no label, it inherits the previous one (or the first that appears)."""
     first = next(iter(mapping.values()))
     ids: list[str] = []
     previous: str | None = None
@@ -60,7 +60,7 @@ def _word(word: Word, offset_ms: int) -> dict[str, Any]:
     return out
 
 
-def build_transcript(  # noqa: PLR0913 — todos keyword-only: os metadados do job
+def build_transcript(  # noqa: PLR0913 — all keyword-only: the job metadata
     result: EngineResult,
     *,
     recording_id: str,
@@ -71,12 +71,12 @@ def build_transcript(  # noqa: PLR0913 — todos keyword-only: os metadados do j
     offset_ms: int = 0,
     duration_ms: int | None = None,
 ) -> dict[str, Any]:
-    """Transcrição no schema do contrato, com locutores `Locutor N` e `person: null`.
+    """Transcript in the contract schema, with `Locutor N` speakers and `person: null`.
 
-    `offset_ms` é o silêncio que o pré-processamento cortou do início: somado a todo tempo de
-    segmento e palavra, as marcas voltam a ser as do áudio original, que o usuário ouve.
-    `duration_ms` é a duração desse original; sem ela, a do áudio tratado mais o deslocamento (o
-    silêncio cortado do fim fica de fora).
+    `offset_ms` is the silence preprocessing trimmed from the start: added to every segment and word
+    time, the marks go back to those of the original audio, the one the user hears.
+    `duration_ms` is the duration of that original; without it, the processed audio's plus the
+    offset (the silence trimmed from the end is left out).
     """
     mapping = speaker_map(result)
     speaker_ids = _segment_speakers(result, mapping)
@@ -129,11 +129,12 @@ def build_transcript(  # noqa: PLR0913 — todos keyword-only: os metadados do j
 
 
 def build_embeddings(result: EngineResult) -> dict[str, Any]:
-    """`speaker_embeddings.json`: vetores por id de locutor do transcript (`S<n>`).
+    """`speaker_embeddings.json`: vectors by transcript speaker id (`S<n>`).
 
-    Rótulos da diarização sem nenhuma fala no transcript ficam de fora: não há locutor para eles.
-    Vetor com componente não finito (NaN ou infinito, o que o pyannote produz para fala curta
-    demais) também fica: o locutor segue sem embedding, e o pgvector recusaria a ingestão inteira.
+    Diarization labels with no speech in the transcript are left out: there is no speaker for them.
+    A vector with a non-finite component (NaN or infinity, which pyannote produces for speech that
+    is too short) is left out too: the speaker stays without an embedding, and pgvector would refuse
+    the whole ingestion.
     """
     mapping = speaker_map(result)
     vectors = {}

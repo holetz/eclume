@@ -1,4 +1,4 @@
-"""Job `transcribe` com Redis, S3 e engine fakes."""
+"""The `transcribe` job with fake Redis, S3 and engine."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
-from eclume_engines import EngineError, EngineOptions, EngineResult, Segment, Word, registro
+from eclume_engines import EngineError, EngineOptions, EngineResult, Segment, Word, logs
 from eclume_worker import jobs
 from eclume_worker.config import WorkerConfig
 from eclume_worker.jobs import EngineRegistry, parse_revision, transcribe
@@ -25,7 +25,7 @@ RECORDING = "01928f3a-1c00-7a00-8000-000000000401"
 
 @dataclass
 class FakePreprocess:
-    """O `preprocess` sem ffmpeg: devolve o próprio arquivo (ou um por canal) e registra o pedido."""
+    """`preprocess` without ffmpeg: return the file itself (or one per channel) and record the request."""
 
     offset_ms: int = 0
     duration_ms: int | None = None
@@ -39,7 +39,7 @@ class FakePreprocess:
             raise self.error
         paths = [src]
         if self.split:
-            copy = workdir / "canal-1.wav"
+            copy = workdir / "channel-1.wav"
             copy.write_bytes(src.read_bytes())
             paths.append(copy)
         return PreprocessResult(
@@ -126,7 +126,7 @@ class FakeEngine:
             engine=self.name,
             model="large-v3-turbo",
             compute_type="int8_float16",
-            # Sem idioma pedido, a engine devolve o detectado.
+            # With no requested language, the engine returns the detected one.
             language=options.language or "en",
             duration_s=10.0,
             segments=[
@@ -138,7 +138,7 @@ class FakeEngine:
             embedding_model="pyannote/wespeaker-voxceleb-resnet34-LM",
             batch_size=16,
             peak_vram_mb=2500,
-            warnings=["exemplo"],
+            warnings=["example"],
         )
 
     def unload(self) -> None:
@@ -156,7 +156,7 @@ class Factory:
         return engine
 
 
-def contexto(tmp_path: Path, *, store: FakeStore | None = None, factory: Factory | None = None, **cfg: Any) -> dict:
+def make_ctx(tmp_path: Path, *, store: FakeStore | None = None, factory: Factory | None = None, **cfg: Any) -> dict:
     config = WorkerConfig(work_dir=tmp_path / "work", **cfg)
     return {
         "redis": FakeRedis(),
@@ -167,14 +167,14 @@ def contexto(tmp_path: Path, *, store: FakeStore | None = None, factory: Factory
     }
 
 
-def rodar(ctx: dict, options: dict | None = None) -> dict:
+def run_job(ctx: dict, options: dict | None = None) -> dict:
     return asyncio.run(transcribe(ctx, RECORDING, f"orgs/o/users/u/{RECORDING}.ogg", options))
 
 
-def test_sucesso_grava_artefatos_e_enfileira_ingest(tmp_path: Path):
+def test_success_writes_artifacts_and_enqueues_ingest(tmp_path: Path):
     factory = Factory()
-    ctx = contexto(tmp_path, factory=factory)
-    out = rodar(ctx, {"language": "pt-BR", "min_speakers": 2, "diarize": True, "embeddings": True})
+    ctx = make_ctx(tmp_path, factory=factory)
+    out = run_job(ctx, {"language": "pt-BR", "min_speakers": 2, "diarize": True, "embeddings": True})
 
     t_key = f"recordings/{RECORDING}/r3/transcript.raw.json"
     e_key = f"recordings/{RECORDING}/r3/speaker_embeddings.json"
@@ -209,7 +209,7 @@ def test_sucesso_grava_artefatos_e_enfileira_ingest(tmp_path: Path):
     assert info["compute_type"] == "int8_float16"
     assert info["duration_ms"] == 10000
     assert info["peak_vram_mb"] == 2500
-    assert info["warnings"] == ["exemplo"]
+    assert info["warnings"] == ["example"]
     assert info["realtime_factor"] is not None
     assert info["started_at"] == ctx["redis"].hashes[f"eclume:progress:{RECORDING}"]["started_at"]
     assert info["started_at"].endswith("Z")
@@ -223,9 +223,9 @@ def test_sucesso_grava_artefatos_e_enfileira_ingest(tmp_path: Path):
     assert not any((tmp_path / "work").iterdir())
 
 
-def test_falha_no_download(tmp_path: Path):
-    ctx = contexto(tmp_path, store=FakeStore(fail_download=True))
-    out = rodar(ctx)
+def test_download_failure(tmp_path: Path):
+    ctx = make_ctx(tmp_path, store=FakeStore(fail_download=True))
+    out = run_job(ctx)
     assert out["error_code"] == "audio_download_failed"
     [(name, args, kwargs)] = ctx["redis"].jobs
     assert name == "transcription_failed"
@@ -235,19 +235,19 @@ def test_falha_no_download(tmp_path: Path):
     assert ctx["store"].saved == {}
 
 
-@pytest.mark.parametrize("falha", [None, "download", "engine"])
-def test_jobs_de_retorno_levam_a_revisao(tmp_path: Path, falha: str | None):
-    store = FakeStore(fail_download=falha == "download")
-    factory = Factory(error=EngineError("out_of_memory", "VRAM") if falha == "engine" else None)
-    ctx = contexto(tmp_path, store=store, factory=factory) | {"job_id": f"transcribe:{RECORDING}:7"}
-    rodar(ctx)
+@pytest.mark.parametrize("failure", [None, "download", "engine"])
+def test_return_jobs_carry_the_revision(tmp_path: Path, failure: str | None):
+    store = FakeStore(fail_download=failure == "download")
+    factory = Factory(error=EngineError("out_of_memory", "VRAM") if failure == "engine" else None)
+    ctx = make_ctx(tmp_path, store=store, factory=factory) | {"job_id": f"transcribe:{RECORDING}:7"}
+    run_job(ctx)
     [(name, args, kwargs)] = ctx["redis"].jobs
-    esperado = "ingest_transcript" if falha is None else "transcription_failed"
-    assert name == esperado
-    assert kwargs["_job_id"] == f"{esperado}:{RECORDING}:7"
-    assert len(args) == 4  # os posicionais do contrato não mudam
+    expected = "ingest_transcript" if failure is None else "transcription_failed"
+    assert name == expected
+    assert kwargs["_job_id"] == f"{expected}:{RECORDING}:7"
+    assert len(args) == 4  # the contract's positionals do not change
     assert ctx["redis"].hashes[f"eclume:progress:{RECORDING}"]["revision"] == 7
-    if falha is None:
+    if failure is None:
         assert args[1:3] == (
             f"recordings/{RECORDING}/r7/transcript.raw.json",
             f"recordings/{RECORDING}/r7/speaker_embeddings.json",
@@ -256,7 +256,7 @@ def test_jobs_de_retorno_levam_a_revisao(tmp_path: Path, falha: str | None):
 
 
 class SpyStore(FakeStore):
-    """Registra, a cada passo do job, o que o heartbeat publicaria."""
+    """Record, at each step of the job, what the heartbeat would publish."""
 
     def __init__(self, registry: list[EngineRegistry], seen: list[tuple[str, bool, str | None]], **kw: Any) -> None:
         super().__init__(**kw)
@@ -268,19 +268,19 @@ class SpyStore(FakeStore):
         super().download(key, dest)
 
 
-@pytest.mark.parametrize("desfecho", ["sucesso", "download", "preprocess", "engine", "inesperado"])
-def test_ocupado_do_inicio_ao_fim_do_job(
-    tmp_path: Path, pre: FakePreprocess, monkeypatch: pytest.MonkeyPatch, desfecho: str
+@pytest.mark.parametrize("outcome", ["success", "download", "preprocess", "engine", "unexpected"])
+def test_busy_from_the_start_to_the_end_of_the_job(
+    tmp_path: Path, pre: FakePreprocess, monkeypatch: pytest.MonkeyPatch, outcome: str
 ):
     seen: list[tuple[str, bool, str | None]] = []
     holder: list[EngineRegistry] = []
-    store = SpyStore(holder, seen, fail_download=desfecho == "download")
-    error = {"engine": EngineError("out_of_memory", "VRAM"), "inesperado": KeyError("x")}.get(desfecho)
-    ctx = contexto(tmp_path, store=store, factory=Factory(error=error))
+    store = SpyStore(holder, seen, fail_download=outcome == "download")
+    error = {"engine": EngineError("out_of_memory", "VRAM"), "unexpected": KeyError("x")}.get(outcome)
+    ctx = make_ctx(tmp_path, store=store, factory=Factory(error=error))
     registry: EngineRegistry = ctx["engines"]
     holder.append(registry)
-    if desfecho == "preprocess":
-        pre.error = PreprocessError("não abre")
+    if outcome == "preprocess":
+        pre.error = PreprocessError("does not open")
 
     def spy_pre(*args: Any) -> PreprocessResult:
         seen.append(("preprocess", registry.busy, registry.current_job))
@@ -295,14 +295,14 @@ def test_ocupado_do_inicio_ao_fim_do_job(
         await enqueue(name, *args, **kwargs)
 
     redis.enqueue_job = spy_enqueue
-    rodar(ctx)
+    run_job(ctx)
 
     job_id = f"transcribe:{RECORDING}:3"
-    retorno = "ingest_transcript" if desfecho == "sucesso" else "transcription_failed"
+    return_name = "ingest_transcript" if outcome == "success" else "transcription_failed"
     assert seen[0] == ("download", True, job_id)
-    assert seen[-1] == (retorno, True, job_id)
+    assert seen[-1] == (return_name, True, job_id)
     assert all(busy and current == job_id for _, busy, current in seen)
-    if desfecho != "download":
+    if outcome != "download":
         assert ("preprocess", True, job_id) in seen
     assert (registry.busy, registry.current_job) == (False, None)
 
@@ -310,20 +310,20 @@ def test_ocupado_do_inicio_ao_fim_do_job(
 CANCEL = f"eclume:cancel:{RECORDING}:3"
 
 
-def test_cancelado_antes_de_comecar_nem_baixa(tmp_path: Path):
+def test_cancelled_before_starting_does_not_even_download(tmp_path: Path):
     store = SpyStore([], [])
-    ctx = contexto(tmp_path, store=store)
+    ctx = make_ctx(tmp_path, store=store)
     holder: list[EngineRegistry] = [ctx["engines"]]
     store.registry = holder
     ctx["redis"].keys.add(CANCEL)
-    assert rodar(ctx) == {"status": "cancelled"}
+    assert run_job(ctx) == {"status": "cancelled"}
     assert store.seen == []
     assert ctx["redis"].jobs == []
     assert ctx["engines"].busy is False
 
 
 class SlowEngine(FakeEngine):
-    """ASR longo: pede o cancelamento no primeiro lote e segue chamando a callback por lote."""
+    """Long ASR: request cancellation on the first batch and keep calling the callback per batch."""
 
     def __init__(self, name: str, redis: FakeRedis, **kwargs: Any) -> None:
         super().__init__(name, **kwargs)
@@ -339,8 +339,8 @@ class SlowEngine(FakeEngine):
         return super().transcribe(audio_path, options, progress)
 
 
-def test_cancelado_no_meio_do_asr_para_sem_retorno(tmp_path: Path):
-    ctx = contexto(tmp_path) | {"cancel_poll_s": 0.01}
+def test_cancelled_mid_asr_stops_with_no_return(tmp_path: Path):
+    ctx = make_ctx(tmp_path) | {"cancel_poll_s": 0.01}
     engines: list[SlowEngine] = []
 
     def factory(name: str, **kwargs: Any) -> SlowEngine:
@@ -348,8 +348,8 @@ def test_cancelado_no_meio_do_asr_para_sem_retorno(tmp_path: Path):
         return engines[0]
 
     ctx["engines"] = EngineRegistry(ctx["config"], factory=factory, hf_token=lambda: None)
-    assert rodar(ctx) == {"status": "cancelled"}
-    # Parou num lote do ASR, longe do fim, sem retorno ao server, sem hash e sem diretório de trabalho.
+    assert run_job(ctx) == {"status": "cancelled"}
+    # It stopped on an ASR batch, far from the end, with no return to the server, no hash and no working directory.
     assert engines[0].batches < 500
     assert ctx["redis"].jobs == []
     assert f"eclume:progress:{RECORDING}" not in ctx["redis"].hashes
@@ -358,94 +358,96 @@ def test_cancelado_no_meio_do_asr_para_sem_retorno(tmp_path: Path):
     assert (ctx["engines"].busy, ctx["engines"].current_job) == (False, None)
 
 
-def test_falha_da_engine_leva_o_codigo(tmp_path: Path):
-    ctx = contexto(tmp_path, factory=Factory(error=EngineError("out_of_memory", "VRAM insuficiente")))
-    rodar(ctx)
+def test_engine_failure_carries_the_code(tmp_path: Path):
+    ctx = make_ctx(tmp_path, factory=Factory(error=EngineError("out_of_memory", "VRAM insuficiente")))
+    run_job(ctx)
     [(name, args, _)] = ctx["redis"].jobs
     assert (name, args) == ("transcription_failed", (RECORDING, "out_of_memory", "VRAM insuficiente", "asr"))
 
 
-def test_erro_inesperado_vira_internal_error(tmp_path: Path):
-    ctx = contexto(tmp_path, factory=Factory(error=KeyError("x")))
-    out = rodar(ctx)
+def test_unexpected_error_becomes_internal_error(tmp_path: Path):
+    ctx = make_ctx(tmp_path, factory=Factory(error=KeyError("x")))
+    out = run_job(ctx)
     assert out["error_code"] == "internal_error"
     assert ctx["redis"].jobs[0][0] == "transcription_failed"
 
 
-def test_falha_no_upload(tmp_path: Path):
-    ctx = contexto(tmp_path, store=FakeStore(fail_upload=True))
-    assert rodar(ctx)["error_code"] == "upload_failed"
+def test_upload_failure(tmp_path: Path):
+    ctx = make_ctx(tmp_path, store=FakeStore(fail_upload=True))
+    assert run_job(ctx)["error_code"] == "upload_failed"
 
 
-def test_engine_forcada_pelo_ambiente_vence_options(tmp_path: Path):
+def test_engine_forced_by_the_environment_wins_over_options(tmp_path: Path):
     factory = Factory()
-    ctx = contexto(tmp_path, factory=factory, engine="cpu")
-    rodar(ctx, {"engine": "whisperx-local", "model": "large-v3-turbo", "compute_type": "int8_float16", "batch_size": 4})
+    ctx = make_ctx(tmp_path, factory=factory, engine="cpu")
+    run_job(
+        ctx, {"engine": "whisperx-local", "model": "large-v3-turbo", "compute_type": "int8_float16", "batch_size": 4}
+    )
     assert factory.created[0].name == "cpu"
     assert factory.created[0].kwargs == {}
-    # A configuração de modelo do admin é da whisperx-local: a engine forçada usa os padrões dela.
+    # The admin's model configuration belongs to whisperx-local: the forced engine uses its own defaults.
     [(_, options, _token)] = factory.created[0].calls
     assert (options.model, options.compute_type, options.batch_size) == (None, None, None)
 
 
-def test_options_escolhe_a_engine_sem_ambiente(tmp_path: Path):
+def test_options_pick_the_engine_without_an_environment(tmp_path: Path):
     factory = Factory()
-    ctx = contexto(tmp_path, factory=factory, remote_base_url="http://speaches:8000", remote_model="m")
-    rodar(ctx, {"engine": "openai-compatible"})
+    ctx = make_ctx(tmp_path, factory=factory, remote_base_url="http://speaches:8000", remote_model="m")
+    run_job(ctx, {"engine": "openai-compatible"})
     assert factory.created[0].kwargs == {"base_url": "http://speaches:8000", "api_key": None, "default_model": "m"}
 
 
-def test_remota_sem_url_falha(tmp_path: Path):
-    ctx = contexto(tmp_path)
-    assert rodar(ctx, {"engine": "openai-compatible"})["error_code"] == "internal_error"
+def test_remote_without_a_url_fails(tmp_path: Path):
+    ctx = make_ctx(tmp_path)
+    assert run_job(ctx, {"engine": "openai-compatible"})["error_code"] == "internal_error"
 
 
-def test_engine_desconhecida_falha(tmp_path: Path):
+def test_unknown_engine_fails(tmp_path: Path):
     config = WorkerConfig(work_dir=tmp_path / "work")
-    ctx = contexto(tmp_path)
+    ctx = make_ctx(tmp_path)
     ctx["engines"] = EngineRegistry(config, hf_token=lambda: None)
-    out = rodar(ctx, {"engine": "nao-existe"})
+    out = run_job(ctx, {"engine": "does-not-exist"})
     assert out["error_code"] == "internal_error"
     assert "desconhecida" in out["message"]
 
 
-def test_descarga_ociosa(tmp_path: Path):
-    agora = [0.0]
+def test_idle_unload(tmp_path: Path):
+    now = [0.0]
     factory = Factory()
-    registry = EngineRegistry(WorkerConfig(), factory=factory, hf_token=lambda: None, clock=lambda: agora[0])
+    registry = EngineRegistry(WorkerConfig(), factory=factory, hf_token=lambda: None, clock=lambda: now[0])
     assert registry.unload_if_idle(300) is False  # nada carregado
     audio = tmp_path / "a.ogg"
     audio.write_bytes(b"OggS-audio")
     registry.run("cpu", audio, EngineOptions(), lambda _s, _p: None)
-    agora[0] = 100.0
+    now[0] = 100.0
     assert registry.unload_if_idle(300) is False
-    agora[0] = 400.0
+    now[0] = 400.0
     assert registry.unload_if_idle(300) is True
     assert factory.created[0].unloads == 1
 
 
-def test_descarga_ociosa_so_uma_vez_por_uso(tmp_path: Path):
-    # O laço ocioso volta a cada 30 s: já descarregada, a engine não é descarregada (nem logada) de novo.
-    agora = [0.0]
+def test_idle_unload_only_once_per_use(tmp_path: Path):
+    # The idle loop comes back every 30 s: once unloaded, the engine is not unloaded (nor logged) again.
+    now = [0.0]
     factory = Factory()
-    registry = EngineRegistry(WorkerConfig(), factory=factory, hf_token=lambda: None, clock=lambda: agora[0])
+    registry = EngineRegistry(WorkerConfig(), factory=factory, hf_token=lambda: None, clock=lambda: now[0])
     audio = tmp_path / "a.ogg"
     audio.write_bytes(b"OggS-audio")
     registry.run("cpu", audio, EngineOptions(), lambda _s, _p: None)
-    agora[0] = 400.0
+    now[0] = 400.0
     assert registry.unload_if_idle(300) is True
-    for passo in (430.0, 460.0, 10_000.0):
-        agora[0] = passo
+    for step in (430.0, 460.0, 10_000.0):
+        now[0] = step
         assert registry.unload_if_idle(300) is False
     assert factory.created[0].unloads == 1
-    # Um novo uso rearma a descarga.
+    # A new use rearms the unload.
     registry.run("cpu", audio, EngineOptions(), lambda _s, _p: None)
-    agora[0] = 10_400.0
+    now[0] = 10_400.0
     assert registry.unload_if_idle(300) is True
     assert factory.created[0].unloads == 2
 
 
-def test_troca_de_engine_descarrega_a_anterior(tmp_path: Path):
+def test_switching_engine_unloads_the_previous_one(tmp_path: Path):
     factory = Factory()
     registry = EngineRegistry(WorkerConfig(), factory=factory, hf_token=lambda: None)
     audio = tmp_path / "a.ogg"
@@ -460,12 +462,12 @@ def test_troca_de_engine_descarrega_a_anterior(tmp_path: Path):
     ("job_id", "revision"),
     [(f"transcribe:{RECORDING}:3", 3), (f"transcribe:{RECORDING}:x", 1), (None, 1), ("abc", 1), ("t:r:0", 1)],
 )
-def test_revisao_do_job_id(job_id: str | None, revision: int):
+def test_revision_from_the_job_id(job_id: str | None, revision: int):
     assert parse_revision(job_id) == revision
 
 
-def _cifrado(texto: str, secret_key: str) -> str:
-    """O token como o server o grava (mesmo formato de eclume_server.crypto)."""
+def _encrypted(text: str, secret_key: str) -> str:
+    """The token as the server writes it (same format as eclume_server.crypto)."""
     import base64  # noqa: PLC0415
     import os  # noqa: PLC0415
 
@@ -475,56 +477,56 @@ def _cifrado(texto: str, secret_key: str) -> str:
 
     key = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"eclume-secrets-v1").derive(secret_key.encode())
     nonce = os.urandom(12)
-    return "v1:" + base64.b64encode(nonce + AESGCM(key).encrypt(nonce, texto.encode(), None)).decode()
+    return "v1:" + base64.b64encode(nonce + AESGCM(key).encrypt(nonce, text.encode(), None)).decode()
 
 
-def test_token_da_organizacao_vence_o_do_ambiente(tmp_path: Path):
+def test_organization_token_wins_over_the_environment_one(tmp_path: Path):
     factory = Factory()
-    ctx = contexto(tmp_path, factory=factory, secret_key="segredo-do-server")
-    rodar(ctx, {"hf_token_encrypted": _cifrado("hf_da_organizacao", "segredo-do-server")})
+    ctx = make_ctx(tmp_path, factory=factory, secret_key="server-secret")
+    run_job(ctx, {"hf_token_encrypted": _encrypted("hf_of_the_organization", "server-secret")})
     [(_, _, token)] = factory.created[0].calls
-    assert token == "hf_da_organizacao"
+    assert token == "hf_of_the_organization"
     info = ctx["redis"].jobs[0][1][3]
     assert "hf_token_undecryptable" not in info["warnings"]
 
-    # O job seguinte, sem o segredo, volta ao token do ambiente.
-    rodar(ctx, {})
+    # The next job, without the secret, goes back to the environment token.
+    run_job(ctx, {})
     assert factory.created[0].calls[-1][2] == "hf_x"
 
 
-@pytest.mark.parametrize("cfg", [{"secret_key": "outra-chave"}, {}])
-def test_token_que_nao_abre_cai_no_do_ambiente_com_aviso(tmp_path: Path, cfg: dict[str, str]):
+@pytest.mark.parametrize("cfg", [{"secret_key": "other-key"}, {}])
+def test_token_that_does_not_open_falls_back_to_the_environment_one_with_a_warning(tmp_path: Path, cfg: dict[str, str]):
     factory = Factory()
-    ctx = contexto(tmp_path, factory=factory, **cfg)
-    out = rodar(ctx, {"hf_token_encrypted": _cifrado("hf_da_organizacao", "segredo-do-server")})
+    ctx = make_ctx(tmp_path, factory=factory, **cfg)
+    out = run_job(ctx, {"hf_token_encrypted": _encrypted("hf_of_the_organization", "server-secret")})
     assert out["status"] == "done"
     [(_, _, token)] = factory.created[0].calls
     assert token == "hf_x"
-    assert ctx["redis"].jobs[0][1][3]["warnings"] == ["hf_token_undecryptable", "exemplo"]
+    assert ctx["redis"].jobs[0][1][3]["warnings"] == ["hf_token_undecryptable", "example"]
 
 
-def test_endpoint_das_options_vence_o_do_ambiente(tmp_path: Path):
+def test_options_endpoint_wins_over_the_environment_one(tmp_path: Path):
     factory = Factory()
-    ctx = contexto(tmp_path, factory=factory, remote_base_url="http://speaches:8000")
-    rodar(ctx, {"engine": "openai-compatible", "endpoint_url": "http://outro:9000/v1"})
-    rodar(ctx, {"engine": "openai-compatible", "endpoint_url": "http://outro:9000/v1"})
-    assert [e.kwargs["base_url"] for e in factory.created] == ["http://outro:9000/v1"]
-    rodar(ctx, {"engine": "openai-compatible"})
-    assert [e.kwargs["base_url"] for e in factory.created] == ["http://outro:9000/v1", "http://speaches:8000"]
+    ctx = make_ctx(tmp_path, factory=factory, remote_base_url="http://speaches:8000")
+    run_job(ctx, {"engine": "openai-compatible", "endpoint_url": "http://other:9000/v1"})
+    run_job(ctx, {"engine": "openai-compatible", "endpoint_url": "http://other:9000/v1"})
+    assert [e.kwargs["base_url"] for e in factory.created] == ["http://other:9000/v1"]
+    run_job(ctx, {"engine": "openai-compatible"})
+    assert [e.kwargs["base_url"] for e in factory.created] == ["http://other:9000/v1", "http://speaches:8000"]
 
 
-def test_opcoes_do_admin_chegam_a_engine(tmp_path: Path):
+def test_admin_options_reach_the_engine(tmp_path: Path):
     factory = Factory()
-    ctx = contexto(tmp_path, factory=factory)
-    rodar(ctx, {"batch_size": 2, "fallback_model": "small", "diarization_model": "pyannote/x"})
+    ctx = make_ctx(tmp_path, factory=factory)
+    run_job(ctx, {"batch_size": 2, "fallback_model": "small", "diarization_model": "pyannote/x"})
     [(_, options, _)] = factory.created[0].calls
     assert (options.batch_size, options.fallback_model, options.diarization_model) == (2, "small", "pyannote/x")
 
 
-def test_idioma_automatico_chega_nulo_a_engine_e_sai_detectado(tmp_path: Path):
+def test_automatic_language_reaches_the_engine_as_null_and_comes_out_detected(tmp_path: Path):
     factory = Factory()
-    ctx = contexto(tmp_path, factory=factory)
-    rodar(ctx, {"language": None, "diarize": False, "embeddings": False})
+    ctx = make_ctx(tmp_path, factory=factory)
+    run_job(ctx, {"language": None, "diarize": False, "embeddings": False})
     [engine] = factory.created
     [(_, options, _)] = engine.calls
     assert options.language is None
@@ -532,16 +534,16 @@ def test_idioma_automatico_chega_nulo_a_engine_e_sai_detectado(tmp_path: Path):
     assert transcript["language"] == "en"
 
 
-def test_preprocessa_antes_do_asr_e_devolve_o_deslocamento(tmp_path: Path, pre: FakePreprocess):
+def test_preprocesses_before_the_asr_and_gives_back_the_offset(tmp_path: Path, pre: FakePreprocess):
     pre.offset_ms = 2000
-    # O original tem 15 s: 2 s cortados do início, 10 s tratados e 3 s cortados do fim.
+    # The original is 15 s: 2 s trimmed from the start, 10 s processed and 3 s trimmed from the end.
     pre.duration_ms = 15_000
-    ctx = contexto(tmp_path, rnnoise_model="/opt/cb.rnnn")
+    ctx = make_ctx(tmp_path, rnnoise_model="/opt/cb.rnnn")
     options = {"preprocess": {"denoise": {"enabled": True, "method": "rnnoise", "strength": 0.6}}}
-    rodar(ctx, options)
+    run_job(ctx, options)
     assert pre.calls == [(options["preprocess"], "/opt/cb.rnnn")]
     transcript = ctx["store"].saved[f"recordings/{RECORDING}/r3/transcript.raw.json"]
-    # Os tempos voltam ao áudio original: a fala de 0 s no tratado é 2 s no original.
+    # The times go back to the original audio: speech at 0 s in the processed audio is at 2 s in the original.
     assert [(s["start_ms"], s["end_ms"]) for s in transcript["segments"]] == [(2000, 4000), (4000, 6000)]
     assert transcript["segments"][0]["words"][0]["start_ms"] == 2000
     assert transcript["duration_ms"] == 15_000
@@ -553,36 +555,36 @@ def test_preprocessa_antes_do_asr_e_devolve_o_deslocamento(tmp_path: Path, pre: 
     assert stages.index("preprocess") < stages.index("asr")
 
 
-def test_canais_separados_rodam_o_asr_por_canal(tmp_path: Path, pre: FakePreprocess):
+def test_separated_channels_run_the_asr_per_channel(tmp_path: Path, pre: FakePreprocess):
     pre.split = True
     factory = Factory()
-    ctx = contexto(tmp_path, factory=factory)
-    rodar(ctx, {"diarize": True, "embeddings": True, "min_speakers": 2})
+    ctx = make_ctx(tmp_path, factory=factory)
+    run_job(ctx, {"diarize": True, "embeddings": True, "min_speakers": 2})
     [engine] = factory.created
     assert [(opts.min_speakers, opts.max_speakers) for _, opts, _ in engine.calls] == [(1, 1), (1, 1)]
     transcript = ctx["store"].saved[f"recordings/{RECORDING}/r3/transcript.raw.json"]
-    # Um locutor por canal, falas mescladas pelo início.
+    # One speaker per channel, speech merged by start.
     assert [s["speaker_id"] for s in transcript["segments"]] == ["S1", "S2", "S1", "S2"]
     embeddings = ctx["store"].saved[f"recordings/{RECORDING}/r3/speaker_embeddings.json"]
     assert sorted(embeddings["speaker_embeddings"]) == ["S1", "S2"]
 
 
-def test_audio_que_nao_abre_falha_no_preprocessamento(tmp_path: Path, pre: FakePreprocess):
-    pre.error = PreprocessError("o áudio não abre")
-    ctx = contexto(tmp_path)
-    assert rodar(ctx)["error_code"] == "audio_decode_failed"
+def test_audio_that_does_not_open_fails_in_preprocessing(tmp_path: Path, pre: FakePreprocess):
+    pre.error = PreprocessError("the audio does not open")
+    ctx = make_ctx(tmp_path)
+    assert run_job(ctx)["error_code"] == "audio_decode_failed"
     [(name, args, _)] = ctx["redis"].jobs
     assert (name, args[1], args[3]) == ("transcription_failed", "audio_decode_failed", "preprocess")
 
 
-def test_log_do_job_leva_job_id_gravacao_e_revisao(tmp_path: Path):
+def test_job_log_carries_job_id_recording_and_revision(tmp_path: Path):
     stream = io.StringIO()
-    registro.configurar_logs(stream=stream)
-    ctx = contexto(tmp_path, store=SpyStore([], []))
+    logs.configure_logs(stream=stream)
+    ctx = make_ctx(tmp_path, store=SpyStore([], []))
     ctx["redis"].keys.add(CANCEL)
-    assert rodar(ctx) == {"status": "cancelled"}
-    linhas = [json.loads(linha) for linha in stream.getvalue().splitlines()]
-    cancelada = next(linha for linha in linhas if "cancelada" in linha["msg"])
-    assert cancelada["recording_id"] == RECORDING
-    assert cancelada["revision"] == 3
-    assert cancelada["job_id"] == f"transcribe:{RECORDING}:3"
+    assert run_job(ctx) == {"status": "cancelled"}
+    lines = [json.loads(line) for line in stream.getvalue().splitlines()]
+    cancelled_line = next(line for line in lines if "cancelled" in line["msg"])
+    assert cancelled_line["recording_id"] == RECORDING
+    assert cancelled_line["revision"] == 3
+    assert cancelled_line["job_id"] == f"transcribe:{RECORDING}:3"
