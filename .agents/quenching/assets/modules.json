@@ -1,0 +1,496 @@
+{
+  "schemaVersion": 1,
+  "source": "plugins/quenching",
+  "marketplace": ".claude-plugin/marketplace.json",
+  "versionConstant": "plugins/quenching/assets/bin/quenching/common/version.py",
+  "distributions": [
+    {
+      "platform": "codex",
+      "name": "quenching-codex",
+      "path": "plugins/codex/quenching-codex",
+      "marketplace": ".agents/plugins/marketplace.json",
+      "pluginManifest": ".codex-plugin/plugin.json",
+      "versionFile": true
+    }
+  ],
+  "modules": [
+    {
+      "name": "quenching",
+      "path": "plugins/quenching",
+      "published": false,
+      "versionFile": true,
+      "cqPathOwner": false
+    },
+    {
+      "name": "quenching-specs-reader",
+      "path": "plugins/claude/quenching-specs-reader",
+      "published": true,
+      "versionFile": true,
+      "cqPathOwner": false,
+      "authored": [
+        "commands/read.md",
+        "bin/cq-specs-read",
+        "README.md"
+      ],
+      "generated": {
+        "trees": [
+          "assets/bin/quenching/common",
+          "assets/bin/quenching/specs",
+          "assets/bin/quenching/mcp",
+          "assets/specs",
+          "assets/portal"
+        ],
+        "metadata": {
+          "description": "Read-only view of another project's provider-owned quenching specs — one command, /quenching-specs-reader:read, for a target that must read a specs front without enabling the full quenching plugin. Generated from plugins/quenching; it never writes the tracker.",
+          "keywords": [
+            "claude-code",
+            "spec-driven",
+            "backlog",
+            "read-only",
+            "obsidian"
+          ]
+        },
+        "files": [
+          "assets/modules.json"
+        ]
+      }
+    },
+    {
+      "name": "quenching-hud",
+      "path": "plugins/claude/quenching-hud",
+      "published": true,
+      "versionFile": false,
+      "cqPathOwner": false
+    },
+    {
+      "name": "quenching-specs",
+      "path": "plugins/claude/quenching-specs",
+      "published": true,
+      "versionFile": true,
+      "cqPathOwner": true,
+      "owned": {
+        "commands": [
+          "specs",
+          "git",
+          "handoff.md"
+        ],
+        "hooks": true,
+        "mcp": true,
+        "packages": [
+          "specs",
+          "git",
+          "session",
+          "codex",
+          "portal",
+          "config",
+          "mcp",
+          "deploy"
+        ],
+        "agents": true
+      },
+      "generatedSupport": {
+        "packages": [
+          "common",
+          "components"
+        ],
+        "references": [
+          "align",
+          "components-command-new",
+          "git",
+          "knowledge-add",
+          "knowledge-align",
+          "knowledge-import",
+          "specs-align",
+          "specs-conclude",
+          "specs-develop",
+          "specs-execute",
+          "specs-create"
+        ],
+        "router": true
+      },
+      "metadata": {
+        "description": "The spec-driven cycle and its git hand-offs: /quenching-specs:specs:* (create, develop, execute, conclude, triage, status), /quenching-specs:git:* and /quenching-specs:handoff, the verifier agents, and the one cq command-line tool every other quenching module routes through. Enable it alone for a provider-owned backlog; the other modules add their fronts beside it.",
+        "keywords": [
+          "claude-code",
+          "spec-driven",
+          "backlog",
+          "git",
+          "orchestration"
+        ]
+      }
+    },
+    {
+      "name": "quenching-align",
+      "path": "plugins/claude/quenching-align",
+      "published": true,
+      "versionFile": true,
+      "cqPathOwner": false,
+      "owned": {
+        "commands": [
+          "knowledge",
+          "components",
+          "align.md"
+        ],
+        "packages": [
+          "knowledge",
+          "components"
+        ],
+        "agents": false
+      },
+      "generatedSupport": {
+        "packages": [
+          "common",
+          "session",
+          "controls"
+        ],
+        "references": [
+          "align",
+          "components-command-new",
+          "git",
+          "knowledge-add",
+          "knowledge-align",
+          "knowledge-import",
+          "specs-align",
+          "specs-conclude",
+          "specs-develop",
+          "specs-execute",
+          "components-command-eval",
+          "components-harness-align",
+          "front-align",
+          "knowledge-documentation",
+          "knowledge-import-memory"
+        ],
+        "router": true
+      },
+      "metadata": {
+        "description": "The repository-wide align and the two knowledge fronts it conducts first: /quenching-align:align over every enabled module, the docs/ OKF bundle (/quenching-align:knowledge:*) and the .claude/ automation surface (/quenching-align:components:*). Fronts whose module is not enabled are reported not-installed, never invoked. Requires quenching-specs for cq.",
+        "keywords": [
+          "claude-code",
+          "documentation",
+          "okf",
+          "open-knowledge-format",
+          "conformance",
+          "skill-authoring",
+          "automation"
+        ]
+      }
+    },
+    {
+      "name": "quenching-design",
+      "path": "plugins/claude/quenching-design",
+      "published": true,
+      "versionFile": true,
+      "cqPathOwner": false,
+      "owned": {
+        "commands": [
+          "design"
+        ],
+        "packages": [
+          "design"
+        ],
+        "agents": false
+      },
+      "generatedSupport": {
+        "packages": [
+          "common"
+        ],
+        "references": [
+          "align",
+          "components-command-new",
+          "git",
+          "knowledge-add",
+          "knowledge-align",
+          "knowledge-import",
+          "specs-align",
+          "specs-conclude",
+          "specs-develop",
+          "specs-execute",
+          "design-align",
+          "front-align"
+        ],
+        "router": true
+      },
+      "metadata": {
+        "description": "The /.design/ source front: /quenching-design:design:* aligns and reports the design source a repository declares. Requires quenching-specs for cq.",
+        "keywords": [
+          "claude-code",
+          "design",
+          "conformance"
+        ]
+      }
+    },
+    {
+      "name": "quenching-ops",
+      "path": "plugins/claude/quenching-ops",
+      "published": true,
+      "versionFile": true,
+      "cqPathOwner": false,
+      "owned": {
+        "commands": [
+          "ops"
+        ],
+        "packages": [
+          "ops"
+        ],
+        "agents": false
+      },
+      "generatedSupport": {
+        "packages": [
+          "common"
+        ],
+        "references": [
+          "align",
+          "components-command-new",
+          "git",
+          "knowledge-add",
+          "knowledge-align",
+          "knowledge-import",
+          "specs-align",
+          "specs-conclude",
+          "specs-develop",
+          "specs-execute",
+          "ops-align",
+          "front-align"
+        ],
+        "router": true
+      },
+      "metadata": {
+        "description": "The declared-operations front: /quenching-ops:ops:* aligns and reports the operations registry a repository declares. Requires quenching-specs for cq.",
+        "keywords": [
+          "claude-code",
+          "operations",
+          "conformance"
+        ]
+      }
+    },
+    {
+      "name": "quenching-proof",
+      "path": "plugins/claude/quenching-proof",
+      "published": true,
+      "versionFile": true,
+      "cqPathOwner": false,
+      "owned": {
+        "commands": [
+          "proof"
+        ],
+        "packages": [
+          "proof"
+        ],
+        "agents": false
+      },
+      "generatedSupport": {
+        "packages": [
+          "common",
+          "ops",
+          "controls"
+        ],
+        "references": [
+          "align",
+          "components-command-new",
+          "git",
+          "knowledge-add",
+          "knowledge-align",
+          "knowledge-import",
+          "specs-align",
+          "specs-conclude",
+          "specs-develop",
+          "specs-execute",
+          "proof-align",
+          "front-align"
+        ],
+        "router": true
+      },
+      "metadata": {
+        "description": "The verification front: /quenching-proof:proof:* aligns and reports the proof layers a repository declares. Requires quenching-specs for cq.",
+        "keywords": [
+          "claude-code",
+          "testing",
+          "verification",
+          "conformance"
+        ]
+      }
+    },
+    {
+      "name": "quenching-toolchain",
+      "path": "plugins/claude/quenching-toolchain",
+      "published": true,
+      "versionFile": true,
+      "cqPathOwner": false,
+      "owned": {
+        "commands": [
+          "toolchain"
+        ],
+        "packages": [
+          "toolchain"
+        ],
+        "agents": false
+      },
+      "generatedSupport": {
+        "packages": [
+          "common",
+          "controls"
+        ],
+        "references": [
+          "align",
+          "components-command-new",
+          "git",
+          "knowledge-add",
+          "knowledge-align",
+          "knowledge-import",
+          "specs-align",
+          "specs-conclude",
+          "specs-develop",
+          "specs-execute",
+          "toolchain-align",
+          "front-align"
+        ],
+        "router": true
+      },
+      "metadata": {
+        "description": "The toolchain front: /quenching-toolchain:toolchain:* aligns and reports the toolchain a repository declares. Requires quenching-specs for cq.",
+        "keywords": [
+          "claude-code",
+          "toolchain",
+          "conformance"
+        ]
+      }
+    },
+    {
+      "name": "quenching-delivery",
+      "path": "plugins/claude/quenching-delivery",
+      "published": true,
+      "versionFile": true,
+      "cqPathOwner": false,
+      "owned": {
+        "commands": [
+          "delivery"
+        ],
+        "packages": [
+          "delivery"
+        ],
+        "agents": false
+      },
+      "generatedSupport": {
+        "packages": [
+          "common",
+          "controls"
+        ],
+        "references": [
+          "align",
+          "components-command-new",
+          "git",
+          "knowledge-add",
+          "knowledge-align",
+          "knowledge-import",
+          "specs-align",
+          "specs-conclude",
+          "specs-develop",
+          "specs-execute",
+          "delivery-align",
+          "front-align"
+        ],
+        "router": true
+      },
+      "metadata": {
+        "description": "The delivery front: /quenching-delivery:delivery:* aligns and reports the delivery surfaces a repository declares. Requires quenching-specs for cq.",
+        "keywords": [
+          "claude-code",
+          "delivery",
+          "ci-cd",
+          "conformance"
+        ]
+      }
+    },
+    {
+      "name": "quenching-security",
+      "path": "plugins/claude/quenching-security",
+      "published": true,
+      "versionFile": true,
+      "cqPathOwner": false,
+      "owned": {
+        "commands": [
+          "security"
+        ],
+        "packages": [
+          "security"
+        ],
+        "agents": false
+      },
+      "generatedSupport": {
+        "packages": [
+          "common",
+          "controls"
+        ],
+        "references": [
+          "align",
+          "components-command-new",
+          "git",
+          "knowledge-add",
+          "knowledge-align",
+          "knowledge-import",
+          "specs-align",
+          "specs-conclude",
+          "specs-develop",
+          "specs-execute"
+        ],
+        "router": true
+      },
+      "metadata": {
+        "description": "The read-only security pillar: /quenching-security:security:* reports the security posture a repository declares, without a local align. Requires quenching-specs for cq.",
+        "keywords": [
+          "claude-code",
+          "security",
+          "read-only"
+        ]
+      }
+    },
+    {
+      "name": "quenching-opensource",
+      "path": "plugins/claude/quenching-opensource",
+      "published": true,
+      "versionFile": true,
+      "cqPathOwner": false,
+      "owned": {
+        "commands": [
+          "opensource"
+        ],
+        "packages": [
+          "opensource"
+        ],
+        "agents": false
+      },
+      "generatedSupport": {
+        "packages": [
+          "common",
+          "controls"
+        ],
+        "references": [
+          "align",
+          "components-command-new",
+          "git",
+          "knowledge-add",
+          "knowledge-align",
+          "knowledge-import",
+          "specs-align",
+          "specs-conclude",
+          "specs-develop",
+          "specs-execute",
+          "front-align",
+          "opensource-controls",
+          "opensource-align",
+          "opensource-readiness"
+        ],
+        "router": true
+      },
+      "metadata": {
+        "description": "The open source front: /quenching-opensource:opensource:* reports every owner's catalog answers and the baseline level, and writes license, community and governance artifacts from pinned templates. Requires quenching-specs for cq.",
+        "keywords": [
+          "claude-code",
+          "open-source",
+          "governance",
+          "conformance"
+        ]
+      }
+    }
+  ]
+}

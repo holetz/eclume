@@ -1,0 +1,127 @@
+{
+  "replacements": {
+    "Run the `quenching-specs:scout` agent per area, at most 3 at a time,": "Run the scout protocol of `../../agents/scout.md` in Codex host sub-agents per area, at most 3 at a time,",
+    "Claude Code": "Codex",
+    "${CLAUDE_PLUGIN_ROOT}/assets/references/": "../../references/",
+    "${CLAUDE_PLUGIN_ROOT}/assets/templates/": "../../templates/",
+    "${CLAUDE_PLUGIN_ROOT}/assets/specs/": "../../specs/",
+    "${CLAUDE_PLUGIN_ROOT}/assets/knowledge/": "../../knowledge/",
+    "${CLAUDE_PLUGIN_ROOT}/assets/bin/cq": "../../scripts/cq",
+    "plugins/quenching/assets/bin/cq": "plugins/codex/quenching-codex/scripts/bin/cq",
+    "assets/bin/cq": "scripts/bin/cq",
+    "\"assets\", \"bin\", \"cq\"": "\"scripts\", \"bin\", \"cq\"",
+    "${CLAUDE_PLUGIN_ROOT}/assets/checks/": "../../checks/",
+    "${CLAUDE_PLUGIN_ROOT}": "../..",
+    "${CLAUDE_PROJECT_DIR}": ".",
+    "~/.claude/projects/": "~/.codex/sessions/",
+    ".claude/commands/": ".agents/skills/",
+    ".claude/skills/": ".agents/skills/",
+    ".claude/": ".agents/",
+    "os.path.join(\".claude\", \"quenching.json\")": "os.path.join(\".claude\", \"quenching.json\")",
+    "CLAUDE.md": "AGENTS.md",
+    "CLAUDE_PLUGIN_ROOT": "CODEX_PLUGIN_ROOT",
+    "COMMANDS_DIR = \"commands\"": "COMMANDS_DIR = \"skills\"",
+    "CLAUDE_DIR = \".claude\"": "CLAUDE_DIR = \".agents\"",
+    "PLUGIN_MANIFEST = os.path.join(\".claude-plugin\", \"plugin.json\")": "PLUGIN_MANIFEST = os.path.join(\".codex-plugin\", \"plugin.json\")",
+    "REFERENCES_DIR = os.path.join(\"assets\", \"references\")": "REFERENCES_DIR = \"references\"",
+    "plugins/quenching/agents/": "../../agents/"
+  },
+  "dropped_frontmatter": [
+    "argument-hint",
+    "allowed-tools",
+    "model",
+    "context",
+    "hooks"
+  ],
+  "manual_review": [
+    "AskUserQuestion",
+    "Task",
+    "Skill",
+    "context: fork",
+    "hooks",
+    "align — preserve the seven-front dependency order, applicability probes, not-applicable versus skipped vocabulary, and cross-front re-probe",
+    "ops:align — preserve the probe-before-inventory boundary, three-band disposition, and report-only judgement findings",
+    "ops:status — preserve the read-only boundary, finding bands, and explicit configuration/refusal states",
+    "ops:entrypoint:new — preserve its human gate, put as a decision sheet with no cap of four, when translating the body",
+    "proof:align — preserve the three-band plan, floor-deferral rule, and report-only judgement band",
+    "proof:status — preserve the read-only boundary and explicit suite-not-run statement",
+    "proof:layer:new — preserve the human gate as a decision sheet and separate test-migration confirmation"
+  ],
+  "runtime": {
+    "models": {
+      "opus": "gpt-6-astra",
+      "sonnet": "gpt-6.1-sol",
+      "haiku": "gpt-6-luna"
+    },
+    "provider": "codex-only",
+    "subagents": "host-native",
+    "telemetry": "host-provided-or-not-measured",
+    "unsupported_measurements": [
+      "claude-stream-json-surface-load",
+      "claude-transcript-token-cost"
+    ]
+  },
+  "removals": [
+    {
+      "command": "specs/autopilot",
+      "from": " The Codex review of step 6 is one\n  call per epic and its tokens are reported, or `not measured`.",
+      "replace": ""
+    },
+    {
+      "command": "specs/autopilot",
+      "from": "**Codex, in parallel.**",
+      "until": "**Consolidate by `path:line`.**",
+      "replace": "**Codex review: unavailable on this surface.** A Codex run never launches Codex (no nested Codex); the report names the review `unavailable`.\n\n"
+    },
+    {
+      "command": "specs/autopilot",
+      "from": "Merge both lists, one entry per `path:line`, marked claude,",
+      "until": "Each finding kept becomes",
+      "replace": "The reviewer's findings stand once reproduced, with the command and its output. "
+    },
+    {
+      "command": "specs/autopilot",
+      "from": " (and Codex returned or fell back, reported)",
+      "replace": ""
+    },
+    {
+      "command": "specs/autopilot",
+      "from": "; plus the Codex review of each epic —",
+      "until": ".\n**Done when:** the report is printed",
+      "replace": ""
+    },
+    {
+      "command": "specs/conclude",
+      "from": "| Step 2 — the Codex review |",
+      "until": "| Step 3 — the emergent",
+      "replace": ""
+    },
+    {
+      "command": "specs/conclude",
+      "from": "**Independent Codex review, in parallel",
+      "until": "Present the findings.",
+      "replace": "**Codex review: unavailable on this surface.** A Codex run never launches Codex (no nested Codex); the report names the review `unavailable`.\n\n"
+    },
+    {
+      "command": "specs/conclude",
+      "from": "(and the Codex line: `Codex: reviewed (<n> findings, <m> reproduced)` or `Codex: fallback (<reason>)`)",
+      "replace": "(and the line `Codex: unavailable (no nested Codex)`)"
+    },
+    {
+      "command": "specs/execute",
+      "from": "\n\n   A repository that wants a Codex review per task declares it as this hook; the recipe is\n   `docs/standards/architecture/codex-pillar.md` §The per-task review hook.",
+      "replace": ""
+    },
+    {
+      "command": "specs/execute",
+      "from": "   **The Codex executor comes first, one task at a time.**",
+      "until": "c. **Write only",
+      "replace": ""
+    },
+    {
+      "command": "specs/execute",
+      "from": ", any subject that drifted, and each `Codex:` line of 5b.",
+      "replace": ", and any subject that drifted."
+    }
+  ]
+}
