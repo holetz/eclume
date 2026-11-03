@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Baixa as fontes da UI do desktop: desktop/ui/fonts/*.woff2 e OFL.txt, Archivo e IBM Plex Mono
 # (subconjunto latin) do @fontsource, na mesma versão que o web usa, por `npm pack` num diretório
-# temporário. O desktop/ui/eclume.css vem do Design System por design-system/sincronizar.py.
+# temporário. O desktop/ui/eclume.css vem do Design System por design-system/sync.py.
 # Uso: bash desktop/scripts/sincronizar_ds.sh
 set -euo pipefail
 
