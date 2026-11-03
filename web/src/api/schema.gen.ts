@@ -11,7 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Saúde do serviço e versão do contrato */
+        /** Service health and contract version */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -29,10 +29,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Prontidão — Postgres, Redis e MinIO respondem
-         * @description Desde a 2.13.0. Roda as sondas de Postgres, Redis e armazenamento em paralelo, com teto de
-         *     2 s cada. Pública: devolve só o nome e `ok`/`down` de cada uma, sem latência nem mensagem
-         *     de erro. `/api/v1/health` segue estático, como sinal de vida.
+         * Readiness — Postgres, Redis and MinIO answer
+         * @description Since 2.13.0. Runs the Postgres, Redis and storage probes in parallel, with a ceiling of
+         *     2 s each. Public: returns only the name and `ok`/`down` of each, with no latency nor error
+         *     message. `/api/v1/health` stays static, as a liveness signal.
          */
         get: operations["getHealthReady"];
         put?: never;
@@ -53,10 +53,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Abrir sessão com e-mail e senha
-         * @description Define os cookies `eclume_session` (HttpOnly, Secure, SameSite=Lax) e `eclume_csrf`
-         *     (legível pelo JavaScript). Toda requisição mutável autenticada por sessão ecoa o valor
-         *     de `eclume_csrf` no header `X-CSRF-Token`.
+         * Open a session with e-mail and password
+         * @description Sets the `eclume_session` (HttpOnly, Secure, SameSite=Lax) and `eclume_csrf` cookies
+         *     (readable by JavaScript). Every mutating request authenticated by session echoes the value
+         *     of `eclume_csrf` in the `X-CSRF-Token` header.
          */
         post: operations["login"];
         delete?: never;
@@ -74,7 +74,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Encerrar a sessão */
+        /** Close the session */
         post: operations["logout"];
         delete?: never;
         options?: never;
@@ -90,18 +90,18 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Estado do cadastro e o aviso em vigor
-         * @description Diz se o cadastro está aberto e devolve o texto e a versão do aviso que a conta nova aceita.
+         * Sign-up state and the notice in force
+         * @description Says whether sign-up is open and returns the text and version of the notice the new account accepts.
          */
         get: operations["getSignupInfo"];
         put?: never;
         /**
-         * Criar uma conta e abrir a sessão
-         * @description Cadastro aberto, sem convite e sem confirmação de e-mail. Exige o aceite do aviso em vigor
-         *     (`notice_version` igual à versão de `GET /api/v1/auth/signup`). A conta nasce com os
-         *     tipos de agenda padrão, e a resposta define os cookies de sessão, como o login.
-         *     Com o cadastro fechado (`ECLUME_SIGNUP_OPEN=false`), 403 `signup_closed`; e-mail já
-         *     cadastrado, 409 `email_taken`.
+         * Create an account and open the session
+         * @description Open sign-up, with no invitation and no e-mail confirmation. Requires accepting the notice
+         *     in force (`notice_version` equal to the version of `GET /api/v1/auth/signup`). The account
+         *     is born with the default agenda types, and the response sets the session cookies, like
+         *     login. With sign-up closed (`ECLUME_SIGNUP_OPEN=false`), 403 `signup_closed`; e-mail
+         *     already registered, 409 `email_taken`.
          */
         post: operations["signup"];
         delete?: never;
@@ -118,8 +118,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Usuário e credencial correntes
-         * @description Aceita qualquer credencial válida, sem escopo. O lumea usa para mostrar a conta conectada e os escopos do PAT.
+         * Current user and credential
+         * @description Accepts any valid credential, with no scope. lumea uses it to show the connected account and the PAT's scopes.
          */
         get: operations["getMe"];
         put?: never;
@@ -138,10 +138,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uso e cotas da conta
-         * @description Desde a 2.15.0. O uso corrente da conta e a cota efetiva (a sobreposição da conta pelo
-         *     admin sobre o padrão da plataforma; `null` é sem limite). Minutos de áudio e pedidos ao
-         *     agente contam numa janela móvel de 24 h. Aceita qualquer credencial válida, sem escopo.
+         * Account usage and quotas
+         * @description Since 2.15.0. The account's current usage and the effective quota (the admin's per-account
+         *     override over the platform default; `null` is unlimited). Audio minutes and agent
+         *     requests count in a rolling 24 h window. Accepts any valid credential, with no scope.
          */
         get: operations["getMyUsage"];
         put?: never;
@@ -162,12 +162,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Trocar a própria senha
-         * @description Confere a senha atual (errada: 422 em `current_password`) e grava a nova, que segue a regra
-         *     do cadastro (curta: 422 em `new_password`). As outras sessões da conta acabam e esta
-         *     continua. Com `revoke_tokens: true` (desde a 2.14.0), as credenciais de aparelho e os PATs
-         *     da conta também são revogados; ausente ou `false`, continuam valendo. Só pela sessão do
-         *     usuário, com o limite de tentativas das credenciais.
+         * Change one's own password
+         * @description Checks the current password (wrong: 422 on `current_password`) and stores the new one, which
+         *     follows the sign-up rule (too short: 422 on `new_password`). The account's other sessions
+         *     end and this one continues. With `revoke_tokens: true` (since 2.14.0), the account's device
+         *     credentials and PATs are also revoked; absent or `false`, they stay valid. Only through the
+         *     user's session, with the credentials' attempt limit.
          */
         post: operations["changePassword"];
         delete?: never;
@@ -186,11 +186,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Excluir a própria conta
-         * @description Confere a senha (errada: 422 em `password`) e apaga a conta com tudo o que é dela:
-         *     gravações e áudios, transcrições, resumos, pessoas e impressões de voz, coleções, tags,
-         *     campos, tipos de agenda, tokens e aparelhos. Não há como desfazer. A resposta apaga os
-         *     cookies da sessão. Só pela sessão do usuário, com o limite de tentativas das credenciais.
+         * Delete one's own account
+         * @description Checks the password (wrong: 422 on `password`) and deletes the account with everything it
+         *     owns: recordings and audio, transcripts, summaries, people and voiceprints, collections,
+         *     tags, fields, agenda types, tokens and devices. It cannot be undone. The response clears
+         *     the session cookies. Only through the user's session, with the credentials' attempt limit.
          */
         post: operations["deleteAccount"];
         delete?: never;
@@ -209,8 +209,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Aceitar o aviso de consentimento em vigor
-         * @description Registra o aceite do aviso pela conta corrente, o que zera `notice_required` em `GET /api/v1/me`. Uma versão diferente da em vigor é 422. Só sessão.
+         * Accept the consent notice in force
+         * @description Records the current account's acceptance of the notice, which clears `notice_required` in `GET /api/v1/me`. A version other than the one in force is 422. Session only.
          */
         post: operations["acceptNotice"];
         delete?: never;
@@ -227,8 +227,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Ler a atribuição automática de locutores da conta
-         * @description Preferência da conta: ligar sozinho o locutor à pessoa pela voz, e a pontuação mínima para isso. `platform_enabled` é o liga-desliga da plataforma (`voice_identification.enabled`): desligado, a preferência não tem efeito. Só sessão.
+         * Read the account's automatic speaker assignment
+         * @description The account's preference: link the speaker to the person by voice on its own, and the minimum score for that. `platform_enabled` is the platform's on/off switch (`voice_identification.enabled`): when off, the preference has no effect. Session only.
          */
         get: operations["getVoiceAssignment"];
         put?: never;
@@ -237,8 +237,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Mudar a atribuição automática de locutores da conta
-         * @description Os campos enviados mudam e os demais ficam. Vale para as próximas transcrições: os vínculos que já existem não mudam. Só sessão. `threshold` fora de 0,50 a 0,99 é 422; o padrão é 0,75. Desde a 2.19.0, `keep_samples: false` apaga na hora as amostras, os vetores por gravação e as sugestões pendentes da conta.
+         * Change the account's automatic speaker assignment
+         * @description The fields sent change and the others stay. It applies to the next transcriptions: the links that already exist do not change. Session only. `threshold` outside 0.50 to 0.99 is 422; the default is 0.75. Since 2.19.0, `keep_samples: false` immediately deletes the account's samples, per-recording vectors and pending suggestions.
          */
         patch: operations["updateVoiceAssignment"];
         trace?: never;
@@ -251,8 +251,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Ler o idioma de transcrição preferido da conta
-         * @description Desde a 2.20.0. O idioma preferido da conta (`null` é o padrão do servidor) e o padrão do servidor (`platform_default`), para os clientes nomearem o idioma real. O idioma de um job sai, nesta ordem: o do arquivo, o da conta, o do servidor, `pt`. Sessão ou PAT com `recordings:read`.
+         * Read the account's preferred transcription language
+         * @description Since 2.20.0. The account's preferred language (`null` is the server default) and the server default (`platform_default`), so clients can name the actual language. A job's language comes, in this order, from: the file, the account, the server, `pt`. Session or PAT with `recordings:read`.
          */
         get: operations["getTranscriptionPreference"];
         put?: never;
@@ -261,8 +261,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Mudar o idioma de transcrição preferido da conta
-         * @description Desde a 2.20.0. `language` é um idioma, `auto` (a engine detecta) ou `null` (volta ao padrão do servidor). Vale para os próximos jobs; os que já estão na fila não mudam. Só sessão.
+         * Change the account's preferred transcription language
+         * @description Since 2.20.0. `language` is a language, `auto` (the engine detects) or `null` (back to the server default). It applies to the next jobs; the ones already queued do not change. Session only.
          */
         patch: operations["updateTranscriptionPreference"];
         trace?: never;
@@ -299,8 +299,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Ler se a conta exige nomear os locutores
-         * @description Desde a 2.22.0. `required` diz se a cadeia por agente espera todo locutor (com pelo menos 10 s de fala) ter pessoa; `waiting_count` conta as gravações paradas à espera disso. Sessão ou PAT com `recordings:read`.
+         * Read whether the account requires naming the speakers
+         * @description Since 2.22.0. `required` says whether the agent chain waits for every speaker (with at least 10 s of speech) to have a person; `waiting_count` counts the recordings stopped waiting for that. Session or PAT with `recordings:read`.
          */
         get: operations["getSpeakerNaming"];
         put?: never;
@@ -309,8 +309,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Ligar ou desligar a marcação obrigatória dos locutores
-         * @description Desde a 2.22.0. Ligar vale para as próximas transcrições. Desligar solta toda gravação parada da conta (etapa `speakers` `skipped` com `reason` `naming_not_required`) e a cadeia segue. Só sessão.
+         * Turn required speaker naming on or off
+         * @description Since 2.22.0. Turning it on applies to the next transcriptions. Turning it off releases every stopped recording of the account (`speakers` step `skipped` with `reason` `naming_not_required`) and the chain goes on. Session only.
          */
         patch: operations["updateSpeakerNaming"];
         trace?: never;
@@ -323,11 +323,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Como o agente atribui as tags
-         * @description O automático e a regra do campo embutido Tags, o modo (`fixed`: só as tags cadastradas;
-         *     `auto`: o agente pode criar até `new_limit` tags novas por gravação, sempre preferindo
-         *     reusar, enquanto o cadastro tiver menos que `catalog_limit`) e o tamanho do cadastro. Só
-         *     pela sessão do usuário.
+         * How the agent assigns tags
+         * @description The automatic switch and the rule of the built-in Tags field, the mode (`fixed`: only the
+         *     registered tags; `auto`: the agent may create up to `new_limit` new tags per recording,
+         *     always preferring to reuse, while the catalog has fewer than `catalog_limit`) and the
+         *     catalog size. Only through the user's session.
          */
         get: operations["getTagAssignment"];
         put?: never;
@@ -336,8 +336,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Mudar como o agente atribui as tags
-         * @description Os campos enviados mudam, os demais ficam; vale para as próximas transcrições.
+         * Change how the agent assigns tags
+         * @description The fields sent change, the others stay; it applies to the next transcriptions.
          */
         patch: operations["updateTagAssignment"];
         trace?: never;
@@ -350,14 +350,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Listar os tokens do usuário
-         * @description PATs pessoais e credenciais de dispositivo. `?kind=device` é a lista de "App móvel" e "App desktop"; `?kind=personal`, a de "Tokens de acesso".
+         * List the user's tokens
+         * @description Personal PATs and device credentials. `?kind=device` is the list of "App móvel" and "App desktop"; `?kind=personal`, the one of "Tokens de acesso".
          */
         get: operations["listTokens"];
         put?: never;
         /**
-         * Criar um PAT
-         * @description O segredo (`eclp_...`) volta só nesta resposta; o servidor guarda apenas o hash. Cria sempre `kind: personal`: a credencial de dispositivo só nasce de `POST /devices/login` ou `POST /devices/pair`.
+         * Create a PAT
+         * @description The secret (`eclp_...`) comes back only in this response; the server keeps only the hash. It always creates `kind: personal`: a device credential is only born from `POST /devices/login` or `POST /devices/pair`.
          */
         post: operations["createToken"];
         delete?: never;
@@ -379,8 +379,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Revogar um token
-         * @description Vale para PAT e credencial de dispositivo ("Desvincular" desliga o aparelho).
+         * Revoke a token
+         * @description Applies to a PAT and to a device credential ("Desvincular" turns the device off).
          */
         delete: operations["revokeToken"];
         options?: never;
@@ -396,10 +396,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Descritor público do servidor
-         * @description Nome, endereço, endereço MCP, impressão digital da CA raiz e versões. É a fonte do anúncio
-         *     mDNS, do link do QR, do pareamento e do endereço embutido no instalador: o app confirma
-         *     aqui o que recebeu e fixa a CA pela impressão digital (`ca_sha256`).
+         * Public server descriptor
+         * @description Name, address, MCP address, root CA fingerprint and versions. It is the source of the mDNS
+         *     announcement, the QR link, pairing and the address embedded in the installer: the app
+         *     confirms here what it received and pins the CA by its fingerprint (`ca_sha256`).
          */
         get: operations["getServerInfo"];
         put?: never;
@@ -418,13 +418,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Para onde vai cada dado, conforme a configuração em vigor
-         * @description Desde a 2.19.0. Diz, para a transcrição e para cada finalidade de agente, se o dado é
-         *     processado neste servidor, na rede local ou fora dele, com o nome de quem processa quando
-         *     sai. Pública como `GET /server`, porque quem se cadastra precisa saber antes de aceitar o
-         *     aviso; nunca devolve endereço, modelo, chave nem o nome que o admin deu ao provider. A
-         *     configuração muda em runtime: o cliente não guarda a resposta por tempo indeterminado.
-         *     O áudio e a transcrição ficam sempre guardados neste servidor.
+         * Where each piece of data goes, per the settings in force
+         * @description Since 2.19.0. Says, for transcription and for each agent purpose, whether the data is
+         *     processed on this server, on the local network or outside it, with the name of who
+         *     processes it when it leaves. Public like `GET /server`, because whoever signs up needs to
+         *     know before accepting the notice; it never returns the address, model, key nor the name
+         *     the admin gave the provider. The settings change at runtime: the client does not keep the
+         *     response indefinitely. The audio and the transcript are always stored on this server.
          */
         get: operations["getPrivacyInfo"];
         put?: never;
@@ -445,12 +445,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Conferir um link de redefinição de senha
-         * @description Desde a 2.18.0. A página `/redefinir-senha` lê o segredo do fragmento da URL e o manda no
-         *     corpo; a resposta diz o e-mail da conta e até quando o link vale, sem consumir o link.
-         *     Link inexistente, vencido, já usado, vencido por um mais novo ou de conta desativada,
-         *     401 `invalid_reset_link`; tentativas demais do mesmo IP, 429 `rate_limited` com
-         *     `Retry-After`.
+         * Check a password reset link
+         * @description Since 2.18.0. The `/redefinir-senha` page reads the secret from the URL fragment and sends
+         *     it in the body; the response gives the account's e-mail and until when the link is valid,
+         *     without consuming the link. A link that does not exist, expired, was already used, was
+         *     superseded by a newer one or belongs to a deactivated account, 401 `invalid_reset_link`;
+         *     too many attempts from the same IP, 429 `rate_limited` with `Retry-After`.
          */
         post: operations["checkPasswordReset"];
         delete?: never;
@@ -469,12 +469,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Redefinir a senha por um link gerado pelo admin
-         * @description Desde a 2.18.0. Troca a senha da conta do link (ao menos 12 caracteres, como no cadastro),
-         *     marca o link como usado e encerra todas as sessões da conta, sem abrir outra: a pessoa
-         *     entra de novo com a senha nova. Credenciais de aparelho e PATs seguem valendo. Link
-         *     inválido, 401 `invalid_reset_link`, como em `POST /auth/password-reset/check`; senha
-         *     curta, 422 `validation_failed` sem consumir o link.
+         * Reset the password through a link generated by the admin
+         * @description Since 2.18.0. Changes the password of the link's account (at least 12 characters, as at
+         *     sign-up), marks the link as used and closes every session of the account, without opening
+         *     another: the person logs in again with the new password. Device credentials and PATs stay
+         *     valid. Invalid link, 401 `invalid_reset_link`, as in `POST /auth/password-reset/check`;
+         *     short password, 422 `validation_failed` without consuming the link.
          */
         post: operations["resetPassword"];
         delete?: never;
@@ -493,16 +493,16 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Entrar num aparelho com e-mail e senha
-         * @description Confere a senha como o login do navegador e emite uma credencial de dispositivo: um token
-         *     `kind: device` com `recordings:read`, `recordings:write`, desde a 2.6.0 `summaries:read`
-         *     (o aviso de resumo pronto do app, com "Copiar") e, desde a 2.8.0, `transcripts:read` (a
-         *     pasta sincronizada do desktop lê transcrições), sem validade e revogável
-         *     em `DELETE /api/v1/tokens/{token_id}`. O segredo volta só nesta resposta. Senha errada ou
-         *     conta inativa, 401 com a mesma mensagem do login; conta que ainda não aceitou o aviso em
-         *     vigor, 403 `notice_required` (aceite na web e entre de novo); tentativas demais do mesmo
-         *     IP ou para a mesma conta (a janela da conta é comum com `POST /auth/login`), 429
-         *     `rate_limited` com `Retry-After`.
+         * Log in on a device with e-mail and password
+         * @description Checks the password like the browser login and issues a device credential: a
+         *     `kind: device` token with `recordings:read`, `recordings:write`, since 2.6.0
+         *     `summaries:read` (the app's summary-ready notice, with "Copiar") and, since 2.8.0,
+         *     `transcripts:read` (the desktop synced folder reads transcripts), with no expiry and
+         *     revocable at `DELETE /api/v1/tokens/{token_id}`. The secret comes back only in this
+         *     response. Wrong password or inactive account, 401 with the same message as login; an
+         *     account that has not yet accepted the notice in force, 403 `notice_required` (accept it on
+         *     the web and log in again); too many attempts from the same IP or for the same account (the
+         *     account window is shared with `POST /auth/login`), 429 `rate_limited` with `Retry-After`.
          */
         post: operations["deviceLogin"];
         delete?: never;
@@ -521,10 +521,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Gerar um código de pareamento
-         * @description Código de 6 caracteres (`K7Q-4MX`), válido por 10 minutos e de uso único, que o app troca
-         *     por uma credencial de dispositivo em `POST /api/v1/devices/pair`. `pair_url` é o conteúdo
-         *     do QR que o celular lê. Um código novo vence os anteriores ainda não usados. Só sessão.
+         * Generate a pairing code
+         * @description A 6-character code (`K7Q-4MX`), valid for 10 minutes and single use, that the app exchanges
+         *     for a device credential at `POST /api/v1/devices/pair`. `pair_url` is the content of the
+         *     QR the phone reads. A new code expires the earlier ones not yet used. Session only.
          */
         post: operations["createPairingCode"];
         delete?: never;
@@ -543,8 +543,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Estado de um código de pareamento
-         * @description A web consulta para trocar o QR por "Pareado" e mostrar o aparelho (`token_id`). Só sessão.
+         * State of a pairing code
+         * @description The web polls it to replace the QR with "Pareado" and show the device (`token_id`). Session only.
          */
         get: operations["getPairingCode"];
         put?: never;
@@ -565,11 +565,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Trocar um código de pareamento por uma credencial de dispositivo
-         * @description O código aceita maiúsculas ou minúsculas, com ou sem hífen. Emite a credencial de
-         *     dispositivo do dono do código, como `POST /api/v1/devices/login`. Código inexistente,
-         *     vencido ou já usado, 401 `invalid_pairing_code`; tentativas demais do mesmo IP (ou,
-         *     somando todos os IPs, seis vezes esse limite), 429 `rate_limited` com `Retry-After`.
+         * Exchange a pairing code for a device credential
+         * @description The code accepts upper or lower case, with or without the hyphen. Issues the device
+         *     credential of the code's owner, like `POST /api/v1/devices/login`. A code that does not
+         *     exist, expired or was already used, 401 `invalid_pairing_code`; too many attempts from the
+         *     same IP (or, adding up all IPs, six times that limit), 429 `rate_limited` with
+         *     `Retry-After`.
          */
         post: operations["pairDevice"];
         delete?: never;
@@ -588,20 +589,20 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Iniciar um upload (ou deduplicar)
-         * @description O cliente calcula o `sha256` do arquivo antes de subir. Se o usuário já tem uma gravação
-         *     com o mesmo hash, a resposta é **200** com `status: deduplicated` e o `recording_id`
-         *     existente, e nada é transferido. Caso contrário, **201** com o upload, o `part_size`
-         *     fixado pelo servidor e as URLs das primeiras partes.
+         * Start an upload (or deduplicate)
+         * @description The client computes the file's `sha256` before uploading. If the user already has a
+         *     recording with the same hash, the response is **200** with `status: deduplicated` and the
+         *     existing `recording_id`, and nothing is transferred. Otherwise, **201** with the upload,
+         *     the `part_size` fixed by the server and the URLs of the first parts.
          *
-         *     Desde a 2.15.0, um upload novo que passa das cotas da conta (tamanho por arquivo,
-         *     armazenamento total ou uploads abertos) responde **403** `quota_exceeded`, com `quota`,
-         *     `limit` e `used`, antes de qualquer byte subir. Deduplicar e retomar não passam pela cota.
+         *     Since 2.15.0, a new upload that exceeds the account's quotas (size per file, total storage
+         *     or open uploads) answers **403** `quota_exceeded`, with `quota`, `limit` and `used`,
+         *     before any byte is uploaded. Deduplicating and resuming do not go through the quota.
          *
-         *     Partes: todas com `part_size` bytes, exceto a última; no máximo 10 000. Cada parte vai
-         *     por `PUT` na `url` da parte, com os `headers` indicados; o `ETag` da resposta é guardado
-         *     para o `complete`. A URL é opaca (MinIO pré-assinado ou o próprio
-         *     `PUT /api/v1/uploads/{upload_id}/parts/{part_number}`) e expira em `expires_at`.
+         *     Parts: all of `part_size` bytes, except the last; at most 10,000. Each part goes by `PUT`
+         *     to the part's `url`, with the given `headers`; the response's `ETag` is kept for the
+         *     `complete`. The URL is opaque (MinIO presigned or the API's own
+         *     `PUT /api/v1/uploads/{upload_id}/parts/{part_number}`) and expires at `expires_at`.
          */
         post: operations["createUpload"];
         delete?: never;
@@ -620,13 +621,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Estado do upload, para retomar
-         * @description `parts_received` lista as partes que o armazenamento já confirmou; o cliente sobe só as que faltam.
+         * Upload state, to resume
+         * @description `parts_received` lists the parts the storage has already confirmed; the client uploads only the missing ones.
          */
         get: operations["getUpload"];
         put?: never;
         post?: never;
-        /** Abortar o upload e descartar as partes */
+        /** Abort the upload and discard the parts */
         delete: operations["abortUpload"];
         options?: never;
         head?: never;
@@ -645,8 +646,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Pedir URLs para partes
-         * @description URLs novas para as partes indicadas, inclusive para substituir URLs expiradas numa retomada.
+         * Request URLs for parts
+         * @description New URLs for the given parts, including to replace expired URLs on a resume.
          */
         post: operations["createPartUrls"];
         delete?: never;
@@ -667,11 +668,11 @@ export interface paths {
         };
         get?: never;
         /**
-         * Enviar uma parte pela API
-         * @description Variante da URL de parte servida pela própria API, com a mesma semântica do `PUT` num
-         *     URL pré-assinado do S3. O cliente não monta este caminho: usa a `url` que recebeu.
-         *     `Content-Length` diferente do tamanho da parte é 409; sem o cabeçalho, o corpo é lido em
-         *     pedaços e passar do tamanho da parte é 413 `payload_too_large` (desde a 2.14.0).
+         * Upload a part through the API
+         * @description Variant of the part URL served by the API itself, with the same semantics as the `PUT` to
+         *     an S3 presigned URL. The client does not build this path: it uses the `url` it received.
+         *     A `Content-Length` other than the part size is 409; without the header, the body is read
+         *     in chunks and going past the part size is 413 `payload_too_large` (since 2.14.0).
          */
         put: operations["putUploadPart"];
         post?: never;
@@ -693,12 +694,13 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Concluir o upload e enfileirar a transcrição
-         * @description Monta o objeto a partir das partes, cria a gravação e enfileira o job. O servidor confere
-         *     o `sha256` declarado; divergência vira falha do job com `error.code: hash_mismatch`.
-         *     Repetir o `complete` de um upload já concluído devolve a mesma gravação. Desde a 2.14.0,
-         *     outro `complete` do mesmo upload em andamento (o servidor montando o objeto e conferindo o
-         *     hash) responde 409 `upload_completing` com `Retry-After`: é passageiro, tente de novo.
+         * Complete the upload and queue the transcription
+         * @description Assembles the object from the parts, creates the recording and queues the job. The server
+         *     checks the declared `sha256`; a mismatch becomes a job failure with
+         *     `error.code: hash_mismatch`. Repeating the `complete` of an already completed upload
+         *     returns the same recording. Since 2.14.0, another `complete` of the same upload while one
+         *     is in progress (the server assembling the object and checking the hash) answers 409
+         *     `upload_completing` with `Retry-After`: it is transient, try again.
          */
         post: operations["completeUpload"];
         delete?: never;
@@ -715,10 +717,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Listar as gravações do usuário
-         * @description A biblioteca: por intervalo de `recorded_at` (semana, mês) e com filtros. Os filtros são
-         *     repetíveis: valores repetidos do mesmo filtro combinam por OU, e filtros diferentes, por E
-         *     (`?tag=a&tag=b&kind=note` = nota com a tag `a` ou `b`).
+         * List the user's recordings
+         * @description The library: by `recorded_at` range (week, month) and with filters. Filters are
+         *     repeatable: repeated values of the same filter combine with OR, and different filters with AND
+         *     (`?tag=a&tag=b&kind=note` = a note with the tag `a` or `b`).
          */
         get: operations["listRecordings"];
         put?: never;
@@ -738,18 +740,18 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Gravação e estado do job */
+        /** Recording and job state */
         get: operations["getRecording"];
         put?: never;
         post?: never;
         /**
-         * Excluir a gravação, o áudio e a transcrição
-         * @description Com PAT, exige `recordings:delete` desde a 2.3.0 (antes, `recordings:write`); a migração concedeu `recordings:delete` a todo token que tinha `recordings:write`.
+         * Delete the recording, the audio and the transcript
+         * @description With a PAT, it requires `recordings:delete` since 2.3.0 (before, `recordings:write`); the migration granted `recordings:delete` to every token that had `recordings:write`.
          */
         delete: operations["deleteRecording"];
         options?: never;
         head?: never;
-        /** Editar metadados da gravação */
+        /** Edit the recording metadata */
         patch: operations["updateRecording"];
         trace?: never;
     };
@@ -763,8 +765,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Áudio da gravação (redirecionamento)
-         * @description Redireciona para uma URL temporária do áudio, que aceita `Range` para o player. Desde a 2.29.0, 410 (`code: audio_deleted`) quando a retenção já apagou o áudio; o endereço assinado responde o mesmo.
+         * Recording audio (redirect)
+         * @description Redirects to a temporary URL of the audio, which accepts `Range` for the player. Since 2.29.0, 410 (`code: audio_deleted`) when retention has already erased the audio; the signed address answers the same.
          */
         get: operations["getRecordingAudio"];
         put?: never;
@@ -787,8 +789,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Transcrever de novo com a configuração atual
-         * @description A transcrição mantém o id e sobe de `revision`; os vínculos de locutor a pessoa são refeitos pela nova diarização. Desde a 2.29.0, 409 com `code: audio_deleted` quando a retenção já apagou o áudio.
+         * Transcribe again with the current configuration
+         * @description The transcript keeps its id and goes up a `revision`; the speaker-to-person links are redone by the new diarization. Since 2.29.0, 409 with `code: audio_deleted` when retention has already erased the audio.
          */
         post: operations["retranscribeRecording"];
         delete?: never;
@@ -809,11 +811,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Cancelar a transcrição em curso ou na fila
-         * @description Desde a 2.10.0. O job `queued`/`running` da gravação termina `cancelled`, a gravação fica
-         *     `failed` com `Job.error.code` `cancelled` (recuperável) e a etapa em curso fica `skipped`
-         *     com `reason` `cancelled`. O worker GPU para no próximo ponto de checagem e libera a GPU;
-         *     "Transcrever de novo" (`/retranscribe`) é a volta. Sem job em aberto, 409.
+         * Cancel the running or queued transcription
+         * @description Since 2.10.0. The recording's `queued`/`running` job ends `cancelled`, the recording becomes
+         *     `failed` with `Job.error.code` `cancelled` (recoverable) and the running step becomes `skipped`
+         *     with `reason` `cancelled`. The GPU worker stops at the next checkpoint and frees the GPU;
+         *     "Transcrever de novo" (`/retranscribe`) is the way back. With no open job, 409.
          */
         post: operations["cancelRecordingTranscription"];
         delete?: never;
@@ -834,10 +836,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Seguir sem nomear os locutores
-         * @description Desde a 2.22.0. Solta a gravação parada à espera dos nomes: a etapa `speakers` fica
-         *     `skipped` com `reason` `continued_by_user` e a cadeia segue pelo tipo de agenda. Fora da
-         *     espera, 409.
+         * Continue without naming the speakers
+         * @description Since 2.22.0. Releases the recording stopped waiting for the names: the `speakers` step
+         *     becomes `skipped` with `reason` `continued_by_user` and the chain goes on through the agenda
+         *     type. Outside the wait, 409.
          */
         post: operations["continueRecordingWithoutNames"];
         delete?: never;
@@ -856,23 +858,23 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Estado do resumo da gravação
-         * @description A versão atual (a de maior `version` concluída), a gerada de referência (a gerada mais
-         *     recente concluída, para comparar e voltar) e a geração em andamento. Sem transcrição, 409
-         *     `transcript_missing`.
+         * Summary state of the recording
+         * @description The current version (the completed one with the highest `version`), the generated reference
+         *     (the most recent completed generated one, to compare and go back to) and the generation in
+         *     progress. With no transcript, 409 `transcript_missing`.
          */
         get: operations["getRecordingSummary"];
         /**
-         * Editar o resumo à mão
-         * @description Grava o Markdown como uma versão `manual`, que vira a atual. `base_version` é a versão que
-         *     a pessoa abriu (0 sem resumo concluído); se outra versão entrou nesse meio-tempo, 409
-         *     `summary_changed` e nada é sobrescrito.
+         * Edit the summary by hand
+         * @description Stores the Markdown as a `manual` version, which becomes the current one. `base_version` is
+         *     the version the person opened (0 with no completed summary); if another version came in
+         *     meanwhile, 409 `summary_changed` and nothing is overwritten.
          */
         put: operations["editRecordingSummary"];
         post?: never;
         /**
-         * Excluir o resumo inteiro
-         * @description Apaga todas as versões e o chat de ajuste da gravação.
+         * Delete the whole summary
+         * @description Erases every version and the adjustment chat of the recording.
          */
         delete: operations["deleteRecordingSummary"];
         options?: never;
@@ -892,9 +894,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Voltar à versão gerada
-         * @description Cria uma versão `manual` com o conteúdo da gerada de referência e `restored_from_id`
-         *     apontando para ela: nada se perde. Sem versão gerada, 409 `summary_missing`.
+         * Go back to the generated version
+         * @description Creates a `manual` version with the content of the generated reference and `restored_from_id`
+         *     pointing at it: nothing is lost. With no generated version, 409 `summary_missing`.
          */
         post: operations["revertRecordingSummary"];
         delete?: never;
@@ -912,18 +914,18 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Mensagens do chat de ajuste */
+        /** Messages of the adjustment chat */
         get: operations["listSummaryChat"];
         put?: never;
         /**
-         * Pedir um ajuste do resumo ao agente
-         * @description Grava o pedido e a resposta do agente em `queued`; o cliente consulta
-         *     `GET /api/v1/summary-chat-messages/{message_id}` da resposta até `done` ou `failed`. O
-         *     agente trabalha sobre o resumo atual e só lê a transcrição quando o pedido precisa; cada
-         *     leitura fica em `reads`. Uma resposta que muda o resumo cria uma versão `chat`. Com um
-         *     pedido ainda em aberto na gravação, 409 `chat_busy`; sem transcrição, 409
-         *     `transcript_missing`. Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h
-         *     (estourada, 403 `quota_exceeded`).
+         * Ask the agent for a summary adjustment
+         * @description Stores the request and the agent's reply in `queued`; the client polls
+         *     `GET /api/v1/summary-chat-messages/{message_id}` of the reply until `done` or `failed`. The
+         *     agent works on the current summary and reads the transcript only when the request needs it;
+         *     each read lands in `reads`. A reply that changes the summary creates a `chat` version. With a
+         *     request still open on the recording, 409 `chat_busy`; with no transcript, 409
+         *     `transcript_missing`. Since 2.15.0, the request counts toward the quota of agent requests in
+         *     24 h (exceeded, 403 `quota_exceeded`).
          */
         post: operations["sendSummaryChat"];
         delete?: never;
@@ -941,13 +943,14 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Marcadores da gravação */
+        /** Markers of the recording */
         get: operations["listMarkers"];
         put?: never;
         /**
-         * Enviar marcadores em lote
-         * @description Idempotente por `client_id`: reenviar o mesmo marcador atualiza a nota e não duplica; um
-         *     reenvio sem nota mantém a que já existe. `device_name` é o do corpo (sem ele, nulo).
+         * Send markers in a batch
+         * @description Idempotent by `client_id`: resending the same marker updates the note and does not duplicate
+         *     it; a resend with no note keeps the existing one. `device_name` is the body's (without it,
+         *     null).
          */
         post: operations["upsertMarkers"];
         delete?: never;
@@ -966,17 +969,17 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Exportar a gravação
-         * @description - `txt`: título, data (horário de Brasília), duração, participantes e uma linha
-         *       `[HH:MM:SS] Nome: texto` por segmento.
-         *     - `srt`: uma legenda por segmento, `HH:MM:SS,mmm --> HH:MM:SS,mmm` e `Nome: texto`.
-         *     - `md`: `# Título`, uma linha com a data e o tipo de agenda, e o resumo atual. Sem resumo,
-         *       409 `summary_missing`.
-         *     - `docx`: título, data, duração e participantes, o resumo (títulos e listas do Markdown
-         *       viram estilos do Word) e a transcrição; sem resumo, só a transcrição.
+         * Export the recording
+         * @description - `txt`: title, date (America/Sao_Paulo time), duration, participants and one
+         *       `[HH:MM:SS] Nome: texto` line per segment.
+         *     - `srt`: one subtitle per segment, `HH:MM:SS,mmm --> HH:MM:SS,mmm` and `Nome: texto`.
+         *     - `md`: `# Título`, one line with the date and the agenda type, and the current summary. With
+         *       no summary, 409 `summary_missing`.
+         *     - `docx`: title, date, duration and participants, the summary (Markdown headings and lists
+         *       become Word styles) and the transcript; with no summary, only the transcript.
          *
-         *     Exige `transcripts:read` num PAT, e também `summaries:read` para `md` e `docx`. Sem
-         *     transcrição, 409 `transcript_missing`.
+         *     Requires `transcripts:read` on a PAT, and also `summaries:read` for `md` and `docx`. With no
+         *     transcript, 409 `transcript_missing`.
          */
         get: operations["exportRecording"];
         put?: never;
@@ -997,9 +1000,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Campos da gravação
-         * @description Todo campo do usuário, na ordem da lista; os sem valor saem com `value` e `origin` nulos.
-         *     Título e tags vêm de `Recording.title`/`tags`.
+         * Fields of the recording
+         * @description Every user field, in list order; those with no value come out with null `value` and `origin`.
+         *     Title and tags come from `Recording.title`/`tags`.
          */
         get: operations["listRecordingFields"];
         put?: never;
@@ -1022,8 +1025,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Aceitar todos os valores automáticos
-         * @description Todo valor `auto` da gravação vira `accepted`, que o preenchimento automático não sobrescreve.
+         * Accept all the automatic values
+         * @description Every `auto` value of the recording becomes `accepted`, which automatic filling does not overwrite.
          */
         post: operations["acceptRecordingFields"];
         delete?: never;
@@ -1044,9 +1047,10 @@ export interface paths {
         };
         get?: never;
         /**
-         * Escrever o valor de um campo
-         * @description Origem `edited`. O valor segue o `kind` do campo: string (texto, uma das opções da escolha,
-         *     até 300 caracteres) ou lista de strings; `null` limpa (o título não fica vazio).
+         * Write the value of a field
+         * @description Origin `edited`. The value follows the field's `kind`: a string (text, one of the choice's
+         *     options, up to 300 characters) or a list of strings; `null` clears it (the title never
+         *     becomes empty).
          */
         put: operations["putRecordingField"];
         post?: never;
@@ -1069,8 +1073,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Aceitar o valor automático de um campo
-         * @description `auto` vira `accepted`; um valor que não é `auto` dá 409 `not_auto`.
+         * Accept the automatic value of a field
+         * @description `auto` becomes `accepted`; a value that is not `auto` gives 409 `not_auto`.
          */
         post: operations["acceptRecordingField"];
         delete?: never;
@@ -1087,10 +1091,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Listar transcrições (incremental)
-         * @description Transcrições concluídas do usuário, em ordem crescente de `(updated_at, id)`.
-         *     `since` é inclusivo (`updated_at >= since`): o cliente guarda o maior `updated_at` que
-         *     viu e deduplica por `id` + `revision`.
+         * List transcripts (incremental)
+         * @description The user's completed transcripts, in ascending `(updated_at, id)` order.
+         *     `since` is inclusive (`updated_at >= since`): the client keeps the largest `updated_at` it
+         *     has seen and deduplicates by `id` + `revision`.
          */
         get: operations["listTranscripts"];
         put?: never;
@@ -1110,7 +1114,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Transcrição completa */
+        /** Full transcript */
         get: operations["getTranscript"];
         put?: never;
         post?: never;
@@ -1130,10 +1134,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Exportar a transcrição
-         * @description `md`: frontmatter YAML (`id`, `title`, `recorded_at`, `language`, `duration_ms`,
-         *     `source`, `revision`, `speakers`) e uma linha por segmento, `**Nome** [HH:MM:SS]: texto`,
-         *     separadas por linha em branco. O nome é o da pessoa ligada ou, sem pessoa, o `label`.
+         * Export the transcript
+         * @description `md`: YAML frontmatter (`id`, `title`, `recorded_at`, `language`, `duration_ms`,
+         *     `source`, `revision`, `speakers`) and one line per segment, `**Nome** [HH:MM:SS]: texto`,
+         *     separated by a blank line. The name is that of the linked person or, with no person, the `label`.
          */
         get: operations["exportTranscript"];
         put?: never;
@@ -1161,12 +1165,12 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Renomear o locutor ou ligá-lo a uma pessoa
-         * @description `person_id` liga o locutor a uma pessoa (confirmando, se for o caso, uma sugestão por
-         *     voz); `null` desfaz o vínculo. Ligar uma pessoa sem mandar `label` passa o `label` para
-         *     o nome da pessoa. Sobe a `revision`. Desde a 2.22.0, ligar a última pessoa que faltava a
-         *     uma gravação parada à espera dos nomes (etapa `speakers` `waiting`) a solta, e a cadeia
-         *     segue sozinha.
+         * Rename the speaker or link it to a person
+         * @description `person_id` links the speaker to a person (confirming, where it applies, a voice
+         *     suggestion); `null` undoes the link. Linking a person without sending `label` sets the `label` to
+         *     the person's name. Bumps the `revision`. Since 2.22.0, linking the last missing person to
+         *     a recording stopped waiting for the names (stage `speakers` `waiting`) releases it, and the chain
+         *     goes on by itself.
          */
         patch: operations["updateSpeaker"];
         trace?: never;
@@ -1186,10 +1190,10 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Recusar uma sugestão por voz
-         * @description A pessoa deixa de ser sugerida para este locutor e nunca volta a ser, nem numa
-         *     comparação futura da mesma transcrição. Só o dono da gravação. Sobe a `revision`.
-         *     Aceitar é o `PATCH` do locutor com `person_id`.
+         * Reject a voice suggestion
+         * @description The person stops being suggested for this speaker and never is again, not even in a
+         *     future comparison of the same transcript. Recording owner only. Bumps the `revision`.
+         *     Accepting is the speaker's `PATCH` with `person_id`.
          */
         delete: operations["rejectSpeakerSuggestion"];
         options?: never;
@@ -1209,8 +1213,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Mesclar locutores
-         * @description Os segmentos dos locutores de origem passam ao locutor de destino, e os de origem somem. Sobe a `revision`. Desde a 2.22.0, se nenhum locutor ficou sem pessoa, solta a gravação parada à espera dos nomes, como `updateSpeaker`.
+         * Merge speakers
+         * @description The segments of the source speakers move to the target speaker, and the source ones disappear. Bumps the `revision`. Since 2.22.0, if no speaker is left without a person, releases the recording stopped waiting for the names, like `updateSpeaker`.
          */
         post: operations["mergeSpeakers"];
         delete?: never;
@@ -1236,8 +1240,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Corrigir o texto ou o locutor de um segmento
-         * @description Corrigir o texto descarta as `words` do segmento. Sobe a `revision`.
+         * Correct the text or the speaker of a segment
+         * @description Correcting the text discards the segment's `words`. Bumps the `revision`.
          */
         patch: operations["updateSegment"];
         trace?: never;
@@ -1252,19 +1256,19 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Resumos da transcrição
-         * @description Da maior `version` para a menor; os números podem pular (ver `Summary`).
+         * Summaries of the transcript
+         * @description From the highest `version` to the lowest; the numbers may skip (see `Summary`).
          */
         get: operations["listSummaries"];
         put?: never;
         /**
-         * Gerar um resumo com um tipo de agenda
-         * @description Cada geração é uma nova `version` do resumo daquele tipo de agenda, com as instruções de
-         *     resumo dele. Sem `agenda_type_id`, vale o tipo da gravação; sem nenhum dos dois, 422. Sem
-         *     `provider_id` e sem provider padrão habilitado na plataforma, também 422.
+         * Generate a summary with an agenda type
+         * @description Each generation is a new `version` of the summary of that agenda type, with its summary
+         *     instructions. Without `agenda_type_id`, the recording's type applies; with neither, 422. Without
+         *     `provider_id` and with no default provider enabled on the platform, also 422.
          *
-         *     Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h (estourada, 403
-         *     `quota_exceeded`), e a conta tem no máximo 3 resumos na fila ou rodando (além disso, 429
+         *     Since 2.15.0, the request counts against the quota of Agent requests in 24 h (exceeded, 403
+         *     `quota_exceeded`), and the account has at most 3 summaries queued or running (beyond that, 429
          *     `rate_limited`).
          */
         post: operations["createSummary"];
@@ -1283,11 +1287,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Um resumo */
+        /** One summary */
         get: operations["getSummary"];
         put?: never;
         post?: never;
-        /** Excluir uma versão de resumo */
+        /** Delete a summary version */
         delete: operations["deleteSummary"];
         options?: never;
         head?: never;
@@ -1304,8 +1308,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma mensagem do chat de ajuste
-         * @description O cliente consulta a resposta do agente até `done` ou `failed`.
+         * One message of the adjustment chat
+         * @description The client polls the Agent's reply until `done` or `failed`.
          */
         get: operations["getSummaryChatMessage"];
         put?: never;
@@ -1328,11 +1332,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Excluir um marcador */
+        /** Delete a marker */
         delete: operations["deleteMarker"];
         options?: never;
         head?: never;
-        /** Editar a nota de um marcador */
+        /** Edit the note of a marker */
         patch: operations["updateMarker"];
         trace?: never;
     };
@@ -1344,17 +1348,17 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Tipos de agenda do usuário
-         * @description Na ordem da lista (`position`). A conta nasce com os tipos padrão da plataforma. Desde a
-         *     2.4.0, basta ao PAT `summaries:read` ou `recordings:read`: a credencial de dispositivo lê a
-         *     lista para escolher o tipo ao parar a gravação (o resto de `/agenda-types` segue pedindo
+         * The user's agenda types
+         * @description In list order (`position`). The account starts with the platform's default types. Since
+         *     2.4.0, a PAT with `summaries:read` or `recordings:read` is enough: the device credential reads the
+         *     list to choose the type when stopping the recording (the rest of `/agenda-types` still requires
          *     `summaries:*`).
          */
         get: operations["listAgendaTypes"];
         put?: never;
         /**
-         * Criar um tipo de agenda
-         * @description Sem `position`, o tipo vai para o fim da lista. Nome repetido entre os tipos do usuário é 409.
+         * Create an agenda type
+         * @description Without `position`, the type goes to the end of the list. A name repeated among the user's types is 409.
          */
         post: operations["createAgendaType"];
         delete?: never;
@@ -1373,10 +1377,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Pré-visualizar um tipo de agenda numa gravação
-         * @description Roda, numa gravação transcrita, a detecção com o rascunho no lugar do tipo salvo de mesmo nome,
-         *     o título e as tags que ele aplicaria e o resumo com as instruções dele, sem gravar nada.
-         *     Desde a 2.15.0, o pedido conta na cota de pedidos ao agente em 24 h (estourada, 403
+         * Preview an agenda type on a recording
+         * @description Runs, on a transcribed recording, the detection with the draft in place of the saved type of the same name,
+         *     the title and the tags it would apply, and the summary with its instructions, without saving anything.
+         *     Since 2.15.0, the request counts against the quota of Agent requests in 24 h (exceeded, 403
          *     `quota_exceeded`).
          */
         post: operations["previewAgendaType"];
@@ -1395,22 +1399,22 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Um tipo de agenda */
+        /** One agenda type */
         get: operations["getAgendaType"];
         put?: never;
         post?: never;
         /**
-         * Excluir um tipo de agenda
-         * @description As gravações que o usavam passam para o tipo padrão da conta (origem `auto`); os resumos
-         *     ficam. O tipo padrão (`fallback`) não sai: 409 `fallback_agenda_type`.
+         * Delete an agenda type
+         * @description The recordings that used it move to the account's default type (origin `auto`); the summaries
+         *     stay. The default type (`fallback`) cannot be removed: 409 `fallback_agenda_type`.
          */
         delete: operations["deleteAgendaType"];
         options?: never;
         head?: never;
         /**
-         * Editar um tipo de agenda
-         * @description Vale para as próximas detecções e resumos; os resumos já gerados guardam as instruções do
-         *     momento. Nome repetido é 422 em `name`.
+         * Edit an agenda type
+         * @description Applies to the next detections and summaries; summaries already generated keep the instructions of
+         *     that moment. A repeated name is 422 on `name`.
          */
         patch: operations["updateAgendaType"];
         trace?: never;
@@ -1423,14 +1427,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Campos do usuário
-         * @description Título e tags vêm embutidos em toda conta; os demais são do usuário.
+         * The user's fields
+         * @description Title and tags come built into every account; the others are the user's.
          */
         get: operations["listFields"];
         put?: never;
         /**
-         * Criar um campo
-         * @description A chave (`key`) sai do nome e não muda depois. Escolha exige `options`; os outros tipos não têm.
+         * Create a field
+         * @description The key (`key`) comes from the name and does not change afterwards. A choice field requires `options`; the other types have none.
          */
         post: operations["createField"];
         delete?: never;
@@ -1449,10 +1453,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Testar a regra de um campo
-         * @description Roda a regra de um campo em rascunho em até 3 gravações transcritas (as indicadas, ou as 3
-         *     mais recentes) com o provider de `fields`, sem gravar nada. Desde a 2.15.0, o pedido
-         *     conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
+         * Test a field's rule
+         * @description Runs a draft field's rule on up to 3 transcribed recordings (the given ones, or the 3
+         *     most recent) with the `fields` provider, without saving anything. Since 2.15.0, the request
+         *     counts toward the 24 h quota of Agent requests (exceeded, 403 `quota_exceeded`).
          */
         post: operations["previewField"];
         delete?: never;
@@ -1470,20 +1474,20 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Um campo */
+        /** One field */
         get: operations["getField"];
         put?: never;
         post?: never;
         /**
-         * Excluir um campo
-         * @description Os embutidos não saem: 409 `builtin_field`.
+         * Delete a field
+         * @description Built-in fields cannot be removed: 409 `builtin_field`.
          */
         delete: operations["deleteField"];
         options?: never;
         head?: never;
         /**
-         * Editar um campo
-         * @description Mudar o `kind` descarta os valores já preenchidos; um embutido não muda de `kind` (422).
+         * Edit a field
+         * @description Changing the `kind` discards the values already filled in; a built-in field does not change `kind` (422).
          */
         patch: operations["updateField"];
         trace?: never;
@@ -1498,8 +1502,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma pré-visualização
-         * @description Vive 1 h. A de outra conta, a expirada e a inexistente são 404.
+         * One preview
+         * @description Lives 1 h. One from another account, an expired one and a nonexistent one are 404.
          */
         get: operations["getPreview"];
         put?: never;
@@ -1520,15 +1524,15 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Perguntar sobre a base de gravações
+         * Ask about the recordings base
          * @deprecated
-         * @description Guarda a pergunta e a enfileira; o cliente consulta `GET /api/v1/base-chat/{chat_id}` até
-         *     `done` ou `failed`. O agente do `chat` do backend prioriza os resumos e só lê a transcrição
-         *     quando o resumo não basta; `history` são as últimas mensagens da conversa (até 10), que o
-         *     cliente guarda. Cada conta tem no máximo 2 perguntas em aberto; além disso, 429. Desde a
-         *     2.14.0, um PAT sem `transcripts:read` não busca nem lê transcrições: o agente responde só
-         *     pelos resumos (sessão e credencial de aparelho leem as duas). Desde a 2.15.0, a pergunta
-         *     conta na cota de pedidos ao agente em 24 h (estourada, 403 `quota_exceeded`).
+         * @description Stores the question and queues it; the client polls `GET /api/v1/base-chat/{chat_id}` until
+         *     `done` or `failed`. The backend's `chat` agent favours the summaries and only reads the transcript
+         *     when the summary is not enough; `history` is the last messages of the conversation (up to 10), which the
+         *     client keeps. Each account has at most 2 open questions; beyond that, 429. Since
+         *     2.14.0, a PAT without `transcripts:read` neither searches nor reads transcripts: the agent answers only
+         *     from the summaries (a session and a device credential read both). Since 2.15.0, the question
+         *     counts toward the 24 h quota of Agent requests (exceeded, 403 `quota_exceeded`).
          */
         post: operations["askBaseChat"];
         delete?: never;
@@ -1547,10 +1551,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma pergunta e a resposta
+         * One question and its answer
          * @deprecated
-         * @description Vive 1 h. A de outra conta, a expirada e a inexistente são 404. `sources` são as gravações
-         *     que o agente de fato consultou e em que a resposta se apoia.
+         * @description Lives 1 h. One from another account, an expired one and a nonexistent one are 404. `sources` are the recordings
+         *     the agent actually consulted and on which the answer rests.
          */
         get: operations["getBaseChat"];
         put?: never;
@@ -1569,14 +1573,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * As conversas do Agente
-         * @description Da última atividade (`updated_at`) para trás, paginadas por cursor.
+         * The Agent conversations
+         * @description From the latest activity (`updated_at`) backwards, paginated by cursor.
          */
         get: operations["listAgentSessions"];
         put?: never;
         /**
-         * Abrir uma conversa
-         * @description Sem título, a primeira pergunta dá o título (o começo dela, até 120 caracteres).
+         * Open a conversation
+         * @description Without a title, the first question gives the title (its beginning, up to 120 characters).
          */
         post: operations["createAgentSession"];
         delete?: never;
@@ -1595,22 +1599,22 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma conversa com as mensagens e os arquivos
-         * @description As mensagens em ordem, cada uma com os arquivos dela (os anexos da pergunta, os gerados
-         *     pela resposta), e os anexos ainda não enviados (`pending_files`). Uma resposta em aberto há
-         *     mais de 15 minutos vira `failed` com `agent_expired`.
+         * One conversation with its messages and files
+         * @description The messages in order, each with its files (the question's attachments, those generated
+         *     by the answer), and the attachments not yet sent (`pending_files`). An answer left open for
+         *     more than 15 minutes becomes `failed` with `agent_expired`.
          */
         get: operations["getAgentSession"];
         put?: never;
         post?: never;
         /**
-         * Excluir a conversa
-         * @description Leva as mensagens e os arquivos; o bucket é limpo pela fila de exclusão.
+         * Delete the conversation
+         * @description Takes the messages and the files with it; the bucket is cleaned by the deletion queue.
          */
         delete: operations["deleteAgentSession"];
         options?: never;
         head?: never;
-        /** Renomear a conversa */
+        /** Rename the conversation */
         patch: operations["renameAgentSession"];
         trace?: never;
     };
@@ -1626,11 +1630,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Anexar um arquivo à conversa
-         * @description Aceita .txt, .md, .csv, .pdf e .docx até 10 MB; o tipo vem da extensão e é conferido pelo
-         *     conteúdo (415 `unsupported_media_type` fora disso). O server guarda o original e extrai o
-         *     texto (até 200 mil caracteres), que o agente lê. O anexo vai com a próxima pergunta que o
-         *     citar em `attachments`; a conversa tem até 20 anexos (409 `too_many_files`).
+         * Attach a file to the conversation
+         * @description Accepts .txt, .md, .csv, .pdf and .docx up to 10 MB; the type comes from the extension and is checked against the
+         *     content (415 `unsupported_media_type` otherwise). The server keeps the original and extracts the
+         *     text (up to 200 thousand characters), which the agent reads. The attachment goes with the next question that
+         *     cites it in `attachments`; the conversation has up to 20 attachments (409 `too_many_files`).
          */
         post: operations["attachAgentFile"];
         delete?: never;
@@ -1653,8 +1657,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Tirar um anexo ainda não enviado
-         * @description O anexo que já foi com uma pergunta fica no histórico (409).
+         * Remove an attachment not yet sent
+         * @description An attachment already sent with a question stays in the history (409).
          */
         delete: operations["deleteAgentFile"];
         options?: never;
@@ -1674,16 +1678,16 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Perguntar ao Agente
-         * @description Grava a pergunta com os anexos e a resposta em `queued`, e enfileira a resposta; o cliente
-         *     consulta `GET .../messages/{message_id}` até `done` ou `failed`. O histórico é o da conversa,
-         *     guardado no server. O agente consulta a base (os resumos primeiro; transcrições só com
-         *     sessão, credencial de aparelho ou PAT com `transcripts:read`), lê os anexos e pode gerar
-         *     arquivos (.md, .txt, .csv, .docx). Uma resposta em aberto por conversa (409), duas por conta
-         *     (429); cada pergunta conta na cota de pedidos ao agente em 24 h (403 `quota_exceeded`).
-         *     Desde a 2.24.0, `skill` ou `/nome` no começo da mensagem escolhem uma habilidade (422 se
-         *     inexistente ou desligada; o prefixo sai do texto guardado), e a resposta pode trazer
-         *     propostas de ação em `actions`, que só rodam depois de `POST /agent/actions/{id}/confirm`.
+         * Ask the Agent
+         * @description Stores the question with its attachments and the answer as `queued`, and queues the answer; the client
+         *     polls `GET .../messages/{message_id}` until `done` or `failed`. The history is the conversation's,
+         *     kept on the server. The agent consults the base (summaries first; transcripts only with a
+         *     session, a device credential or a PAT with `transcripts:read`), reads the attachments and may generate
+         *     files (.md, .txt, .csv, .docx). One open answer per conversation (409), two per account
+         *     (429); each question counts toward the 24 h quota of Agent requests (403 `quota_exceeded`).
+         *     Since 2.24.0, `skill` or `/nome` at the start of the message picks a skill (422 if
+         *     nonexistent or disabled; the prefix is removed from the stored text), and the answer may carry
+         *     action proposals in `actions`, which only run after `POST /agent/actions/{id}/confirm`.
          */
         post: operations["askAgent"];
         delete?: never;
@@ -1703,8 +1707,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma mensagem da conversa
-         * @description A resposta até `done` ou `failed`, com as fontes e os arquivos gerados.
+         * One message of the conversation
+         * @description The answer until `done` or `failed`, with the sources and the generated files.
          */
         get: operations["getAgentMessage"];
         put?: never;
@@ -1724,7 +1728,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Baixar um anexo ou um arquivo gerado */
+        /** Download an attachment or a generated file */
         get: operations["downloadAgentFile"];
         put?: never;
         post?: never;
@@ -1742,10 +1746,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * O catálogo de ferramentas do Agente
-         * @description Desde a 2.24.0. Cada ferramenta com a natureza (`read` consulta, `produce` gera arquivo,
-         *     `action` propõe uma mudança que a pessoa confirma) e uma descrição curta; é a lista de que
-         *     uma habilidade escolhe as ferramentas permitidas.
+         * The Agent's tool catalogue
+         * @description Since 2.24.0. Each tool with its nature (`read` consults, `produce` generates a file,
+         *     `action` proposes a change the person confirms) and a short description; it is the list from which
+         *     a skill picks its allowed tools.
          */
         get: operations["listAgentTools"];
         put?: never;
@@ -1764,16 +1768,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * As habilidades da conta
-         * @description Desde a 2.24.0. Todas (até 50), por nome.
+         * The account's skills
+         * @description Since 2.24.0. All of them (up to 50), by name.
          */
         get: operations["listAgentSkills"];
         put?: never;
         /**
-         * Cadastrar uma habilidade
-         * @description Desde a 2.24.0. O nome (a barra inicial é ignorada) tem de 2 a 40 letras minúsculas, números
-         *     e hífens; repetido na conta é 409 `skill_exists`. Ferramenta fora do catálogo ou mais de 50
-         *     habilidades na conta: 422.
+         * Register a skill
+         * @description Since 2.24.0. The name (the leading slash is ignored) has 2 to 40 lowercase letters, digits
+         *     and hyphens; a duplicate in the account is 409 `skill_exists`. A tool outside the catalogue or more than 50
+         *     skills in the account: 422.
          */
         post: operations["createAgentSkill"];
         delete?: never;
@@ -1792,22 +1796,22 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma habilidade
-         * @description Desde a 2.24.0.
+         * One skill
+         * @description Since 2.24.0.
          */
         get: operations["getAgentSkill"];
         put?: never;
         post?: never;
         /**
-         * Excluir a habilidade
-         * @description Desde a 2.24.0. As perguntas que a usaram guardam o nome.
+         * Delete the skill
+         * @description Since 2.24.0. The questions that used it keep its name.
          */
         delete: operations["deleteAgentSkill"];
         options?: never;
         head?: never;
         /**
-         * Editar a habilidade
-         * @description Desde a 2.24.0. Os campos enviados mudam; `allowed_tools` nulo libera todas as ferramentas.
+         * Edit the skill
+         * @description Since 2.24.0. The fields sent change; a null `allowed_tools` allows every tool.
          */
         patch: operations["updateAgentSkill"];
         trace?: never;
@@ -1820,9 +1824,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * O registro das ações do Agente
-         * @description Desde a 2.24.0. A auditoria: cada proposta, com quem confirmou, quando e o resultado por
-         *     alvo, da mais recente para trás. Fica mesmo depois que a conversa é excluída.
+         * The log of the Agent's actions
+         * @description Since 2.24.0. The audit trail: each proposal, with who confirmed it, when, and the result per
+         *     target, newest first. It remains even after the conversation is deleted.
          */
         get: operations["listAgentActions"];
         put?: never;
@@ -1843,8 +1847,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Uma ação do Agente
-         * @description Desde a 2.24.0. A consulta até `done` ou `failed`; a proposta com mais de 24 h vira `expired`.
+         * One Agent action
+         * @description Since 2.24.0. Polled until `done` or `failed`; a proposal older than 24 h becomes `expired`.
          */
         get: operations["getAgentAction"];
         put?: never;
@@ -1867,12 +1871,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Confirmar a proposta
-         * @description Desde a 2.24.0. Passa a proposta a `queued` e enfileira a execução, alvo a alvo, pelas mesmas
-         *     operações do servidor MCP. Idempotente: confirmar de novo devolve o estado atual sem
-         *     executar outra vez. Vencida ou descartada: 409 (`action_expired`, `action_cancelled`). Exige
-         *     o escopo de escrita da ferramenta: `summaries:write` para `regenerate_summaries`,
-         *     `recordings:write` para as demais (PAT sem ele: 403).
+         * Confirm the proposal
+         * @description Since 2.24.0. Moves the proposal to `queued` and enqueues the execution, target by target,
+         *     through the same operations as the MCP server. Idempotent: confirming again returns the
+         *     current state without executing again. Expired or dismissed: 409 (`action_expired`,
+         *     `action_cancelled`). Requires the tool's write scope: `summaries:write` for
+         *     `regenerate_summaries`, `recordings:write` for the others (a PAT without it: 403).
          */
         post: operations["confirmAgentAction"];
         delete?: never;
@@ -1893,8 +1897,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Descartar a proposta
-         * @description Desde a 2.24.0. Só de `proposed` (descartar de novo devolve o estado); senão 409 `action_not_proposed`.
+         * Dismiss the proposal
+         * @description Since 2.24.0. Only from `proposed` (dismissing again returns the state); otherwise 409 `action_not_proposed`.
          */
         post: operations["cancelAgentAction"];
         delete?: never;
@@ -1910,10 +1914,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Diretório de pessoas do usuário */
+        /** The user's people directory */
         get: operations["listPeople"];
         put?: never;
-        /** Cadastrar uma pessoa */
+        /** Register a person */
         post: operations["createPerson"];
         delete?: never;
         options?: never;
@@ -1929,11 +1933,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Empresas, áreas e tags de pessoa em uso
-         * @description Os valores dos atributos de cadastro das pessoas do usuário, com quantas pessoas usam cada
-         *     um. Empresa e área se agrupam sem acento e sem caixa, e o valor devolvido é a grafia mais
-         *     usada; as tags de pessoa se agrupam sem caixa. Servem às sugestões do cadastro e ao filtro
-         *     Participantes da biblioteca.
+         * Companies, areas and person tags in use
+         * @description The values of the registration attributes of the user's people, with how many people use
+         *     each one. Company and area are grouped accent- and case-insensitively, and the value returned
+         *     is the most used spelling; person tags are grouped case-insensitively. They feed the
+         *     registration suggestions and the library's Participants filter.
          */
         get: operations["listPersonFacets"];
         put?: never;
@@ -1953,18 +1957,18 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Uma pessoa */
+        /** One person */
         get: operations["getPerson"];
         put?: never;
         post?: never;
         /**
-         * Excluir uma pessoa
-         * @description Desfaz os vínculos de locutor e apaga a impressão de voz, se houver.
+         * Delete a person
+         * @description Undoes the speaker links and erases the voiceprint, if any.
          */
         delete: operations["deletePerson"];
         options?: never;
         head?: never;
-        /** Editar uma pessoa */
+        /** Edit a person */
         patch: operations["updatePerson"];
         trace?: never;
     };
@@ -1978,8 +1982,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Transcrições em que a pessoa fala
-         * @description Exige `people:read` e `transcripts:read` num PAT. As falas da pessoa saem de `GET /api/v1/search?person=`.
+         * Transcripts in which the person speaks
+         * @description Requires `people:read` and `transcripts:read` on a PAT. The person's utterances come from `GET /api/v1/search?person=`.
          */
         get: operations["listPersonTranscripts"];
         put?: never;
@@ -2000,15 +2004,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Impressão de voz da pessoa
-         * @description As amostras (locutores confirmados) que compõem a impressão, sem os vetores.
+         * The person's voiceprint
+         * @description The samples (confirmed speakers) that make up the voiceprint, without the vectors.
          */
         get: operations["getVoiceprint"];
         put?: never;
         post?: never;
         /**
-         * Excluir a impressão de voz
-         * @description Apaga todas as amostras e as sugestões pendentes da pessoa.
+         * Delete the voiceprint
+         * @description Erases all of the person's samples and pending suggestions.
          */
         delete: operations["deleteVoiceprint"];
         options?: never;
@@ -2031,9 +2035,9 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Remover uma amostra da impressão de voz
-         * @description Tira da impressão só aquela amostra; o locutor segue ligado à pessoa. As sugestões que a
-         *     impressão já fez não mudam.
+         * Remove a sample from the voiceprint
+         * @description Takes only that sample out of the voiceprint; the speaker stays linked to the person. The
+         *     suggestions the voiceprint already made do not change.
          */
         delete: operations["deleteVoiceSample"];
         options?: never;
@@ -2049,9 +2053,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Busca full-text sobre segmentos
-         * @description Busca em português (`tsvector` pt) nos segmentos das transcrições do usuário.
-         *     Pede `q` ou `person`; com só `person`, lista as falas da pessoa em ordem cronológica.
+         * Full-text search over segments
+         * @description Portuguese search (`tsvector` pt) over the segments of the user's transcripts.
+         *     Takes `q` or `person`; with only `person`, it lists the person's utterances in chronological order.
          */
         get: operations["search"];
         put?: never;
@@ -2069,10 +2073,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Coleções do usuário */
+        /** The user's collections */
         get: operations["listCollections"];
         put?: never;
-        /** Criar uma coleção */
+        /** Create a collection */
         post: operations["createCollection"];
         delete?: never;
         options?: never;
@@ -2093,13 +2097,13 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Excluir uma coleção
-         * @description As gravações ficam; só saem da coleção.
+         * Delete a collection
+         * @description The recordings stay; they only leave the collection.
          */
         delete: operations["deleteCollection"];
         options?: never;
         head?: never;
-        /** Renomear ou descrever uma coleção */
+        /** Rename or describe a collection */
         patch: operations["updateCollection"];
         trace?: never;
     };
@@ -2115,9 +2119,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Mesclar uma coleção em outra
-         * @description As gravações da coleção passam para `into`, sem repetição, e a coleção é excluída; `into`
-         *     fica com o nome, a descrição e a regra dela. `into` igual à coleção, ou inexistente, é 422.
+         * Merge a collection into another
+         * @description The collection's recordings move to `into`, without duplicates, and the collection is deleted;
+         *     `into` takes its name, description and rule. `into` equal to the collection, or nonexistent, is 422.
          */
         post: operations["mergeCollection"];
         delete?: never;
@@ -2134,17 +2138,17 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * O cadastro de tags do usuário
-         * @description As tags cadastradas, em ordem alfabética, com quantas gravações usam cada uma. As tags são
-         *     fixas por padrão: o agente só escolhe entre elas (ver `GET /me/tag-assignment`). Toda tag
-         *     que o usuário escreve numa gravação, num envio ou nas tags padrão de um tipo entra no
-         *     cadastro sozinha, e a gravação fica com a grafia do cadastro (sem acento e sem caixa).
+         * The user's tag registry
+         * @description The registered tags, in alphabetical order, with how many recordings use each one. Tags are
+         *     fixed by default: the agent only chooses among them (see `GET /me/tag-assignment`). Every tag
+         *     the user writes on a recording, on an upload or in an agenda type's default tags enters the
+         *     registry on its own, and the recording takes the registry's spelling (accent- and case-insensitive).
          */
         get: operations["listTags"];
         put?: never;
         /**
-         * Cadastrar uma tag
-         * @description O mesmo nome, sem acento e sem caixa, é 409 `tag_exists`.
+         * Register a tag
+         * @description The same name, compared accent- and case-insensitively, is 409 `tag_exists`.
          */
         post: operations["createTag"];
         delete?: never;
@@ -2166,16 +2170,16 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Excluir uma tag
-         * @description A tag sai do cadastro, das gravações e das tags padrão dos tipos.
+         * Delete a tag
+         * @description The tag leaves the registry, the recordings and the agenda types' default tags.
          */
         delete: operations["deleteTag"];
         options?: never;
         head?: never;
         /**
-         * Renomear ou descrever uma tag
-         * @description Renomear troca o nome também nas gravações e nas tags padrão dos tipos; um nome já
-         *     cadastrado é 409 `tag_exists` (para juntar as duas, mescle).
+         * Rename or describe a tag
+         * @description Renaming also changes the name in the recordings and in the agenda types' default tags; a
+         *     name already registered is 409 `tag_exists` (to join the two, merge them).
          */
         patch: operations["updateTag"];
         trace?: never;
@@ -2192,9 +2196,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Mesclar uma tag em outra
-         * @description Onde havia a tag, fica `into` (sem repetir), nas gravações e nas tags padrão dos tipos; a
-         *     tag sai do cadastro. `into` igual à tag, ou inexistente, é 422.
+         * Merge a tag into another
+         * @description Wherever the tag was, `into` takes its place (without repeating), in the recordings and in
+         *     the agenda types' default tags; the tag leaves the registry. `into` equal to the tag, or
+         *     nonexistent, is 422.
          */
         post: operations["mergeTag"];
         delete?: never;
@@ -2213,11 +2218,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Abrir a sessão de admin
-         * @description Conta de admin, separada das contas de usuário (o mesmo e-mail pode existir nas duas).
-         *     Define os cookies `eclume_admin_session` (HttpOnly, Secure, SameSite=Strict,
-         *     `Path=/api/v1/admin`) e `eclume_admin_csrf` (legível pelo JavaScript). Toda requisição
-         *     mutável em `/api/v1/admin/*` ecoa `eclume_admin_csrf` no header `X-CSRF-Token`.
+         * Open the admin session
+         * @description Admin account, separate from the user accounts (the same e-mail may exist in both). Sets
+         *     the cookies `eclume_admin_session` (HttpOnly, Secure, SameSite=Strict,
+         *     `Path=/api/v1/admin`) and `eclume_admin_csrf` (readable by JavaScript). Every mutating
+         *     request under `/api/v1/admin/*` echoes `eclume_admin_csrf` in the `X-CSRF-Token` header.
          */
         post: operations["adminLogin"];
         delete?: never;
@@ -2235,7 +2240,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Encerrar a sessão de admin */
+        /** Close the admin session */
         post: operations["adminLogout"];
         delete?: never;
         options?: never;
@@ -2250,7 +2255,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Conta de admin corrente */
+        /** Current admin account */
         get: operations["getAdminMe"];
         put?: never;
         post?: never;
@@ -2267,7 +2272,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Configuração em runtime da plataforma */
+        /** Runtime configuration of the platform */
         get: operations["getAdminSettings"];
         put?: never;
         post?: never;
@@ -2275,8 +2280,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Alterar a configuração
-         * @description Merge por bloco; só os campos enviados mudam. Vale para os próximos jobs. Desligar `voice_identification.enabled` apaga as impressões de voz e as sugestões pendentes de toda a plataforma.
+         * Change the configuration
+         * @description Merge per block; only the fields sent change. Applies to the next jobs. Turning off `voice_identification.enabled` erases the voiceprints and the pending suggestions of the whole platform.
          */
         patch: operations["updateAdminSettings"];
         trace?: never;
@@ -2288,10 +2293,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Providers de agente de sumarização */
+        /** Summarization agent providers */
         get: operations["listAgentProviders"];
         put?: never;
-        /** Cadastrar um provider */
+        /** Register a provider */
         post: operations["createAgentProvider"];
         delete?: never;
         options?: never;
@@ -2311,13 +2316,13 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Remover um provider */
+        /** Remove a provider */
         delete: operations["deleteAgentProvider"];
         options?: never;
         head?: never;
         /**
-         * Editar um provider
-         * @description `api_key: null` apaga a chave guardada; ausente, mantém.
+         * Edit a provider
+         * @description `api_key: null` erases the stored key; absent, keeps it.
          */
         patch: operations["updateAgentProvider"];
         trace?: never;
@@ -2330,12 +2335,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Tipos de agenda padrão da plataforma
-         * @description Os marcados com `include_for_new_users` são copiados para cada conta criada depois.
+         * Default agenda types of the platform
+         * @description Those marked with `include_for_new_users` are copied into every account created afterwards.
          */
         get: operations["listDefaultAgendaTypes"];
         put?: never;
-        /** Criar um tipo de agenda padrão */
+        /** Create a default agenda type */
         post: operations["createDefaultAgendaType"];
         delete?: never;
         options?: never;
@@ -2355,13 +2360,13 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Excluir um tipo de agenda padrão */
+        /** Delete a default agenda type */
         delete: operations["deleteDefaultAgendaType"];
         options?: never;
         head?: never;
         /**
-         * Editar um tipo de agenda padrão
-         * @description Vale para as contas criadas depois; as cópias que as contas já têm ficam como estão.
+         * Edit a default agenda type
+         * @description Applies to the accounts created afterwards; the copies the accounts already hold stay as they are.
          */
         patch: operations["updateDefaultAgendaType"];
         trace?: never;
@@ -2373,7 +2378,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Segredos da plataforma (sem valor) */
+        /** Platform secrets (without value) */
         get: operations["listSecrets"];
         put?: never;
         post?: never;
@@ -2388,16 +2393,16 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description Nome do segredo: `hf_token` (diarização no worker GPU) ou `anthropic_api_key` (provider `anthropic` sem chave própria). Outro nome → 422. */
+                /** @description Secret name: `hf_token` (diarization in the GPU worker) or `anthropic_api_key` (`anthropic` provider without its own key). Any other name → 422. */
                 secret_name: string;
             };
             cookie?: never;
         };
         get?: never;
-        /** Gravar um segredo (cifrado) */
+        /** Store a secret (encrypted) */
         put: operations["putSecret"];
         post?: never;
-        /** Apagar um segredo */
+        /** Erase a secret */
         delete: operations["deleteSecret"];
         options?: never;
         head?: never;
@@ -2412,8 +2417,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Contas de usuário
-         * @description Dados da conta e a contagem de gravações; nunca o conteúdo do usuário.
+         * User accounts
+         * @description Account data and the recording count; never the user's content.
          */
         get: operations["listUsers"];
         put?: never;
@@ -2437,15 +2442,15 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Excluir um usuário e todos os dados dele
-         * @description Desde a 2.15.0. Exclui a conta como a exclusão pela própria pessoa (`POST /me/delete`), sem a senha: gravações, transcrições, resumos e tudo o mais saem do banco, os objetos saem do armazenamento pela fila de exclusão, a transcrição em curso é cancelada e o e-mail fica livre para um cadastro novo.
+         * Delete a user and all their data
+         * @description Since 2.15.0. Deletes the account like the deletion by the person themselves (`POST /me/delete`), without the password: recordings, transcripts, summaries and everything else leave the database, the objects leave storage through the deletion queue, the transcription in progress is cancelled and the e-mail becomes free for a new sign-up.
          */
         delete: operations["deleteUser"];
         options?: never;
         head?: never;
         /**
-         * Desativar ou reativar um usuário, ou sobrepor as cotas dele
-         * @description Desativar encerra as sessões e revoga os PATs do usuário (desde a 2.18.0, também vence o link de redefinição de senha pendente). Desde a 2.15.0, `quotas` troca a sobreposição das cotas da conta.
+         * Deactivate or reactivate a user, or override their quotas
+         * @description Deactivating closes the user's sessions and revokes their PATs (since 2.18.0, it also expires the pending password reset link). Since 2.15.0, `quotas` replaces the override of the account's quotas.
          */
         patch: operations["updateUser"];
         trace?: never;
@@ -2462,8 +2467,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Gerar um link de redefinição de senha para um usuário
-         * @description Desde a 2.18.0. Link único, válido por 24 horas, que o admin entrega por fora a quem pediu: `<url pública>/redefinir-senha#<segredo>`, com o segredo no fragmento (não chega a logs nem ao `Referer`). O servidor guarda só o hash, e `url` só volta aqui. Um link novo vence os anteriores ainda não usados da conta; desativar a conta anula o link pendente. Conta desativada, 409 `conflict`. O admin nunca vê nem define a senha.
+         * Generate a password reset link for a user
+         * @description Since 2.18.0. Single-use link, valid for 24 hours, that the admin hands over out of band to whoever asked: `<url pública>/redefinir-senha#<segredo>`, with the secret in the fragment (it reaches neither logs nor the `Referer`). The server stores only the hash, and `url` comes back only here. A new link expires the account's earlier unused ones; deactivating the account voids the pending link. Deactivated account, 409 `conflict`. The admin never sees nor sets the password.
          */
         post: operations["createPasswordReset"];
         delete?: never;
@@ -2482,8 +2487,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Retentar um job de transcrição que falhou
-         * @description Cria o job da revisão seguinte da gravação, com a configuração atual da plataforma, e o enfileira. Vale para a gravação de qualquer usuário, mas só para o job mais recente da gravação e em estado `failed`.
+         * Retry a transcription job that failed
+         * @description Creates the job of the recording's next revision, with the platform's current configuration, and enqueues it. Applies to any user's recording, but only to the recording's most recent job and in state `failed`.
          */
         post: operations["retryTranscriptionJob"];
         delete?: never;
@@ -2499,7 +2504,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Saúde da fila, da GPU e dos modelos */
+        /** Health of the queue, the GPU and the models */
         get: operations["getAdminHealth"];
         put?: never;
         post?: never;
@@ -2513,7 +2518,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Erro RFC 9457. O cliente decide por `code`, nunca por `title`. */
+        /** @description RFC 9457 error. The client decides by `code`, never by `title`. */
         Problem: {
             /** Format: uri-reference */
             type: string;
@@ -2522,54 +2527,54 @@ export interface components {
             detail?: string;
             instance?: string;
             /**
-             * @description Código estável. Valores v1: `unauthorized`, `insufficient_scope`, `forbidden`,
+             * @description Stable code. v1 values: `unauthorized`, `insufficient_scope`, `forbidden`,
              *     `not_found`, `validation_failed`, `conflict`, `hash_mismatch`, `upload_expired`,
-             *     `rate_limited`; desde a 1.4.0, `session_required` (PAT numa operação só de sessão);
-             *     desde a 2.0.0, `email_taken` (cadastro com e-mail existente) e `signup_closed`;
-             *     desde a 2.2.0, `summary_changed` (o resumo mudou desde a versão aberta),
-             *     `summary_missing`, `transcript_missing` e `chat_busy` (já há um pedido de ajuste em
-             *     aberto); desde a 2.3.0, `invalid_pairing_code` (código de pareamento inexistente,
-             *     vencido ou usado) e `notice_required` (sessão de conta que ainda não aceitou o aviso em
-             *     vigor); desde a 2.14.0, `payload_too_large`, `upload_completing` e `internal_error`;
-             *     desde a 2.15.0, `quota_exceeded` (cota da conta estourada); desde a 2.18.0,
-             *     `invalid_reset_link` (link de redefinição de senha inexistente, vencido ou usado).
-             *     Códigos novos entram de forma aditiva.
+             *     `rate_limited`; since 1.4.0, `session_required` (a PAT on a session-only operation);
+             *     since 2.0.0, `email_taken` (signup with an existing e-mail) and `signup_closed`;
+             *     since 2.2.0, `summary_changed` (the summary changed since the opened version),
+             *     `summary_missing`, `transcript_missing` and `chat_busy` (an adjustment request is already
+             *     open); since 2.3.0, `invalid_pairing_code` (pairing code nonexistent,
+             *     expired or used) and `notice_required` (session of an account that has not yet accepted the notice in
+             *     force); since 2.14.0, `payload_too_large`, `upload_completing` and `internal_error`;
+             *     since 2.15.0, `quota_exceeded` (the account's quota exceeded); since 2.18.0,
+             *     `invalid_reset_link` (password reset link nonexistent, expired or used).
+             *     New codes are added additively.
              */
             code: string;
-            /** @description Com `payload_too_large`, o teto do corpo da rota em bytes (desde a 2.14.0); com `quota_exceeded`, o limite da cota (desde a 2.15.0). */
+            /** @description With `payload_too_large`, the route's body ceiling in bytes (since 2.14.0); with `quota_exceeded`, the quota's limit (since 2.15.0). */
             limit?: number;
             /**
-             * @description Com `quota_exceeded`, a cota estourada (desde a 2.15.0).
+             * @description With `quota_exceeded`, the exceeded quota (since 2.15.0).
              * @enum {string}
              */
             quota?: "storage_bytes" | "file_bytes" | "open_uploads" | "agent_requests_24h";
-            /** @description Com `quota_exceeded`, o uso a que o pedido levaria (bytes, uploads abertos ou pedidos em 24 h; em `file_bytes`, o tamanho do arquivo) (desde a 2.15.0). */
+            /** @description With `quota_exceeded`, the usage the request would lead to (bytes, open uploads or requests in 24 h; for `file_bytes`, the file size) (since 2.15.0). */
             used?: number;
             /**
-             * @description Com `insufficient_scope`, os escopos que faltaram; numa operação com requisitos `pat`
-             *     alternativos, as alternativas (basta um deles).
+             * @description With `insufficient_scope`, the missing scopes; on an operation with alternative `pat`
+             *     requirements, the alternatives (one of them is enough).
              */
             required_scopes?: components["schemas"]["Scope"][];
-            /** @description Com `validation_failed`, um item por campo inválido. */
+            /** @description With `validation_failed`, one item per invalid field. */
             errors?: {
-                /** @description Caminho do campo (`size_bytes`, `parts[3].etag`). */
+                /** @description Field path (`size_bytes`, `parts[3].etag`). */
                 field: string;
                 message: string;
             }[];
         };
         /**
-         * @description Escopo de PAT. `recordings:delete` (2.3.0) exclui gravações. A tela "Conexão MCP" agrupa os escopos em "Buscar e ler gravações" (`recordings:read`, `transcripts:read`), "Ler e editar resumos" (`summaries:read`, `summaries:write`), "Editar campos e tags" (`recordings:write`) e "Excluir gravações" (`recordings:delete`).
+         * @description PAT scope. `recordings:delete` (2.3.0) deletes recordings. The "Conexão MCP" screen groups the scopes into "Buscar e ler gravações" (`recordings:read`, `transcripts:read`), "Ler e editar resumos" (`summaries:read`, `summaries:write`), "Editar campos e tags" (`recordings:write`) and "Excluir gravações" (`recordings:delete`).
          * @enum {string}
          */
         Scope: "recordings:read" | "recordings:write" | "recordings:delete" | "transcripts:read" | "transcripts:write" | "people:read" | "people:write" | "summaries:read" | "summaries:write";
         Health: {
             /** @enum {string} */
             status: "ok" | "degraded";
-            /** @description Versão do servidor. */
+            /** @description Server version. */
             version: string;
-            /** @description Versão deste contrato que o servidor implementa (`info.version`). */
+            /** @description Version of this contract that the server implements (`info.version`). */
             contract_version: string;
-            /** @description Desde a 2.12.0: o SHA do git de que a imagem do servidor foi construída (o deploy o grava). Ausente fora de uma imagem de produção. */
+            /** @description Since 2.12.0: the git SHA the server image was built from (the deploy writes it). Absent outside a production image. */
             commit?: string;
         };
         HealthReady: {
@@ -2583,26 +2588,26 @@ export interface components {
             }[];
         };
         PasswordResetCheck: {
-            /** @description O segredo do link, lido do fragmento de `/redefinir-senha#<token>`. */
+            /** @description The link's secret, read from the fragment of `/redefinir-senha#<token>`. */
             token: string;
         };
         PasswordReset: {
-            /** @description O segredo do link, como em `PasswordResetCheck`. */
+            /** @description The link's secret, as in `PasswordResetCheck`. */
             token: string;
             /**
              * Format: password
-             * @description Ao menos 12 caracteres, como no cadastro.
+             * @description At least 12 characters, as at signup.
              */
             new_password: string;
         };
-        /** @description Desde a 2.18.0. O que a página de redefinição mostra de um link válido. */
+        /** @description Since 2.18.0. What the reset page shows of a valid link. */
         PasswordResetInfo: {
             /** Format: email */
             email: string;
             /** Format: date-time */
             expires_at: string;
         };
-        /** @description Desde a 2.18.0. O link de redefinição recém-gerado; `url` só volta na criação. */
+        /** @description Since 2.18.0. The freshly generated reset link; `url` is returned only on creation. */
         PasswordResetLink: {
             /**
              * Format: uri
@@ -2617,13 +2622,13 @@ export interface components {
             email: string;
             password: string;
         };
-        /** @description Aviso que a conta aceita ao nascer ("Sou responsável por pedir o consentimento das pessoas que gravo"). */
+        /** @description Notice the account accepts at creation ("Sou responsável por pedir o consentimento das pessoas que gravo"). */
         Notice: {
             version: string;
             text: string;
         };
         SignupInfo: {
-            /** @description `false` com `ECLUME_SIGNUP_OPEN=false`: o cadastro responde 403 `signup_closed`. */
+            /** @description `false` with `ECLUME_SIGNUP_OPEN=false`: signup responds 403 `signup_closed`. */
             open: boolean;
             notice: components["schemas"]["Notice"];
         };
@@ -2632,7 +2637,7 @@ export interface components {
             /** Format: email */
             email: string;
             password: string;
-            /** @description Versão do aviso aceito; tem de ser a em vigor. */
+            /** @description Version of the accepted notice; it must be the one in force. */
             notice_version: string;
         };
         NoticeAccept: {
@@ -2649,12 +2654,12 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             last_login_at: string | null;
-            /** @description Versão do aviso aceito, ou `null` numa conta que ainda não aceitou. */
+            /** @description Version of the accepted notice, or `null` on an account that has not yet accepted it. */
             notice_version: string | null;
             /** Format: date-time */
             notice_accepted_at: string | null;
         };
-        /** @description Conta de usuário vista pelo admin (o `User` mais a contagem de gravações e, desde a 2.15.0, o uso e a sobreposição das cotas). */
+        /** @description User account as seen by the admin (the `User` plus the recording count and, since 2.15.0, the usage and the quota override). */
         AdminUser: {
             /** Format: uuid */
             id: string;
@@ -2670,11 +2675,11 @@ export interface components {
             /** Format: date-time */
             notice_accepted_at: string | null;
             recording_count: number;
-            /** @description Só os campos que esta conta sobrepõe ao padrão da plataforma (`null` num campo é sem limite); `null` quando a conta segue o padrão inteiro. */
+            /** @description Only the fields this account overrides from the platform default (`null` in a field means no limit); `null` when the account follows the whole default. */
             quotas: components["schemas"]["QuotasOverride"] | null;
             usage: components["schemas"]["UsageNow"];
         };
-        /** @description Cotas parciais (desde a 2.15.0): só os campos presentes valem; `null` num campo é sem limite. */
+        /** @description Partial quotas (since 2.15.0): only the fields present apply; `null` in a field means no limit. */
         QuotasOverride: {
             storage_bytes?: number | null;
             file_bytes?: number | null;
@@ -2682,18 +2687,18 @@ export interface components {
             gpu_minutes_24h?: number | null;
             agent_requests_24h?: number | null;
         };
-        /** @description Ao menos um campo; desde a 2.15.0, `active` é opcional e entra `quotas`. */
+        /** @description At least one field; since 2.15.0, `active` is optional and `quotas` is added. */
         UserPatch: {
-            /** @description `false` desativa a conta, encerra as sessões e revoga os PATs. */
+            /** @description `false` deactivates the account, ends its sessions and revokes its PATs. */
             active?: boolean;
-            /** @description Troca a sobreposição inteira das cotas da conta pelos campos enviados (`null` num campo é sem limite); `quotas: null` volta a conta ao padrão da plataforma. */
+            /** @description Replaces the account's whole quota override with the fields sent (`null` in a field means no limit); `quotas: null` returns the account to the platform default. */
             quotas?: components["schemas"]["QuotasOverride"] | null;
         };
         AdminUserPage: {
             items: components["schemas"]["AdminUser"][];
             next_cursor: components["schemas"]["NextCursor"];
         };
-        /** @description Conta de admin, separada das contas de usuário. */
+        /** @description Admin account, separate from the user accounts. */
         AdminAccount: {
             /** Format: uuid */
             id: string;
@@ -2710,79 +2715,79 @@ export interface components {
             id: string;
             name: string;
         };
-        /** @description Cotas de uma conta (desde a 2.15.0); `null` é sem limite. Minutos de áudio transcritos e pedidos ao agente contam numa janela móvel de 24 h. */
+        /** @description Quotas of an account (since 2.15.0); `null` means no limit. Transcribed audio minutes and agent requests count over a rolling 24 h window. */
         Quotas: {
-            /** @description Armazenamento total (áudio das gravações mais uploads abertos), em bytes. */
+            /** @description Total storage (recording audio plus open uploads), in bytes. */
             storage_bytes: number | null;
-            /** @description Tamanho máximo de um arquivo, em bytes. */
+            /** @description Maximum size of one file, in bytes. */
             file_bytes: number | null;
-            /** @description Uploads abertos ao mesmo tempo. */
+            /** @description Uploads open at the same time. */
             open_uploads: number | null;
-            /** @description Minutos de áudio enviados à transcrição em 24 h. Passado o limite nada é recusado: a gravação espera na fila até a janela abrir. */
+            /** @description Audio minutes sent to transcription in 24 h. Past the limit nothing is refused: the recording waits in the queue until the window opens. */
             gpu_minutes_24h: number | null;
-            /** @description Pedidos da pessoa ao agente (resumos, chats, pré-visualizações) em 24 h. */
+            /** @description The person's requests to the agent (summaries, chats, previews) in 24 h. */
             agent_requests_24h: number | null;
         };
-        /** @description Uso corrente de uma conta (desde a 2.15.0). */
+        /** @description Current usage of an account (since 2.15.0). */
         UsageNow: {
             storage_bytes: number;
             open_uploads: number;
             gpu_minutes_24h: number;
             agent_requests_24h: number;
         };
-        /** @description Uso e cota efetiva da conta (desde a 2.15.0). */
+        /** @description Usage and effective quota of the account (since 2.15.0). */
         Usage: {
             usage: components["schemas"]["UsageNow"];
             quotas: components["schemas"]["Quotas"];
         };
         Me: {
             user: components["schemas"]["User"];
-            /** @description A conta ainda não aceitou o aviso em vigor (`POST /api/v1/me/notice`). */
+            /** @description The account has not yet accepted the notice in force (`POST /api/v1/me/notice`). */
             notice_required: boolean;
             auth: {
                 /** @enum {string} */
                 method: "session" | "pat";
-                /** @description Com sessão, todos os escopos. */
+                /** @description With a session, every scope. */
                 scopes: components["schemas"]["Scope"][];
                 /**
                  * Format: uuid
-                 * @description Id do PAT em uso, ou `null` com sessão.
+                 * @description Id of the PAT in use, or `null` with a session.
                  */
                 token_id: string | null;
             };
         };
-        /** @description Atribuição automática de locutores da conta: com ela ligada e a identificação por voz ligada na plataforma, o locutor cuja voz passa do limiar é ligado à pessoa na ingestão, antes do resumo, e sai com `auto_score` no `Speaker`. */
+        /** @description The account's automatic speaker assignment: with it on and voice identification on on the platform, the speaker whose voice passes the threshold is linked to the person at ingestion, before the summary, and comes out with `auto_score` on the `Speaker`. */
         VoiceAssignment: {
             enabled: boolean;
-            /** @description Pontuação mínima (cosseno normalizado) para ligar sozinho, de 0,50 a 0,99. */
+            /** @description Minimum score (normalized cosine) to link on its own, from 0.50 to 0.99. */
             threshold: number;
-            /** @description A identificação por voz está ligada na plataforma; desligada, nada é atribuído. */
+            /** @description Voice identification is on on the platform; when off, nothing is assigned. */
             platform_enabled: boolean;
-            /** @description Desde a 2.19.0. A conta guarda amostras e impressões de voz (padrão `true`). Desligada, nada de voz da conta é calculado, comparado ou guardado; o desligamento apaga na hora as amostras, os vetores por gravação e as sugestões pendentes da conta. */
+            /** @description Since 2.19.0. The account keeps voice samples and voiceprints (default `true`). When off, nothing of the account's voice is computed, compared or stored; turning it off immediately deletes the account's samples, per-recording vectors and pending suggestions. */
             keep_samples: boolean;
-            /** @description Desde a 2.19.0. Quantas amostras de voz a conta guarda. */
+            /** @description Since 2.19.0. How many voice samples the account keeps. */
             sample_count: number;
-            /** @description Desde a 2.19.0. Quantas pessoas da conta têm impressão de voz (ao menos uma amostra). */
+            /** @description Since 2.19.0. How many people of the account have a voiceprint (at least one sample). */
             voiceprint_people: number;
         };
-        /** @description Desde a 2.22.0. Se a conta exige nomear os locutores antes da cadeia por agente e quantas gravações esperam por isso. */
+        /** @description Since 2.22.0. Whether the account requires naming the speakers before the agent chain, and how many recordings are waiting for it. */
         SpeakerNamingPreference: {
             required: boolean;
-            /** @description Gravações cuja revisão atual está com a etapa `speakers` em `waiting`. */
+            /** @description Recordings whose current revision has the `speakers` stage in `waiting`. */
             waiting_count: number;
         };
         SpeakerNamingPatch: {
             required: boolean;
         };
-        /** @description Desde a 2.20.0. Idioma de transcrição preferido da conta e o padrão do servidor que vale quando a conta não escolhe. */
+        /** @description Since 2.20.0. The account's preferred transcription language and the server default that applies when the account does not choose one. */
         TranscriptionPreference: {
-            /** @description Idioma (BCP 47), `auto` (detectar) ou `null` (padrão do servidor). */
+            /** @description Language (BCP 47), `auto` (detect) or `null` (server default). */
             language: string | null;
-            /** @description O `asr.default_language` da plataforma (`pt` sem configuração); pode ser `auto`. */
+            /** @description The platform's `asr.default_language` (`pt` when unconfigured); it may be `auto`. */
             platform_default: string;
         };
         TranscriptionPreferencePatch: {
-            /** @description Idioma (BCP 47), `auto` ou `null` para voltar ao padrão do servidor. */
+            /** @description Language (BCP 47), `auto` or `null` to return to the server default. */
             language: string | null;
         };
         /** @description Since 2.29.0. How long the audio of the account's recordings stays on the server, the platform ceiling and the window in force. */
@@ -2801,21 +2806,21 @@ export interface components {
         VoiceAssignmentPatch: {
             enabled?: boolean;
             threshold?: number;
-            /** @description Desde a 2.19.0. `false` apaga na hora as amostras, os vetores por gravação e as sugestões pendentes da conta; os arquivos de voz do armazenamento saem logo depois. `true` volta a guardar a partir das próximas transcrições, sem recuperar o que saiu. */
+            /** @description Since 2.19.0. `false` immediately deletes the account's samples, per-recording vectors and pending suggestions; the voice files in storage go shortly after. `true` resumes keeping from the next transcriptions on, without recovering what was removed. */
             keep_samples?: boolean;
         };
-        /** @description Cursor da próxima página, ou `null` na última. */
+        /** @description Cursor of the next page, or `null` on the last one. */
         NextCursor: string | null;
         Token: {
             /** Format: uuid */
             id: string;
-            /** @description Com `kind: device`, o nome do aparelho. */
+            /** @description With `kind: device`, the device name. */
             name: string;
             kind: components["schemas"]["TokenKind"];
-            /** @description Com `kind: device`, a plataforma do aparelho; `null` num PAT pessoal. */
+            /** @description With `kind: device`, the device platform; `null` on a personal PAT. */
             platform: components["schemas"]["DevicePlatform"] | null;
             scopes: components["schemas"]["Scope"][];
-            /** @description Começo do segredo, para reconhecer o token (`eclp_7Hq2`). */
+            /** @description Start of the secret, to recognize the token (`eclp_7Hq2`). */
             prefix: string;
             /** Format: date-time */
             created_at: string;
@@ -2827,71 +2832,71 @@ export interface components {
             revoked_at: string | null;
         };
         /**
-         * @description `personal`, o PAT criado em "Tokens de acesso" ou "Conexão MCP"; `device`, a credencial de um aparelho, emitida pelo login ou pelo pareamento.
+         * @description `personal`, the PAT created in "Tokens de acesso" or "Conexão MCP"; `device`, the credential of a device, issued by login or by pairing.
          * @enum {string}
          */
         TokenKind: "personal" | "device";
         /** @enum {string} */
         DevicePlatform: "windows" | "macos" | "linux" | "ios" | "android";
         ServerInfo: {
-            /** @description Nome do servidor (`ECLUME_SERVER_NAME`), também a instância no mDNS. */
+            /** @description Server name (`ECLUME_SERVER_NAME`), also the instance on mDNS. */
             name: string;
             /**
              * Format: uri
-             * @description Endereço público (`ECLUME_PUBLIC_URL`).
+             * @description Public address (`ECLUME_PUBLIC_URL`).
              */
             url: string;
             /**
              * Format: uri
-             * @description Endereço do servidor MCP, que o assistente recebe.
+             * @description Address of the MCP server, which the assistant receives.
              */
             mcp_url: string;
-            /** @description SHA-256, em hex minúsculo, do DER do certificado raiz servido em `/downloads/eclume-root.crt`; `null` enquanto a raiz não foi publicada. */
+            /** @description SHA-256, in lowercase hex, of the DER of the root certificate served at `/downloads/eclume-root.crt`; `null` while the root has not been published. */
             ca_sha256: string | null;
-            /** @description Desde a 2.21.0. SHA-256, em hex minúsculo, do DER da próxima raiz durante a rotação, servida em `/downloads/eclume-root-proxima.crt`; ausente ou `null` fora dela. O app com a raiz atual fixada baixa a próxima por essa mesma conexão, confere a impressão e a guarda para trocar sozinho quando o servidor passar a servi-la. */
+            /** @description Since 2.21.0. SHA-256, in lowercase hex, of the DER of the next root during rotation, served at `/downloads/eclume-root-proxima.crt`; absent or `null` outside it. The app with the current root pinned downloads the next one over that same connection, checks its fingerprint and keeps it, to switch on its own when the server starts serving it. */
             ca_next_sha256?: string | null;
-            /** @description Versão do servidor. */
+            /** @description Server version. */
             version: string;
-            /** @description Versão deste contrato que o servidor implementa. */
+            /** @description Version of this contract that the server implements. */
             contract_version: string;
         };
-        /** @description Desde a 2.19.0. Para onde vai cada dado, conforme a configuração em vigor. */
+        /** @description Since 2.19.0. Where each piece of data goes, under the configuration in force. */
         PrivacyInfo: {
-            /** @description Um item por finalidade, na ordem de `DataPurpose`. */
+            /** @description One item per purpose, in the order of `DataPurpose`. */
             destinations: components["schemas"]["DataDestination"][];
         };
         /**
-         * @description `transcription` é o áudio virando texto; as demais são as finalidades de agente (resumos, campos, chat e detecção do tipo de agenda).
+         * @description `transcription` is audio becoming text; the others are the agent purposes (summaries, fields, chat and agenda type detection).
          * @enum {string}
          */
         DataPurpose: "transcription" | "summaries" | "fields" | "chat" | "agenda_detection";
         DataDestination: {
             purpose: components["schemas"]["DataPurpose"];
             /**
-             * @description `server`: neste servidor; `local_network`: em outra máquina da rede local; `external`: fora do servidor e da rede; `disabled`: nenhum provider habilitado para a finalidade, e nada é enviado. Na dúvida, o servidor responde `external`.
+             * @description `server`: on this server; `local_network`: on another machine of the local network; `external`: outside the server and the network; `disabled`: no provider enabled for the purpose, and nothing is sent. When in doubt, the server answers `external`.
              * @enum {string}
              */
             location: "server" | "local_network" | "external" | "disabled";
-            /** @description Com `external`, quem processa: o fornecedor (por exemplo `Anthropic`) ou só o host do endereço (por exemplo `api.deepseek.com`); `null` nos demais. */
+            /** @description With `external`, who processes it: the vendor (for example `Anthropic`) or only the host of the address (for example `api.deepseek.com`); `null` in the others. */
             processor: string | null;
         };
         DeviceLogin: {
             /** Format: email */
             email: string;
             password: string;
-            /** @description Nome do aparelho, que vira o nome do token ("iPhone da Mariana"). */
+            /** @description Device name, which becomes the token name ("iPhone da Mariana"). */
             device_name: string;
             platform: components["schemas"]["DevicePlatform"];
         };
         DevicePair: {
-            /** @description O código de pareamento (`K7Q-4MX` ou `k7q4mx`). */
+            /** @description The pairing code (`K7Q-4MX` or `k7q4mx`). */
             code: string;
             device_name: string;
             platform: components["schemas"]["DevicePlatform"];
         };
         DeviceCredential: {
             token: components["schemas"]["Token"];
-            /** @description O token completo, que o app guarda. Não é mostrado de novo. */
+            /** @description The full token, which the app stores. It is not shown again. */
             secret: string;
             server: components["schemas"]["ServerInfo"];
         };
@@ -2899,7 +2904,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description `expired` vale também para o código vencido por um código mais novo.
+             * @description `expired` also applies to a code superseded by a newer code.
              * @enum {string}
              */
             status: "pending" | "used" | "expired";
@@ -2907,16 +2912,16 @@ export interface components {
             expires_at: string;
             /**
              * Format: uuid
-             * @description Com `used`, a credencial de dispositivo que o código emitiu.
+             * @description With `used`, the device credential the code issued.
              */
             token_id: string | null;
-            /** @description Só na criação. 6 caracteres de `23456789ABCDEFGHJKMNPQRSTVWXYZ`. */
+            /** @description Only at creation. 6 characters of `23456789ABCDEFGHJKMNPQRSTVWXYZ`. */
             code?: string;
-            /** @description Só na criação. O código como a tela mostra (`K7Q-4MX`). */
+            /** @description Only at creation. The code as the screen shows it (`K7Q-4MX`). */
             display?: string;
             /**
              * Format: uri
-             * @description Só na criação. Conteúdo do QR: `<url>/parear?codigo=<code>&ca=<ca_sha256>` (sem `ca` enquanto a raiz não foi publicada).
+             * @description Only at creation. QR content: `<url>/parear?codigo=<code>&ca=<ca_sha256>` (without `ca` while the root has not been published).
              */
             pair_url?: string;
         };
@@ -2925,13 +2930,13 @@ export interface components {
             scopes: components["schemas"]["Scope"][];
             /**
              * Format: date-time
-             * @description Sem valor, o PAT não expira.
+             * @description With no value, the PAT does not expire.
              */
             expires_at?: string | null;
         };
         TokenCreated: {
             token: components["schemas"]["Token"];
-            /** @description O PAT completo. Não é mostrado de novo. */
+            /** @description The full PAT. It is not shown again. */
             secret: string;
         };
         TokenPage: {
@@ -2939,59 +2944,59 @@ export interface components {
             next_cursor: components["schemas"]["NextCursor"];
         };
         /**
-         * @description Origem do áudio. `desktop` e `mobile` são os apps que gravam.
+         * @description Audio origin. `desktop` and `mobile` are the apps that record.
          * @enum {string}
          */
         Source: "desktop" | "mobile" | "upload" | "api";
-        /** @description Contexto da captura, preenchido pelo app que gravou (desktop ou celular). */
+        /** @description Capture context, filled in by the app that recorded (desktop or phone). */
         Capture: {
             /**
-             * @description App de reunião detectado.
+             * @description Detected meeting app.
              * @enum {string|null}
              */
             meeting_app?: "teams" | "meet" | "zoom" | "other" | null;
             device_name?: string | null;
-            /** @description Versão do app que gravou (`eclume-desktop/0.3.0`, `eclume-android/0.1.0`). */
+            /** @description Version of the app that recorded (`eclume-desktop/0.3.0`, `eclume-android/0.1.0`). */
             client_version?: string | null;
         };
-        /** @description Metadados livres de organização (tipo de reunião, cliente, projeto). */
+        /** @description Free organization metadata (meeting type, client, project). */
         RecordingMetadata: {
             [key: string]: string;
         };
         UploadCreate: {
             filename: string;
-            /** @description Tipo do arquivo, com parâmetros opcionais (`audio/ogg; codecs=opus`, a saída do navegador; `audio/webm`; `video/mp4`). */
+            /** @description File type, with optional parameters (`audio/ogg; codecs=opus`, the browser output; `audio/webm`; `video/mp4`). */
             content_type: string;
             size_bytes: number;
-            /** @description SHA-256 do arquivo inteiro, em hex minúsculo. */
+            /** @description SHA-256 of the whole file, in lowercase hex. */
             sha256: string;
-            /** @description Sem valor, deriva do nome do arquivo. */
+            /** @description With no value, derived from the file name. */
             title?: string;
             /**
              * Format: date-time
-             * @description Início da gravação. Sem valor, vale a hora do envio (`recorded_at_source` `upload`).
+             * @description Start of the recording. With no value, the upload time applies (`recorded_at_source` `upload`).
              */
             recorded_at?: string;
             /**
-             * @description De onde veio `recorded_at`. Sem valor, o servidor decide: com `recorded_at` e
-             *     `source` `desktop` ou `mobile`, `capture`; com `recorded_at` e outra origem, `user`;
-             *     sem `recorded_at`, `upload`.
+             * @description Where `recorded_at` came from. With no value, the server decides: with `recorded_at` and
+             *     `source` `desktop` or `mobile`, `capture`; with `recorded_at` and another origin, `user`;
+             *     without `recorded_at`, `upload`.
              */
             recorded_at_source?: components["schemas"]["RecordedAtSource"];
             kind?: components["schemas"]["RecordingKind"];
             /**
              * Format: uuid
-             * @description Tipo de agenda escolhido ao parar a gravação no celular: vira o tipo escolhido pelo
-             *     usuário (origem `edited`) e dispensa a detecção.
+             * @description Agenda type chosen when stopping the recording on the phone: it becomes the type chosen by the
+             *     user (origin `edited`) and skips the detection.
              */
             agenda_type_id?: string;
             /**
-             * @description Marcadores feitos durante a gravação, com o `device_name` da captura. Idempotentes por
-             *     `client_id`: num upload deduplicado, entram na gravação existente.
+             * @description Markers made during the recording, with the capture's `device_name`. Idempotent by
+             *     `client_id`: in a deduplicated upload, they go into the existing recording.
              */
             markers?: components["schemas"]["MarkerInput"][];
             duration_ms?: number;
-            /** @description Idioma esperado (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta e a gravação guarda o detectado). Sem valor, vale o idioma preferido da conta, depois o padrão do servidor. */
+            /** @description Expected language (BCP 47) or, since 2.20.0, `auto` (the engine detects it and the recording stores the detected one). With no value, the account's preferred language applies, then the server default. */
             language?: string;
             source?: components["schemas"]["Source"];
             capture?: components["schemas"]["Capture"];
@@ -3007,10 +3012,10 @@ export interface components {
             method: "PUT";
             /**
              * Format: uri
-             * @description URL opaca da parte.
+             * @description Opaque URL of the part.
              */
             url: string;
-            /** @description Headers que o `PUT` deve levar. */
+            /** @description Headers the `PUT` must carry. */
             headers: {
                 [key: string]: string;
             };
@@ -3030,20 +3035,20 @@ export interface components {
             content_type: string;
             size_bytes: number;
             sha256: string;
-            /** @description Tamanho de toda parte menos a última, em bytes (mínimo 5 MiB). */
+            /** @description Size of every part but the last, in bytes (minimum 5 MiB). */
             part_size: number;
             part_count: number;
             parts_received: components["schemas"]["ReceivedPart"][];
-            /** @description URLs já emitidas para partes pendentes; pode vir parcial ou vazio. */
+            /** @description URLs already issued for pending parts; may come partial or empty. */
             parts: components["schemas"]["PartUrl"][];
             /**
              * Format: uuid
-             * @description Gravação criada pelo `complete`, ou a existente num `deduplicated`.
+             * @description Recording created by `complete`, or the existing one in a `deduplicated`.
              */
             recording_id: string | null;
             /**
              * Format: date-time
-             * @description Depois disso o upload inacabado é descartado (`upload_expired`).
+             * @description After this the unfinished upload is discarded (`upload_expired`).
              */
             expires_at: string;
             /** Format: date-time */
@@ -3066,25 +3071,25 @@ export interface components {
          * @enum {string}
          */
         RecordingStatus: "uploading" | "queued" | "processing" | "transcribed" | "failed";
-        /** @description Job de transcrição mais recente da gravação. */
+        /** @description Most recent transcription job of the recording. */
         Job: {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
             state: "queued" | "running" | "succeeded" | "failed" | "cancelled";
             /**
-             * @description Etapa em curso, ou `null` fora de execução. `preprocessing` é o tratamento do áudio
-             *     antes do ASR (holetz/eclume#33).
+             * @description Current stage, or `null` outside execution. `preprocessing` is the audio treatment
+             *     before the ASR (holetz/eclume#33).
              * @enum {string|null}
              */
             stage: "preprocessing" | "asr" | "alignment" | "diarization" | "embeddings" | "finalizing" | null;
             progress: number;
             attempts: number;
             error: {
-                /** @description `hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`... e, desde a 1.4.0, `worker_lost` (o worker GPU parou no meio do job), `job_lost` (o job sumiu da fila sem resposta) e `job_stalled` (progresso parado além do teto), detectados pelo server. Desde a 2.5.0, `ingest_failed`: a transcrição ficou pronta no worker GPU, mas o server não conseguiu gravá-la (a ingestão falhou ou nunca chegou); recuperável. Desde a 2.10.0, `cancelled`: o dono cancelou a transcrição (ou excluiu a gravação); recuperável, com `state` `cancelled`. */
+                /** @description `hash_mismatch`, `unsupported_media`, `gpu_oom`, `engine_error`... and, since 1.4.0, `worker_lost` (the GPU worker stopped in the middle of the job), `job_lost` (the job vanished from the queue without an answer) and `job_stalled` (progress stalled beyond the ceiling), detected by the server. Since 2.5.0, `ingest_failed`: the transcription finished in the GPU worker, but the server could not store it (the ingestion failed or never arrived); recoverable. Since 2.10.0, `cancelled`: the owner cancelled the transcription (or deleted the recording); recoverable, with `state` `cancelled`. */
                 code: string;
                 message: string;
-                /** @description A falha é passageira (worker perdido, job sumido ou parado, ingestão falha, falta de VRAM): retranscrever ou `POST /api/v1/admin/jobs/{job_id}/retry` tende a resolver. Ausente em servidores anteriores à 1.4.0. */
+                /** @description The failure is transient (lost worker, vanished or stalled job, failed ingestion, lack of VRAM): retranscribing or `POST /api/v1/admin/jobs/{job_id}/retry` tends to solve it. Absent on servers older than 1.4.0. */
                 retryable?: boolean;
             } | null;
             /** Format: date-time */
@@ -3094,63 +3099,63 @@ export interface components {
             /** Format: date-time */
             finished_at: string | null;
             /**
-             * @description Por que o job espera, enquanto `state` é `queued`; `null` em qualquer outro estado.
-             *     Ausente em servidores anteriores à 2.16.0 (holetz/eclume#117).
+             * @description Why the job waits, while `state` is `queued`; `null` in any other state.
+             *     Absent on servers older than 2.16.0 (holetz/eclume#117).
              */
             queue?: components["schemas"]["JobQueue"] | null;
         };
         /**
-         * @description A espera de um job `queued`, calculada na leitura. Só contagens e horários: nada de outra
-         *     conta. Esperar nunca vira falha; o job segue `queued`.
+         * @description The wait of a `queued` job, computed at read time. Only counts and times: nothing about another
+         *     account. Waiting never becomes a failure; the job stays `queued`.
          */
         JobQueue: {
             /**
-             * @description `processor_queue` (na fila do processador de transcrição), `account_turn` (atrás de
-             *     outras gravações da própria conta, pela fila justa) ou `quota_window` (a conta passou
-             *     dos minutos de transcrição de 24 h). Enum aberto: clientes toleram valor novo.
+             * @description `processor_queue` (in the transcription processor's queue), `account_turn` (behind
+             *     other recordings of the account itself, through the fair queue) or `quota_window` (the account went
+             *     over its 24 h transcription minutes). Open enum: clients tolerate a new value.
              * @enum {string}
              */
             reason: "processor_queue" | "account_turn" | "quota_window";
             /**
-             * @description Em `processor_queue`, quantos jobs começam antes deste, contando o que está rodando;
-             *     `null` nos outros motivos ou se o job não está na fila do processador.
+             * @description In `processor_queue`, how many jobs start before this one, counting the running one;
+             *     `null` for the other reasons or if the job is not in the processor's queue.
              */
             ahead: number | null;
-            /** @description Em `account_turn`, quantas gravações da própria conta vêm antes; `null` nos outros. */
+            /** @description In `account_turn`, how many recordings of the account itself come before; `null` in the others. */
             account_ahead: number | null;
             /**
              * Format: date-time
-             * @description Previsão de início, pela duração real das últimas transcrições; é estimativa, e os
-             *     clientes a rotulam assim. `null` sem histórico suficiente, com o processador fora do
-             *     ar ou fora de `processor_queue`.
+             * @description Start forecast, from the real duration of the latest transcriptions; it is an estimate, and
+             *     clients label it as such. `null` without enough history, with the processor
+             *     down or outside `processor_queue`.
              */
             estimated_start_at: string | null;
             /**
              * Format: date-time
-             * @description Em `quota_window`, quando a janela de 24 h volta a ter minutos; `null` nos outros.
+             * @description In `quota_window`, when the 24 h window has minutes again; `null` in the others.
              */
             resumes_at: string | null;
             processor: components["schemas"]["ProcessorStatus"];
         };
-        /** @description Se o processador de transcrição está no ar, pelo heartbeat do worker GPU. */
+        /** @description Whether the transcription processor is up, by the GPU worker's heartbeat. */
         ProcessorStatus: {
             online: boolean;
             /**
              * Format: date-time
-             * @description Fora do ar, o último heartbeat visto (precisão de 1 min); `null` no ar ou se nunca
-             *     houve heartbeat.
+             * @description When down, the last heartbeat seen (1 min precision); `null` when up or if there was
+             *     never a heartbeat.
              */
             offline_since: string | null;
         };
         /**
-         * @description `meeting` (reunião, o padrão) ou `note` (nota por voz).
+         * @description `meeting` (meeting, the default) or `note` (voice note).
          * @enum {string}
          */
         RecordingKind: "meeting" | "note";
         /**
-         * @description Origem de `recorded_at`: `capture` (relógio do app que gravou), `file_metadata` (lida do
-         *     arquivo e confirmada na importação), `user` (digitada ou corrigida) ou `upload` (sem data;
-         *     vale a hora do envio).
+         * @description Origin of `recorded_at`: `capture` (clock of the app that recorded), `file_metadata` (read from the
+         *     file and confirmed at import), `user` (typed or corrected) or `upload` (no date;
+         *     the upload time applies).
          * @enum {string}
          */
         RecordedAtSource: "capture" | "file_metadata" | "user" | "upload";
@@ -3163,36 +3168,36 @@ export interface components {
             source: components["schemas"]["Source"];
             /**
              * Format: date-time
-             * @description Início da gravação; o fim é `recorded_at + duration_ms`.
+             * @description Start of the recording; the end is `recorded_at + duration_ms`.
              */
             recorded_at: string;
             recorded_at_source: components["schemas"]["RecordedAtSource"];
-            /** @description `null` até o áudio ser lido. */
+            /** @description `null` until the audio is read. */
             duration_ms: number | null;
-            /** @description Idioma pedido ou detectado; `auto` só enquanto a detecção não roda. */
+            /** @description Requested or detected language; `auto` only while the detection has not run. */
             language: string | null;
             size_bytes: number;
             content_type: string;
             content_hash: string;
             /**
              * @deprecated
-             * @description Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             * @description Deprecated since 2.11.0: always the user themself (each account is isolated); removed in `/api/v2`.
              */
             owner: components["schemas"]["UserRef"];
             tags: string[];
             collection_ids: string[];
             /**
-             * @description De quem é a lista de coleções: `auto` (o agente, pelas coleções automáticas), `edited` (o
-             *     usuário mudou; o agente não mexe mais) ou `null` (vinda do envio, ou ainda sem escolha: o
-             *     agente só soma).
+             * @description Who owns the collection list: `auto` (the agent, through the auto collections), `edited` (the
+             *     user changed it; the agent no longer touches it) or `null` (from the upload, or not yet chosen: the
+             *     agent only adds).
              * @enum {string|null}
              */
             collections_origin: "auto" | "edited" | null;
             metadata: components["schemas"]["RecordingMetadata"];
             capture: components["schemas"]["Capture"] | null;
             /**
-             * @description Tipo de agenda da gravação: detectado pelo agente (`auto`) ou escolhido pelo usuário
-             *     (`edited`), que a detecção nunca troca.
+             * @description Agenda type of the recording: detected by the agent (`auto`) or chosen by the user
+             *     (`edited`), which the detection never replaces.
              */
             agenda_type: {
                 /** Format: uuid */
@@ -3203,24 +3208,24 @@ export interface components {
             } | null;
             job: components["schemas"]["Job"] | null;
             /**
-             * @description As sete etapas do processamento da revisão atual, em ordem; a que ainda não rodou sai
-             *     `pending`. Enquanto o worker GPU reporta progresso, o pré-processamento ou a transcrição
-             *     sai `active`. A etapa `speakers` entrou na 2.22.0 (eram seis).
+             * @description The seven processing steps of the current revision, in order; one that has not run yet comes out
+             *     `pending`. While the GPU worker reports progress, preprocessing or transcription
+             *     comes out `active`. The `speakers` step arrived in 2.22.0 (there were six).
              */
             pipeline: components["schemas"]["PipelineStep"][];
             /**
-             * @description Desde a 2.22.0. O que a gravação espera do dono para seguir: `speakers` quando a etapa
-             *     `speakers` está `waiting` (a conta exige nomear os locutores e falta alguém); `null`
-             *     nas outras.
+             * @description Since 2.22.0. What the recording expects from the owner to proceed: `speakers` when the
+             *     `speakers` step is `waiting` (the account requires naming the speakers and someone is missing); `null`
+             *     in the others.
              * @enum {string|null}
              */
             awaiting: "speakers" | null;
             /**
              * Format: uuid
-             * @description Transcrição, depois do primeiro job concluído.
+             * @description Transcript, after the first completed job.
              */
             transcript_id: string | null;
-            /** @description Marcadores da gravação. */
+            /** @description Markers of the recording. */
             marker_count: number;
             /**
              * Format: date-time
@@ -3234,12 +3239,12 @@ export interface components {
         };
         PipelineStep: {
             /**
-             * @description Na ordem da cadeia; o tipo de agenda vem antes dos campos. `speakers` (desde a 2.22.0) fica entre a transcrição e o tipo de agenda.
+             * @description In chain order; the agenda type comes before the fields. `speakers` (since 2.22.0) sits between the transcription and the agenda type.
              * @enum {string}
              */
             step: "received" | "preprocessing" | "transcription" | "speakers" | "agenda_type" | "fields" | "summary";
             /**
-             * @description `waiting` (desde a 2.22.0) é só da etapa `speakers`: parada à espera de o dono nomear os locutores, com `reason` `unnamed_speakers`.
+             * @description `waiting` (since 2.22.0) belongs only to the `speakers` step: stopped waiting for the owner to name the speakers, with `reason` `unnamed_speakers`.
              * @enum {string}
              */
             state: "pending" | "active" | "done" | "failed" | "skipped" | "waiting";
@@ -3248,17 +3253,17 @@ export interface components {
             /** Format: date-time */
             finished_at: string | null;
             duration_ms: number | null;
-            /** @description Com `state` `failed`. */
+            /** @description With `state` `failed`. */
             error: {
                 code: string;
                 message: string;
             } | null;
             /**
-             * @description Por que a etapa foi pulada: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
-             *     `no_agenda_type`, `before_pipeline` (gravação anterior ao pipeline), `cancelled` (a
-             *     transcrição foi cancelada nesta etapa, desde a 2.10.0), entre outros. Desde a 2.22.0,
-             *     na etapa `speakers`: `unnamed_speakers` (em `waiting`), `continued_by_user` e
-             *     `naming_not_required` (soltas sem os nomes).
+             * @description Why the step was skipped: `no_provider`, `no_auto_fields`, `no_types`, `set_by_user`,
+             *     `no_agenda_type`, `before_pipeline` (recording older than the pipeline), `cancelled` (the
+             *     transcription was cancelled at this step, since 2.10.0), among others. Since 2.22.0,
+             *     at the `speakers` step: `unnamed_speakers` (in `waiting`), `continued_by_user` and
+             *     `naming_not_required` (released without the names).
              */
             reason: string | null;
         };
@@ -3266,24 +3271,24 @@ export interface components {
             title?: string;
             /**
              * Format: date-time
-             * @description Corrigir a data passa `recorded_at_source` a `user`.
+             * @description Correcting the date sets `recorded_at_source` to `user`.
              */
             recorded_at?: string;
             kind?: components["schemas"]["RecordingKind"];
-            /** @description Idioma (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta). */
+            /** @description Language (BCP 47) or, since 2.20.0, `auto` (the engine detects it). */
             language?: string;
-            /** @description Substitui a lista inteira. */
+            /** @description Replaces the whole list. */
             tags?: string[];
-            /** @description Substitui a lista inteira. */
+            /** @description Replaces the whole list. */
             collection_ids?: string[];
-            /** @description Substitui o objeto inteiro (até 50 entradas). */
+            /** @description Replaces the whole object (up to 50 entries). */
             metadata?: {
                 [key: string]: string;
             };
             /**
              * Format: uuid
-             * @description Tipo de agenda escolhido pelo usuário (origem `edited`, que a detecção não troca);
-             *     `null` tira o tipo e devolve a escolha à detecção.
+             * @description Agenda type chosen by the user (origin `edited`, which the detection does not replace);
+             *     `null` removes the type and hands the choice back to the detection.
              */
             agenda_type_id?: string | null;
         };
@@ -3292,20 +3297,20 @@ export interface components {
             next_cursor: components["schemas"]["NextCursor"];
         };
         RetranscribeRequest: {
-            /** @description Idioma (BCP 47) ou, desde a 2.20.0, `auto` (a engine detecta). */
+            /** @description Language (BCP 47) or, since 2.20.0, `auto` (the engine detects it). */
             language?: string;
             /**
-             * @description Desde a 2.25.0. Mínimo de locutores a esperar nesta revisão; vence os limites do admin
-             *     e a regra da nota de voz (um locutor). Não persiste: vale só para a revisão pedida.
+             * @description Since 2.25.0. Minimum number of speakers to expect in this revision; overrides the admin limits
+             *     and the voice note rule (one speaker). Not persisted: it applies only to the requested revision.
              */
             min_speakers?: number;
             /**
-             * @description Desde a 2.25.0. Máximo de locutores a esperar nesta revisão (422 se menor que
-             *     `min_speakers`). Uma nota de voz (`kind: note`) sem este campo usa 1 locutor.
+             * @description Since 2.25.0. Maximum number of speakers to expect in this revision (422 if lower than
+             *     `min_speakers`). A voice note (`kind: note`) without this field uses 1 speaker.
              */
             max_speakers?: number;
         };
-        /** @description Resumo de listagem de uma transcrição (sem segmentos). */
+        /** @description Listing summary of a transcript (without segments). */
         TranscriptSummary: {
             /** Format: uuid */
             id: string;
@@ -3325,7 +3330,7 @@ export interface components {
             updated_at: string;
             /**
              * @deprecated
-             * @description Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             * @description Deprecated since 2.11.0: always the user themself (each account is isolated); removed in `/api/v2`.
              */
             owner: components["schemas"]["UserRef"];
             speakers: components["schemas"]["Speaker"][];
@@ -3341,7 +3346,7 @@ export interface components {
             label?: string;
             /**
              * Format: uuid
-             * @description Pessoa a ligar, ou `null` para desfazer.
+             * @description Person to link, or `null` to undo.
              */
             person_id?: string | null;
         };
@@ -3353,24 +3358,24 @@ export interface components {
             text?: string;
             speaker_id?: string;
         };
-        /** @description Uma amostra da impressão de voz — um locutor confirmado como a pessoa. */
+        /** @description A voiceprint sample — a speaker confirmed as the person. */
         VoiceSample: {
             /** Format: uuid */
             transcript_id: string;
             /**
              * Format: uuid
-             * @description Gravação da amostra, ou `null` se ela não existe mais.
+             * @description Recording of the sample, or `null` if it no longer exists.
              */
             recording_id: string | null;
-            /** @description Título da gravação, ou `null` se ela não existe mais. */
+            /** @description Title of the recording, or `null` if it no longer exists. */
             recording_title: string | null;
             speaker_id: string;
-            /** @description Modelo de embedding da amostra. */
+            /** @description Embedding model of the sample. */
             model: string;
             talk_ms: number;
             /**
-             * @description A fala mais longa do locutor, para ouvir a amostra no áudio da gravação
-             *     (`GET /api/v1/recordings/{recording_id}/audio`); `null` sem gravação ou sem fala.
+             * @description The speaker's longest utterance, to listen to the sample in the recording's audio
+             *     (`GET /api/v1/recordings/{recording_id}/audio`); `null` without a recording or without an utterance.
              */
             excerpt: {
                 start_ms: number;
@@ -3378,7 +3383,7 @@ export interface components {
             } | null;
             /**
              * @deprecated
-             * @description Obsoleto desde a 2.11.0: sempre o próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             * @description Deprecated since 2.11.0: always the user themself (each account is isolated); removed in `/api/v2`.
              */
             created_by: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
@@ -3387,7 +3392,7 @@ export interface components {
         Voiceprint: {
             /** Format: uuid */
             person_id: string;
-            /** @description Identificação por voz ligada na plataforma. Desligada, nada é comparado nem vira amostra. */
+            /** @description Voice identification turned on in the platform. When off, nothing is compared or becomes a sample. */
             enabled: boolean;
             sample_count: number;
             samples: components["schemas"]["VoiceSample"][];
@@ -3399,25 +3404,25 @@ export interface components {
             /** Format: email */
             email: string | null;
             notes: string | null;
-            /** @description Empresa (empresa, cooperativa, órgão) da pessoa. */
+            /** @description Company (company, cooperative, agency) of the person. */
             company: string | null;
-            /** @description Área ou departamento da pessoa na empresa. */
+            /** @description Area or department of the person in the company. */
             department: string | null;
-            /** @description Cargo ou função. */
+            /** @description Job title or role. */
             job_title: string | null;
             phone: string | null;
-            /** @description Tags de pessoa, rótulos livres da pessoa (separados das tags das gravações). */
+            /** @description Person tags, free labels of the person (separate from the recording tags). */
             tags: string[];
-            /** @description Transcrições do usuário em que a pessoa fala. */
+            /** @description The user's transcripts in which the person speaks. */
             transcript_count: number;
             /**
              * Format: date-time
-             * @description `recorded_at` da transcrição mais recente em que a pessoa fala.
+             * @description `recorded_at` of the most recent transcript in which the person speaks.
              */
             last_seen_at: string | null;
-            /** @description Amostras da impressão de voz da pessoa. */
+            /** @description Voiceprint samples of the person. */
             voice_sample_count: number;
-            /** @description Soma das falas dos locutores ligados à pessoa, em todas as transcrições. */
+            /** @description Sum of the utterances of the speakers linked to the person, across all transcripts. */
             speaking_time_ms: number;
             /** Format: date-time */
             created_at: string;
@@ -3433,7 +3438,7 @@ export interface components {
             department?: string | null;
             job_title?: string | null;
             phone?: string | null;
-            /** @description Sem repetição (ignorando a caixa); vazias e espaços nas pontas saem. */
+            /** @description No repetition (ignoring case); empty ones and surrounding spaces are removed. */
             tags?: string[];
         };
         PersonPatch: {
@@ -3445,12 +3450,12 @@ export interface components {
             department?: string | null;
             job_title?: string | null;
             phone?: string | null;
-            /** @description Substitui a lista inteira; sem repetição (ignorando a caixa); vazias e espaços nas pontas saem. */
+            /** @description Replaces the whole list; no repetition (ignoring case); empty ones and surrounding spaces are removed. */
             tags?: string[];
         };
         PersonFacetValue: {
             value: string;
-            /** @description Pessoas com esse valor. */
+            /** @description People with that value. */
             count: number;
         };
         PersonFacets: {
@@ -3474,7 +3479,7 @@ export interface components {
             };
             speaker: components["schemas"]["Speaker"];
             segment: components["schemas"]["Segment"];
-            /** @description Texto do segmento com os termos entre `<mark>` e `</mark>`; nenhum outro HTML. */
+            /** @description Segment text with the terms between `<mark>` and `</mark>`; no other HTML. */
             highlight: string;
             rank: number;
         };
@@ -3488,11 +3493,11 @@ export interface components {
             name: string;
             description: string | null;
             /**
-             * @description "Quando incluir": a regra que o agente segue para pôr a gravação na coleção. Pode falar
-             *     do assunto, do tipo de agenda e dos participantes (empresa, área, cargo, tags de pessoa).
+             * @description "Quando incluir": the rule the agent follows to put the recording in the collection. It may
+             *     speak of the subject, the agenda type and the participants (company, area, role, person tags).
              */
             instructions: string;
-            /** @description Com regra, o agente inclui as gravações depois da transcrição. */
+            /** @description With a rule, the agent adds the recordings after transcription. */
             auto_assign: boolean;
             recording_count: number;
             /** Format: date-time */
@@ -3515,7 +3520,7 @@ export interface components {
         CollectionMerge: {
             /**
              * Format: uuid
-             * @description A coleção que recebe as gravações; outra que não a mesclada.
+             * @description The collection that receives the recordings; one other than the merged one.
              */
             into: string;
         };
@@ -3527,14 +3532,14 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
-            /** @description "Quando usar": vai ao agente junto com o nome. */
+            /** @description "Quando usar": goes to the agent together with the name. */
             description: string;
             /**
-             * @description `user` (cadastrada pelo usuário) ou `auto` (criada pelo agente no modo autogerenciado).
+             * @description `user` (registered by the user) or `auto` (created by the agent in self-managed mode).
              * @enum {string}
              */
             origin: "user" | "auto";
-            /** @description Gravações com a tag. */
+            /** @description Recordings with the tag. */
             count: number;
             /** Format: date-time */
             created_at: string;
@@ -3553,25 +3558,25 @@ export interface components {
         TagMerge: {
             /**
              * Format: uuid
-             * @description A tag que fica; outra que não a mesclada.
+             * @description The tag that stays; one other than the merged one.
              */
             into: string;
         };
         TagAssignment: {
-            /** @description O agente atribui tags depois da transcrição. */
+            /** @description The agent assigns tags after transcription. */
             auto_fill: boolean;
-            /** @description A regra geral das tags (a do campo embutido Tags). */
+            /** @description The general rule of the tags (that of the built-in Tags field). */
             instructions: string;
             /**
-             * @description `fixed`: só as tags cadastradas; `auto`: o agente pode criar tags novas.
+             * @description `fixed`: only the registered tags; `auto`: the agent may create new tags.
              * @enum {string}
              */
             mode: "fixed" | "auto";
-            /** @description No modo `auto`, quantas tags novas o agente pode criar por gravação. */
+            /** @description In `auto` mode, how many new tags the agent may create per recording. */
             new_limit: number;
-            /** @description Tags no cadastro. */
+            /** @description Tags in the catalog. */
             catalog_count: number;
-            /** @description Acima deste tamanho do cadastro, o agente não cria mais tags. */
+            /** @description Above this catalog size, the agent creates no more tags. */
             catalog_limit: number;
         };
         PasswordChange: {
@@ -3579,12 +3584,12 @@ export interface components {
             current_password: string;
             /**
              * Format: password
-             * @description Ao menos 12 caracteres, como no cadastro.
+             * @description At least 12 characters, as at sign-up.
              */
             new_password: string;
             /**
-             * @description Desde a 2.14.0. `true` revoga também as credenciais de aparelho e os PATs da conta (os
-             *     aparelhos pedem login de novo); ausente vale `false`.
+             * @description Since 2.14.0. `true` also revokes the account's device credentials and PATs (the
+             *     devices ask for a login again); absent means `false`.
              * @default false
              */
             revoke_tokens: boolean;
@@ -3592,7 +3597,7 @@ export interface components {
         AccountDeletion: {
             /**
              * Format: password
-             * @description A senha da conta, que confirma a exclusão.
+             * @description The account's password, which confirms the deletion.
              */
             password: string;
         };
@@ -3608,82 +3613,82 @@ export interface components {
             id: string;
             name: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern: string | null;
             /**
-             * @description Como escrever o `{assunto}` do título (a regra que o agente segue). Vazia, vale a do tipo
-             *     padrão da conta.
+             * @description How to write the title's `{assunto}` (the rule the agent follows). Empty, the account's
+             *     fallback agenda type's rule applies.
              */
             title_instructions: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions: string;
-            /** @description Ordem na lista do usuário. */
+            /** @description Order in the user's list. */
             position: number;
             /**
-             * @description O tipo padrão da conta: aplicado quando nenhum outro tipo se encaixa com confiança, sem
-             *     outros tipos, sem agente de detecção ou com a detecção falha. Não pode ser excluído.
+             * @description The account's fallback agenda type: applied when no other type fits with confidence, with
+             *     no other types, with no detection agent or when detection fails. It cannot be deleted.
              */
             fallback: boolean;
         };
-        /** @description O conteúdo de um tipo de agenda, salvo ou em rascunho. */
+        /** @description The content of an agenda type, saved or in draft. */
         AgendaTypeDraft: {
             name: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern?: string | null;
-            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            /** @description How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies. */
             title_instructions?: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify?: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags?: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions: string;
         };
         AgendaTypeCreate: {
             name: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern?: string | null;
-            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            /** @description How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies. */
             title_instructions?: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify?: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags?: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions: string;
-            /** @description Sem valor, o fim da lista. */
+            /** @description Without a value, the end of the list. */
             position?: number;
         };
         AgendaTypePatch: {
             name?: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern?: string | null;
-            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            /** @description How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies. */
             title_instructions?: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify?: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags?: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions?: string;
             position?: number;
         };
@@ -3696,66 +3701,66 @@ export interface components {
             id: string;
             name: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern: string | null;
             /**
-             * @description Como escrever o `{assunto}` do título (a regra que o agente segue). Vazia, vale a do tipo
-             *     padrão da conta.
+             * @description How to write the title's `{assunto}` (the rule the agent follows). Empty, the account's
+             *     fallback agenda type's rule applies.
              */
             title_instructions: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions: string;
-            /** @description Ordem na lista do usuário. */
+            /** @description Order in the user's list. */
             position: number;
-            /** @description Copiado para cada conta criada depois. */
+            /** @description Copied to each account created afterwards. */
             include_for_new_users: boolean;
         };
         DefaultAgendaTypeCreate: {
             name: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern?: string | null;
-            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            /** @description How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies. */
             title_instructions?: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify?: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags?: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions: string;
-            /** @description Sem valor, o fim da lista. */
+            /** @description Without a value, the end of the list. */
             position?: number;
-            /** @description Sem valor, `true`. */
+            /** @description Without a value, `true`. */
             include_for_new_users?: boolean;
         };
         DefaultAgendaTypePatch: {
             name?: string;
             /**
-             * @description Padrão do título da gravação, com os marcadores `{assunto}` (o título automático),
-             *     `{data}` (`dd/mm/aaaa` da gravação), `{tipo}` e `{<chave do campo>}`. Sem padrão, o
-             *     título automático fica como está.
+             * @description Pattern of the recording's title, with the placeholders `{assunto}` (the automatic title),
+             *     `{data}` (the recording's `dd/mm/aaaa`), `{tipo}` and `{<chave do campo>}`. Without a
+             *     pattern, the automatic title stays as it is.
              */
             title_pattern?: string | null;
-            /** @description Como escrever o `{assunto}` do título. Vazia, vale a do tipo padrão da conta. */
+            /** @description How to write the title's `{assunto}`. Empty, the account's fallback agenda type's rule applies. */
             title_instructions?: string;
-            /** @description Como reconhecer uma gravação deste tipo; o agente de detecção lê este texto. */
+            /** @description How to recognise a recording of this type; the detection agent reads this text. */
             identify?: string;
-            /** @description Tags somadas às automáticas quando o tipo é aplicado. */
+            /** @description Tags added to the automatic ones when the type is applied. */
             default_tags?: string[];
-            /** @description Instruções do resumo, em Markdown; a transcrição é anexada pelo servidor. */
+            /** @description Instructions of the summary, in Markdown; the server appends the transcript. */
             summary_instructions?: string;
             position?: number;
-            /** @description Copiado para cada conta criada depois. */
+            /** @description Copied to each account created afterwards. */
             include_for_new_users?: boolean;
         };
         DefaultAgendaTypePage: {
@@ -3763,61 +3768,61 @@ export interface components {
             next_cursor: components["schemas"]["NextCursor"];
         };
         /**
-         * @description `text` e `choice` guardam uma string; `list`, um array de strings.
+         * @description `text` and `choice` hold a string; `list`, an array of strings.
          * @enum {string}
          */
         FieldKind: "text" | "list" | "choice";
         Field: {
             /** Format: uuid */
             id: string;
-            /** @description Slug do nome, único na conta; o marcador `{key}` do padrão de título. */
+            /** @description Slug of the name, unique in the account; the `{key}` placeholder of the title pattern. */
             key: string;
             /**
-             * @description Campo embutido (não sai nem muda de `kind`); `null` nos do usuário.
+             * @description Built-in field (it is neither removed nor changes `kind`); `null` in the user's own.
              * @enum {string|null}
              */
             builtin: "title" | "tags" | null;
             name: string;
             kind: components["schemas"]["FieldKind"];
-            /** @description As opções de um campo `choice` (ao menos uma); vazia nos outros tipos. */
+            /** @description The options of a `choice` field (at least one); empty in the other kinds. */
             options: string[];
-            /** @description A regra ("como identificar") que o agente segue ao preencher o campo. */
+            /** @description The rule ("como identificar") the agent follows when filling the field. */
             instructions: string;
-            /** @description Preencher automaticamente depois da transcrição. */
+            /** @description Fill automatically after transcription. */
             auto_fill: boolean;
             position: number;
         };
-        /** @description O conteúdo de um campo, salvo ou em rascunho. */
+        /** @description The content of a field, saved or in draft. */
         FieldDraft: {
             name: string;
             kind: components["schemas"]["FieldKind"];
-            /** @description As opções de um campo `choice` (ao menos uma); vazia nos outros tipos. */
+            /** @description The options of a `choice` field (at least one); empty in the other kinds. */
             options?: string[];
-            /** @description A regra ("como identificar") que o agente segue ao preencher o campo. */
+            /** @description The rule ("como identificar") the agent follows when filling the field. */
             instructions?: string;
-            /** @description Preencher automaticamente depois da transcrição. */
+            /** @description Fill automatically after transcription. */
             auto_fill?: boolean;
         };
         FieldCreate: {
             name: string;
             kind: components["schemas"]["FieldKind"];
-            /** @description As opções de um campo `choice` (ao menos uma); vazia nos outros tipos. */
+            /** @description The options of a `choice` field (at least one); empty in the other kinds. */
             options?: string[];
-            /** @description A regra ("como identificar") que o agente segue ao preencher o campo. */
+            /** @description The rule ("como identificar") the agent follows when filling the field. */
             instructions?: string;
-            /** @description Preencher automaticamente depois da transcrição. */
+            /** @description Fill automatically after transcription. */
             auto_fill?: boolean;
-            /** @description Sem valor, o fim da lista. */
+            /** @description Without a value, the end of the list. */
             position?: number;
         };
         FieldPatch: {
             name?: string;
             kind?: components["schemas"]["FieldKind"];
-            /** @description As opções de um campo `choice` (ao menos uma); vazia nos outros tipos. */
+            /** @description The options of a `choice` field (at least one); empty in the other kinds. */
             options?: string[];
-            /** @description A regra ("como identificar") que o agente segue ao preencher o campo. */
+            /** @description The rule ("como identificar") the agent follows when filling the field. */
             instructions?: string;
-            /** @description Preencher automaticamente depois da transcrição. */
+            /** @description Fill automatically after transcription. */
             auto_fill?: boolean;
             position?: number;
         };
@@ -3825,11 +3830,11 @@ export interface components {
             items: components["schemas"]["Field"][];
             next_cursor: components["schemas"]["NextCursor"];
         };
-        /** @description `text`/`choice` → string; `list` → array de strings; `null` = sem valor. */
+        /** @description `text`/`choice` → string; `list` → array of strings; `null` = no value. */
         FieldValue: string | string[] | null;
         /**
-         * @description `auto`: o agente preencheu; `edited`: o usuário escreveu; `accepted`: o usuário aceitou o
-         *     automático. `edited` e `accepted` nunca são sobrescritos por um preenchimento automático.
+         * @description `auto`: the agent filled it; `edited`: the user wrote it; `accepted`: the user accepted the
+         *     automatic value. `edited` and `accepted` are never overwritten by an automatic fill.
          * @enum {string}
          */
         FieldValueOrigin: "auto" | "edited" | "accepted";
@@ -3845,26 +3850,26 @@ export interface components {
         };
         FieldValuePut: {
             /**
-             * @description `text`/`choice` → até 300 caracteres; `list` → até 50 itens de até 300 caracteres (64
-             *     nas tags); `null` limpa (menos o título).
+             * @description `text`/`choice` → up to 300 characters; `list` → up to 50 items of up to 300 characters (64
+             *     for tags); `null` clears (except the title).
              */
             value: string | string[] | null;
         };
         FieldPreviewRequest: {
             field: components["schemas"]["FieldDraft"];
-            /** @description Gravações transcritas do usuário; sem elas, as 3 mais recentes. */
+            /** @description Transcribed recordings of the user; without them, the 3 most recent. */
             recording_ids?: string[];
         };
         AgendaTypePreviewRequest: {
             agenda_type: components["schemas"]["AgendaTypeDraft"];
             /**
              * Format: uuid
-             * @description Uma gravação transcrita do usuário.
+             * @description A transcribed recording of the user.
              */
             recording_id: string;
             /**
              * Format: uuid
-             * @description O tipo salvo que o rascunho edita, que sai da concorrência no lugar dele; sem ele, sai o de mesmo nome. Rascunho do tipo padrão não concorre: fica quando nenhum outro serve.
+             * @description The saved type the draft edits, which leaves the competition in its place; without it, the one with the same name leaves. A draft of the fallback agenda type does not compete: it stays for when no other fits.
              */
             agenda_type_id?: string | null;
         };
@@ -3878,18 +3883,18 @@ export interface components {
             /** Format: uuid */
             recording_id: string;
             recording_title: string;
-            /** @description A detecção escolheu o rascunho. */
+            /** @description Detection chose the draft. */
             detected: boolean;
-            /** @description O tipo que a gravação teria (o rascunho, um dos salvos ou o tipo padrão). */
+            /** @description The type the recording would get (the draft, one of the saved ones or the fallback agenda type). */
             detected_type_name: string;
-            /** @description Nenhum tipo serviu, ou a confiança ficou abaixo de 0,6: a gravação teria o tipo padrão. */
+            /** @description No type fitted, or the confidence fell below 0.6: the recording would get the fallback agenda type. */
             fallback: boolean;
             confidence: number | null;
-            /** @description O título que o rascunho aplicaria. */
+            /** @description The title the draft would apply. */
             title: string;
-            /** @description As tags da gravação com as tags padrão do rascunho. */
+            /** @description The recording's tags with the draft's default tags. */
             tags: string[];
-            /** @description O resumo com as instruções do rascunho. */
+            /** @description The summary with the draft's instructions. */
             summary_md: string;
         };
         Preview: {
@@ -3899,9 +3904,9 @@ export interface components {
             kind: "field_rule" | "agenda_type";
             /** @enum {string} */
             status: "queued" | "running" | "done" | "failed";
-            /** @description Com `status: done`: um item por gravação testada. */
+            /** @description With `status: done`: one item per tested recording. */
             items: (components["schemas"]["FieldPreviewItem"] | components["schemas"]["AgendaTypePreviewItem"])[];
-            /** @description Com `status: failed`; `no_provider` quando a finalidade não tem provider. */
+            /** @description With `status: failed`; `no_provider` when the purpose has no provider. */
             error: {
                 code: string;
                 message: string;
@@ -3909,7 +3914,7 @@ export interface components {
         };
         BaseChatRequest: {
             message: string;
-            /** @description As últimas mensagens da conversa, em ordem; o server não guarda o histórico. */
+            /** @description The last messages of the conversation, in order; the server does not keep the history. */
             history?: components["schemas"]["BaseChatTurn"][];
         };
         BaseChatTurn: {
@@ -3927,14 +3932,14 @@ export interface components {
             id: string;
             /** @enum {string} */
             status: "queued" | "running" | "done" | "failed";
-            /** @description Com `status: done`: a resposta em Markdown. */
+            /** @description With `status: done`: the answer in Markdown. */
             answer: string | null;
-            /** @description As gravações consultadas em que a resposta se apoia. */
+            /** @description The consulted recordings the answer rests on. */
             sources: components["schemas"]["BaseChatSource"][];
-            /** @description Quantas consultas à base o agente fez. */
+            /** @description How many queries to the base the agent made. */
             queries: number;
             model: string | null;
-            /** @description Com `status: failed`; `no_provider` quando a finalidade `chat` não tem provider. */
+            /** @description With `status: failed`; `no_provider` when the `chat` purpose has no provider. */
             error: {
                 code: string;
                 message: string;
@@ -3943,13 +3948,13 @@ export interface components {
         AgentSession: {
             /** Format: uuid */
             id: string;
-            /** @description Vazio até a primeira pergunta, que dá o título. */
+            /** @description Empty until the first question, which gives the title. */
             title: string;
             /** Format: date-time */
             created_at: string;
             /**
              * Format: date-time
-             * @description A última atividade (pergunta ou resposta).
+             * @description The last activity (question or answer).
              */
             updated_at: string;
         };
@@ -3959,7 +3964,7 @@ export interface components {
         AgentSessionUpdate: {
             title: string;
         };
-        /** @description Uma `AgentSession` com as mensagens e os anexos ainda não enviados. */
+        /** @description An `AgentSession` with the messages and the attachments not yet sent. */
         AgentSessionDetail: {
             /** Format: uuid */
             id: string;
@@ -3969,7 +3974,7 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             messages: components["schemas"]["AgentMessage"][];
-            /** @description Os anexos ainda não enviados com uma pergunta. */
+            /** @description The attachments not yet sent with a question. */
             pending_files: components["schemas"]["AgentFile"][];
         };
         AgentFile: {
@@ -3979,18 +3984,18 @@ export interface components {
             session_id: string;
             /**
              * Format: uuid
-             * @description A pergunta que levou o anexo ou a resposta que gerou o arquivo; nulo no anexo não enviado.
+             * @description The question that carried the attachment or the answer that produced the file; null on an attachment not yet sent.
              */
             message_id: string | null;
             /**
-             * @description `input` é anexo da pessoa; `output`, arquivo gerado pelo agente.
+             * @description `input` is an attachment of the person; `output`, a file produced by the agent.
              * @enum {string}
              */
             direction: "input" | "output";
             name: string;
             media_type: string;
             size_bytes: number;
-            /** @description Caracteres do texto extraído do anexo (0 é anexo sem texto legível); nulo no gerado. */
+            /** @description Characters of the text extracted from the attachment (0 is an attachment with no readable text); null on a produced file. */
             text_chars: number | null;
             /** Format: date-time */
             created_at: string;
@@ -4002,37 +4007,37 @@ export interface components {
             session_id: string;
             /** @enum {string} */
             role: "user" | "assistant";
-            /** @description A pergunta, ou a resposta em Markdown (vazia até `done`). */
+            /** @description The question, or the answer in Markdown (empty until `done`). */
             content: string;
             /**
-             * @description A pergunta é sempre `done`; a resposta vai de `queued` a `done` ou `failed`.
+             * @description The question is always `done`; the answer goes from `queued` to `done` or `failed`.
              * @enum {string}
              */
             status: "queued" | "running" | "done" | "failed";
-            /** @description As gravações consultadas em que a resposta se apoia. */
+            /** @description The consulted recordings the answer rests on. */
             sources: components["schemas"]["BaseChatSource"][];
-            /** @description Quantas ferramentas o agente chamou. */
+            /** @description How many tools the agent called. */
             queries: number;
             model: string | null;
-            /** @description Com `status: failed`; `no_provider` sem provider para o `chat`, `agent_expired` quando a resposta passou de 15 minutos em aberto. */
+            /** @description With `status: failed`; `no_provider` with no provider for `chat`, `agent_expired` when the answer stayed open for more than 15 minutes. */
             error: {
                 code: string;
                 message: string;
             } | null;
-            /** @description Os anexos da pergunta ou os arquivos gerados pela resposta. */
+            /** @description The question's attachments or the files the answer produced. */
             files: components["schemas"]["AgentFile"][];
-            /** @description Desde a 2.24.0. O nome da habilidade escolhida na pergunta (o nome na hora). */
+            /** @description Since 2.24.0. The name of the skill chosen in the question (the name at that time). */
             skill: string | null;
-            /** @description Desde a 2.24.0. As propostas de ação da resposta, que a pessoa confirma ou descarta. */
+            /** @description Since 2.24.0. The answer's action proposals, which the person confirms or discards. */
             actions: components["schemas"]["AgentAction"][];
             /** Format: date-time */
             created_at: string;
         };
         AgentMessageCreate: {
             message: string;
-            /** @description Ids de anexos desta conversa ainda não enviados (até 5). */
+            /** @description Ids of attachments of this conversation not yet sent (up to 5). */
             attachments?: string[];
-            /** @description Desde a 2.24.0. O nome de uma habilidade ligada da conta; `/nome` no começo da mensagem vale o mesmo. */
+            /** @description Since 2.24.0. The name of an enabled skill of the account; `/nome` at the start of the message is the same. */
             skill?: string;
         };
         AgentTool: {
@@ -4044,13 +4049,13 @@ export interface components {
         AgentSkill: {
             /** Format: uuid */
             id: string;
-            /** @description O `/nome` da conversa. */
+            /** @description The conversation's `/nome`. */
             name: string;
-            /** @description O que a habilidade faz; o agente a lê para escolher. */
+            /** @description What the skill does; the agent reads it to choose. */
             description: string;
-            /** @description As instruções em Markdown. */
+            /** @description The instructions in Markdown. */
             instructions: string;
-            /** @description As ferramentas que a habilidade permite (nomes do catálogo); nulo libera todas. */
+            /** @description The tools the skill allows (catalog names); null allows them all. */
             allowed_tools: string[] | null;
             enabled: boolean;
             /** Format: date-time */
@@ -4076,7 +4081,7 @@ export interface components {
             /** Format: uuid */
             recording_id: string;
             title: string;
-            /** @description O resultado neste alvo; nulo enquanto não executado. */
+            /** @description The result on this target; null until executed. */
             result: {
                 /** @enum {string} */
                 status: "done" | "skipped" | "failed";
@@ -4086,22 +4091,22 @@ export interface components {
                 summary_id?: string | null;
             } | null;
         };
-        /** @description Desde a 2.24.0. Uma ação que o Agente propôs: o texto do cartão, os alvos congelados na proposta e, depois da confirmação, o resultado por alvo. É também o registro de auditoria. */
+        /** @description Since 2.24.0. An action the Agent proposed: the card text, the targets frozen in the proposal and, after confirmation, the result per target. It is also the audit record. */
         AgentAction: {
             /** Format: uuid */
             id: string;
             /**
              * Format: uuid
-             * @description Nulo depois que a conversa é excluída.
+             * @description Null after the conversation is deleted.
              */
             session_id: string | null;
             /** Format: uuid */
             message_id: string | null;
             /** @enum {string} */
             tool: "regenerate_summaries" | "tag_recordings" | "collect_recordings" | "set_agenda_type";
-            /** @description Os parâmetros normalizados (alvos, tags, coleções ou o tipo resolvidos). */
+            /** @description The normalized parameters (resolved targets, tags, collections or type). */
             params: Record<string, never>;
-            /** @description O que será feito, em uma frase. */
+            /** @description What will be done, in one sentence. */
             summary: string;
             targets: components["schemas"]["AgentActionTarget"][];
             /** @enum {string} */
@@ -4132,9 +4137,9 @@ export interface components {
         /** @enum {string} */
         AgentProviderKind: "ollama" | "openai-compatible" | "anthropic" | "claude-cli";
         /**
-         * @description Para que o provider serve: `summaries` (resumos), `fields` (preenchimento de campos),
-         *     `chat` (ajuste do resumo) e `agenda_detection` (detecção do tipo de agenda). Cada
-         *     finalidade tem no máximo um provider: declará-la num provider a tira dos outros.
+         * @description What the provider is for: `summaries` (summaries), `fields` (field filling),
+         *     `chat` (summary adjustment) and `agenda_detection` (agenda type detection). Each
+         *     purpose has at most one provider: declaring it on one provider removes it from the others.
          * @enum {string}
          */
         AgentPurpose: "summaries" | "fields" | "chat" | "agenda_detection";
@@ -4145,27 +4150,28 @@ export interface components {
             kind: components["schemas"]["AgentProviderKind"];
         };
         /**
-         * @description Como a versão nasceu: `generated` (o agente pelas instruções do tipo de agenda), `manual`
-         *     (edição à mão, ou voltar à gerada) ou `chat` (ajuste pelo agente no chat).
+         * @description How the version came about: `generated` (the agent, following the agenda type's
+         *     instructions), `manual` (a hand edit, or reverting to the generated one) or `chat` (an
+         *     adjustment by the agent in the chat).
          * @enum {string}
          */
         SummaryOrigin: "generated" | "manual" | "chat";
         /**
-         * @description Uma versão do resumo da transcrição. A atual é a de maior `version` com `status: done`.
-         *     Uma geração que termina depois de uma edição ou de um ajuste toma o próximo número e vira a
-         *     atual; por isso os números podem pular.
+         * @description One version of the transcript's summary. The current one is the highest `version` with
+         *     `status: done`. A generation that finishes after an edit or an adjustment takes the next
+         *     number and becomes the current one; that is why the numbers can skip.
          */
         Summary: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             transcript_id: string;
-            /** @description Revisão da transcrição que o resumo leu. */
+            /** @description Revision of the transcript the summary read. */
             transcript_revision: number;
             /**
-             * @description Instantâneo do tipo de agenda cujas instruções o resumo seguiu (numa versão `manual` ou
-             *     `chat`, o da versão de que ela partiu): o resumo continua quando o tipo é renomeado ou
-             *     excluído. `null` numa edição sem versão anterior.
+             * @description Snapshot of the agenda type whose instructions the summary followed (in a `manual` or
+             *     `chat` version, that of the version it started from): the summary survives when the
+             *     type is renamed or deleted. `null` in an edit with no previous version.
              */
             agenda_type: {
                 /** Format: uuid */
@@ -4173,8 +4179,8 @@ export interface components {
                 name: string;
             } | null;
             /**
-             * @description Versão do resumo da transcrição, a partir de 1; toda geração, edição, volta à gerada
-             *     ou ajuste por chat sobe a versão.
+             * @description Version of the transcript's summary, starting at 1; every generation, edit, revert to
+             *     the generated one or chat adjustment raises the version.
              */
             version: number;
             origin: components["schemas"]["SummaryOrigin"];
@@ -4182,10 +4188,10 @@ export interface components {
             status: "queued" | "running" | "done" | "failed";
             /** @enum {string} */
             trigger: "manual" | "automatic";
-            /** @description O agente que escreveu a versão; `null` numa versão `manual`. */
+            /** @description The agent that wrote the version; `null` in a `manual` version. */
             provider: components["schemas"]["AgentProviderRef"] | null;
             model: string | null;
-            /** @description Resumo em Markdown, com `status: done`. */
+            /** @description Summary in Markdown, with `status: done`. */
             content_md: string | null;
             error: {
                 code: string;
@@ -4193,18 +4199,18 @@ export interface components {
             } | null;
             /**
              * Format: uuid
-             * @description Na volta à gerada, a versão gerada cujo conteúdo foi restaurado.
+             * @description On a revert to the generated one, the generated version whose content was restored.
              */
             restored_from_id: string | null;
             /**
              * Format: uuid
-             * @description Numa versão `chat`, a resposta do agente que a produziu.
+             * @description In a `chat` version, the agent reply that produced it.
              */
             chat_message_id: string | null;
             /**
              * Format: uuid
              * @deprecated
-             * @description Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             * @description Deprecated since 2.11.0: always the user's own id (each account is isolated); removed in `/api/v2`.
              */
             created_by: string | null;
             /** Format: date-time */
@@ -4215,12 +4221,12 @@ export interface components {
         SummaryCreate: {
             /**
              * Format: uuid
-             * @description Sem valor, o tipo de agenda da gravação.
+             * @description Without a value, the recording's agenda type.
              */
             agenda_type_id?: string;
             /**
              * Format: uuid
-             * @description Sem valor, o provider padrão da plataforma.
+             * @description Without a value, the platform's default provider.
              */
             provider_id?: string;
         };
@@ -4228,28 +4234,28 @@ export interface components {
             items: components["schemas"]["Summary"][];
             next_cursor: components["schemas"]["NextCursor"];
         };
-        /** @description O resumo da gravação como a tela o mostra. */
+        /** @description The recording's summary as the screen shows it. */
         SummaryState: {
-            /** @description A versão atual (maior `version` concluída). */
+            /** @description The current version (highest completed `version`). */
             current: components["schemas"]["Summary"] | null;
-            /** @description A gerada de referência (a `generated` concluída mais recente), para comparar e voltar. */
+            /** @description The reference generated version (the most recent completed `generated`), to compare and revert. */
             generated: components["schemas"]["Summary"] | null;
-            /** @description A geração em `queued` ou `running`, se houver. */
+            /** @description The generation in `queued` or `running`, if any. */
             pending: components["schemas"]["Summary"] | null;
-            /** @description Versões guardadas, de todas as origens. */
+            /** @description Stored versions, of every origin. */
             version_count: number;
         };
         SummaryEdit: {
             content_md: string;
-            /** @description A versão que a pessoa abriu para editar; 0 sem resumo concluído. */
+            /** @description The version the person opened to edit; 0 with no completed summary. */
             base_version: number;
         };
         SummaryChatRequest: {
             message: string;
         };
         /**
-         * @description Uma consulta do agente à transcrição: `read_transcript` (o trecho `from_ms`–`to_ms`,
-         *     `clipped` se passou do teto e foi cortado) ou `search_transcript` (`query` e os `hits`).
+         * @description One agent lookup into the transcript: `read_transcript` (the excerpt `from_ms`–`to_ms`,
+         *     `clipped` if it exceeded the cap and was cut) or `search_transcript` (`query` and the `hits`).
          */
         ChatRead: {
             /** @enum {string} */
@@ -4267,36 +4273,36 @@ export interface components {
             recording_id: string;
             /** @enum {string} */
             role: "user" | "assistant";
-            /** @description O pedido, ou a resposta do agente (`null` até `done`). */
+            /** @description The request, or the agent's reply (`null` until `done`). */
             content: string | null;
             /**
-             * @description A mensagem do usuário nasce `done`; a do agente vai de `queued` a `done` ou `failed`.
+             * @description The user's message is born `done`; the agent's goes from `queued` to `done` or `failed`.
              * @enum {string}
              */
             status: "queued" | "running" | "done" | "failed";
             /**
              * Format: uuid
-             * @description Na resposta do agente, o pedido que ela responde.
+             * @description In the agent's reply, the request it answers.
              */
             reply_to: string | null;
             /**
              * Format: uuid
-             * @description A versão atual quando o pedido chegou.
+             * @description The current version when the request arrived.
              */
             base_summary_id: string | null;
             /**
              * Format: uuid
-             * @description A versão `chat` que a resposta criou, se mudou o resumo.
+             * @description The `chat` version the reply created, if it changed the summary.
              */
             summary_id: string | null;
-            /** @description As consultas do agente à transcrição, em ordem. */
+            /** @description The agent's lookups into the transcript, in order. */
             reads: components["schemas"]["ChatRead"][];
             provider: components["schemas"]["AgentProviderRef"] | null;
             model: string | null;
             /**
-             * @description Com `failed` (`provider_bad_output`, `chat_tool_limit`, `provider_timeout`...), ou com
-             *     `done` e `summary_changed` quando o resumo mudou durante o ajuste: a resposta fica, sem
-             *     versão nova.
+             * @description With `failed` (`provider_bad_output`, `chat_tool_limit`, `provider_timeout`...), or with
+             *     `done` and `summary_changed` when the summary changed during the adjustment: the reply
+             *     stays, with no new version.
              */
             error: {
                 code: string;
@@ -4305,7 +4311,7 @@ export interface components {
             /**
              * Format: uuid
              * @deprecated
-             * @description Obsoleto desde a 2.11.0: sempre o id do próprio usuário (cada conta é isolada); sai na `/api/v2`.
+             * @description Deprecated since 2.11.0: always the user's own id (each account is isolated); removed in `/api/v2`.
              */
             created_by: string | null;
             /** Format: date-time */
@@ -4324,16 +4330,16 @@ export interface components {
         MarkerInput: {
             /**
              * Format: uuid
-             * @description Id gerado pelo app; reenviar o mesmo não duplica.
+             * @description Id generated by the app; resending the same one does not duplicate.
              */
             client_id: string;
-            /** @description Instante desde o início da gravação. */
+            /** @description Instant since the start of the recording. */
             at_ms: number;
             note?: string | null;
         };
         MarkerBatch: {
             markers: components["schemas"]["MarkerInput"][];
-            /** @description Quem marcou ("Field phone"). */
+            /** @description Who marked it ("Field phone"). */
             device_name?: string | null;
         };
         MarkerPatch: {
@@ -4346,7 +4352,7 @@ export interface components {
             recording_id: string;
             /** Format: uuid */
             client_id: string;
-            /** @description Instante desde o início; pode passar da duração, que só se conhece depois. */
+            /** @description Instant since the start; it may exceed the duration, which is only known later. */
             at_ms: number;
             note: string | null;
             device_name: string | null;
@@ -4364,18 +4370,18 @@ export interface components {
             engine: "whisperx-local" | "openai-compatible" | "cpu";
             model: string;
             compute_type: string;
-            /** @description `null` = adaptativo à VRAM livre. */
+            /** @description `null` = adaptive to the free VRAM. */
             batch_size: number | null;
             /**
-             * @description Idioma das gravações sem idioma próprio (`pt`, `en`…), ou `auto`: a engine detecta o
-             *     idioma de cada gravação e o alinhador segue o detectado.
+             * @description Language of recordings with no language of their own (`pt`, `en`…), or `auto`: the
+             *     engine detects each recording's language and the aligner follows the detected one.
              */
             default_language: string | null;
-            /** @description Modelo usado depois de um OOM. */
+            /** @description Model used after an OOM. */
             fallback_model: string | null;
             /**
              * Format: uri
-             * @description Base do servidor remoto, com `engine: openai-compatible`.
+             * @description Base of the remote server, with `engine: openai-compatible`.
              */
             endpoint_url: string | null;
         };
@@ -4386,46 +4392,46 @@ export interface components {
             max_speakers: number | null;
         };
         /**
-         * @description Tratamento do áudio antes da transcrição, pelo worker GPU, em ordem fixa: separar canais,
-         *     reduzir ruído, normalizar o loudness e cortar o silêncio do início e do fim. A conversão
-         *     para 16 kHz mono é sempre feita e não tem chave. As marcas de tempo continuam as do áudio
-         *     original.
+         * @description Audio processing before transcription, by the GPU worker, in a fixed order: split
+         *     channels, reduce noise, normalize loudness and trim the silence at the start and end. The
+         *     conversion to 16 kHz mono is always done and has no key. Timestamps remain those of the
+         *     original audio.
          */
         PreprocessingSettings: {
             denoise: {
                 enabled: boolean;
                 /**
-                 * @description `rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg).
+                 * @description `rnnoise` (neural network, 48 kHz) or `afftdn` (ffmpeg's FFT).
                  * @enum {string}
                  */
                 method: "rnnoise" | "afftdn";
-                /** @description Quanto do sinal tratado entra na mistura. */
+                /** @description How much of the processed signal goes into the mix. */
                 strength: number;
             };
             loudnorm: {
                 enabled: boolean;
-                /** @description Loudness integrado alvo (EBU R128). */
+                /** @description Target integrated loudness (EBU R128). */
                 target_lufs: number;
                 true_peak_db: number;
-                /** @description Faixa de loudness. */
+                /** @description Loudness range. */
                 lra: number;
             };
             trim_silence: {
                 enabled: boolean;
-                /** @description Silêncio mínimo, no início ou no fim, para cortar. */
+                /** @description Minimum silence, at the start or the end, to trim. */
                 min_silence_s: number;
-                /** @description Abaixo deste nível, é silêncio. */
+                /** @description Below this level, it is silence. */
                 threshold_db: number;
             };
-            /** @description Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado. */
+            /** @description One channel per person (stereo recording of two sources); duplicated mono is skipped. */
             split_channels: {
                 enabled: boolean;
             };
         };
         VoiceIdentificationSettings: {
-            /** @description Liga a identificação por voz na plataforma; exige a separação de locutores ligada (422 em `voice_identification.enabled`). Desligado, nenhuma impressão é comparada nem criada; desligar apaga as existentes. O aceite do aviso no cadastro cobre o consentimento. */
+            /** @description Turns voice identification on for the platform; it requires speaker diarization on (422 on `voice_identification.enabled`). Off, no voiceprint is compared or created; turning it off deletes the existing ones. Accepting the notice at sign-up covers the consent. */
             enabled: boolean;
-            /** @description Similaridade mínima (cosseno) para sugerir uma pessoa; o padrão sai da calibração. */
+            /** @description Minimum similarity (cosine) to suggest a person; the default comes from calibration. */
             suggestion_threshold: number;
         };
         AdminSettings: {
@@ -4433,20 +4439,20 @@ export interface components {
             diarization: components["schemas"]["DiarizationSettings"];
             voice_identification: components["schemas"]["VoiceIdentificationSettings"];
             preprocessing: components["schemas"]["PreprocessingSettings"];
-            /** @description Cotas padrão de toda conta (desde a 2.15.0); o admin as sobrepõe por conta. */
+            /** @description Default quotas of every account (since 2.15.0); the admin overrides them per account. */
             quotas: components["schemas"]["Quotas"];
             /** @description Since 2.29.0. Platform-wide audio retention settings. */
             retention: components["schemas"]["RetentionSettings"];
             /** Format: date-time */
             updated_at: string;
-            /** @description Conta de admin que mudou por último. */
+            /** @description Admin account that changed it last. */
             updated_by: components["schemas"]["AdminRef"] | null;
         };
         RetentionSettings: {
             /** @description Ceiling, in days, on the audio retention an account may choose; `null` is none. It only caps the accounts' values and deletes nothing for an account that left retention off. */
             audio_max_days: number | null;
         };
-        /** @description Cada bloco é mesclado campo a campo; campos ausentes ficam como estão. */
+        /** @description Each block is merged field by field; absent fields stay as they are. */
         AdminSettingsPatch: {
             asr?: {
                 /** @enum {string} */
@@ -4454,7 +4460,7 @@ export interface components {
                 model?: string;
                 compute_type?: string;
                 batch_size?: number | null;
-                /** @description Código do idioma ou `auto`. */
+                /** @description Language code or `auto`. */
                 default_language?: string | null;
                 fallback_model?: string | null;
                 /** Format: uri */
@@ -4470,39 +4476,39 @@ export interface components {
                 enabled?: boolean;
                 suggestion_threshold?: number;
             };
-            /** @description Cada etapa é mesclada campo a campo. */
+            /** @description Each step is merged field by field. */
             preprocessing?: {
                 denoise?: {
                     enabled?: boolean;
                     /**
-                     * @description `rnnoise` (rede neural, 48 kHz) ou `afftdn` (FFT do ffmpeg).
+                     * @description `rnnoise` (neural network, 48 kHz) or `afftdn` (ffmpeg's FFT).
                      * @enum {string}
                      */
                     method?: "rnnoise" | "afftdn";
-                    /** @description Quanto do sinal tratado entra na mistura. */
+                    /** @description How much of the processed signal goes into the mix. */
                     strength?: number;
                 };
                 loudnorm?: {
                     enabled?: boolean;
-                    /** @description Loudness integrado alvo (EBU R128). */
+                    /** @description Target integrated loudness (EBU R128). */
                     target_lufs?: number;
                     true_peak_db?: number;
-                    /** @description Faixa de loudness. */
+                    /** @description Loudness range. */
                     lra?: number;
                 };
                 trim_silence?: {
                     enabled?: boolean;
-                    /** @description Silêncio mínimo, no início ou no fim, para cortar. */
+                    /** @description Minimum silence, at the start or the end, to trim. */
                     min_silence_s?: number;
-                    /** @description Abaixo deste nível, é silêncio. */
+                    /** @description Below this level, it is silence. */
                     threshold_db?: number;
                 };
-                /** @description Um canal por pessoa (gravação estéreo de duas fontes); mono duplicado é pulado. */
+                /** @description One channel per person (stereo recording of two sources); duplicated mono is skipped. */
                 split_channels?: {
                     enabled?: boolean;
                 };
             };
-            /** @description Cotas padrão (desde a 2.15.0), mescladas campo a campo; `null` é sem limite. */
+            /** @description Default quotas (since 2.15.0), merged field by field; `null` is no limit. */
             quotas?: components["schemas"]["QuotasOverride"];
             /** @description Since 2.29.0. Audio retention ceiling; a null `audio_max_days` removes it. */
             retention?: {
@@ -4516,13 +4522,13 @@ export interface components {
             kind: components["schemas"]["AgentProviderKind"];
             /**
              * Format: uri
-             * @description Base da API (Ollama, OpenAI-compatível). `null` para `anthropic` e `claude-cli`.
+             * @description API base (Ollama, OpenAI-compatible). `null` for `anthropic` and `claude-cli`.
              */
             base_url: string | null;
             model: string;
             api_key_set: boolean;
             enabled: boolean;
-            /** @description Parâmetros do provider (`max_tokens`, `temperature`, `context_window`). */
+            /** @description Provider parameters (`max_tokens`, `temperature`, `context_window`). */
             options: {
                 [key: string]: string | number | boolean;
             };
@@ -4543,7 +4549,7 @@ export interface components {
             options?: {
                 [key: string]: string | number | boolean;
             };
-            /** @description Sem valor, um provider habilitado assume as finalidades que nenhum outro declara. */
+            /** @description Without a value, an enabled provider takes the purposes no other one declares. */
             used_for?: components["schemas"]["AgentPurpose"][];
         };
         AgentProviderPatch: {
@@ -4556,7 +4562,7 @@ export interface components {
             options?: {
                 [key: string]: string | number | boolean;
             };
-            /** @description Substitui a lista; as finalidades declaradas saem dos outros providers. */
+            /** @description Replaces the list; the declared purposes leave the other providers. */
             used_for?: components["schemas"]["AgentPurpose"][];
         };
         AgentProviderPage: {
@@ -4574,7 +4580,7 @@ export interface components {
         SecretPut: {
             value: string;
         };
-        /** @description O job criado por `POST /api/v1/admin/jobs/{job_id}/retry`. */
+        /** @description The job created by `POST /api/v1/admin/jobs/{job_id}/retry`. */
         AdminJobRetried: {
             /** Format: uuid */
             job_id: string;
@@ -4592,7 +4598,7 @@ export interface components {
                 running: number;
                 failed_last_24h: number;
             };
-            /** @description `null` quando o worker não reporta GPU (engine CPU ou remota). */
+            /** @description `null` when the worker reports no GPU (CPU or remote engine). */
             gpu: {
                 name: string;
                 vram_total_mb: number;
@@ -4608,17 +4614,17 @@ export interface components {
                 vram_mb: number | null;
             }[];
             /**
-             * @description As etapas do pipeline que falharam nas últimas 24 h, da mais recente para a mais antiga,
-             *     sem o conteúdo das gravações.
+             * @description The pipeline steps that failed in the last 24 h, from the most recent to the oldest,
+             *     without the recordings' content.
              */
             recent_failures: {
                 /**
                  * Format: uuid
-                 * @description O job de transcrição (que o admin retenta); `null` nas etapas por agente.
+                 * @description The transcription job (which the admin retries); `null` for agent steps.
                  */
                 job_id: string | null;
                 /**
-                 * @description A etapa do pipeline que falhou (holetz/eclume#33).
+                 * @description The pipeline step that failed (holetz/eclume#33).
                  * @enum {string}
                  */
                 step?: "received" | "preprocessing" | "transcription" | "agenda_type" | "fields" | "summary";
@@ -4629,14 +4635,14 @@ export interface components {
                 message: string;
                 /** Format: date-time */
                 failed_at: string;
-                /** @description Falha passageira que `POST /api/v1/admin/jobs/{job_id}/retry` pode resolver (1.4.0). */
+                /** @description Transient failure that `POST /api/v1/admin/jobs/{job_id}/retry` can resolve (1.4.0). */
                 retryable?: boolean;
             }[];
             /** Format: date-time */
             checked_at: string;
             /**
-             * @description Cada etapa do pipeline (fora o recebido) nas últimas 24 h: execuções concluídas (feitas ou
-             *     falhas), a mediana da duração das feitas e as falhas. Zeradas quando não rodaram.
+             * @description Each pipeline step (except received) in the last 24 h: completed runs (done or failed),
+             *     the median duration of the done ones and the failures. Zeroed when they did not run.
              */
             steps: {
                 /** @enum {string} */
@@ -4646,8 +4652,8 @@ export interface components {
                 failures: number;
             }[];
             /**
-             * @description Uma sonda por serviço, em paralelo, com teto de 2 s cada: `healthy`, `degraded` (lento),
-             *     `down` ou `absent` (ainda não existe na plataforma).
+             * @description One probe per service, in parallel, with a 2 s cap each: `healthy`, `degraded` (slow),
+             *     `down` or `absent` (does not exist on the platform yet).
              */
             services: {
                 /** @enum {string} */
@@ -4657,7 +4663,7 @@ export interface components {
                 detail: string | null;
                 latency_ms: number | null;
             }[];
-            /** @description Heartbeat do worker GPU (`eclume:gpu:health`, a cada 15 s, TTL 45 s); `null` quando nenhum worker publicou nos últimos 45 s. */
+            /** @description Heartbeat of the GPU worker (`eclume:gpu:health`, every 15 s, TTL 45 s); `null` when no worker has published in the last 45 s. */
             worker?: {
                 online: boolean;
                 /** Format: date-time */
@@ -4665,21 +4671,21 @@ export interface components {
                 version: string | null;
                 engine: string | null;
                 device?: string | null;
-                /** @description Há um job de transcrição rodando no worker. */
+                /** @description A transcription job is running on the worker. */
                 busy: boolean;
             } | null;
-            /** @description Profundidade de cada fila arq da instância (só números, sem ids). */
+            /** @description Depth of each arq queue of the instance (numbers only, no ids). */
             queues?: {
                 name: string;
                 queued: number;
                 running: number;
             }[];
-            /** @description Desde a 2.15.0: jobs de transcrição retidos no banco, fora da fila da GPU — os que aguardam a vez da conta (ela já tem um na GPU) e os que aguardam a janela de minutos de 24 h. Só números. */
+            /** @description Since 2.15.0: transcription jobs held in the database, outside the GPU queue — those waiting for the account's turn (it already has one on the GPU) and those waiting for the 24 h minutes window. Numbers only. */
             held_jobs?: {
                 account_turn: number;
                 gpu_minutes: number;
             };
-            /** @description Jobs de transcrição da plataforma já despachados à GPU e ainda não concluídos, com o progresso (desde a 2.15.0, sem os retidos, contados em `held_jobs`). */
+            /** @description The platform's transcription jobs already dispatched to the GPU and not yet finished, with their progress (since 2.15.0, without the held ones, counted in `held_jobs`). */
             running_jobs?: {
                 /** Format: uuid */
                 job_id: string;
@@ -4696,146 +4702,146 @@ export interface components {
                 started_at: string | null;
                 /**
                  * Format: date-time
-                 * @description Última escrita do worker no progresso; parado há muito tempo indica worker morto.
+                 * @description The worker's last progress write; stale for a long time indicates a dead worker.
                  */
                 updated_at: string | null;
             }[];
         };
         /**
          * Transcript
-         * @description Transcrição do eclume, contrato v1. É o corpo de `GET /api/v1/transcripts/{transcript_id}` e a saída do worker GPU. Evolui só de forma aditiva: o consumidor ignora propriedades que não conhece e tolera valores de enum novos (regras em contracts/README.md).
+         * @description eclume transcript, contract v1. It is the body of `GET /api/v1/transcripts/{transcript_id}` and the output of the GPU worker. It evolves only additively: the consumer ignores properties it does not know and tolerates new enum values (rules in contracts/README.md).
          */
         Transcript: {
             /**
-             * @description Versão deste schema, `1.<minor>`. O minor sobe a cada mudança aditiva; a 1.2 marca `owner` como obsoleto.
+             * @description Version of this schema, `1.<minor>`. The minor goes up with every additive change; 1.2 marks `owner` as deprecated.
              * @example 1.1
              */
             schema_version: string;
             /**
              * Format: uuid
-             * @description Id da transcrição. Estável entre revisões e retranscrições.
+             * @description Transcript id. Stable across revisions and retranscriptions.
              */
             id: string;
             /**
              * Format: uuid
-             * @description Gravação de onde a transcrição saiu.
+             * @description Recording the transcript came from.
              */
             recording_id: string;
-            /** @description Título da gravação. */
+            /** @description Recording title. */
             title: string;
-            /** @description Idioma do conteúdo, BCP 47 (`pt-BR`, `pt`, `en`). */
+            /** @description Content language, BCP 47 (`pt-BR`, `pt`, `en`). */
             language: string;
             /**
              * Format: date-time
-             * @description Início da gravação (RFC 3339). Sem data informada pelo cliente, é o instante do upload.
+             * @description Recording start (RFC 3339). Without a date supplied by the client, it is the upload instant.
              */
             recorded_at: string;
-            /** @description Duração do áudio em milissegundos. */
+            /** @description Audio duration in milliseconds. */
             duration_ms: number;
             /**
-             * @description Como o áudio chegou ao eclume: `desktop` (app de captura), `upload` (navegador) ou `api` (integração por PAT).
+             * @description How the audio reached eclume: `desktop` (capture app), `upload` (browser) or `api` (integration through a PAT).
              * @enum {string}
              */
             source: "desktop" | "upload" | "api";
-            /** @description Hash do arquivo de áudio enviado, `sha256:<hex>`. É a chave de deduplicação do upload e da importação no lumea. */
+            /** @description Hash of the uploaded audio file, `sha256:<hex>`. It is the deduplication key of the upload and of the import into lumea. */
             content_hash: string;
-            /** @description Revisão do conteúdo. Sobe a cada edição (locutor renomeado, pessoa ligada, segmento corrigido) e a cada retranscrição. */
+            /** @description Content revision. It goes up with every edit (speaker renamed, person linked, segment corrected) and with every retranscription. */
             revision: number;
             /** Format: date-time */
             created_at: string;
             /**
              * Format: date-time
-             * @description Última mudança de qualquer campo; é o que `GET /api/v1/transcripts?since=` compara.
+             * @description Last change to any field; it is what `GET /api/v1/transcripts?since=` compares.
              */
             updated_at: string;
             /**
              * @deprecated
-             * @description Obsoleto desde o schema 1.2: sempre o próprio usuário (cada conta é isolada); sai na versão 2 do schema.
+             * @description Deprecated since schema 1.2: always the user themselves (each account is isolated); removed in version 2 of the schema.
              */
             owner: components["schemas"]["UserRef"];
             engine?: components["schemas"]["TranscriptEngine"];
-            /** @description Locutores da transcrição. Sem diarização, há um locutor só. */
+            /** @description Speakers of the transcript. Without diarization, there is a single speaker. */
             speakers: components["schemas"]["Speaker"][];
-            /** @description Falas em ordem de `start_ms`. Todo `speaker_id` aponta para um locutor de `speakers`. */
+            /** @description Utterances in `start_ms` order. Every `speaker_id` points to a speaker in `speakers`. */
             segments: components["schemas"]["Segment"][];
-            /** @description Tags da gravação. */
+            /** @description Recording tags. */
             tags?: string[];
             /**
-             * @description Natureza da gravação: `meeting` (reunião) ou `note` (nota por voz). Desde o schema 1.1.
+             * @description Nature of the recording: `meeting` (meeting) or `note` (voice note). Since schema 1.1.
              * @enum {string}
              */
             kind?: "meeting" | "note";
             /**
-             * @description De onde veio `recorded_at`: `capture` (relógio do app que gravou), `file_metadata` (metadados do arquivo, confirmados na importação), `user` (informada ou corrigida) ou `upload` (hora do envio). Desde o schema 1.1.
+             * @description Where `recorded_at` came from: `capture` (clock of the app that recorded), `file_metadata` (file metadata, confirmed at import), `user` (supplied or corrected) or `upload` (upload time). Since schema 1.1.
              * @enum {string}
              */
             recorded_at_source?: "capture" | "file_metadata" | "user" | "upload";
         };
-        /** @description Referência curta a um usuário do eclume. */
+        /** @description Short reference to an eclume user. */
         UserRef: {
             /** Format: uuid */
             id: string;
             name: string;
         };
-        /** @description Referência curta a uma pessoa do diretório da organização. */
+        /** @description Short reference to a person in the organization's directory. */
         PersonRef: {
             /** Format: uuid */
             id: string;
             name: string;
         };
-        /** @description Pessoa sugerida para um locutor pela impressão de voz. Só a atribuição automática da conta (`Speaker.auto_score`) liga sem confirmação, e só acima do limiar dela. */
+        /** @description Person suggested for a speaker by the voiceprint. Only the account's automatic assignment (`Speaker.auto_score`) links without confirmation, and only above its threshold. */
         SpeakerSuggestion: {
             person: components["schemas"]["PersonRef"];
-            /** @description Similaridade de cosseno normalizada, de 0 a 1. */
+            /** @description Normalized cosine similarity, from 0 to 1. */
             score: number;
         };
-        /** @description Locutor de uma transcrição. */
+        /** @description Speaker of a transcript. */
         Speaker: {
-            /** @description Id do locutor, único dentro da transcrição (`S1`, `S2`...). Estável entre edições; some só numa mesclagem. */
+            /** @description Speaker id, unique within the transcript (`S1`, `S2`...). Stable across edits; disappears only in a merge. */
             id: string;
-            /** @description Nome exibido. Começa como `Locutor N` e muda quando o usuário renomeia o locutor. */
+            /** @description Display name. It starts as `Locutor N` and changes when the user renames the speaker. */
             label: string;
-            /** @description Pessoa ligada ao locutor, ou `null` enquanto ninguém a identificou. Vem de uma confirmação humana ou, com `auto_score`, da atribuição automática pela voz. */
+            /** @description Person linked to the speaker, or `null` while nobody has identified them. It comes from a human confirmation or, with `auto_score`, from the automatic assignment by voice. */
             person: components["schemas"]["PersonRef"] | null;
-            /** @description Pontuação (cosseno normalizado, 0 a 1) com que a voz ligou o locutor à `person` na ingestão, quando a atribuição automática da conta estava ligada; `null` se alguém ligou ou confirmou o vínculo, e sempre `null` sem `person`. Confirmar (`PATCH` com o mesmo `person_id`) o zera e só então reforça a impressão de voz. */
+            /** @description Score (normalized cosine, 0 to 1) with which the voice linked the speaker to the `person` at ingestion, when the account's automatic assignment was on; `null` if someone linked or confirmed the link, and always `null` without `person`. Confirming (`PATCH` with the same `person_id`) clears it and only then reinforces the voiceprint. */
             auto_score?: number | null;
-            /** @description Sugestões por voz ainda não confirmadas, da maior para a menor `score`. */
+            /** @description Voice suggestions not yet confirmed, from highest to lowest `score`. */
             suggestions?: components["schemas"]["SpeakerSuggestion"][];
-            /** @description Tempo total de fala do locutor, em milissegundos. */
+            /** @description Total speaking time of the speaker, in milliseconds. */
             talk_ms?: number;
         };
-        /** @description Palavra com tempo do alinhamento. `start_ms` e `end_ms` são `null` quando o alinhador não conseguiu posicioná-la (números, siglas). */
+        /** @description Word with alignment timing. `start_ms` and `end_ms` are `null` when the aligner could not place it (numbers, acronyms). */
         Word: {
             text: string;
             start_ms: number | null;
             end_ms: number | null;
             confidence?: number;
         };
-        /** @description Uma fala contínua de um locutor. `end_ms >= start_ms`. */
+        /** @description One continuous utterance by a speaker. `end_ms >= start_ms`. */
         Segment: {
-            /** @description Id do segmento, único dentro da transcrição. */
+            /** @description Segment id, unique within the transcript. */
             id: string;
-            /** @description Locutor da fala; aponta para `speakers[].id`. */
+            /** @description Speaker of the utterance; points to `speakers[].id`. */
             speaker_id: string;
             start_ms: number;
             end_ms: number;
             text: string;
-            /** @description Confiança média do ASR no segmento, de 0 a 1. */
+            /** @description Average ASR confidence in the segment, from 0 to 1. */
             confidence?: number;
-            /** @description Palavras com tempo. Presente só com `?include=words`. */
+            /** @description Timed words. Present only with `?include=words`. */
             words?: components["schemas"]["Word"][];
         };
-        /** @description Proveniência: engine e modelos que produziram a transcrição. */
+        /** @description Provenance: engine and models that produced the transcript. */
         TranscriptEngine: {
             /** @description Engine (`whisperx-local`, `openai-compatible`, `cpu`). */
             name: string;
-            /** @description Modelo de ASR (`large-v3-turbo`). */
+            /** @description ASR model (`large-v3-turbo`). */
             model: string;
             diarization_model?: string | null;
         };
     };
     responses: {
-        /** @description Sem credencial, ou credencial inválida, expirada ou revogada. */
+        /** @description No credential, or an invalid, expired or revoked credential. */
         Unauthorized: {
             headers: {
                 "WWW-Authenticate"?: string;
@@ -4845,7 +4851,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Credencial válida sem permissão (escopo ou dono), PAT numa operação que aceita só sessão (`code: session_required`), cadastro fechado (`code: signup_closed`) ou sessão de conta que ainda não aceitou o aviso em vigor (`code: notice_required`; antes do aceite, só `GET /me`, `POST /me/notice` e `/auth/*` respondem, e `POST /devices/login` não emite credencial). Desde a 2.15.0, cota da conta estourada (`code: quota_exceeded`, com `quota`, `limit` e `used`). */
+        /** @description Valid credential without permission (scope or owner), a PAT on an operation that accepts only a session (`code: session_required`), signup closed (`code: signup_closed`) or a session of an account that has not yet accepted the notice in force (`code: notice_required`; before acceptance, only `GET /me`, `POST /me/notice` and `/auth/*` respond, and `POST /devices/login` issues no credential). Since 2.15.0, the account's quota exceeded (`code: quota_exceeded`, with `quota`, `limit` and `used`). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -4854,7 +4860,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Não existe ou não é do usuário (o eclume não distingue os dois). */
+        /** @description Does not exist or does not belong to the user (eclume does not tell the two apart). */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -4863,7 +4869,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Corpo ou parâmetros inválidos. */
+        /** @description Invalid body or parameters. */
         ValidationFailed: {
             headers: {
                 [name: string]: unknown;
@@ -4872,7 +4878,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description O estado atual impede a operação (upload já concluído, nome duplicado, job em andamento, resumo mudado desde a versão aberta, chat com pedido em aberto). */
+        /** @description The current state prevents the operation (upload already completed, duplicate name, job in progress, summary changed since the opened version, chat with a request open). */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -4890,7 +4896,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description O arquivo não é de um tipo que a rota aceita (`code: unsupported_media_type`, desde a 2.23.0), ou o conteúdo não bate com a extensão. */
+        /** @description The file is not of a type the route accepts (`code: unsupported_media_type`, since 2.23.0), or the content does not match the extension. */
         UnsupportedMediaType: {
             headers: {
                 [name: string]: unknown;
@@ -4899,7 +4905,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Corpo acima do teto da rota (`code: payload_too_large`, desde a 2.14.0); `limit` diz o teto em bytes. */
+        /** @description Body above the route's ceiling (`code: payload_too_large`, since 2.14.0); `limit` gives the ceiling in bytes. */
         PayloadTooLarge: {
             headers: {
                 [name: string]: unknown;
@@ -4908,7 +4914,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Falha inesperada do servidor (`code: internal_error`, desde a 2.14.0); o detalhe fica no log do servidor, com o `X-Request-ID` da resposta. */
+        /** @description Unexpected server failure (`code: internal_error`, since 2.14.0); the detail stays in the server log, with the response's `X-Request-ID`. */
         InternalError: {
             headers: {
                 [name: string]: unknown;
@@ -4917,10 +4923,10 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Limite atingido (`code: rate_limited`): pedidos em aberto, como as 3 pré-visualizações em andamento por conta (tente de novo quando algum terminar), ou tentativas por minuto nas rotas de credencial (login, cadastro, login de admin e `/devices/*`, por IP), com `Retry-After`. Nos logins por senha, desde a 2.14.0, contam só as falhas: por par (conta, IP), e um teto da conta que não barra IP que já entrou nela com sucesso; o sucesso zera o par. */
+        /** @description Limit reached (`code: rate_limited`): open requests, such as the 3 previews in progress per account (try again when one finishes), or attempts per minute on the credential routes (login, signup, admin login and `/devices/*`, per IP), with `Retry-After`. On password logins, since 2.14.0, only failures count: per (account, IP) pair, plus an account ceiling that does not block an IP that has already signed in to it successfully; success resets the pair. */
         TooManyRequests: {
             headers: {
-                /** @description Segundos até a janela de tentativas reabrir. */
+                /** @description Seconds until the attempts window reopens. */
                 "Retry-After"?: number;
                 [name: string]: unknown;
             };
@@ -4930,24 +4936,24 @@ export interface components {
         };
     };
     parameters: {
-        /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+        /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
         CsrfToken: string;
-        /** @description Cursor opaco devolvido em `next_cursor`. */
+        /** @description Opaque cursor returned in `next_cursor`. */
         Cursor: string;
-        /** @description Itens por página. */
+        /** @description Items per page. */
         Limit: number;
         /**
-         * @description Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
-         *     editado também move o `updated_at` da gravação e da transcrição a que pertence. Desde a
-         *     2.17.0, a etapa `summary` que termina `failed` ou `skipped` move o `updated_at` só da
-         *     gravação, para os clientes avisarem o fim do processamento (holetz/eclume#118).
+         * @description Only items with `updated_at >= since` (inclusive). Since 2.8.0, a summary that finishes or is
+         *     edited also moves the `updated_at` of the recording and of the transcript it belongs to. Since
+         *     2.17.0, a `summary` stage that ends `failed` or `skipped` moves the `updated_at` of the
+         *     recording only, so that clients report the end of processing (holetz/eclume#118).
          */
         Since: string;
-        /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
+        /** @description Person id; only transcripts (or excerpts) in which a speaker is linked to that person. */
         PersonFilter: string;
-        /** @description Só gravações com esta tag. */
+        /** @description Only recordings with this tag. */
         TagFilter: string;
-        /** @description Só gravações desta coleção. */
+        /** @description Only recordings in this collection. */
         CollectionFilter: string;
         PairingCodeId: string;
         TokenId: string;
@@ -4985,7 +4991,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Serviço no ar. */
+            /** @description Service up. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5005,7 +5011,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Todas as dependências respondem. */
+            /** @description All dependencies answer. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5014,7 +5020,7 @@ export interface operations {
                     "application/json": components["schemas"]["HealthReady"];
                 };
             };
-            /** @description Alguma dependência não respondeu em 2 s; `checks` diz qual. */
+            /** @description Some dependency did not answer within 2 s; `checks` says which. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -5038,10 +5044,10 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Sessão aberta. */
+            /** @description Session opened. */
             204: {
                 headers: {
-                    /** @description `eclume_session` e `eclume_csrf`. */
+                    /** @description `eclume_session` and `eclume_csrf`. */
                     "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
@@ -5057,7 +5063,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5065,7 +5071,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Sessão encerrada e cookies removidos. */
+            /** @description Session closed and cookies removed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5085,7 +5091,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Cadastro. */
+            /** @description Sign-up. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5109,10 +5115,10 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Conta criada e sessão aberta. */
+            /** @description Account created and session opened. */
             204: {
                 headers: {
-                    /** @description `eclume_session` e `eclume_csrf`. */
+                    /** @description `eclume_session` and `eclume_csrf`. */
                     "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
@@ -5134,7 +5140,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Usuário corrente. */
+            /** @description Current user. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5155,7 +5161,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Uso e cotas. */
+            /** @description Usage and quotas. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5171,7 +5177,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5183,7 +5189,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Senha trocada. */
+            /** @description Password changed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5200,7 +5206,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5212,7 +5218,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Conta excluída; a sessão acabou. */
+            /** @description Account deleted; the session ended. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5229,7 +5235,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5241,7 +5247,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Aceite registrado. */
+            /** @description Acceptance recorded. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5262,7 +5268,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Preferência corrente. */
+            /** @description Current preference. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5279,7 +5285,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5291,7 +5297,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Preferência resultante. */
+            /** @description Resulting preference. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5314,7 +5320,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Preferência corrente. */
+            /** @description Current preference. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5331,7 +5337,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5343,7 +5349,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Preferência resultante. */
+            /** @description Resulting preference. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5383,7 +5389,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5418,7 +5424,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Preferência corrente. */
+            /** @description Current preference. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5435,7 +5441,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5447,7 +5453,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Preferência resultante. */
+            /** @description Resulting preference. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5470,7 +5476,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A configuração da conta. */
+            /** @description The account's settings. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5487,7 +5493,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5499,7 +5505,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A configuração atualizada. */
+            /** @description The updated settings. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5516,11 +5522,11 @@ export interface operations {
     listTokens: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
-                /** @description Só os tokens deste tipo. */
+                /** @description Only the tokens of this kind. */
                 kind?: components["schemas"]["TokenKind"];
             };
             header?: never;
@@ -5529,7 +5535,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tokens, inclusive revogados, do mais novo para o mais antigo. */
+            /** @description Tokens, revoked ones included, from newest to oldest. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5546,7 +5552,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5558,7 +5564,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description PAT criado. */
+            /** @description PAT created. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5576,7 +5582,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -5586,7 +5592,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Revogado. Usos seguintes recebem 401. */
+            /** @description Revoked. Later uses get 401. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5607,7 +5613,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Descritor. */
+            /** @description Descriptor. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5627,7 +5633,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Destinos em vigor. */
+            /** @description Destinations in force. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5651,7 +5657,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Link válido. */
+            /** @description Valid link. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5679,7 +5685,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Senha redefinida e sessões da conta encerradas. */
+            /** @description Password reset and the account's sessions closed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5705,7 +5711,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Credencial de dispositivo emitida. */
+            /** @description Device credential issued. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5725,7 +5731,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5733,7 +5739,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Código gerado; `code`, `display` e `pair_url` só voltam aqui. */
+            /** @description Code generated; `code`, `display` and `pair_url` only come back here. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5757,7 +5763,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Estado do código, sem o código. */
+            /** @description State of the code, without the code. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5784,7 +5790,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Credencial de dispositivo emitida. */
+            /** @description Device credential issued. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5803,7 +5809,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -5815,7 +5821,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Deduplicado. Já existe gravação com este hash. */
+            /** @description Deduplicated. A recording with this hash already exists. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5824,7 +5830,7 @@ export interface operations {
                     "application/json": components["schemas"]["Upload"];
                 };
             };
-            /** @description Upload criado. */
+            /** @description Upload created. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5867,7 +5873,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -5877,7 +5883,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Abortado. */
+            /** @description Aborted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5893,7 +5899,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -5907,7 +5913,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description URLs das partes pedidas. */
+            /** @description URLs of the requested parts. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5939,10 +5945,10 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Parte gravada. */
+            /** @description Part stored. */
             200: {
                 headers: {
-                    /** @description Identificador da parte, a devolver no `complete`. */
+                    /** @description Identifier of the part, to return in the `complete`. */
                     ETag: string;
                     [name: string]: unknown;
                 };
@@ -5959,7 +5965,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -5973,7 +5979,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Gravação criada, job na fila. */
+            /** @description Recording created, job queued. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5985,10 +5991,10 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description O upload expirou (`code: upload_expired`), não está mais aberto (`code: conflict`) ou outro `complete` dele está em andamento (`code: upload_completing`, desde a 2.14.0, com `Retry-After`). */
+            /** @description The upload expired (`code: upload_expired`), is no longer open (`code: conflict`) or another `complete` of it is in progress (`code: upload_completing`, since 2.14.0, with `Retry-After`). */
             409: {
                 headers: {
-                    /** @description Com `upload_completing`, segundos até tentar de novo. */
+                    /** @description With `upload_completing`, seconds until trying again. */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };
@@ -6002,42 +6008,42 @@ export interface operations {
     listRecordings: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
                 /**
-                 * @description Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
-                 *     editado também move o `updated_at` da gravação e da transcrição a que pertence. Desde a
-                 *     2.17.0, a etapa `summary` que termina `failed` ou `skipped` move o `updated_at` só da
-                 *     gravação, para os clientes avisarem o fim do processamento (holetz/eclume#118).
+                 * @description Only items with `updated_at >= since` (inclusive). Since 2.8.0, a summary that finishes or is
+                 *     edited also moves the `updated_at` of the recording and of the transcript it belongs to. Since
+                 *     2.17.0, a `summary` stage that ends `failed` or `skipped` moves the `updated_at` of the
+                 *     recording only, so that clients report the end of processing (holetz/eclume#118).
                  */
                 since?: components["parameters"]["Since"];
                 /** @description `recorded_at >= from`. */
                 from?: string;
                 /** @description `recorded_at < to`. */
                 to?: string;
-                /** @description `created_desc` (padrão, a mais recente enviada primeiro), `recorded_asc` ou `recorded_desc` (pelo início da gravação). O cursor vale só para a mesma ordenação. */
+                /** @description `created_desc` (default, the most recently uploaded first), `recorded_asc` or `recorded_desc` (by the recording start). The cursor is valid only for the same order. */
                 sort?: "created_desc" | "recorded_asc" | "recorded_desc";
-                /** @description Natureza da gravação; repetível. */
+                /** @description Nature of the recording; repeatable. */
                 kind?: components["schemas"]["RecordingKind"][];
-                /** @description Estado da gravação; repetível. */
+                /** @description State of the recording; repeatable. */
                 status?: components["schemas"]["RecordingStatus"][];
-                /** @description Tag; repetível. */
+                /** @description Tag; repeatable. */
                 tag?: string[];
-                /** @description Coleção; repetível. */
+                /** @description Collection; repeatable. */
                 collection?: string[];
-                /** @description Pessoa ligada a um locutor da transcrição; repetível. */
+                /** @description Person linked to a speaker of the transcript; repeatable. */
                 person?: string[];
-                /** @description Valor de um campo do usuário, `<field_id>:<valor>`; repetível. Cada campo é um filtro: valores do mesmo campo combinam por OU, campos diferentes por E. Num campo de lista, basta o valor ser um dos itens; título e tags valem como os embutidos. */
+                /** @description Value of a user field, `<field_id>:<valor>`; repeatable. Each field is a filter: values of the same field combine with OR, different fields with AND. In a list field, it is enough for the value to be one of the items; title and tags count as the built-in ones. */
                 field?: string[];
-                /** @description Empresa de um participante (pessoa ligada a um locutor), sem acento nem caixa; repetível. Os atributos `person_*` valem para uma mesma pessoa: com `person_company` e `person_tag`, alguém da empresa e com a tag falou na gravação. */
+                /** @description Company of a participant (a person linked to a speaker), ignoring accents and case; repeatable. The `person_*` attributes apply to one and the same person: with `person_company` and `person_tag`, someone from the company and with the tag spoke in the recording. */
                 person_company?: string[];
-                /** @description Área de um participante, sem acento nem caixa; repetível (ver `person_company`). */
+                /** @description Department of a participant, ignoring accents and case; repeatable (see `person_company`). */
                 person_department?: string[];
-                /** @description Tag de pessoa de um participante, sem caixa; repetível (ver `person_company`). */
+                /** @description Person tag of a participant, ignoring case; repeatable (see `person_company`). */
                 person_tag?: string[];
-                /** @description Desde a 2.22.0. `speakers`: só as gravações cuja revisão atual está parada à espera de nomear os locutores (`Recording.awaiting`). */
+                /** @description Since 2.22.0. `speakers`: only the recordings whose current revision is stopped waiting for the speakers to be named (`Recording.awaiting`). */
                 awaiting?: "speakers"[];
             };
             header?: never;
@@ -6046,7 +6052,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Gravações, na ordem de `sort`. */
+            /** @description Recordings, in the `sort` order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6070,7 +6076,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Gravação. */
+            /** @description Recording. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6088,7 +6094,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6098,7 +6104,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -6114,7 +6120,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6128,7 +6134,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Gravação atualizada. */
+            /** @description Recording updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6154,7 +6160,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Redirecionamento para o áudio. */
+            /** @description Redirect to the audio. */
             302: {
                 headers: {
                     Location: string;
@@ -6172,7 +6178,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6186,7 +6192,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Job na fila. */
+            /** @description Job queued. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6205,7 +6211,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6215,7 +6221,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Transcrição cancelada; a gravação com o job `cancelled`. */
+            /** @description Transcription cancelled; the recording with the job `cancelled`. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6234,7 +6240,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6244,7 +6250,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A gravação, com a etapa `speakers` solta. */
+            /** @description The recording, with the `speakers` step released. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6270,7 +6276,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Estado do resumo. */
+            /** @description Summary state. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6289,7 +6295,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6303,7 +6309,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A versão nova. */
+            /** @description The new version. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6323,7 +6329,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6333,7 +6339,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -6350,7 +6356,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6360,7 +6366,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A versão nova. */
+            /** @description The new version. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -6378,9 +6384,9 @@ export interface operations {
     listSummaryChat: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -6391,7 +6397,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Mensagens, em ordem cronológica. */
+            /** @description Messages, in chronological order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6410,7 +6416,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6424,7 +6430,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pedido e resposta na fila. */
+            /** @description Request and reply queued. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6451,7 +6457,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Marcadores em ordem de `at_ms` (página única). */
+            /** @description Markers in `at_ms` order (single page). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6469,7 +6475,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6483,7 +6489,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Todos os marcadores da gravação, em ordem de `at_ms`. */
+            /** @description All the markers of the recording, in `at_ms` order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6501,7 +6507,7 @@ export interface operations {
     exportRecording: {
         parameters: {
             query: {
-                /** @description Formato do export. Formatos novos entram de forma aditiva. */
+                /** @description Export format. New formats are added additively. */
                 format: "txt" | "srt" | "md" | "docx";
             };
             header?: never;
@@ -6512,7 +6518,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Arquivo exportado, com o nome em slug do título. */
+            /** @description Exported file, named with the slug of the title. */
             200: {
                 headers: {
                     "Content-Disposition"?: string;
@@ -6543,7 +6549,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Os campos da gravação com valor e origem. */
+            /** @description The fields of the recording with value and origin. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6561,7 +6567,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6571,7 +6577,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Os campos da gravação com valor e origem. */
+            /** @description The fields of the recording with value and origin. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6589,7 +6595,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6604,7 +6610,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Os campos da gravação com valor e origem. */
+            /** @description The fields of the recording with value and origin. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6623,7 +6629,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6634,7 +6640,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Os campos da gravação com valor e origem. */
+            /** @description The fields of the recording with value and origin. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6652,20 +6658,20 @@ export interface operations {
     listTranscripts: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
                 /**
-                 * @description Só itens com `updated_at >= since` (inclusivo). Desde a 2.8.0, um resumo que termina ou é
-                 *     editado também move o `updated_at` da gravação e da transcrição a que pertence. Desde a
-                 *     2.17.0, a etapa `summary` que termina `failed` ou `skipped` move o `updated_at` só da
-                 *     gravação, para os clientes avisarem o fim do processamento (holetz/eclume#118).
+                 * @description Only items with `updated_at >= since` (inclusive). Since 2.8.0, a summary that finishes or is
+                 *     edited also moves the `updated_at` of the recording and of the transcript it belongs to. Since
+                 *     2.17.0, a `summary` stage that ends `failed` or `skipped` moves the `updated_at` of the
+                 *     recording only, so that clients report the end of processing (holetz/eclume#118).
                  */
                 since?: components["parameters"]["Since"];
-                /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
+                /** @description Person id; only transcripts (or excerpts) in which a speaker is linked to that person. */
                 person?: components["parameters"]["PersonFilter"];
-                /** @description Transcrição de uma gravação específica. */
+                /** @description The transcript of one specific recording. */
                 recording_id?: string;
             };
             header?: never;
@@ -6674,7 +6680,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Transcrições. */
+            /** @description Transcripts. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6691,7 +6697,7 @@ export interface operations {
     getTranscript: {
         parameters: {
             query?: {
-                /** @description `words` inclui as palavras com tempo em cada segmento. */
+                /** @description `words` includes the timed words in each segment. */
                 include?: "words";
             };
             header?: never;
@@ -6702,7 +6708,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Transcrição, no schema de `contracts/transcript.schema.json`. */
+            /** @description Transcript, in the schema of `contracts/transcript.schema.json`. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6719,7 +6725,7 @@ export interface operations {
     exportTranscript: {
         parameters: {
             query: {
-                /** @description Formato do export. Formatos novos entram de forma aditiva. */
+                /** @description Export format. New formats are added additively. */
                 format: "md";
             };
             header?: never;
@@ -6730,7 +6736,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Arquivo exportado. */
+            /** @description Exported file. */
             200: {
                 headers: {
                     "Content-Disposition"?: string;
@@ -6749,7 +6755,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6764,7 +6770,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Locutor atualizado. */
+            /** @description Speaker updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6783,7 +6789,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6795,7 +6801,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Locutor sem a sugestão recusada. */
+            /** @description Speaker without the rejected suggestion. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6813,7 +6819,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6827,7 +6833,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Transcrição depois da mesclagem. */
+            /** @description Transcript after the merge. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6846,7 +6852,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6861,7 +6867,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Segmento atualizado. */
+            /** @description Segment updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6879,9 +6885,9 @@ export interface operations {
     listSummaries: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -6892,7 +6898,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Resumos, da versão mais nova para a mais antiga. */
+            /** @description Summaries, from the newest version to the oldest. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6911,7 +6917,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6925,7 +6931,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Resumo na fila. */
+            /** @description Summary queued. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6952,7 +6958,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Resumo. */
+            /** @description Summary. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6970,7 +6976,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -6980,7 +6986,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7003,7 +7009,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Mensagem. */
+            /** @description Message. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7021,7 +7027,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7031,7 +7037,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7047,7 +7053,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7061,7 +7067,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Marcador atualizado. */
+            /** @description Marker updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7079,9 +7085,9 @@ export interface operations {
     listAgendaTypes: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -7090,7 +7096,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tipos de agenda. */
+            /** @description Agenda types. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7108,7 +7114,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7120,7 +7126,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tipo criado. */
+            /** @description Type created. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7139,7 +7145,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7151,7 +7157,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`. */
+            /** @description Preview queued; poll `GET /api/v1/previews/{preview_id}`. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -7177,7 +7183,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tipo de agenda. */
+            /** @description Agenda type. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7195,7 +7201,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7205,7 +7211,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7222,7 +7228,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7236,7 +7242,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tipo atualizado. */
+            /** @description Type updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7260,7 +7266,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Campos, na ordem da lista. */
+            /** @description Fields, in list order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7278,7 +7284,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7290,7 +7296,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Campo criado. */
+            /** @description Field created. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7308,7 +7314,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7320,7 +7326,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pré-visualização na fila; consulte `GET /api/v1/previews/{preview_id}`. */
+            /** @description Preview queued; poll `GET /api/v1/previews/{preview_id}`. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -7346,7 +7352,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Campo. */
+            /** @description Field. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7364,7 +7370,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7374,7 +7380,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído, com os valores dele. */
+            /** @description Deleted, with its values. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7391,7 +7397,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7405,7 +7411,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Campo atualizado. */
+            /** @description Field updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7431,7 +7437,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description O estado e, pronta, os resultados. */
+            /** @description The state and, once ready, the results. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7449,7 +7455,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7461,7 +7467,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pergunta na fila. */
+            /** @description Question queued. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -7487,7 +7493,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description O estado e, pronta, a resposta com as fontes. */
+            /** @description The state and, once ready, the answer with its sources. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7504,9 +7510,9 @@ export interface operations {
     listAgentSessions: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -7515,7 +7521,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Uma página de conversas. */
+            /** @description A page of conversations. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7535,7 +7541,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7547,7 +7553,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A conversa criada. */
+            /** @description The created conversation. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7571,7 +7577,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A conversa. */
+            /** @description The conversation. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7589,7 +7595,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7599,7 +7605,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7615,7 +7621,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7629,7 +7635,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A conversa renomeada. */
+            /** @description The renamed conversation. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7648,7 +7654,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7664,7 +7670,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description O anexo, ainda sem pergunta (`message_id` nulo). */
+            /** @description The attachment, not yet tied to a question (`message_id` null). */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7685,7 +7691,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7696,7 +7702,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tirado. */
+            /** @description Removed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7713,7 +7719,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7727,7 +7733,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A pergunta gravada e a resposta na fila. */
+            /** @description The question stored and the answer queued. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -7756,7 +7762,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A mensagem. */
+            /** @description The message. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7781,7 +7787,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description O arquivo, como anexo. */
+            /** @description The file, as an attachment. */
             200: {
                 headers: {
                     "Content-Disposition"?: string;
@@ -7809,7 +7815,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description O catálogo. */
+            /** @description The catalogue. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7833,7 +7839,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description As habilidades. */
+            /** @description The skills. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7852,7 +7858,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -7864,7 +7870,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A habilidade cadastrada. */
+            /** @description The registered skill. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7890,7 +7896,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A habilidade. */
+            /** @description The skill. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7908,7 +7914,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7918,7 +7924,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7934,7 +7940,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -7948,7 +7954,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A habilidade editada. */
+            /** @description The edited skill. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7967,9 +7973,9 @@ export interface operations {
     listAgentActions: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -7978,7 +7984,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Uma página de ações. */
+            /** @description A page of actions. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8005,7 +8011,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A ação. */
+            /** @description The action. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8023,7 +8029,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8033,7 +8039,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A ação na fila (ou o estado atual, se já confirmada). */
+            /** @description The queued action (or the current state, if already confirmed). */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -8052,7 +8058,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8062,7 +8068,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A proposta descartada. */
+            /** @description The dismissed proposal. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8080,11 +8086,11 @@ export interface operations {
     listPeople: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
-                /** @description Busca por nome ou e-mail (prefixo, sem acento). */
+                /** @description Search by name or e-mail (prefix, accent-insensitive). */
                 q?: string;
             };
             header?: never;
@@ -8093,7 +8099,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Pessoas, em ordem alfabética. */
+            /** @description People, in alphabetical order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8110,7 +8116,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8122,7 +8128,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pessoa cadastrada. */
+            /** @description Person registered. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -8146,7 +8152,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Valores em uso, em ordem alfabética. */
+            /** @description Values in use, in alphabetical order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8170,7 +8176,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Pessoa. */
+            /** @description Person. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8188,7 +8194,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8198,7 +8204,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8214,7 +8220,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8228,7 +8234,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pessoa atualizada. */
+            /** @description Person updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8246,9 +8252,9 @@ export interface operations {
     listPersonTranscripts: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -8259,7 +8265,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Transcrições, da mais recente para a mais antiga. */
+            /** @description Transcripts, newest first. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8284,7 +8290,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Impressão. */
+            /** @description Voiceprint. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8302,7 +8308,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8312,7 +8318,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8328,7 +8334,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8340,7 +8346,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Removida. */
+            /** @description Removed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8355,23 +8361,23 @@ export interface operations {
     search: {
         parameters: {
             query?: {
-                /** @description Termos de busca (sintaxe `websearch_to_tsquery`, aceita "frase exata" e -exclusão). */
+                /** @description Search terms (`websearch_to_tsquery` syntax, accepts "frase exata" and -exclusion). */
                 q?: string;
-                /** @description Id de pessoa; só transcrições (ou trechos) em que um locutor está ligado a ela. */
+                /** @description Person id; only transcripts (or excerpts) in which a speaker is linked to that person. */
                 person?: components["parameters"]["PersonFilter"];
                 /** @description `recorded_at >= from`. */
                 from?: string;
                 /** @description `recorded_at < to`. */
                 to?: string;
-                /** @description Só gravações com esta tag. */
+                /** @description Only recordings with this tag. */
                 tag?: components["parameters"]["TagFilter"];
-                /** @description Só gravações desta coleção. */
+                /** @description Only recordings in this collection. */
                 collection?: components["parameters"]["CollectionFilter"];
-                /** @description Valor de um campo do usuário, `<field_id>:<valor>`; repetível, como em `GET /api/v1/recordings`: valores do mesmo campo combinam por OU, campos diferentes por E. Num campo de lista, basta o valor ser um dos itens; título e tags valem como os embutidos. */
+                /** @description Value of a user field, `<field_id>:<valor>`; repeatable, as in `GET /api/v1/recordings`: values of the same field combine with OR, different fields with AND. On a list field, the value need only be one of the items; title and tags work like the built-in ones. */
                 field?: string[];
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -8380,7 +8386,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Trechos encontrados, por relevância. */
+            /** @description Passages found, by relevance. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8397,9 +8403,9 @@ export interface operations {
     listCollections: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -8408,7 +8414,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Coleções. */
+            /** @description Collections. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8425,7 +8431,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8437,7 +8443,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Coleção criada. */
+            /** @description Collection created. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -8455,7 +8461,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8465,7 +8471,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8481,7 +8487,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8495,7 +8501,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Coleção atualizada. */
+            /** @description Collection updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8514,7 +8520,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8528,7 +8534,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A coleção que recebeu as gravações. */
+            /** @description The collection that received the recordings. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8552,7 +8558,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tags com contagem. */
+            /** @description Tags with counts. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8569,7 +8575,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8581,7 +8587,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tag cadastrada. */
+            /** @description Tag registered. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -8600,7 +8606,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8610,7 +8616,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluída. */
+            /** @description Deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8626,7 +8632,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8640,7 +8646,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tag atualizada. */
+            /** @description Tag updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8660,7 +8666,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8674,7 +8680,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A tag que ficou. */
+            /** @description The tag that remained. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8702,10 +8708,10 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Sessão de admin aberta. */
+            /** @description Admin session opened. */
             204: {
                 headers: {
-                    /** @description `eclume_admin_session` e `eclume_admin_csrf`. */
+                    /** @description `eclume_admin_session` and `eclume_admin_csrf`. */
                     "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
@@ -8721,7 +8727,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8729,7 +8735,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Sessão encerrada e cookies removidos. */
+            /** @description Session closed and cookies removed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8749,7 +8755,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Conta de admin. */
+            /** @description Admin account. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8770,7 +8776,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Configuração. */
+            /** @description Configuration. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8787,7 +8793,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8799,7 +8805,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Configuração resultante. */
+            /** @description Resulting configuration. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8822,7 +8828,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Providers. A chave de API nunca volta; só `api_key_set`. */
+            /** @description Providers. The API key never comes back; only `api_key_set`. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8839,7 +8845,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8851,7 +8857,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Provider cadastrado. */
+            /** @description Provider registered. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -8869,7 +8875,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8879,7 +8885,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Removido. */
+            /** @description Removed. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8896,7 +8902,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8910,7 +8916,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Provider atualizado. */
+            /** @description Provider updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8934,7 +8940,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tipos padrão, na ordem da lista. */
+            /** @description Default types, in list order. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8952,7 +8958,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path?: never;
@@ -8964,7 +8970,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tipo padrão criado. */
+            /** @description Default type created. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -8983,7 +8989,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -8993,7 +8999,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Excluído. As cópias das contas ficam. */
+            /** @description Deleted. The accounts' copies remain. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -9009,7 +9015,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -9023,7 +9029,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Tipo padrão atualizado. */
+            /** @description Default type updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9047,7 +9053,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Nomes e estado; o valor nunca volta. */
+            /** @description Names and state; the value never comes back. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9064,11 +9070,11 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
-                /** @description Nome do segredo: `hf_token` (diarização no worker GPU) ou `anthropic_api_key` (provider `anthropic` sem chave própria). Outro nome → 422. */
+                /** @description Secret name: `hf_token` (diarization in the GPU worker) or `anthropic_api_key` (`anthropic` provider without its own key). Any other name → 422. */
                 secret_name: string;
             };
             cookie?: never;
@@ -9079,7 +9085,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Gravado. */
+            /** @description Stored. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -9095,18 +9101,18 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
-                /** @description Nome do segredo: `hf_token` (diarização no worker GPU) ou `anthropic_api_key` (provider `anthropic` sem chave própria). Outro nome → 422. */
+                /** @description Secret name: `hf_token` (diarization in the GPU worker) or `anthropic_api_key` (`anthropic` provider without its own key). Any other name → 422. */
                 secret_name: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Apagado. */
+            /** @description Erased. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -9121,9 +9127,9 @@ export interface operations {
     listUsers: {
         parameters: {
             query?: {
-                /** @description Cursor opaco devolvido em `next_cursor`. */
+                /** @description Opaque cursor returned in `next_cursor`. */
                 cursor?: components["parameters"]["Cursor"];
-                /** @description Itens por página. */
+                /** @description Items per page. */
                 limit?: components["parameters"]["Limit"];
             };
             header?: never;
@@ -9132,7 +9138,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Usuários. */
+            /** @description Users. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9149,7 +9155,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -9159,7 +9165,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Conta excluída. */
+            /** @description Account deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -9175,7 +9181,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -9189,7 +9195,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Usuário atualizado. */
+            /** @description User updated. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9208,7 +9214,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -9218,7 +9224,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Link gerado. */
+            /** @description Link generated. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -9237,7 +9243,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obrigatório com sessão: o valor do cookie `eclume_csrf`, ou de `eclume_admin_csrf` em `/api/v1/admin/*`. Ignorado com PAT. */
+                /** @description Required with a session: the value of the `eclume_csrf` cookie, or of `eclume_admin_csrf` on `/api/v1/admin/*`. Ignored with a PAT. */
                 "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
             };
             path: {
@@ -9247,7 +9253,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Novo job na fila. */
+            /** @description New job in the queue. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -9271,7 +9277,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Estado atual. */
+            /** @description Current state. */
             200: {
                 headers: {
                     [name: string]: unknown;

@@ -1,4 +1,4 @@
-"""Testes do contrato v1: validade do OpenAPI e do schema, fixtures e mapeamento para o lumea."""
+"""v1 contract tests: OpenAPI and schema validity, fixtures and the mapping to lumea."""
 
 from __future__ import annotations
 
@@ -25,11 +25,11 @@ BUNDLE_URI = "urn:eclume:contracts:v1:bundle"
 HTTP_METHODS = {"get", "put", "post", "delete", "patch", "head", "options", "trace"}
 
 
-def strictify(node: Any) -> Any:  # noqa: ANN401 — percorre YAML/JSON arbitrário
-    """Fecha todo schema de objeto a propriedades não declaradas.
+def strictify(node: Any) -> Any:  # noqa: ANN401 — walks arbitrary YAML/JSON
+    """Close every object schema to undeclared properties.
 
-    O contrato é aberto de propósito (o cliente ignora propriedades novas), mas uma fixture com
-    uma propriedade fora do schema é erro de digitação, não evolução.
+    The contract is open on purpose (the client ignores new properties), but a fixture with a
+    property outside the schema is a typo, not evolution.
     """
     if isinstance(node, list):
         return [strictify(item) for item in node]
@@ -73,7 +73,7 @@ def transcript() -> dict[str, Any]:
 
 @pytest.fixture(scope="session")
 def strict_validator_for(bundle: dict[str, Any]) -> Callable[[str], Draft202012Validator]:
-    """Fábrica de validadores estritos para um ponteiro JSON dentro do bundle."""
+    """Factory of strict validators for a JSON pointer inside the bundle."""
     strict_bundle = strictify(bundle)
     registry = Registry().with_resource(BUNDLE_URI, Resource(contents=strict_bundle, specification=DRAFT202012))
 
@@ -99,7 +99,7 @@ def _operations(spec: dict[str, Any]) -> Iterator[tuple[str, str, dict[str, Any]
 
 
 def _media_examples(bundle: dict[str, Any]) -> Iterator[tuple[str, str, Any]]:
-    """Cada exemplo de media type do bundle: (onde, ponteiro do schema, valor)."""
+    """Each media type example of the bundle: (where, schema pointer, value)."""
 
     def from_content(content: dict[str, Any], *where: str) -> Iterator[tuple[str, str, Any]]:
         for media, media_obj in content.items():
@@ -120,41 +120,41 @@ def _media_examples(bundle: dict[str, Any]) -> Iterator[tuple[str, str, Any]]:
         yield from from_content(response.get("content", {}), "components", "responses", name)
 
 
-# --- validade estrutural ---------------------------------------------------------------------
+# --- structural validity ---------------------------------------------------------------------
 
 
-def test_openapi_fonte_e_valido(source_spec: dict[str, Any]) -> None:
+def test_source_openapi_is_valid(source_spec: dict[str, Any]) -> None:
     validate(source_spec, base_uri=(CONTRACTS / "openapi-v1.yaml").as_uri())
 
 
-def test_bundle_e_valido_e_sem_referencia_externa(bundle: dict[str, Any]) -> None:
+def test_bundle_is_valid_and_has_no_external_reference(bundle: dict[str, Any]) -> None:
     validate(bundle)
     text = (CONTRACTS / "openapi-v1.bundled.yaml").read_text(encoding="utf-8")
     assert "externalValue" not in text
     assert "transcript.schema.json#" not in text
 
 
-def test_bundle_commitado_esta_atualizado(bundle_module: ModuleType) -> None:
+def test_committed_bundle_is_up_to_date(bundle_module: ModuleType) -> None:
     committed = (CONTRACTS / "openapi-v1.bundled.yaml").read_text(encoding="utf-8")
-    assert committed == bundle_module.build(), "rode: uv run python contracts/tools/bundle.py"
+    assert committed == bundle_module.build(), "run: uv run python contracts/tools/bundle.py"
 
 
-def test_schema_da_transcricao_e_2020_12_valido(transcript_schema: dict[str, Any]) -> None:
+def test_transcript_schema_is_valid_2020_12(transcript_schema: dict[str, Any]) -> None:
     assert transcript_schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
     Draft202012Validator.check_schema(transcript_schema)
 
 
-def test_versoes_do_contrato_sao_v1(source_spec: dict[str, Any], transcript: dict[str, Any]) -> None:
-    # A linha 2.x do redesign segue sob /api/v1; depois dele, a próxima quebra vai para /api/v2.
+def test_contract_versions_are_v1(source_spec: dict[str, Any], transcript: dict[str, Any]) -> None:
+    # The redesign's 2.x line stays under /api/v1; after it, the next break goes to /api/v2.
     assert re.fullmatch(r"2\.\d+\.\d+", source_spec["info"]["version"])
     assert transcript["schema_version"].startswith("1.")
     assert all(path.startswith("/api/v1/") for path in source_spec["paths"])
 
 
-# --- fixtures e exemplos ---------------------------------------------------------------------
+# --- fixtures and examples -------------------------------------------------------------------
 
 
-def test_fixture_de_transcricao_valida_estrita_contra_o_schema(
+def test_transcript_fixture_validates_strictly_against_the_schema(
     transcript_schema: dict[str, Any], transcript: dict[str, Any]
 ) -> None:
     validator = Draft202012Validator(strictify(transcript_schema), format_checker=Draft202012Validator.FORMAT_CHECKER)
@@ -162,7 +162,7 @@ def test_fixture_de_transcricao_valida_estrita_contra_o_schema(
     assert errors == []
 
 
-def test_fixture_de_transcricao_respeita_as_invariantes(transcript: dict[str, Any]) -> None:
+def test_transcript_fixture_respects_the_invariants(transcript: dict[str, Any]) -> None:
     speaker_ids = [speaker["id"] for speaker in transcript["speakers"]]
     assert len(speaker_ids) == len(set(speaker_ids))
     segment_ids = [segment["id"] for segment in transcript["segments"]]
@@ -182,13 +182,13 @@ def test_fixture_de_transcricao_respeita_as_invariantes(transcript: dict[str, An
     assert {speaker["id"]: speaker["talk_ms"] for speaker in transcript["speakers"]} == talk
 
 
-def test_fixture_tem_tres_locutores_um_ligado_a_pessoa(transcript: dict[str, Any]) -> None:
+def test_fixture_has_three_speakers_one_linked_to_a_person(transcript: dict[str, Any]) -> None:
     speakers = transcript["speakers"]
-    assert len(speakers) == 3  # noqa: PLR2004 — o caso que o épico pede
+    assert len(speakers) == 3  # noqa: PLR2004 — the case the epic asks for
     assert [speaker["person"] is not None for speaker in speakers].count(True) == 1
 
 
-def test_todo_exemplo_valida_estrito_contra_o_schema_do_media_type(
+def test_every_example_validates_strictly_against_the_media_type_schema(
     bundle: dict[str, Any], strict_validator_for: Callable[[str], Draft202012Validator]
 ) -> None:
     failures: list[str] = []
@@ -197,38 +197,38 @@ def test_todo_exemplo_valida_estrito_contra_o_schema_do_media_type(
         count += 1
         validator = strict_validator_for(schema_pointer)
         failures.extend(f"{label} {list(e.absolute_path)}: {e.message}" for e in validator.iter_errors(value))
-    assert count >= 40  # noqa: PLR2004 — guarda contra um percurso que não encontra nada
+    assert count >= 40  # noqa: PLR2004 — guards against a walk that finds nothing
     assert failures == []
 
 
-def test_toda_fixture_e_referenciada_por_um_exemplo(source_spec: dict[str, Any]) -> None:
+def test_every_fixture_is_referenced_by_an_example(source_spec: dict[str, Any]) -> None:
     referenced = {Path(example["externalValue"]).name for example in source_spec["components"]["examples"].values()}
     on_disk = {path.name for path in FIXTURES.iterdir()}
     assert on_disk == referenced
 
 
-def test_operacoes_declaram_401_e_escopos_conhecidos(source_spec: dict[str, Any]) -> None:
+def test_operations_declare_401_and_known_scopes(source_spec: dict[str, Any]) -> None:
     scopes = set(source_spec["components"]["schemas"]["Scope"]["enum"])
     default_security = source_spec["security"]
     for path, method, operation in _operations(source_spec):
         security = operation.get("security", default_security)
         if security:
-            assert "401" in operation["responses"], f"{method.upper()} {path} sem 401"
+            assert "401" in operation["responses"], f"{method.upper()} {path} without 401"
         for requirement in security:
             assert set(requirement.get("pat", [])) <= scopes, f"{method.upper()} {path}"
         if path == "/api/v1/admin/auth/login":
-            assert security == [], f"{method.upper()} {path} deve ser público"
+            assert security == [], f"{method.upper()} {path} must be public"
         elif path.startswith("/api/v1/admin/"):
             assert security == [{"adminSessionCookie": []}], (
-                f"{method.upper()} {path} deve aceitar só a sessão de admin"
+                f"{method.upper()} {path} must accept only the admin session"
             )
         elif path.startswith("/api/v1/tokens"):
-            assert security == [{"sessionCookie": []}], f"{method.upper()} {path} deve aceitar só sessão"
+            assert security == [{"sessionCookie": []}], f"{method.upper()} {path} must accept only a session"
         else:
-            assert {"adminSessionCookie": []} not in security, f"{method.upper()} {path} fora de /admin/*"
+            assert {"adminSessionCookie": []} not in security, f"{method.upper()} {path} outside /admin/*"
 
 
-# --- export .md ------------------------------------------------------------------------------
+# --- .md export ------------------------------------------------------------------------------
 
 
 def _hms(ms: int) -> str:
@@ -241,7 +241,7 @@ def _speaker_name(speaker: dict[str, Any]) -> str:
 
 
 def render_markdown(transcript: dict[str, Any]) -> str:
-    """Renderização de referência do export `format=md` (valores do frontmatter em JSON, que é YAML)."""
+    """Reference rendering of the `format=md` export (frontmatter values as JSON, which is YAML)."""
 
     def q(value: object) -> str:
         return json.dumps(value, ensure_ascii=False)
@@ -263,19 +263,19 @@ def render_markdown(transcript: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def test_export_md_da_fixture_bate_com_a_renderizacao_de_referencia(transcript: dict[str, Any]) -> None:
+def test_fixture_md_export_matches_the_reference_rendering(transcript: dict[str, Any]) -> None:
     expected = (FIXTURES / "transcript-3-locutores.md").read_text(encoding="utf-8")
     assert render_markdown(transcript) == expected
 
 
-# --- mapeamento para o transcricao.md do lumea -----------------------------------------------
+# --- mapping to lumea's transcricao.md -------------------------------------------------------
 
-# Formato de linha de `lumea/assets/meet/transcribe/store.py` (`_SEGMENT_RE`).
+# Line format of `lumea/assets/meet/transcribe/store.py` (`_SEGMENT_RE`).
 LUMEA_SEGMENT_RE = re.compile(r"^\*\*(?P<speaker>[^*]+)\*\*\s+\[(?P<timestamp>[^\]]+)\]:\s*(?P<text>.*)$")
 
 
 def to_lumea_frontmatter(transcript: dict[str, Any]) -> dict[str, Any]:
-    """Mapeamento de referência do JSON v1 para o frontmatter de `transcricao.md` (store.py:102-128)."""
+    """Reference mapping from the v1 JSON to the frontmatter of `transcricao.md` (store.py:102-128)."""
     first_text: dict[str, str] = {}
     for segment in transcript["segments"]:
         first_text.setdefault(segment["speaker_id"], segment["text"])
@@ -299,7 +299,7 @@ def to_lumea_frontmatter(transcript: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def test_json_v1_gera_o_frontmatter_do_lumea_sem_perda(transcript: dict[str, Any]) -> None:
+def test_v1_json_produces_the_lumea_frontmatter_without_loss(transcript: dict[str, Any]) -> None:
     frontmatter = to_lumea_frontmatter(transcript)
     participants = frontmatter["participantes"]
     assert [p["speaker_id"] for p in participants] == ["S1", "S2", "S3"]
@@ -320,7 +320,7 @@ def test_json_v1_gera_o_frontmatter_do_lumea_sem_perda(transcript: dict[str, Any
         assert match["text"] == segment["text"]
 
 
-# Campos obsoletos na v1: seguem obrigatórios e preenchidos até a `/api/v2` (contrato-v1.md).
+# Deprecated fields in v1: they stay required and filled until `/api/v2` (contrato-v1.md).
 DEPRECATED_V1 = (
     ("Recording", "owner"),
     ("TranscriptSummary", "owner"),
@@ -330,12 +330,12 @@ DEPRECATED_V1 = (
 )
 
 
-def test_obsoletos_seguem_obrigatorios_e_marcados(
+def test_deprecated_fields_stay_required_and_marked(
     source_spec: dict[str, Any], transcript_schema: dict[str, Any]
 ) -> None:
     schemas = source_spec["components"]["schemas"]
     for schema, field in DEPRECATED_V1:
-        assert field in schemas[schema]["required"], f"{schema}.{field} saiu de required: só a v2 remove"
-        assert schemas[schema]["properties"][field].get("deprecated") is True, f"{schema}.{field} perdeu a marca"
+        assert field in schemas[schema]["required"], f"{schema}.{field} left required: only v2 removes it"
+        assert schemas[schema]["properties"][field].get("deprecated") is True, f"{schema}.{field} lost the mark"
     assert "owner" in transcript_schema["required"]
     assert transcript_schema["properties"]["owner"].get("deprecated") is True

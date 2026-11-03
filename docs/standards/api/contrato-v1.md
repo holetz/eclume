@@ -128,6 +128,11 @@ mapping to `transcricao.md`) is in [contracts/README.md](/contracts/README.md).
   of the fixtures and of the contract become neutral, with no real person or organization. Only
   examples and descriptions change: no schema, route or validation. Patch, with no effect for
   clients.
+- **English descriptions (2.29.1, `contracts`):** the `description`, `summary` and `title` texts
+  of `openapi-v1.yaml` and the `description` texts of `transcript.schema.json` are translated to
+  English. Wire names (paths, fields, enum and `code` values, scopes, tags, components and example
+  keys) stay as they were. Only descriptions change: no schema, route or validation. Patch, with no
+  effect for clients.
 - **Chat over the base (2.7.0, `base-chat`):** `POST /base-chat` (202, with the question and up to
   10 history messages, which the client keeps) and `GET /base-chat/{chat_id}` (poll until `done` or
   `failed`), both with `summaries:read`. The state lives 1 h in Redis; another account's is 404;
