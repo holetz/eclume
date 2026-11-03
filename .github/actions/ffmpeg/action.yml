@@ -13,15 +13,17 @@ runs:
     - name: Download the ffmpeg packages (cache miss)
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      timeout-minutes: 5
       run: |
+        timeout --kill-after=10 300 bash -e <<'SCRIPT'
         mkdir -p ~/ffmpeg-debs/partial
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends --download-only \
           -o Dir::Cache::archives="$HOME/ffmpeg-debs" ffmpeg
+        SCRIPT
     - name: Install ffmpeg from the cached packages
       shell: bash
-      timeout-minutes: 5
       run: |
+        timeout --kill-after=10 300 bash -e <<'SCRIPT'
         sudo dpkg -i "$HOME"/ffmpeg-debs/*.deb
         ffmpeg -version | head -n 1
+        SCRIPT
