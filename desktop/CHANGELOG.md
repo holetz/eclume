@@ -6,7 +6,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 [SemVer](https://semver.org/lang/pt-BR/); a norma está em
 [versionamento.md](../docs/standards/code/versionamento.md).
 
-## [Não lançado]
+## [Unreleased]
 
 ### Alterado
 

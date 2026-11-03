@@ -6,7 +6,7 @@ O que muda no app do celular do eclume (Android). A seção de cada versão é a
 [SemVer](https://semver.org/lang/pt-BR/); a norma está em
 [versionamento.md](../docs/standards/code/versionamento.md).
 
-## [Não lançado]
+## [Unreleased]
 
 ## [0.1.1] - 2026-10-01
 

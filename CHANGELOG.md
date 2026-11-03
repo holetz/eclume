@@ -8,7 +8,7 @@ same deploy — for those who host it and those who use it. The apps have their 
 [versionamento.md](docs/standards/code/versionamento.md). The contract version (`info.version` of
 v1) has its own line and each entry cites it.
 
-## [Não lançado]
+## [Unreleased]
 
 ### Added
 
