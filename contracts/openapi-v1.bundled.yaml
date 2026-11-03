@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.29.1
+  version: 2.30.0
   summary: Contract v1 of the eclume API, the institutional transcription service.
   description: "Source of truth between the eclume server and its clients: the web frontend, the desktop\n\
     app and PAT integrations, such as the lumea importer.\n\n**Conventions** (detail in `docs/standards/api/contrato-v1.md`):\n\
@@ -528,6 +528,76 @@ paths:
               examples:
                 conta:
                   $ref: '#/components/examples/TranscriptionPreference'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/me/locale:
+    get:
+      tags:
+      - auth
+      operationId: getAccountLocale
+      summary: Read the account's product locale
+      description: 'Since 2.30.0. The account''s product locale (`null` when it never chose one), the
+        locale in force for this request (`effective`: the account''s, else the first supported `Accept-Language`,
+        else `default`), the default and the supported locales. Summaries and agent answers are generated
+        in the owner''s locale (`en` when `null`). Separate from the transcription language (`/me/transcription`).
+        Any valid credential, with no scope.'
+      security:
+      - sessionCookie: []
+      - pat: []
+      parameters:
+      - name: Accept-Language
+        in: header
+        required: false
+        description: The client's languages; used for `effective` when the account has no locale.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current locale.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountLocale'
+              examples:
+                conta:
+                  $ref: '#/components/examples/AccountLocale'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags:
+      - auth
+      operationId: updateAccountLocale
+      summary: Change the account's product locale
+      description: 'Since 2.30.0. `locale` is `en`, `pt-BR` or `null` (drop the choice: requests fall
+        back to `Accept-Language`, jobs to `en`). It applies to what is generated from now on; summaries
+        already generated do not change. Session only.'
+      security:
+      - sessionCookie: []
+      parameters:
+      - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountLocalePatch'
+            examples:
+              portugues:
+                $ref: '#/components/examples/AccountLocalePatchRequest'
+      responses:
+        '200':
+          description: Resulting locale.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountLocale'
+              examples:
+                conta:
+                  $ref: '#/components/examples/AccountLocale'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -6014,6 +6084,12 @@ components:
           - string
           - 'null'
           format: date-time
+        locale:
+          description: Since 2.30.0. The account's product locale (`GET`/`PATCH /api/v1/me/locale`), or
+            `null` when it never chose one.
+          oneOf:
+          - $ref: '#/components/schemas/Locale'
+          - type: 'null'
     AdminUser:
       description: User account as seen by the admin (the `User` plus the recording count and, since 2.15.0,
         the usage and the quota override).
@@ -6058,6 +6134,11 @@ components:
           - string
           - 'null'
           format: date-time
+        locale:
+          description: Since 2.30.0. The account's product locale, or `null` when it never chose one.
+          oneOf:
+          - $ref: '#/components/schemas/Locale'
+          - type: 'null'
         recording_count:
           type: integer
           minimum: 0
@@ -6360,6 +6441,46 @@ components:
           - string
           - 'null'
           pattern: ^(auto|[a-z]{2,3}(-[A-Z]{2})?)$
+    AccountLocale:
+      description: Since 2.30.0. The account's product locale, the one in force for the request, the default
+        and the supported locales.
+      type: object
+      required:
+      - locale
+      - effective
+      - default
+      - supported
+      properties:
+        locale:
+          description: The account's choice, or `null` when it never chose one.
+          oneOf:
+          - $ref: '#/components/schemas/Locale'
+          - type: 'null'
+        effective:
+          $ref: '#/components/schemas/Locale'
+        default:
+          $ref: '#/components/schemas/Locale'
+        supported:
+          type: array
+          items:
+            $ref: '#/components/schemas/Locale'
+    AccountLocalePatch:
+      type: object
+      additionalProperties: false
+      required:
+      - locale
+      properties:
+        locale:
+          description: The new locale, or `null` to drop the choice.
+          oneOf:
+          - $ref: '#/components/schemas/Locale'
+          - type: 'null'
+    Locale:
+      description: Since 2.30.0. A product locale (`en` is the default). New locales are added additively.
+      type: string
+      enum:
+      - en
+      - pt-BR
     AudioRetention:
       description: Since 2.29.0. How long the audio of the account's recordings stays on the server, the
         platform ceiling and the window in force.
@@ -11436,6 +11557,7 @@ components:
           last_login_at: '2026-09-18T13:55:02Z'
           notice_version: '1'
           notice_accepted_at: '2026-09-28T12:00:00Z'
+          locale: pt-BR
         auth:
           method: pat
           scopes:
@@ -11488,6 +11610,19 @@ components:
       summary: Transcribe in English by default
       value:
         language: en
+    AccountLocale:
+      summary: Account in Brazilian Portuguese
+      value:
+        locale: pt-BR
+        effective: pt-BR
+        default: en
+        supported:
+        - en
+        - pt-BR
+    AccountLocalePatchRequest:
+      summary: Switch the account to Brazilian Portuguese
+      value:
+        locale: pt-BR
     AudioRetention:
       summary: Thirty days chosen, ceiling of ninety
       value:
@@ -15003,6 +15138,7 @@ components:
           last_login_at: '2026-09-18T13:55:02Z'
           notice_version: null
           notice_accepted_at: null
+          locale: null
           recording_count: 37
           quotas:
             storage_bytes: 21474836480
@@ -15020,6 +15156,7 @@ components:
           last_login_at: '2026-09-17T19:03:10Z'
           notice_version: '1'
           notice_accepted_at: '2026-09-28T12:00:00Z'
+          locale: en
           recording_count: 12
           quotas: null
           usage:

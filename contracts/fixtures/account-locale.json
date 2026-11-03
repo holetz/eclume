@@ -1,0 +1,9 @@
+{
+  "locale": "pt-BR",
+  "effective": "pt-BR",
+  "default": "en",
+  "supported": [
+    "en",
+    "pt-BR"
+  ]
+}

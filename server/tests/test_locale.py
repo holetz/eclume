@@ -105,3 +105,31 @@ def test_an_account_without_a_choice_reads_null_and_the_column_takes_only_suppor
 
     with pytest.raises(IntegrityError):
         run(services.sql(store))
+
+
+URL = "/api/v1/me/locale"
+
+
+def test_me_locale_reads_and_writes_the_account_choice(
+    make_user: Callable[..., Account], as_user: Callable[[Account], Api]
+):
+    owner = as_user(make_user())
+    assert owner.get(URL).json() == {"locale": None, "effective": "en", "default": "en", "supported": ["en", "pt-BR"]}
+    assert owner.get(URL, headers={"Accept-Language": "pt-BR,pt;q=0.9"}).json()["effective"] == "pt-BR"
+    changed = owner.patch(URL, json={"locale": "pt-BR"}).json()
+    assert (changed["locale"], changed["effective"]) == ("pt-BR", "pt-BR")
+    assert owner.get(URL, headers={"Accept-Language": "en-US"}).json()["effective"] == "pt-BR"
+    assert owner.get("/api/v1/me").json()["user"]["locale"] == "pt-BR"
+    assert owner.patch(URL, json={"locale": None}).json()["locale"] is None
+    for body in ({}, {"locale": "es"}, {"locale": "pt"}, {"locale": "en", "other": 1}):
+        assert owner.patch(URL, json=body).status_code == 422, body
+
+
+def test_pat_reads_the_locale_but_does_not_write_it(
+    make_user: Callable[..., Account], as_user: Callable[[Account], Api]
+):
+    owner = as_user(make_user())
+    owner.patch(URL, json={"locale": "pt-BR"})
+    reader = owner.pat("people:read")
+    assert reader.get(URL).json()["locale"] == "pt-BR"
+    assert reader.patch(URL, json={"locale": "en"}).status_code == 403
