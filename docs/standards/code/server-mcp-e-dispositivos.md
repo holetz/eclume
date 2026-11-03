@@ -207,7 +207,7 @@ pinning; `GET /api/v1/server` confirms what came and allows switching servers ("
 overwrite: ECDSA P-256, 10 years, critical CA `basicConstraints`, `keyUsage` only `keyCertSign` and
 `cRLSign`, `extendedKeyUsage = serverAuth` (Windows does not accept it for code signing nor
 S/MIME) and a **critical** `nameConstraints` with `permitted` for each exact IP (`/32` or `/128`) and each
-DNS name of `ECLUME_PUBLIC_HOST` and `ECLUME_CA_NOMES`, plus the e-mail `eclume.invalid`. Without a subtree
+DNS name of `ECLUME_PUBLIC_HOST` and `ECLUME_CA_NAMES`, plus the e-mail `eclume.invalid`. Without a subtree
 of a type, names of that type would be free (RFC 5280): with no DNS name configured, DNS is
 restricted to `eclume.invalid`; with no IP at all, generation refuses. The key stays on the host because Caddy
 issues the intermediate and leaves by itself; the constraint makes that acceptable: whoever steals the key can only
@@ -218,7 +218,7 @@ the default, so production does not flip in an ordinary deploy) or `eclume` (a n
 `.env.prod.example`). In the apps the constraint adds nothing (they already trust a single root, for a single
 server); it protects the browser, the system and the MCP clients, which install the root. `eclume-server ca
 gerar --prova <pasta>` generates a throwaway `127.0.0.1` root with the leaves `dentro` (127.0.0.1)
-and `fora` (127.0.0.2), to prove the refusal in the clients (`deploy/prova-ca-restrita.sh`).
+and `fora` (127.0.0.2), to prove the refusal in the clients (`deploy/prove-restricted-ca.sh`).
 
 **Announced rotation.** `publish-ca` publishes at `/downloads/eclume-root.crt` the root of the active CA
 and, with `local` active and the own root present, the own root at

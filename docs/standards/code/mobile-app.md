@@ -284,8 +284,8 @@ The `tauri-plugin-eclume-gravador` plugin (`mobile/plugins/gravador`; runtime na
   become the "Notificações bloqueadas" banner on Início, with the same button.
 - **UI** (`mobile/ui/src`): React + TS, a function of the `EstadoApp` (`app/estado.ts`), with the
   typed bridge (`ponte/`) and a fake bridge for the tests. The `eclume.css` is the DS copy generated
-  from `design-system/styles.css` by `design-system/sincronizar.py` (the mobile `.m-*` layer),
-  checked by `test_sincronizar.py` and against the web's by `ui/src/styles/copia.test.ts` (typed by
+  from `design-system/styles.css` by `design-system/sync.py` (the mobile `.m-*` layer),
+  checked by `test_sync.py` and against the web's by `ui/src/styles/copia.test.ts` (typed by
   `tsconfig.node.json`, because it reads the file from disk); product adjustments in `app.css`. No
   fixed `style` on the screens: spacing and sizes are `app.css` classes with `--space-*` and the DS
   sizes, and `style` only carries a custom property (the meter bars' `--h`); the
@@ -353,7 +353,7 @@ The `tauri-plugin-eclume-gravador` plugin (`mobile/plugins/gravador`; runtime na
 - **Gate `android` pillar** ([monorepo.md](monorepo.md)): the minified release APK with a throwaway
   key, the plugin's and the app's `testDebugUnitTest` and `lintRelease`, and the JNI bridge checked
   by `mobile/scripts/simbolos_jni.py` in the `.so` and in the dex.
-- **Release APK smoke** (`prova-emulador.sh --fumaca <apk x86_64>`, in `release-movel.sh`): opens,
+- **Release APK smoke** (`prova-emulador.sh --fumaca <apk x86_64>`, in `release-mobile.sh`): opens,
   forces the `SyncWorker` job and requires the sync log, with no `UnsatisfiedLinkError`,
   `ClassNotFoundException` or `FATAL EXCEPTION` ([mobile-distribuicao.md](mobile-distribuicao.md)).
 - **Audio:** the emulator microphone delivers silence; capturing a known sound through

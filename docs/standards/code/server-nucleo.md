@@ -127,8 +127,8 @@ image has few processes and each one imports only its own (holetz/eclume#150).
   together with the code that uses it; *contract* (remove, rename, tighten a constraint) only lands in a
   deploy **after** the one of the code that stopped depending on the object. So the code of the previous
   deploy runs on the new schema: `migrate` with old server and workers up is safe and
-  a one-step `deploy.sh --voltar` needs no database restore. There is no `down`: beyond one step, the
-  path is the pre-deploy dump (`restaurar-backup.sh --banco`).
+  a one-step `deploy.sh --rollback` needs no database restore. There is no `down`: beyond one step, the
+  path is the pre-deploy dump (`restore-backup.sh --database`).
 - `eclume-server migrate --pendentes` lists the migrations the tree knows and the database has not
   applied, one per line, without applying anything (`migrate.pending`).
 

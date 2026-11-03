@@ -1,7 +1,7 @@
 ---
 type: standard
 title: eclume Design System on the web
-description: The eclume web uses the eclume Design System (versioned in design-system/) as its single visual base — eclume.css generated from styles.css by sincronizar.py, app.css with only what the DS lacks, the Archivo and IBM Plex Mono fonts served by the build, Lucide icons with square caps and a dark theme through data-theme — and this is the flow of a visual change, the map of the old tokens and the product classes.
+description: The eclume web uses the eclume Design System (versioned in design-system/) as its single visual base — eclume.css generated from styles.css by sync.py, app.css with only what the DS lacks, the Archivo and IBM Plex Mono fonts served by the build, Lucide icons with square caps and a dark theme through data-theme — and this is the flow of a visual change, the map of the old tokens and the product classes.
 resource: web/src/styles/**, web/src/main.tsx, web/src/app/theme.ts, web/src/app/Brand.tsx, web/public/favicon.svg, web/index.html, web/src/**/*.module.css
 tags: [code, web, design-system, css, tema, acessibilidade]
 timestamp: 2026-10-01
@@ -33,7 +33,7 @@ stopped applying in the production build:
 | File | What it holds | Who edits it |
 |---|---|---|
 | `fonts.css` | `@fontsource/archivo` 400, 500, 600, 700 and 800 and `@fontsource/ibm-plex-mono` 400 and 500 | whoever changes the weights used |
-| `eclume.css` | generated from `design-system/styles.css`, minus the Google Fonts `@import` | nobody: only `sincronizar.py` |
+| `eclume.css` | generated from `design-system/styles.css`, minus the Google Fonts `@import` | nobody: only `sync.py` |
 | `app.css` | the product layer, only what the DS does not define | the web specs |
 
 - **`eclume.css` is not edited.** A product adjustment goes in `app.css` or in the screen's CSS
@@ -45,11 +45,11 @@ stopped applying in the production build:
   in the same commit as the source:
 
   ```bash
-  uv run python design-system/sincronizar.py          # escreve as três cópias
-  uv run python design-system/sincronizar.py --check  # só confere (roda no uv run pytest)
+  uv run python design-system/sync.py          # escreve as três cópias
+  uv run python design-system/sync.py --check  # só confere (roda no uv run pytest)
   ```
 
-  `design-system/test_sincronizar.py` fails when a copy diverges from the source; the desktop's
+  `design-system/test_sync.py` fails when a copy diverges from the source; the desktop's
   `ui_assets` and the phone's `copia.test.ts` check the copies against the web's. Then `npm --prefix
   web run build` and the visual verification screenshots (below) show what changed. A new DS class
   is available with nothing else; a renamed class breaks the screen that used it, and the E2E

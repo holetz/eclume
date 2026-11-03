@@ -1,8 +1,8 @@
 ---
 type: standard
 title: Desktop app distribution
-description: How the eclume desktop app becomes installers and updates itself — version in tauri.conf.json, tag desktop-v<versão>, release on the host through deploy/release-desktop.sh (Linux; Windows optional by cross-compilation; macOS out while the repository is private) and the desktop-release workflow as the manual alternative, the server address and fingerprint embedded in the build, updater packages signed with the project's own minisign key, latest.json and instaladores.json with eclume server URLs, publication to /srv/eclume/downloads through deploy/publicar-desktop.sh and the "Atualizado para X" notice.
-resource: desktop/scripts/assinar-windows.sh, desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/scripts/icones_bandeja.py, desktop/INSTALACAO.md, desktop/build.Dockerfile, desktop/build-windows.Dockerfile, .github/workflows/desktop-release.yml, .github/workflows/desktop-plataformas.yml, deploy/release-desktop.sh, deploy/publicar-desktop.sh
+description: How the eclume desktop app becomes installers and updates itself — version in tauri.conf.json, tag desktop-v<versão>, release on the host through deploy/release-desktop.sh (Linux; Windows optional by cross-compilation; macOS out while the repository is private) and the desktop-release workflow as the manual alternative, the server address and fingerprint embedded in the build, updater packages signed with the project's own minisign key, latest.json and instaladores.json with eclume server URLs, publication to /srv/eclume/downloads through deploy/publish-desktop.sh and the "Atualizado para X" notice.
+resource: desktop/scripts/assinar-windows.sh, desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/scripts/icones_bandeja.py, desktop/INSTALACAO.md, desktop/build.Dockerfile, desktop/build-windows.Dockerfile, .github/workflows/desktop-release.yml, .github/workflows/desktop-platforms.yml, deploy/release-desktop.sh, deploy/publish-desktop.sh
 tags: [code, desktop, release, updater, tauri, ci, instaladores]
 timestamp: 2026-10-01
 audience: both
@@ -17,7 +17,7 @@ The desktop app ships as installers that update themselves through the Tauri upd
 package is signed with the project's **own minisign key**. The Windows installer ships with an
 **Authenticode code signature** (with a timestamp) whenever the host has the vendor configuration
 (§Windows code signing); without it, it ships unsigned, and publishing it that way requires
-`--sem-assinatura`. Linux has no code signing. Because the repository is private, clients never download from GitHub:
+`--unsigned`. Linux has no code signing. Because the repository is private, clients never download from GitHub:
 they download from the eclume server itself, at `https://<servidor>:8443/downloads/` (the
 release's `ECLUME_DOWNLOADS_URL`).
 
@@ -27,7 +27,7 @@ the host**, without Actions. Platforms:
 | Platform | State |
 |---|---|
 | Linux | ships in every release (AppImage and deb) |
-| Windows | ships in every release (NSIS), Authenticode-signed when the host has the configuration; `--sem-windows` on the host or `windows: false` in the workflow leave it out |
+| Windows | ships in every release (NSIS), Authenticode-signed when the host has the configuration; `--no-windows` on the host or `windows: false` in the workflow leave it out |
 | macOS | **out** until the repository goes public (a macOS minute costs 10×) |
 
 A platform left out of the release disappears from `latest.json`, and its clients stay on the
@@ -38,7 +38,7 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
    git archive do commit                   │ build Linux (+ Windows)          │ desktop-v<versão>
                                            │ assina com a chave do host (.sig) │ gh release download
                                            └ latest.json, instaladores.json,   ▼
-                                             SHA256SUMS      deploy/publicar-desktop.sh (no host)
+                                             SHA256SUMS      deploy/publish-desktop.sh (no host)
                                                                                │
                                    /srv/eclume/downloads/ ◄────────────────────┘ ──► Caddy /downloads/
 ```
@@ -51,11 +51,11 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
 - The tag is `desktop-v<versão>`, created by the release itself (`gh release create --target <commit>`),
   never by hand: it triggers no workflow.
 - When the version goes up and who raises it (the conclude of the spec that changes the app, through
-  `deploy/versao.py definir desktop <versão>`, with its section in `desktop/CHANGELOG.md`) is in
+  `deploy/version.py set desktop <versão>`, with its section in `desktop/CHANGELOG.md`) is in
   [versionamento.md](versionamento.md).
 - Releasing a version: with the version and its section on `main`, push `main`, wait for the host
   gate (`eclume/gate` = `success` on the commit; [monorepo.md](monorepo.md)) and run
-  `bash deploy/release-desktop.sh --context <contexto> --publicar`.
+  `bash deploy/release-desktop.sh --context <contexto> --publish`.
 
 ## Release on the host — `deploy/release-desktop.sh`
 
@@ -66,12 +66,12 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   else's server. `--plan` only shows version, tag, commit, targets, folders, disk and the
   blockers, without writing.
 - The code comes **from the commit**, not from the working tree: `git archive HEAD` goes to
-  `~/eclume-build/release/src` on the host, recreated on every release. With `--publicar`, the
+  `~/eclume-build/release/src` on the host, recreated on every release. With `--publish`, the
   script refuses a dirty tree, a commit GitHub does not have, a commit without the `eclume/gate` =
   `success` status (the host gate) and a tag that already exists. Waiving the gate is explicit and
-  per invocation: `--sem-gate "<motivo>"` waives only the status and publishes on the commit the
+  per invocation: `--skip-gate "<motivo>"` waives only the status and publishes on the commit the
   trail `eclume/gate-dispensa` = `failure` with the reason; a clean tree and a commit on GitHub are
-  still required. Without `--publicar` it is a **dry run**: the artifacts stay in
+  still required. Without `--publish` it is a **dry run**: the artifacts stay in
   `~/eclume-build/release/dist-<versão>/` on the host and nothing is published.
 - **Compile without secrets, bundle with them.** Each target runs in two containers: `tauri build
   --no-bundle` with no secret mounted (that is where the build scripts of third-party crates run)
@@ -81,8 +81,8 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
 - **Check before publishing:** with a signature, the release checks the setup and, extracted by
   `7z`, the `eclume-desktop.exe` and the `uninstall.exe` (`assinar-windows.sh --verificar`); any
   failure stops the release. Without configuration, the dry run warns "instalador Windows sem
-  assinatura", `--plan` shows `assinatura Windows ausente`, and `--publicar` refuses without
-  `--sem-assinatura`.
+  assinatura", `--plan` shows `assinatura Windows ausente`, and `--publish` refuses without
+  `--unsigned`.
 - The build image comes from `desktop/build.Dockerfile` with the minimal context (only
   `desktop/rust-toolchain.toml`): Ubuntu 24.04 and Node by digest, the Rust from the file, and the
   tag `eclume-desktop-build:<versão do Rust>` (the Windows one likewise, with a pinned-version
@@ -95,16 +95,16 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   so the following builds are incremental. The script refuses to start with the host disk at
   `ECLUME_DISK_LIMIT` (90%) or more, and a lock (`~/eclume-build/release/.trava`) prevents two
   releases at the same time.
-- **Windows** (default; `--sem-windows` omits it): cross-compilation in the container of `desktop/build-windows.Dockerfile`
+- **Windows** (default; `--no-windows` omits it): cross-compilation in the container of `desktop/build-windows.Dockerfile`
   (`nsis`, `lld`/`llvm` 18, the `x86_64-pc-windows-msvc` target and `cargo-xwin`), with
   `tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis`. Only the NSIS
   ships: the MSI requires WiX, which only runs on Windows. The image and the cross-compiled libopus
   were proven in the dry run of holetz/eclume#68 (the NSIS came out of the host).
 - The manifests are produced on the host, by `manifestos_release.py` (with `desktop/INSTALACAO.md`
-  copied), and `SHA256SUMS` is checked before publishing. `--publicar` creates the GitHub Release
+  copied), and `SHA256SUMS` is checked before publishing. `--publish` creates the GitHub Release
   through the host's `gh`. The `notes` of `latest.json`, which is the text of the "Atualizado para
   X" notice, is the version's section in `desktop/CHANGELOG.md`
-  (`python3 deploy/versao.py notas desktop <versão>`); an explicit `--notas` wins, and a version
+  (`python3 deploy/version.py notas desktop <versão>`); an explicit `--notes` wins, and a version
   without a section refuses the release. The `desktop-release` workflow does the same with the
   `notas` input empty.
 
@@ -113,9 +113,9 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
 - It triggers **only** on `workflow_dispatch`: the tag the host release creates does not trigger
   it. It makes the same release on GitHub Actions — Linux always; Windows (`nsis,msi`, on
   `windows-2025`) with the `windows` input, on by default (the minute costs 2×; uncheck it for
-  Linux only). `publicar: false` (default) is a dry run — the artifacts stay in the run. To
-  publish, the `plano` job checks `eclume/gate` = `success` on the commit (permission
-  `statuses: read`, `deploy/gate.py decidir`) and fails without it; there is no waiver here —
+  Linux only). `publish: false` (default) is a dry run — the artifacts stay in the run. To
+  publish, the `plan` job checks `eclume/gate` = `success` on the commit (permission
+  `statuses: read`, `deploy/gate.py decide`) and fails without it; there is no waiver here —
   whoever needs to waive publishes from the host.
 - The Tauri CLI is the one from `desktop/package-lock.json` (exact version, the same as mobile),
   installed by `npm --prefix desktop ci --ignore-scripts` in a step without the secrets and run by
@@ -123,7 +123,7 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   would point at private GitHub URLs.
 - The Windows-only code compiles and passes `clippy -D warnings` on every host gate, by
   cross-compilation (`windows` pillar). The proof of **execution** on a real Windows stays manual:
-  `desktop-plataformas.yml` (by hand) runs the workspace `cargo check` and the tests of
+  `desktop-platforms.yml` (by hand) runs the workspace `cargo check` and the tests of
   `eclume-mirror` and `eclume-sync` on `windows-2025`.
 
 ## Server embedded in the installer
@@ -203,7 +203,7 @@ contract with the download page and with the apps already installed: they do not
 
 ## Publication on the host
 
-`deploy/publicar-desktop.sh [desktop-v<versão>]` runs on the host (where `gh` is authenticated):
+`deploy/publish-desktop.sh [desktop-v<versão>]` runs on the host (where `gh` is authenticated):
 it downloads the release into a temporary folder inside `/srv/eclume/downloads`, checks
 `SHA256SUMS` and the version of `latest.json`, moves it to `/srv/eclume/downloads/<versão>/` and
 only then swaps `latest.json`, `instaladores.json` and `INSTALACAO.md` at the root (copy + `mv`,

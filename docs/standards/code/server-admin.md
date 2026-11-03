@@ -204,7 +204,7 @@ have. A repeated name: 409 on `POST`, 422 on `name` in the `PATCH`.
   `start_interval` of 2 s; `start_period` of 120 s on the GPU).
 - **`eclume-server saude --json`:** the same `admin_health()` as the screen, plus a `summary`
   (`queued_over_2h`, `failed_last_24h`, `provider_auth_last_24h`, `services_down`) and the
-  `claude_token` (`status` `ok`/`unknown`, `expires_at`, `days_left`). It is what the host's `vigia.sh`
+  `claude_token` (`status` `ok`/`unknown`, `expires_at`, `days_left`). It is what the host's `watchdog.sh`
   reads through `docker exec`, so that Health and the alert never disagree; the CLI log goes to stderr.
 - **Claude token expiry:** `agent_providers.key_set_at` (migration 025) changes whenever the
   key changes (create, replace, delete). An `sk-ant-oat…` expires at `key_set_at + 365 dias`; keys

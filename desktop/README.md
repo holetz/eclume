@@ -8,7 +8,7 @@ first run, the person signs in with e-mail and password on the server embedded i
 (or found on the network through mDNS), with the CA pinned by its fingerprint.
 
 The installers come out of the host, through `bash deploy/release-desktop.sh` (Linux and Windows;
-Windows comes out unless `--sem-windows` is passed; macOS out while the repository is private), or
+Windows comes out unless `--no-windows` is passed; macOS out while the repository is private), or
 from the `desktop-release` workflow by hand, and the app updates itself through the Tauri updater;
 the process is in
 [docs/standards/code/desktop-distribuicao.md](../docs/standards/code/desktop-distribuicao.md) and

@@ -59,7 +59,7 @@ station is prepared by [estacao-windows.md](estacao-windows.md):
   "not found" that exists). `touch` the changed files (`touch crates/*/src/*.rs`)
   before `remote-run`.
 - **The desktop release builds from the commit, not from the tree** (`git archive`): whatever was not
-  committed does not go in. The rehearsal (without `--publicar`) requires neither a push nor a new version and leaves the
+  committed does not go in. The rehearsal (without `--publish`) requires neither a push nor a new version and leaves the
   installers in `~/eclume-build/release/dist-<version>`; the script refuses to start with the host's
   disk at 90% or more.
 - Disk: `docker builder prune -f --filter until=720h` is fine when space gets tight.
@@ -280,18 +280,18 @@ The gate (`bash deploy/gate.sh` on the station; standard in
   peak. The cause was the missing `./gradlew --stop`: the Gradle that `tauri android build` leaves up
   (2 GiB) coexisted with the following `gradlew --no-daemon`, and Kotlin compiled in a second JVM. With
   `kotlin.compiler.execution.strategy=in-process`, `-Xmx1536m`, `org.gradle.workers.max=2` and the `--stop`
-  in `deploy/pilares.sh`, two consecutive runs passed with `anon` of 2658 and 2870 MiB, cgroup peak of
+  in `deploy/pillars.sh`, two consecutive runs passed with `anon` of 2658 and 2870 MiB, cgroup peak of
   3581 MiB (the rest is page cache) and `oom_kill` 0, without raising the ceiling. A full run took 16 to 21 minutes with production up, and refuses with the
   disk at 90%.
-- Proportional: the host runs only the pillars that the diff since the last green SHA requires (`--todos` on the
+- Proportional: the host runs only the pillars that the diff since the last green SHA requires (`--all` on the
   station forces all ten) and abandons the SHA that the pre-push fired and that `main` has already passed
-  (`eclume/gate` = `error` "superado por <sha>"); `bash deploy/gate.sh --estado <sha>` shows the
+  (`eclume/gate` = `error` "superado por <sha>"); `bash deploy/gate.sh --status <sha>` shows the
   description with the pillars run and the ones skipped. A deploy with no status for the tip SHA is resolved
   with `bash deploy/gate.sh <sha>`, which is never abandoned.
 - Pruning on every run: logs older than 30 days, build images of another Rust version (the
   `eclume-gate`, `eclume-desktop-build`, `-windows` and `eclume-mobile-build` without the current tag) and
   `src-*` older than a day. The release `dist-*` (`~/eclume-build/release` and `/movel`) stay at the
-  3 most recent, pruned on every `release-desktop.sh` and `release-movel.sh`.
+  3 most recent, pruned on every `release-desktop.sh` and `release-mobile.sh`.
 - The host's `gh` (account `holetz`, scope `repo`) publishes the `eclume/gate` status; the pillar containers
   do not receive the token. The NDK at `~/android-sdk/ndk/28.2.13676358` goes in read-only on the
   `mobile` pillar.
@@ -310,9 +310,9 @@ clients download from the eclume server itself:
   lives in `/srv/eclume/downloads/<version>/`, with the three most recent kept.
 - **Publish a release** (on the host, where `gh` is authenticated):
   ```bash
-  deploy/publicar-desktop.sh desktop-v0.1.0
+  deploy/publish-desktop.sh desktop-v0.1.0
   # from the dev machine, without cloning anything on the host:
-  ssh holetz@192.168.15.199 'bash -s -- desktop-v0.1.0' < deploy/publicar-desktop.sh
+  ssh holetz@192.168.15.199 'bash -s -- desktop-v0.1.0' < deploy/publish-desktop.sh
   ```
   The script checks `SHA256SUMS` before swapping the root manifests.
 - **Updater key (minisign):** the private key and the password live in

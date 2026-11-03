@@ -7,7 +7,7 @@ tags: [design, brand, tokens]
 timestamp: 2026-10-01
 audience: both
 authority: current
-source: design-system/styles.css (generated into the copies by design-system/sincronizar.py), docs/standards/code/web-design-system.md and holetz/eclume#130, holetz/eclume#122
+source: design-system/styles.css (generated into the copies by design-system/sync.py), docs/standards/code/web-design-system.md and holetz/eclume#130, holetz/eclume#122
 maintainer: holetz
 ---
 

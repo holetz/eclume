@@ -33,7 +33,12 @@ v1) has its own line and each entry cites it.
 
 ### Changed
 
-- Python dependencies raised to clear the `auditoria` pillar: aiohttp 3.14.5, certifi 2026.10.23,
+- Hosting scripts, flags and pillars in English: `deploy/pillars.sh` (pillar `audit`),
+  `restore-backup.sh`, `watchdog.sh`, `publish-desktop.sh`, `publish-mobile.sh`,
+  `release-mobile.sh`, and flags such as `deploy.sh --rollback`/`--no-gpu`/`--generate-env` and
+  `gate.sh --status`; the old flags fail with "unknown flag". The full map is in
+  [deploy/README.md](deploy/README.md) (#244).
+- Python dependencies raised to clear the `audit` pillar: aiohttp 3.14.5, certifi 2026.10.23,
   filelock 4.2.4, opentelemetry 1.45.1, pillow 13.0.0 (GPU worker image only, through matplotlib),
   pypdf 6.21.2 (floor raised in `server/pyproject.toml`) and setuptools 84.2.1 (#296).
 - Leaner server in CPU and memory, with no behaviour change: minimal queue probe, on-demand imports,
@@ -58,6 +63,11 @@ v1) has its own line and each entry cites it.
 ### Deprecated
 
 - The chat over the knowledge base (`/base-chat`), which the Agent replaces (contract 2.23.0, #142).
+- The pt-BR names of the hosting env vars, still read as a fallback: `ECLUME_CA_NOMES`,
+  `ECLUME_PULOS`, `ECLUME_BACKUP_DIA`, `ECLUME_ENSAIO_DIA`, `ECLUME_DEPLOYS_RETIDOS`,
+  `ECLUME_STAGING_LOTE`, `VIGIA_*` and the publish `DESTINO`/`MANTER` give way to `ECLUME_CA_NAMES`,
+  `ECLUME_SKIPS`, `ECLUME_BACKUP_DAY`, `ECLUME_REHEARSAL_DAY`, `ECLUME_DEPLOYS_KEPT`,
+  `ECLUME_STAGING_BATCH`, `WATCHDOG_*`, `DEST` and `KEEP` (#244).
 
 ### For those who host
 
