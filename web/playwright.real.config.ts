@@ -1,14 +1,14 @@
-// E2E do app contra o backend real: um stack efêmero (deploy/docker-compose.e2e.yml, projeto
-// eclume-e2e) subido por deploy/e2e-real.sh no host, que passa a URL e o admin descartável:
-//   ECLUME_E2E_URL, ECLUME_E2E_ADMIN_EMAIL, ECLUME_E2E_ADMIN_PASSWORD e ECLUME_E2E_AUDIO (WAV de fala).
-// O certificado é o da CA interna do Caddy efêmero: o navegador ignora o erro de TLS.
-// e2e-real/producao.spec.ts escolhe o próprio alvo: o staging (ECLUME_PROVA_URL, padrão
-// https://127.0.0.1:18444, deploy/staging.sh subir), nunca a produção.
+// App E2E against the real backend: an ephemeral stack (deploy/docker-compose.e2e.yml, project
+// eclume-e2e) started by deploy/e2e-real.sh on the host, which passes the URL and the disposable admin:
+//   ECLUME_E2E_URL, ECLUME_E2E_ADMIN_EMAIL, ECLUME_E2E_ADMIN_PASSWORD and ECLUME_E2E_AUDIO (speech WAV).
+// The certificate is the ephemeral Caddy's internal CA: the browser ignores the TLS error.
+// e2e-real/producao.spec.ts picks its own target: staging (ECLUME_PROOF_URL, default
+// https://127.0.0.1:18444, deploy/staging.sh up), never production.
 import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: 'e2e-real',
-  // Transcrição na CPU com o download do modelo na primeira rodada, e o resumo pelo `claude -p`.
+  // Transcription on the CPU with the model download on the first run, and the summary through `claude -p`.
   timeout: 8 * 60_000,
   expect: { timeout: 20_000 },
   retries: 0,

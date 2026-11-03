@@ -115,8 +115,8 @@ executable whose **name** contains "eclume": run the meeting simulator under ano
 
 `powershell -NoProfile -File desktop/scripts/prova-windows.ps1` runs the end-to-end proof on this
 station: it downloads and installs the NSIS from `/downloads`, opens the app with port 9229, captures the first
-run (with the embedded server), signs in with the test account (`ECLUME_PROVA_EMAIL` and
-`ECLUME_PROVA_SENHA`), records a note through the `Ctrl+Alt+N` shortcut speaking a text through the Windows
+run (with the embedded server), signs in with the test account (`ECLUME_PROOF_EMAIL` and
+`ECLUME_PROOF_PASSWORD`), records a note through the `Ctrl+Alt+N` shortcut speaking a text through the Windows
 voice on the speakers, and checks through the API (`desktop/scripts/prova_nota.py`) that the note reached the
 library with `kind=note`, `eclume-desktop/<version>` and `transcribed`. The note only stops by itself
 with voice on the microphone: with a muted microphone, it is discarded ("não ouvimos voz") and the proof stays
@@ -147,7 +147,7 @@ The host has the toolchain installed in `holetz`'s space, without apt: the `x86_
 toolchain's `rust-lld`, `llvm-rc` → `llvm-rc-18`, `llvm-mt` → `llvm-mt-18` and `llvm-lib` →
 `llvm-lib-18`. The first build downloads Microsoft's CRT and SDK to `~/.cache/cargo-xwin`.
 The official installers come out of `deploy/release-desktop.sh`, which builds the NSIS with the same
-`cargo-xwin` in a container (Windows is the default; `--sem-windows` omits it), or from `desktop-release`
+`cargo-xwin` in a container (Windows is the default; `--no-windows` omits it), or from `desktop-release`
 ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md)).
 
 ## Validation of 2026-09-25 (holetz/eclume#28)

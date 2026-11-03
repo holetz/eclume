@@ -1,13 +1,13 @@
-// Provas no navegador instalado na estação:
-// - e2e-prod/admin.spec.ts, o painel de administração só de leitura, na produção (ECLUME_PROD_URL,
-//   https://192.168.15.199:8443): ECLUME_ADMIN_EMAIL e ECLUME_ADMIN_PASSWORD;
-// - e2e-prod/prova.spec.ts, o web do usuário (deploy/prova-web-prod.sh), que escreve e por isso roda
-//   no staging (ECLUME_PROVA_URL, https://127.0.0.1:18444) e recusa a produção: ECLUME_PROD_EMAIL e
+// Proofs in the browser installed on the workstation:
+// - e2e-prod/admin.spec.ts, the read-only administration panel, on production (ECLUME_PROD_URL,
+//   https://192.168.15.199:8443): ECLUME_ADMIN_EMAIL and ECLUME_ADMIN_PASSWORD;
+// - e2e-prod/prova.spec.ts, the user web (deploy/prove-web-prod.sh), which writes and so runs on
+//   staging (ECLUME_PROOF_URL, https://127.0.0.1:18444) and refuses production: ECLUME_PROD_EMAIL and
 //   ECLUME_PROD_PASSWORD.
-// Cada prova pula sem as variáveis dela.
-// O padrão é o Google Chrome; E2E_CHANNEL=msedge usa o Edge, onde o Chrome não está instalado.
-// O navegador ignora o erro de TLS da CA interna; o certificado verdadeiro é conferido fora dele,
-// pelo `curl --cacert eclume-root.crt` do runbook (docs/project/deploy-producao.md).
+// Each proof skips without its variables.
+// The default is Google Chrome; E2E_CHANNEL=msedge uses Edge, where Chrome is not installed.
+// The browser ignores the internal CA's TLS error; the real certificate is checked outside it, by the
+// runbook's `curl --cacert eclume-root.crt` (docs/project/deploy-producao.md).
 import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({

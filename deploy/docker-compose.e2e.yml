@@ -1,17 +1,17 @@
-# Stack efêmero para o E2E do web contra o backend real (projeto `eclume-e2e`), no host GPU:
+# Ephemeral stack for the web E2E against the real backend (project `eclume-e2e`), on the GPU host:
 #
 #   bash deploy/e2e-real.sh
 #
-# As mesmas peças da produção (a borda Caddy com o SPA e a CA `eclume`, server, worker CPU com a
-# CLI do Claude, worker de transcrição, Postgres, Redis, MinIO), sem nada em comum com ela: dados
-# em tmpfs ou em volumes que o `down -v` apaga, Caddy só em 127.0.0.1:18443 e o worker de
-# transcrição com `ECLUME_ENGINE=cpu`, sem GPU — não disputa VRAM com a produção nem com o
-# Jellyfin. Server e borda saem do checkout (`:e2e`); o worker reaproveita a imagem
-# `eclume-worker-gpu:prod`, que tem a
-# engine CPU (faster-whisper) e não vale reconstruir (~8 GB), com o código de `engines/` e
-# `worker-gpu/` do checkout montado na frente (PYTHONPATH). O compose roda no host (bind mounts
-# relativos). Senhas fixas: nada aqui sai do host. A raiz do Caddy é uma raiz própria descartável,
-# restrita a 127.0.0.1, que o e2e-real.sh gera em ECLUME_E2E_CA_DIR antes da subida.
+# The same pieces as production (the Caddy edge with the SPA and the `eclume` CA, server, CPU worker
+# with the Claude CLI, transcription worker, Postgres, Redis, MinIO), sharing nothing with it: data
+# in tmpfs or in volumes that `down -v` deletes, Caddy only on 127.0.0.1:18443 and the transcription
+# worker with `ECLUME_ENGINE=cpu`, without GPU — it competes for VRAM with neither production nor
+# Jellyfin. Server and edge come from the checkout (`:e2e`); the worker reuses the
+# `eclume-worker-gpu:prod` image, which has the CPU engine (faster-whisper) and is not worth
+# rebuilding (~8 GB), with the checkout's `engines/` and `worker-gpu/` code mounted in front
+# (PYTHONPATH). The compose runs on the host (relative bind mounts). Fixed passwords: nothing here
+# leaves the host. Caddy's root is a disposable own root, restricted to 127.0.0.1, that e2e-real.sh
+# generates in ECLUME_E2E_CA_DIR before starting.
 name: eclume-e2e
 
 x-server-env: &server-env
@@ -24,7 +24,7 @@ x-server-env: &server-env
   ECLUME_SECRET_KEY: eclume-e2e-secret-key
   ECLUME_PUBLIC_URL: https://127.0.0.1:18443
   ECLUME_COOKIE_SECURE: "true"
-  # A suíte entra e cria contas muitas vezes por minuto do mesmo IP.
+  # The suite logs in and creates accounts many times a minute from the same IP.
   ECLUME_CREDENTIAL_ATTEMPTS_PER_MINUTE: "10000"
 
 x-server-image: &server-image
@@ -32,12 +32,12 @@ x-server-image: &server-image
   build:
     context: ..
     dockerfile: deploy/server.Dockerfile
-    # O resumo do e2e roda pelo `claude -p`, que só entra na imagem com ECLUME_CLAUDE_CLI=1 (#129).
+    # The e2e summary runs through `claude -p`, which only goes into the image with ECLUME_CLAUDE_CLI=1 (#129).
     args: {ECLUME_CLAUDE_CLI: "1"}
     labels: {org.eclume.image: "server-e2e"}
 
 services:
-  # A borda com o SPA embutido, como na produção (deploy/web.Dockerfile).
+  # The edge with the embedded SPA, as in production (deploy/web.Dockerfile).
   caddy:
     image: eclume-edge:e2e
     build:
@@ -52,7 +52,7 @@ services:
       - source: caddyfile
         target: /etc/caddy/Caddyfile
     volumes:
-      - ${ECLUME_E2E_CA_DIR:?o e2e-real.sh define a pasta da raiz descartável}:/etc/caddy/ca:ro
+      - ${ECLUME_E2E_CA_DIR:?e2e-real.sh sets the folder of the disposable root}:/etc/caddy/ca:ro
 
   server:
     <<: *server-image
@@ -67,13 +67,13 @@ services:
       timeout: 5s
       retries: 20
 
-  # O worker CPU único, como na produção: as filas eclume:default e eclume:agents.
+  # The single CPU worker, as in production: the eclume:default and eclume:agents queues.
   worker-cpu:
     <<: *server-image
     command: ["eclume-server", "worker"]
     environment:
       <<: *server-env
-      # O resumo real do E2E sai do `claude -p`, com o token de longa duração da produção.
+      # The real E2E summary comes from `claude -p`, with production's long-lived token.
       CLAUDE_CODE_OAUTH_TOKEN: ${ECLUME_CLAUDE_OAUTH_TOKEN:-}
     depends_on:
       postgres: {condition: service_healthy}
@@ -127,7 +127,7 @@ services:
     command: ["server", "/data"]
     environment:
       MINIO_ROOT_USER: eclume
-      # Multipart incompleto dura mais que os 7 dias de upload_ttl_days (duração Go: sem `d`).
+      # An incomplete multipart lives longer than the 7 days of upload_ttl_days (Go duration: no `d`).
       MINIO_API_STALE_UPLOADS_EXPIRY: 192h
       MINIO_ROOT_PASSWORD: eclume-e2e-secret
     tmpfs:
@@ -138,7 +138,7 @@ services:
       timeout: 3s
       retries: 30
 
-  # --- one-shots (perfil tools) ---
+  # --- one-shots (tools profile) ---
 
   minio-init:
     profiles: [tools]
@@ -147,7 +147,7 @@ services:
       minio: {condition: service_healthy}
     entrypoint: ["sh", "-c", "mc alias set local http://minio:9000 eclume eclume-e2e-secret >/dev/null && mc mb --ignore-existing local/eclume"]
 
-  # O migrador (superusuário) aplica o schema e liga o LOGIN de eclume_server, como na produção.
+  # The migrator (superuser) applies the schema and enables eclume_server's LOGIN, as in production.
   migrate:
     <<: *server-image
     profiles: [tools]
@@ -182,15 +182,15 @@ configs:
             ca eclume
           }
         }
-        # Cabeçalhos genéricos para o que não é do SPA (/api, /media); `?` não sobrescreve o que o
-        # upstream ou as regras do SPA já puseram (a CSP inteira do SPA).
+        # Generic headers for what is not the SPA's (/api, /media); `?` does not overwrite what the
+        # upstream or the SPA rules already set (the SPA's whole CSP).
         header {
           ?X-Content-Type-Options nosniff
           ?Referrer-Policy no-referrer
           ?Content-Security-Policy "frame-ancestors 'none'"
         }
         handle /api/* {
-          # Rede grossa: o server recusa antes, com problem+json, acima do teto de cada rota.
+          # Coarse net: the server refuses earlier, with problem+json, above each route's ceiling.
           request_body {
             max_size 9MiB
           }
@@ -199,10 +199,10 @@ configs:
         handle /media/* {
           reverse_proxy server:8000
         }
-        # O SPA (deploy/web.Caddyfile na imagem), depois das rotas acima.
+        # The SPA (deploy/web.Caddyfile in the image), after the routes above.
         import /etc/caddy/spa.caddy
       }
 
 volumes:
-  # O modelo da engine CPU (faster-whisper `small`, ~0,5 GB): baixado a cada rodada, apagado no `down -v`.
+  # The CPU engine model (faster-whisper `small`, ~0.5 GB): downloaded on every run, deleted on `down -v`.
   models:

@@ -9,7 +9,7 @@
   --color-accent-2: #b8432c;
   --color-rec: #b8432c;
   --color-divider: color-mix(in srgb, #262420 32%, transparent);
-  /* Borda de controle interativo (campo, caixa, botão secundário, switch): ≥ 3:1 sobre fundo e superfície, nos dois temas; o divisor fica para a estrutura. */
+  /* Interactive control border (field, box, secondary button, switch): ≥ 3:1 over ground and surface, in both themes; the divider is left for structure. */
   --color-control-border: var(--color-neutral-600);
 
   /* Tonal ramps — warm linen neutrals, walnut accent, terracotta for recording and failure. */

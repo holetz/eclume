@@ -58,12 +58,12 @@ def permitted_names(host: str, names: list[str]) -> list[x509.GeneralName]:
         else:
             dns.append(x509.DNSName(value))
     if not ips:
-        raise CaError("a raiz precisa de um IP permitido (ECLUME_PUBLIC_HOST ou ECLUME_CA_NOMES)")
+        raise CaError("a raiz precisa de um IP permitido (ECLUME_PUBLIC_HOST ou ECLUME_CA_NAMES)")
     return [*ips, *(dns or [x509.DNSName(UNUSED_DOMAIN)]), x509.RFC822Name(UNUSED_DOMAIN)]
 
 
 def split_names(raw: str | None) -> list[str]:
-    """`ECLUME_CA_NOMES`: names or IPs separated by comma or space."""
+    """`ECLUME_CA_NAMES`: names or IPs separated by comma or space."""
     return [n for n in re.split(r"[,\s]+", raw or "") if n]
 
 

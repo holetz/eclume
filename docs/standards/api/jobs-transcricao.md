@@ -308,9 +308,9 @@ stalling.
 - **Deploy drains, it does not kill.** The GPU `WorkerSettings` has
   `job_completion_wait = job_timeout`: on SIGTERM arq stops picking up jobs and finishes the
   current one, and the jobs in the `eclume:gpu` queue go on to the new worker. `deploy.sh` reads
-  `busy` in the heartbeat and, with the GPU busy, waits up to `--espera-gpu` (30 min) before
+  `busy` in the heartbeat and, with the GPU busy, waits up to `--gpu-wait` (30 min) before
   recreating `worker-gpu` (`stop_grace_period: 40m`); at the end of the wait it refuses, unless
-  `--interromper-gpu`. Without that flag, a deploy does not produce `worker_lost`.
+  `--interrupt-gpu`. Without that flag, a deploy does not produce `worker_lost`.
 - **Two observations.** Nothing is marked the first time: the suspicion stays in
   `eclume:reaper:suspect:<_job_id>` (code and instant) and only becomes a failure if the same
   diagnosis lasts the whole grace. That covers the worker that just picked up the job and has not
@@ -336,7 +336,7 @@ stalling.
 `ECLUME_ENGINE=cpu` (faster-whisper `small` int8, without alignment and **without diarization**:
 the raw comes out with one speaker). It applies in dev
 ([desenvolver-sem-gpu.md](../../how-to/desenvolver-sem-gpu.md)), in E2E and also **in production**
-on a host without an NVIDIA GPU: `deploy/deploy.sh --sem-gpu` adds
+on a host without an NVIDIA GPU: `deploy/deploy.sh --no-gpu` adds
 `deploy/docker-compose.cpu.yml`, which sets `ECLUME_ENGINE=cpu` and `ECLUME_DEVICE=cpu` on
 `worker-gpu` and zeroes its GPU reservation (`deploy: !reset {}`, Compose 2.24+), with the same
 image. The queue, the job contract and the raw are the same; the heartbeat comes out without the

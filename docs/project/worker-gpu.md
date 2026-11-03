@@ -257,7 +257,7 @@ docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gp
   process that does not import torch until the next job (`healthcheck.start_period` covers the
   return). A light process, which never imported torch, does not restart. The cost is reloading the
   models on the job after the idle period, which was already the case after the unload. `MALLOC_ARENA_MAX=2` in the image and
-  a 2 s `poll_delay` in arq complement it. `vigia.sh` does not alert on this
+  a 2 s `poll_delay` in arq complement it. `watchdog.sh` does not alert on this
   restart: the container only counts as bad in two consecutive rounds, and the absent heartbeat
   likewise.
 - **Out of memory.** An OOM in the ASR halves the batch down to 1. If it still falls short, the model

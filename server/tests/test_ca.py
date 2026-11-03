@@ -100,3 +100,23 @@ def test_cli_generate_and_refuse(tmp_path: Path, capsys: pytest.CaptureFixture[s
     assert capsys.readouterr().out.startswith("sha256 ")
     assert cli.main(args) == 2
     assert "não é sobrescrita" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [
+        ({"ECLUME_CA_NAMES": "new.local"}, "new.local"),
+        ({"ECLUME_CA_NOMES": "old.local"}, "old.local"),
+        ({"ECLUME_CA_NAMES": "new.local", "ECLUME_CA_NOMES": "old.local"}, "new.local"),
+        ({}, None),
+    ],
+)
+def test_cli_names_default_reads_ca_names_then_the_deprecated_ca_nomes(
+    monkeypatch: pytest.MonkeyPatch, env: dict[str, str], expected: str | None
+):
+    monkeypatch.delenv("ECLUME_CA_NAMES", raising=False)
+    monkeypatch.delenv("ECLUME_CA_NOMES", raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    args = cli.build_parser().parse_args(["ca", "gerar", "--pasta", "x", "--host", "10.0.0.1"])
+    assert args.nomes == expected

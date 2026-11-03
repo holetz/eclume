@@ -2,7 +2,7 @@
 type: project
 title: Production deploy on the GPU host
 description: How eclume runs in production on the host 192.168.15.199 — the eclume compose project with Caddy on 8443, build on the host daemon through the Docker context, secrets in deploy/.env.prod, a separate admin account and open signup, an internal CA on the clients, a daily cron backup with a tested restore, operation and coexistence with lumea.
-resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/deploy_lib.py, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restaurar-backup.sh, deploy/staging.sh, deploy/docker-compose.staging.yml, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prova-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py, deploy/prova-ca-restrita.sh
+resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/deploy_lib.py, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restore-backup.sh, deploy/staging.sh, deploy/docker-compose.staging.yml, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prove-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py, deploy/prove-restricted-ca.sh
 tags: [deploy, producao, host, caddy, backup, runbook]
 timestamp: 2026-10-08
 audience: both
@@ -123,29 +123,29 @@ One-shots of the `tools` profile, run by `compose run --rm`: `minio-init` (bucke
 | `downloads/` | desktop installers, `latest.json` and `eclume-root.crt` |
 | `secrets/` (700) | `env.prod`, `hf_token`, `admin-password`, updater keys, Android keystore, `restic-password`, `restic-fora.env` and `restic-rclone/` (the rclone configuration of the off-host destination) — all 600 |
 | `backups/` | `restic/` (encrypted repository), `minio/.espelho/`, `pre-deploy/`, `backup.log` and `ensaio.log` |
-| `estado/` (700) | `backup.json`, `fora.json`, `ensaio.json` (`ok`, `at`, `detalhe` of each nightly step, read by `vigia.sh`), `secrets.sha256` and `vigia/` |
-| `bin/` | `backup.sh`, `restaurar-backup.sh`, `staging.sh` and `vigia.sh`, installed by the deploy |
+| `estado/` (700) | `backup.json`, `fora.json`, `ensaio.json` (`ok`, `at`, `detalhe` of each nightly step, read by `watchdog.sh`), `secrets.sha256` and `vigia/` |
+| `bin/` | `backup.sh`, `restore-backup.sh`, `staging.sh` and `watchdog.sh`, installed by the deploy |
 
 ## Deploy
 
 From the development machine, with the `gpu-host` context of the [host runbook](host-setup.md):
 
 ```bash
-bash deploy/deploy.sh --context gpu-host --gerar-env   # once: deploy/.env.prod with random secrets
+bash deploy/deploy.sh --context gpu-host --generate-env   # once: deploy/.env.prod with random secrets
 bash deploy/deploy.sh --plan --context gpu-host
 bash deploy/deploy.sh --context gpu-host
 bash deploy/bootstrap-admin.sh --context gpu-host --email admin@example.com   # once
 ```
 
 The scripts have no default context: without `--context` (or `ECLUME_DOCKER_CONTEXT`), they refuse. This
-host has a GPU and comes up without `--sem-gpu`. `deploy.sh` uses the Docker context for build and bring-up and SSH (the target comes from the
+host has a GPU and comes up without `--no-gpu`. `deploy.sh` uses the Docker context for build and bring-up and SSH (the target comes from the
 context's `ssh://` endpoint) for what belongs to the host. In order:
 
 1. Before any write to the host, it refuses a dirty working tree, a HEAD that GitHub does not
    have and a HEAD without the host gate's `eclume/gate` = `success` status (`bash deploy/gate.sh`;
    [monorepo.md](../standards/code/monorepo.md)). It also refuses a HEAD outside `origin/main` or
-   that does not descend from the SHA in production (the last one in `deploys.log`), unless `--fora-do-main
-   "<reason>"` (test branch; the reason goes into the history) or `--voltar` (rollback), and a
+   that does not descend from the SHA in production (the last one in `deploys.log`), unless `--off-main
+   "<reason>"` (test branch; the reason goes into the history) or `--rollback` (rollback), and a
    `deploy/.env.prod` that loses or changes a key of the host's copy (below). `--plan` shows, without
    refusing: the SHA in production and the target, how many commits separate them, the pending migrations, the
    env × host, the busy GPU and the gate. It also refuses with the host disk at 90% or more
@@ -157,18 +157,18 @@ context's `ssh://` endpoint) for what belongs to the host. In order:
 4. It builds `server`, `caddy` (the `eclume-edge` image, with the SPA) and `worker-gpu` on the host
    daemon from the `git archive` of the SHA in a temporary directory on the workstation — compose,
    Dockerfiles and scripts are those of the SHA, never those of the working tree (`--services` restricts, and
-   `web` still works as the old name of `caddy`; `--sem-build` skips). Which images the SHA has and
+   `web` still works as the old name of `caddy`; `--no-build` skips). Which images the SHA has and
    which services come up come from its compose (`docker compose config` read by `deploy_lib.py
-   topologia`). An image that is not built now must already be on the host: the first deploy
+   topology`). An image that is not built now must already be on the host: the first deploy
    of the edge with the SPA builds `caddy`. The build records
    `ECLUME_COMMIT` (`/api/v1/health` returns it as `commit`) and the `:<sha>` tags beside `:prod`;
    the deploy also tags with `:<sha>` the images it did not build, and each deploy leaves a trio. On
    `worker-gpu` only the tag changes: with identical code, the cache returns the same image and the container is not
    recreated.
-5. **Busy GPU:** it waits for the heartbeat's `busy` to drop up to `--espera-gpu` (30 min); at the end, it refuses,
-   unless `--interromper-gpu`. SIGTERM drains (the worker finishes the current job).
+5. **Busy GPU:** it waits for the heartbeat's `busy` to drop up to `--gpu-wait` (30 min); at the end, it refuses,
+   unless `--interrupt-gpu`. SIGTERM drains (the worker finishes the current job).
 6. With a pending migration, it writes `pg_dump -Fc` to `/srv/eclume/backups/pre-deploy/` before
-   `migrate`; `restaurar-backup.sh --banco <dump> --confirmo` restores only the database from it.
+   `migrate`; `restore-backup.sh --database <dump> --confirmo` restores only the database from it.
 7. `up --wait postgres redis minio` → `run --rm minio-init` → `run --rm migrate` →
    `up --wait server worker worker-gpu` → `up --force-recreate --remove-orphans --wait caddy`.
    The one-shots stay out of `--wait`, which treats exit 0 of a service nobody expects as a
@@ -188,26 +188,26 @@ context's `ssh://` endpoint) for what belongs to the host. In order:
   before holetz/eclume#151) and `/srv/eclume/deploys.log` (TSV: date, SHA, flags, reason,
   applied migrations and the pre-deploy dump).
 - **Retention:** the host keeps the image trio and the dump of the last 3 distinct deploys
-  (`ECLUME_DEPLOYS_RETIDOS`); tags outside the window are removed, from the new trios (`edge`) and the old ones
+  (`ECLUME_DEPLOYS_KEPT`); tags outside the window are removed, from the new trios (`edge`) and the old ones
   (`web`), and `image prune` only takes what is left without a tag (label `org.eclume.image`: `server`,
   `edge`, `web`, `worker-gpu`).
-- **`bash deploy/deploy.sh --context gpu-host --voltar <sha>`** brings up the retained trio of that deploy,
+- **`bash deploy/deploy.sh --context gpu-host --rollback <sha>`** brings up the retained trio of that deploy,
   without build and without migrate (`deploy_lib.py voltar` decides), with the compose of that SHA: going back
   to a SHA before holetz/eclume#151 brings `web`, `worker-cpu` and `worker-agents` up again, with
   plain Caddy, and `--remove-orphans` removes the single `worker`. One step back works even with a new
   migration, by the expand/contract rule
   ([server-nucleo.md](../standards/code/server-nucleo.md)); more than one step with migrations the
   target does not know refuses and points to the pre-deploy dump to restore the database first.
-- **Test branch** is `--fora-do-main "<reason>"`; the next `main` deploy requires descending from
-  what is in production, so go back to `main` with `--voltar` or with a `main` commit that already
+- **Test branch** is `--off-main "<reason>"`; the next `main` deploy requires descending from
+  what is in production, so go back to `main` with `--rollback` or with a `main` commit that already
   contains the branch.
 
 ### Gate and waiver
 
 A push to `main` fires the gate on the host by itself (hook `.githooks/pre-push`); check with
-`bash deploy/gate.sh --estado` before the deploy. A test branch needs the gate on its own SHA:
+`bash deploy/gate.sh --status` before the deploy. A test branch needs the gate on its own SHA:
 publish the branch and run `bash deploy/gate.sh` on it (about 40 minutes on the host), or waive.
-The waiver is `bash deploy/deploy.sh --context gpu-host --sem-gate "<reason>"`: it holds only for that
+The waiver is `bash deploy/deploy.sh --context gpu-host --skip-gate "<reason>"`: it holds only for that
 invocation, waives only the status (clean tree and commit on GitHub are still required) and leaves on the
 commit the status `eclume/gate-dispensa` with the reason. Use it only in an emergency — a production
 fix that cannot wait for the gate, or the gate broken by something outside the code (host, image,
@@ -216,10 +216,10 @@ network) — and run the gate on the same SHA right afterwards.
 ### Secrets
 
 `deploy/.env.prod` (600, in `.gitignore`) comes from `deploy/.env.prod.example` through
-`--gerar-env`, with `openssl rand`; `--gerar-env` refuses when the host already has
+`--generate-env`, with `openssl rand`; `--generate-env` refuses when the host already has
 `secrets/env.prod` (the deploy restores that copy in a checkout without an env). The deploy compares the local
 env with the host's copy **by key** — the host sends only the sha256 of each value — and refuses
-when a host key is missing or changed; a key new only locally passes. `--substituir-env` accepts
+when a host key is missing or changed; a key new only locally passes. `--replace-env` accepts
 the swap and first stores `secrets/env.prod.<date>`. Passwords are hex, because they go into the DSN unescaped, and
 `ECLUME_ENCRYPTION_KEY` is the base64 of 32 bytes. The deploy refuses while there is a `=troque-`.
 Without the file in the checkout (another machine, another worktree), the deploy restores it from the host's
@@ -240,7 +240,7 @@ copy.
 | `ECLUME_SECRET_KEY` | signs the part and audio URLs; changing it invalidates those in circulation |
 | `ECLUME_ENCRYPTION_KEY` | encrypts the providers' API keys and the admin panel secrets; the GPU worker receives the same one, to open the HF token that arrives encrypted in the job; changing it forces re-registering them ([server-agentes.md](../standards/code/server-agentes.md), [server-admin.md](../standards/code/server-admin.md)) |
 | `ECLUME_PUBLIC_URL` | `https://192.168.15.199:8443`, the base of the URLs returned to the client |
-| `ECLUME_SIGNUP_OPEN` | `true` (default): anyone on the LAN creates an account through `POST /api/v1/auth/signup`, accepting the notice. `false` closes signup without a code deploy: change the env and recreate the server (`bash deploy/deploy.sh --context gpu-host --sem-build`) |
+| `ECLUME_SIGNUP_OPEN` | `true` (default): anyone on the LAN creates an account through `POST /api/v1/auth/signup`, accepting the notice. `false` closes signup without a code deploy: change the env and recreate the server (`bash deploy/deploy.sh --context gpu-host --no-build`) |
 | `ECLUME_SIGNUPS_PER_IP_PER_DAY` | `5` (default): ceiling of accounts created per IP in 24 h, besides the per-minute ceiling. After the quota deploy (holetz/eclume#98), the owner overrides the quotas of her own account in Admin → Usuários |
 | `ECLUME_CLAUDE_CLI` | required, `0` or `1`: the build arg that puts the `claude` CLI in the server image. This production uses `1` (`claude-cli` is its provider); `0` builds the image with free software only and `claude-cli` fails with `provider_not_configured` |
 | `ECLUME_CLAUDE_OAUTH_TOKEN` | optional: long-lived Claude token (`claude setup-token`, 1 year), delivered to `worker` as `CLAUDE_CODE_OAUTH_TOKEN`. The normal path is the token in the panel (below), which wins over this one; with neither, `claude-cli` fails with `provider_not_configured`. **Do not mount** the host's `~/.claude/.credentials.json`: the OAuth renewal diverges in the bind mount ([server-agentes.md](../standards/code/server-agentes.md#deploy)) |
@@ -286,7 +286,7 @@ opens the authorization in the browser and prints the token (`sk-ant-oat01-…`)
 wins over the env's `ECLUME_CLAUDE_OAUTH_TOKEN`, which remains as an alternative for operating without the panel. The
 token lasts 1 year and is not renewed: generate another before it expires (the symptom is the summary failing with
 `provider_auth` in the admin's Saúde). The panel records the registration date (`key_set_at`), and
-`eclume-server saude --json` reports the expiry (`claude_token.days_left`); `vigia.sh` warns
+`eclume-server saude --json` reports the expiry (`claude_token.days_left`); `watchdog.sh` warns
 at 30 days or less. A token only in the env has no date: the watcher warns once "validade desconhecida".
 
 On a Windows station ([estacao-windows.md](estacao-windows.md)), `.gitattributes` keeps the
@@ -297,30 +297,30 @@ scripts with LF in any checkout. Without `flock`, the lock becomes the directory
 **Proofs that write run on staging, never on production** (holetz/eclume#91). The
 `eclume-staging` is an ephemeral compose project on the host (`deploy/docker-compose.staging.yml`), with the
 `main` code and the data of the latest backup restored from the off-host repository, Caddy only on
-`https://127.0.0.1:18444`, CPU transcription and no mDNS. `staging.sh subir` brings it up with a
+`https://127.0.0.1:18444`, CPU transcription and no mDNS. `staging.sh up` brings it up with a
 throwaway account (admin and user with the same e-mail, in `~/eclume-staging/conta`) and its CA in
-`~/eclume-staging/ca/ca.crt`; `staging.sh derrubar` deletes it (`down -v`). From the workstation, the tunnel
+`~/eclume-staging/ca/ca.crt`; `staging.sh down` deletes it (`down -v`). From the workstation, the tunnel
 `ssh -L 18444:127.0.0.1:18444` reaches it.
 
 ```bash
-ssh holetz@192.168.15.199 /srv/eclume/bin/staging.sh subir
+ssh holetz@192.168.15.199 /srv/eclume/bin/staging.sh up
 ssh holetz@192.168.15.199 cat eclume-staging/ca/ca.crt > /tmp/staging-ca.crt
 ssh -f -N -L 18444:127.0.0.1:18444 holetz@192.168.15.199
 ssh holetz@192.168.15.199 "sed -n 's/^ECLUME_PASSWORD=//p' eclume-staging/conta" \
   | python3 deploy/smoke_prod.py --ca /tmp/staging-ca.crt --email staging@eclume.invalid
-ssh holetz@192.168.15.199 /srv/eclume/bin/staging.sh derrubar
+ssh holetz@192.168.15.199 /srv/eclume/bin/staging.sh down
 ```
 
-**On production, read-only:** `smoke_prod.py --somente-leitura` (health, SPA, `/downloads/`, signup
+**On production, read-only:** `smoke_prod.py --read-only` (health, SPA, `/downloads/`, signup
 and admin session) and the administration panel (`e2e-prod/admin.spec.ts`). Without
-`--somente-leitura`, the smoke refuses the production URL with exit 2 (`https://192.168.15.199:8443` or
+`--read-only`, the smoke refuses the production URL with exit 2 (`https://192.168.15.199:8443` or
 `ECLUME_PUBLIC_URL`) before any request; `prova.spec.ts`, `producao.spec.ts` and
 `mobile/e2e/prova.mjs` refuse the same way.
 
 ```bash
 ssh holetz@192.168.15.199 cat /srv/eclume/downloads/eclume-root.crt > /tmp/eclume-root.crt
 ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
-  | python3 deploy/smoke_prod.py --url https://192.168.15.199:8443 --ca /tmp/eclume-root.crt --somente-leitura
+  | python3 deploy/smoke_prod.py --url https://192.168.15.199:8443 --ca /tmp/eclume-root.crt --read-only
 ```
 
 `smoke_prod.py` uses only the standard library. It checks health, the SPA (the routes' `index.html`
@@ -382,7 +382,7 @@ ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
 uv run eclume-server discover --timeout 10
 ```
 
-**Web proof** (`bash deploy/prova-web-prod.sh`, `web/e2e-prod/prova.spec.ts`, in the workstation's Chrome
+**Web proof** (`bash deploy/prove-web-prod.sh`, `web/e2e-prod/prova.spec.ts`, in the workstation's Chrome
 or with `E2E_CHANNEL=msedge`, against staging through the tunnel the script opens): signs in through the screen
 with the throwaway account (read from `~/eclume-staging/conta` on the host),
 creates a temporary field, tests the rule on the latest recordings and deletes it; generates the link
@@ -394,7 +394,7 @@ with `OK`, no page error, and leaves the screenshots in `web/test-results/prod/`
 codes expire by themselves in 10 minutes.
 
 ```bash
-ECLUME_PROD_SSH=holetz@192.168.15.199 bash deploy/prova-web-prod.sh
+ECLUME_PROD_SSH=holetz@192.168.15.199 bash deploy/prove-web-prod.sh
 ```
 
 ## Connect an assistant (MCP)
@@ -420,7 +420,7 @@ pairing ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositi
 Only the browser, Claude Desktop/Code (MCP) and lumea need the root installed.
 
 eclume's own root (`ECLUME_TLS_CA=eclume`) has a critical name constraint: it is only valid for the
-IP of `ECLUME_PUBLIC_HOST` and the names in `ECLUME_CA_NOMES` (currently `workstation.local`), and only for TLS
+IP of `ECLUME_PUBLIC_HOST` and the names in `ECLUME_CA_NAMES` (currently `workstation.local`), and only for TLS
 server. Installing it on a station does not let anyone impersonate another site with it. The key
 stays in `/srv/eclume/secrets/ca/` (the deploy generates it once and never overwrites it; it goes into the backup
 of `secrets/`). Caddy's `local` root, from earlier installs, has no constraint and goes out in the
@@ -436,7 +436,7 @@ rotation below.
 - **Firefox:** import in Settings → Certificates, because it uses its own store.
 - **lumea:** mount the PEM in the `api` container and point `LUMEA_ECLUME_CA_BUNDLE` to it, with
   `LUMEA_ECLUME_URL=https://192.168.15.199:8443` (lumea's `deploy/.env.remote`).
-- **Proof of the constraint** on a station: `bash deploy/prova-ca-restrita.sh` generates a
+- **Proof of the constraint** on a station: `bash deploy/prove-restricted-ca.sh` generates a
   throwaway root for `127.0.0.1`, brings up `127.0.0.1:18445` (inside) and `127.0.0.2:18446` (outside) and checks
   `curl`; with the throwaway root installed, Chrome, Edge and Firefox open the first and refuse the
   second. Remove the throwaway root afterwards (the script prints the command).
@@ -484,7 +484,7 @@ would not run outside a session. `deploy.sh` installs the scripts in `bin/`, gen
 
 ```
 30 3 * * * ECLUME_DATA_DIR=/srv/eclume /srv/eclume/bin/backup.sh >> /srv/eclume/backups/backup.log 2>&1 # eclume-backup
-30 4 * * * ECLUME_DATA_DIR=/srv/eclume /srv/eclume/bin/staging.sh ensaio >> /srv/eclume/backups/ensaio.log 2>&1 # eclume-ensaio
+30 4 * * * ECLUME_DATA_DIR=/srv/eclume /srv/eclume/bin/staging.sh rehearse >> /srv/eclume/backups/ensaio.log 2>&1 # eclume-rehearsal
 ```
 
 **Encrypted restic snapshot, in two repositories.** `backup.sh` runs restic (official image
@@ -506,7 +506,7 @@ deduplication works on the copy. In this production, the destination is the owne
 | `secrets/` | `env.prod` (with `ECLUME_ENCRYPTION_KEY`), `admin-password`, `hf_token`, updater key and password, Android keystore and password — except `restic-*` |
 
 The dumps exist in the clear only in a temporary folder during the run; only the bucket mirror stays in the clear
-(the recordings are already in MinIO on the same disk). Retention: **7 dailies** (`MANTER`,
+(the recordings are already in MinIO on the same disk). Retention: **7 dailies** (`KEEP`,
 `forget --keep-daily 7` every day and `prune` only on Sundays, the `--prune` of the same `forget`) in both
 repositories. The host is also CI and staging, so every backup container carries `--cpu-shares 256`
 and `GOMAXPROCS=1` (restic and mc) and `restic backup` reads with `--read-concurrency 1`; `backup.sh`
@@ -520,10 +520,10 @@ deletion, `forget --keep-daily 7` releases it once seven newer daily snapshots e
 days later), and the Sunday `prune` frees the space (at most 7 days after that). No snapshot is
 rewritten on deletion. Each step writes
 `estado/backup.json`, `estado/fora.json` and `estado/ensaio.json` (`ok`, `at`, `detalhe`), which
-`vigia.sh` reads, and the backup writes `estado/secrets.sha256` (sha256 of `secrets/` and the PKI in the snapshot).
+`watchdog.sh` reads, and the backup writes `estado/secrets.sha256` (sha256 of `secrets/` and the PKI in the snapshot).
 `deploy.sh --plan` shows the age of each step's last `ok`.
 
-**Nightly rehearsal** (`staging.sh ensaio`, at 04:30): restores the most recent snapshot **from the
+**Nightly rehearsal** (`staging.sh rehearse`, at 04:30): restores the most recent snapshot **from the
 off-host repository** into `eclume-staging`, applies `main`'s `migrate` over the restored database and runs
 `smoke_prod.py` against it. It also checks what the smoke does not see: the sha256 of the restored `secrets/` and PKI
 against `estado/secrets.sha256`, the fingerprint of the restored root against
@@ -531,35 +531,35 @@ against `estado/secrets.sha256`, the fingerprint of the restored root against
 `restic check --read-data-subset` of a rotating 1/7 of the off-host repository. It always exits with `down -v`;
 refuses with the disk at 90% or more. A failure leaves `estado/ensaio.json` with `ok: false` and the reason.
 
-The rehearsal is **proportional**. On Sundays (or with `ECLUME_ENSAIO_DIA=7`) it is the **full** one: the
+The rehearsal is **proportional**. On Sundays (or with `ECLUME_REHEARSAL_DAY=7`) it is the **full** one: the
 whole snapshot, the audio batch checked over the restored bucket and the summary and chat smoke
 (which spends the Claude quota). On other days it is the **partial** one: it restores only `pg/`, `secrets/` and
-`caddy/` plus the batch's audios, drawn from the restored database, and runs the `--somente-leitura` smoke;
+`caddy/` plus the batch's audios, drawn from the restored database, and runs the `--read-only` smoke;
 `estado/ensaio.json` says "ensaio parcial". The images `eclume-server:<sha>` and `eclume-edge:<sha>`
 (or `eclume-web:<sha>`, before holetz/eclume#151) that the deploy retained for `main`'s SHA
 are reused, without build; only what is missing is built (and, in the full one, the retained server's image needs
 `claude`, otherwise the server is rebuilt). Staging brings up every long-running service of
 `main`'s compose, with no fixed list: the edge with the SPA and the single CPU worker, as in production. Every staging container carries `--cpu-shares 256` (the services, through a
 `~/eclume-staging/cpu-shares.yml` generated on every run) and restic and mc, `GOMAXPROCS=1`. The
-`subir` is always the full restore.
+`up` is always the full restore.
 
 ```bash
 ssh holetz@192.168.15.199 /srv/eclume/bin/backup.sh                    # backup now
-ssh holetz@192.168.15.199 /srv/eclume/bin/staging.sh ensaio            # rehearsal now
-ssh holetz@192.168.15.199 /srv/eclume/bin/restaurar-backup.sh --teste   # proves the most recent, on the host
-ssh holetz@192.168.15.199 /srv/eclume/bin/restaurar-backup.sh --aplicar 2026-09-25 --confirmo
+ssh holetz@192.168.15.199 /srv/eclume/bin/staging.sh rehearse            # rehearsal now
+ssh holetz@192.168.15.199 /srv/eclume/bin/restore-backup.sh --test   # proves the most recent, on the host
+ssh holetz@192.168.15.199 /srv/eclume/bin/restore-backup.sh --apply 2026-09-25 --confirmo
 ```
 
-- **`[--repositorio local|fora] --teste [<snap>]`** restores the snapshot (default `latest`; also the
+- **`[--repository local|fora] --test [<snap>]`** restores the snapshot (default `latest`; also the
   restic id or the date YYYY-MM-DD) into a temporary folder, the dump into a database `eclume_restore_teste` and the
   bucket into an `eclume-restore-teste`. Then it compares the counts (users, recordings,
   transcriptions, summaries and objects) with production and deletes everything.
-- **`[--repositorio local|fora] --aplicar <snap> --confirmo`** validates the dump and restores it into a temporary
+- **`[--repository local|fora] --apply <snap> --confirmo`** validates the dump and restores it into a temporary
   database (`eclume_restore_novo`) before stopping anything; only then does it stop server and workers
   and swap the `eclume` database for the temporary one. Then it mirrors the snapshot's bucket back, without deleting objects
   that are not in the backup, and brings the services up.
-- **`--banco <dump> --confirmo`** returns only the database to a `pre-deploy/` dump (holetz/eclume#92).
-- **Prior validation (`--banco` and `--aplicar`).** The script runs `pg_restore --list` and restores the
+- **`--database <dump> --confirmo`** returns only the database to a `pre-deploy/` dump (holetz/eclume#92).
+- **Prior validation (`--database` and `--apply`).** The script runs `pg_restore --list` and restores the
   dump into a temporary database with the services still up. A truncated or corrupt dump refuses the
   restore with `FALHA`, deletes the temporary one and leaves the `eclume` database and the services as they were.
   If the rename swap fails after the stop, the old database (`eclume_antes`) gets its name back and the
@@ -568,10 +568,10 @@ ssh holetz@192.168.15.199 /srv/eclume/bin/restaurar-backup.sh --aplicar 2026-09-
 **New host.** All that is needed is the repository password and the destination credential, taken from the vault:
 
 1. Write `/srv/eclume/secrets/restic-password` and `/srv/eclume/secrets/restic-fora.env` (700/600).
-2. `restaurar-backup.sh --host-novo /srv/eclume` returns `secrets/` (with `env.prod`) and Caddy's
+2. `restore-backup.sh --new-host /srv/eclume` returns `secrets/` (with `env.prod`) and Caddy's
    PKI in `caddy/data/caddy/pki`, **before** the first deploy, to keep the clients' CA.
 3. Run the deploy (with the restored `env.prod` as `deploy/.env.prod`) and then
-   `restaurar-backup.sh --repositorio fora --aplicar latest --confirmo`.
+   `restore-backup.sh --repository fora --apply latest --confirmo`.
 
 With the destination on OneDrive, the credential does not go to the vault: step 1 includes authorizing rclone
 again on the new host, as below, because the owner's account is the credential.
@@ -579,7 +579,7 @@ again on the new host, as below, because the owner's account is the credential.
 **Off-host destination on OneDrive (rclone, since 2026-10-08).** `restic-fora.env` is
 `RESTIC_REPOSITORY=rclone:eclume-onedrive:eclume-restic`, a folder in the owner's personal OneDrive,
 chosen by her in place of B2. The restic image does not carry the `rclone` that this backend calls, and
-so `backup.sh`, `staging.sh` and `restaurar-backup.sh` mount two items:
+so `backup.sh`, `staging.sh` and `restore-backup.sh` mount two items:
 
 - the static binary from the `rclone/rclone` image pinned by digest (`RCLONE_IMAGE`), through a volume
   `eclume-rclone-<digest>` that Docker fills on the first mount;
@@ -618,23 +618,23 @@ bash deploy/deploy.sh --context gpu-host --services "server caddy"   # only serv
 - **Stalled transcription job:** the CPU worker by itself marks as a recoverable failure (`worker_lost`,
   `job_lost`, `job_stalled`) the job the GPU worker abandoned; the owner retranscribes or the admin uses
   "Tentar de novo" in Saúde ([jobs-transcricao.md](../standards/api/jobs-transcricao.md#dead-job)).
-- **Staging** (`eclume-staging`, 127.0.0.1:18444): `staging.sh subir` for the proofs,
-  `staging.sh derrubar` afterwards; the nightly rehearsal brings it up and down by itself. Rehearsal failure: see
+- **Staging** (`eclume-staging`, 127.0.0.1:18444): `staging.sh up` for the proofs,
+  `staging.sh down` afterwards; the nightly rehearsal brings it up and down by itself. Rehearsal failure: see
   `estado/ensaio.json` and the end of `backups/ensaio.log`.
 - **Web E2E against the real backend** in an ephemeral stack, without touching production:
   `remote-run . 'bash deploy/e2e-real.sh'` ([frontend-web.md](../standards/code/frontend-web.md)).
 - **Hugging Face token:** write it in Administração → Locutores (wins over the file) or change
   `/srv/eclume/secrets/hf_token` (600). The worker rereads it on every job, without restarting
   ([worker-gpu.md](worker-gpu.md)).
-- **Desktop installers:** `deploy/publicar-desktop.sh` writes to `/srv/eclume/downloads/`,
+- **Desktop installers:** `deploy/publish-desktop.sh` writes to `/srv/eclume/downloads/`,
   which Caddy already serves ([host-setup.md](host-setup.md), installers section). Since 0.2.0,
   the release embeds the address and the CA fingerprint of this server (variables
   `ECLUME_SERVER_URL` and `ECLUME_SERVER_CA_SHA256`): changing the root CA (the switchover of the rotation above)
   or the address requires updating the variables and shipping a new release
   ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#server-embedded-in-the-installer)).
-  Publishing is `bash deploy/release-desktop.sh --publicar --notas "<text>"` (compiles on the host, without
+  Publishing is `bash deploy/release-desktop.sh --publish --notes "<text>"` (compiles on the host, without
   Actions; `--plan` beforehand shows what would go out) and, with the release created,
-  `ssh holetz@192.168.15.199 'bash -s -- desktop-v<version>' < deploy/publicar-desktop.sh`.
+  `ssh holetz@192.168.15.199 'bash -s -- desktop-v<version>' < deploy/publish-desktop.sh`.
 - **Logs:** one JSON line per record (`ts`, `level`, `logger`, `msg` and, when present,
   `request_id`, `recording_id`, `revision`, `job_id`); every API response carries `X-Request-ID`.
   To follow a request or a job:
@@ -645,18 +645,18 @@ bash deploy/deploy.sh --context gpu-host --services "server caddy"   # only serv
   the `server` healthcheck; the workers have a healthcheck through the queues' heartbeat keys
   (`"${P[@]}" ps` shows `unhealthy`). The admin Saúde numbers from the terminal:
   `"${P[@]}" exec server eclume-server saude --json`.
-- **Alerts (`vigia.sh`):** the `# eclume-vigia` cron runs `/srv/eclume/bin/vigia.sh` every 5 min
+- **Alerts (`watchdog.sh`):** the `# eclume-watchdog` cron runs `/srv/eclume/bin/watchdog.sh` every 5 min
   (`deploy.sh` installs it). It warns when: disk ≥ 85%; backup, off-host copy or rehearsal without
   `ok` for more than 26 h (`estado/*.json`; without them, the last `ok:` line of `backup.log`);
   a container of the `eclume` project `unhealthy`, restarting or stopped in two consecutive rounds; a job
   in the GPU queue for more than 2 h; 3 or more failures in 24 h or any `provider_auth`; Claude
   token expiring in 30 days; `nvidia-smi` failing or no GPU worker heartbeat; `saude --json`
   not responding. Each alert goes out once, repeats every 6 h and sends the back-to-normal notice;
-  state in `/srv/eclume/estado/vigia/`. Limits per environment (`VIGIA_DISCO_PCT`,
-  `VIGIA_BACKUP_HORAS`, `VIGIA_TOKEN_DIAS`, `VIGIA_REPETIR_HORAS`). To see without sending:
-  `ssh holetz@192.168.15.199 /srv/eclume/bin/vigia.sh --simular`. **Channel:** not yet decided
+  state in `/srv/eclume/estado/vigia/`. Limits per environment (`WATCHDOG_DISK_PCT`,
+  `WATCHDOG_BACKUP_HOURS`, `WATCHDOG_TOKEN_DAYS`, `WATCHDOG_REPEAT_HOURS`; the `VIGIA_*` names are still read). To see without sending:
+  `ssh holetz@192.168.15.199 /srv/eclume/bin/watchdog.sh --simulate`. **Channel:** not yet decided
   (holetz/eclume#93, task 5.3); until then the alerts go to `estado/vigia/alertas.log` and to the
-  syslog (`journalctl -t eclume-vigia`).
+  syslog (`journalctl -t eclume-watchdog`).
 - **Disk:** `deploy.sh` shows the usage in `--plan`. To free space, run
   `docker --context gpu-host builder prune -f --filter until=720h`; never do `image prune -a`,
   because it would delete images of the personal services.

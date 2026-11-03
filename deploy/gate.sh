@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
-# Gate de qualidade do eclume, a partir da estação: envia o `git archive` do commit para o host GPU
-# e roda lá deploy/gate-host.sh, que prova os pilares de deploy/pilares.sh e publica o status
-# `eclume/gate` no commit. Deploy e releases recusam um SHA sem esse status em `success`.
-# Contrato: docs/standards/code/monorepo.md; runbook: docs/project/host-setup.md.
+# The eclume quality gate, from the workstation: sends the commit's `git archive` to the GPU host
+# and runs deploy/gate-host.sh there, which proves the pillars of deploy/pillars.sh and publishes the
+# `eclume/gate` status on the commit. Deploys and releases refuse a SHA without that status in `success`.
+# Contract: docs/standards/code/monorepo.md; runbook: docs/project/host-setup.md.
 #
-# Uso: bash deploy/gate.sh [<ref>] [--pilares a,b | --todos] [--fundo] [--superavel] [--plan] [--context NOME]
-#      bash deploy/gate.sh --estado [<ref>]
-#   <ref>       o commit provado (padrão: HEAD); o gate completo exige o commit no GitHub.
-#   --pilares   só esses pilares (vírgulas), sem publicar status; não exige o commit no GitHub.
-#   --todos     publica o status rodando os dez pilares; sem ele, o host roda só os pilares que o
-#               diff desde o último SHA verde exige (deploy/gate.py) e o status diz os dispensados.
-#   --fundo     solta a execução no host e volta em segundos (o hook de pre-push usa este modo,
-#               com o push ainda em curso); host fora do alcance vira aviso.
-#   --superavel o host abandona o SHA se o `main` já passou dele (publica `error` "superado por
-#               <sha>"); o hook de pre-push usa, o pedido à mão nunca é abandonado.
-#   --estado    mostra o status `eclume/gate` do commit e o fim do log no host.
-#   --plan      só mostra o que faria (somente leitura).
-#   --context   contexto Docker do host (padrão: $ECLUME_DOCKER_CONTEXT ou gpu-host).
-# Variáveis: ECLUME_SSH (quando o contexto não é ssh://); ECLUME_DISK_LIMIT e ECLUME_GPU_E2E_ESPERA
-#            (minutos de espera do gpu-e2e pela GPU livre) seguem para o host.
+# Usage: bash deploy/gate.sh [<ref>] [--pillars a,b | --all] [--background] [--supersedable] [--plan] [--context NAME]
+#        bash deploy/gate.sh --status [<ref>]
+#   <ref>           the commit proved (default: HEAD); the full gate needs the commit on GitHub.
+#   --pillars       only these pillars (comma-separated), without publishing a status; no GitHub commit needed.
+#   --all           publishes the status running every pillar; without it, the host runs only the pillars
+#                   the diff since the last green SHA requires (deploy/gate.py) and the status names the skipped.
+#   --background    lets the run go on the host and returns in seconds (the pre-push hook uses this mode,
+#                   with the push still in flight); an unreachable host becomes a warning.
+#   --supersedable  the host abandons the SHA if `main` has already moved past it (publishes `error`
+#                   "superseded by <sha>"); the pre-push hook uses it, a manual request is never abandoned.
+#   --status        shows the commit's `eclume/gate` status and the tail of the host log.
+#   --plan          only shows what it would do (read-only).
+#   --context       the host's Docker context (default: $ECLUME_DOCKER_CONTEXT or gpu-host).
+# Variables: ECLUME_SSH (when the context is not ssh://); ECLUME_DISK_LIMIT and ECLUME_GPU_E2E_WAIT
+#            (minutes gpu-e2e waits for a free GPU; the deprecated ECLUME_GPU_E2E_ESPERA still works)
+#            go on to the host.
+# A pre-rename SHA (one with deploy/pilares.sh) carries the old host script: prove it from its own checkout.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -26,89 +28,90 @@ cd "$ROOT"
 CONTEXT="${ECLUME_DOCKER_CONTEXT:-gpu-host}"
 REPO=holetz/eclume
 REF=HEAD
-PILARES=""
-TODOS=0
-SUPERAVEL=0
-FUNDO=0
-ESTADO=0
+PILLARS=""
+ALL=0
+SUPERSEDABLE=0
+BACKGROUND=0
+STATUS=0
 PLAN_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --pilares)
-      [[ $# -ge 2 && -n "$2" ]] || { echo "--pilares exige a lista (python,web…)." >&2; exit 2; }
-      PILARES="$2"; shift 2 ;;
-    --todos) TODOS=1; shift ;;
-    --fundo) FUNDO=1; shift ;;
-    --superavel) SUPERAVEL=1; shift ;;
-    --estado) ESTADO=1; shift ;;
+    --pillars)
+      [[ $# -ge 2 && -n "$2" ]] || { echo "--pillars needs the list (python,web…)." >&2; exit 2; }
+      PILLARS="$2"; shift 2 ;;
+    --all) ALL=1; shift ;;
+    --background) BACKGROUND=1; shift ;;
+    --supersedable) SUPERSEDABLE=1; shift ;;
+    --status) STATUS=1; shift ;;
     --plan|--dry-run) PLAN_ONLY=1; shift ;;
     --context)
-      [[ $# -ge 2 && -n "$2" ]] || { echo "--context exige o nome de um contexto Docker." >&2; exit 2; }
+      [[ $# -ge 2 && -n "$2" ]] || { echo "--context needs the name of a Docker context." >&2; exit 2; }
       CONTEXT="$2"; shift 2 ;;
-    --help|-h) sed -n '2,20p' "$0"; exit 0 ;;
-    -*) echo "Flag desconhecida: $1" >&2; exit 2 ;;
+    --help|-h) sed -n '2,23p' "$0"; exit 0 ;;
+    -*) echo "Unknown flag: $1 (see --help)" >&2; exit 2 ;;
     *) REF="$1"; shift ;;
   esac
 done
 
 SHA="$(git rev-parse --verify "$REF^{commit}")"
-[[ -z "$PILARES" || "$TODOS" -eq 0 ]] || { echo "--todos e --pilares não andam juntos." >&2; exit 2; }
-if [[ -n "$PILARES" ]]; then
-  validos="$(bash deploy/pilares.sh --lista | tr '\n' ' ')"
-  IFS=, read -r -a pedidos <<< "$PILARES"
-  for p in "${pedidos[@]}"; do
-    [[ " $validos" == *" $p "* ]] || { echo "Pilar desconhecido: $p (pilares: $validos)." >&2; exit 2; }
+[[ -z "$PILLARS" || "$ALL" -eq 0 ]] || { echo "--all and --pillars do not go together." >&2; exit 2; }
+if [[ -n "$PILLARS" ]]; then
+  valid="$(bash deploy/pillars.sh --list | tr '\n' ' ')"
+  IFS=, read -r -a requested <<< "$PILLARS"
+  for p in "${requested[@]}"; do
+    [[ " $valid" == *" $p "* ]] || { echo "Unknown pillar: $p (pillars: $valid)." >&2; exit 2; }
   done
 fi
 
-estado_gate() {
-  gh api "repos/$REPO/commits/$SHA/status" 2>/dev/null | python3 deploy/gate.py decidir || true
+gate_status() {
+  gh api "repos/$REPO/commits/$SHA/status" 2>/dev/null | python3 deploy/gate.py decide || true
 }
 
 endpoint="$(docker context inspect "$CONTEXT" --format '{{.Endpoints.docker.Host}}')"
 SSH="${ECLUME_SSH:-${endpoint#ssh://}}"
 [[ "$endpoint" == ssh://* || -n "${ECLUME_SSH:-}" ]] || {
-  echo "O contexto $CONTEXT não é ssh:// ($endpoint); defina ECLUME_SSH=usuario@host." >&2; exit 2; }
+  echo "Context $CONTEXT is not ssh:// ($endpoint); set ECLUME_SSH=user@host." >&2; exit 2; }
 host() { ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=60 "$SSH" "$@"; }
 
-if [[ "$ESTADO" -eq 1 ]]; then
-  echo "Commit $SHA: $(estado_gate)"
-  # shellcheck disable=SC2016 # o $HOME é o do host
-  host 'f="$HOME/eclume-gate/logs/'"$SHA"'.log"; if test -f "$f"; then echo "Log $f:"; tail -n 15 "$f"; else echo "Sem log no host para este commit."; fi'
+if [[ "$STATUS" -eq 1 ]]; then
+  echo "Commit $SHA: $(gate_status)"
+  # shellcheck disable=SC2016 # $HOME is the host's
+  host 'f="$HOME/eclume-gate/logs/'"$SHA"'.log"; if test -f "$f"; then echo "Log $f:"; tail -n 15 "$f"; else echo "No host log for this commit."; fi'
   exit 0
 fi
 
-commit_no_gh=1  # 1 = o commit está no GitHub
-gh api "repos/$REPO/commits/$SHA" --silent 2>/dev/null || commit_no_gh=0
-modo="$([[ "$TODOS" -eq 1 ]] && echo completo || echo "pelo diff"), publica $([[ "$FUNDO" -eq 1 ]] && echo "em segundo plano" || echo "em primeiro plano")"
-[[ -z "$PILARES" ]] || modo="parcial ($PILARES), sem publicar"
-echo "Commit $SHA · gate $modo · host $SSH (contexto $CONTEXT)" >&2
+on_gh=1  # 1 = the commit is on GitHub
+gh api "repos/$REPO/commits/$SHA" --silent 2>/dev/null || on_gh=0
+mode="$([[ "$ALL" -eq 1 ]] && echo full || echo "by diff"), publishes $([[ "$BACKGROUND" -eq 1 ]] && echo "in the background" || echo "in the foreground")"
+[[ -z "$PILLARS" ]] || mode="partial ($PILLARS), unpublished"
+echo "Commit $SHA · gate $mode · host $SSH (context $CONTEXT)" >&2
 if [[ "$PLAN_ONLY" -eq 1 ]]; then
-  echo "No GitHub: $([[ "$commit_no_gh" -eq 1 ]] && echo sim || echo não) · $(estado_gate)" >&2
+  echo "On GitHub: $([[ "$on_gh" -eq 1 ]] && echo yes || echo no) · $(gate_status)" >&2
   exit 0
 fi
-if [[ -z "$PILARES" && "$FUNDO" -eq 0 && "$commit_no_gh" -eq 0 ]]; then
-  echo "O commit $SHA não está no GitHub: faça o push antes (o status é publicado nele)." >&2; exit 2
+if [[ -z "$PILLARS" && "$BACKGROUND" -eq 0 && "$on_gh" -eq 0 ]]; then
+  echo "Commit $SHA is not on GitHub: push it first (the status is published on it)." >&2; exit 2
 fi
 
-# shellcheck disable=SC2016 # o $HOME é o do host
+# shellcheck disable=SC2016 # $HOME is the host's
 DIR="$(host 'echo "$HOME"')/eclume-gate/src-$SHA-$(date +%s)"
-echo "Enviando o código de $SHA para $SSH:$DIR…" >&2
-# Sem a conversão de fim de linha da estação (core.autocrlf): o host recebe os bytes do commit.
+echo "Sending the code of $SHA to $SSH:$DIR…" >&2
+# Without the workstation's line-ending conversion (core.autocrlf): the host gets the commit's bytes.
 git -c core.autocrlf=false archive --format=tar "$SHA" | host "mkdir -p '$DIR' && tar -x -C '$DIR'"
 
-# ECLUME_DISK_LIMIT da estação segue para o host, para subir o limite de disco num gate pontual.
+# The workstation's ECLUME_DISK_LIMIT goes on to the host, to raise the disk limit for a one-off gate.
+gpu_wait="${ECLUME_GPU_E2E_WAIT:-${ECLUME_GPU_E2E_ESPERA:-}}"
 envs=""
 [[ -z "${ECLUME_DISK_LIMIT:-}" ]] || envs="ECLUME_DISK_LIMIT=${ECLUME_DISK_LIMIT//[^0-9]/} "
-[[ -z "${ECLUME_GPU_E2E_ESPERA:-}" ]] || envs+="ECLUME_GPU_E2E_ESPERA=${ECLUME_GPU_E2E_ESPERA//[^0-9]/} "
+[[ -z "$gpu_wait" ]] || envs+="ECLUME_GPU_E2E_WAIT=${gpu_wait//[^0-9]/} "
 args=(--sha "$SHA")
-[[ -z "$PILARES" ]] || args+=(--pilares "$PILARES")
-[[ "$TODOS" -eq 0 ]] || args+=(--todos)
-[[ "$SUPERAVEL" -eq 0 ]] || args+=(--superavel)
-if [[ "$FUNDO" -eq 1 ]]; then
+[[ -z "$PILLARS" ]] || args+=(--pillars "$PILLARS")
+[[ "$ALL" -eq 0 ]] || args+=(--all)
+[[ "$SUPERSEDABLE" -eq 0 ]] || args+=(--supersedable)
+if [[ "$BACKGROUND" -eq 1 ]]; then
   host "${envs}setsid nohup bash '$DIR/deploy/gate-host.sh' ${args[*]} >/dev/null 2>&1 < /dev/null &"
-  echo "Gate de $SHA solto no host; acompanhe com: bash deploy/gate.sh --estado $SHA" >&2
+  echo "Gate of $SHA let go on the host; follow it with: bash deploy/gate.sh --status $SHA" >&2
   exit 0
 fi
 host "${envs}bash '$DIR/deploy/gate-host.sh' ${args[*]}"

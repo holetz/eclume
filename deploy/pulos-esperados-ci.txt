@@ -1,8 +1,0 @@
-# Pulos esperados do pytest na CI (deploy/pulos.py). Formato: arquivo::teste | motivo.
-# Qualquer pulo fora desta lista, ou listado e ausente, falha o pilar python.
-worker-gpu/tests/test_gpu_e2e.py::test_transcribes_the_two_voice_dialogue | exige o compose eclume-gpu-test (S4, #158)
-worker-gpu/tests/test_gpu_e2e.py::test_missing_audio_yields_transcription_failed | exige o compose eclume-gpu-test (S4, #158)
-# O claude real roda só no gate do host: a CI pública não tem o token.
-server/tests/test_agents_real.py::test_claude_cli_summarizes_the_fixture_transcript | sem ECLUME_TEST_CLAUDE
-server/tests/test_agents_real.py::test_chat_reads_the_transcript_when_the_request_depends_on_it | sem ECLUME_TEST_CLAUDE
-server/tests/test_agents_real.py::test_chat_about_form_does_not_read_the_transcript | sem ECLUME_TEST_CLAUDE

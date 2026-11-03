@@ -1,16 +1,16 @@
 # syntax=docker/dockerfile:1.9
-# Imagem do server do eclume: API (uvicorn), worker CPU (`eclume-server worker`: arq com as filas
-# eclume:default e eclume:agents num processo), migrations e o CLI `eclume-server`. Uma imagem para
-# todos os papéis; o compose de produção escolhe o comando.
+# eclume's server image: API (uvicorn), CPU worker (`eclume-server worker`: arq with the
+# eclume:default and eclume:agents queues in one process), migrations and the `eclume-server` CLI.
+# One image for every role; the production compose picks the command.
 #
-# Build a partir da RAIZ do repositório, no daemon do host (o contexto é filtrado por
-# deploy/server.Dockerfile.dockerignore, lido pelo BuildKit por estar ao lado deste arquivo):
+# Build from the repository ROOT, on the host daemon (the context is filtered by
+# deploy/server.Dockerfile.dockerignore, which BuildKit reads because it sits next to this file):
 #   docker --context gpu-host build -f deploy/server.Dockerfile -t eclume-server:prod .
 
-# A CLI `claude` do provider `claude-cli` (docs/standards/code/server-agentes.md) é opcional e não
-# é software livre: só entra com --build-arg ECLUME_CLAUDE_CLI=1. O padrão (0) escolhe o estágio
-# vazio e o BuildKit nem constrói o outro. O pacote npm traz o binário nativo em bin/claude.exe:
-# só ele entra na imagem final, sem Node. Versão fixada.
+# The `claude` CLI of the `claude-cli` provider (docs/standards/code/server-agentes.md) is optional and
+# not free software: it only goes in with --build-arg ECLUME_CLAUDE_CLI=1. The default (0) picks the
+# empty stage and BuildKit does not even build the other one. The npm package ships the native binary
+# in bin/claude.exe: only it goes into the final image, without Node. Pinned version.
 ARG ECLUME_CLAUDE_CLI=0
 
 FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS claudecli-0
@@ -30,8 +30,8 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
     UV_PROJECT_ENVIRONMENT=/app/.venv
 WORKDIR /app
-# Só os manifestos primeiro: a camada de dependências só refaz quando o lock muda. O uv precisa
-# do pyproject de todo membro do workspace para ler o lock.
+# Only the manifests first: the dependency layer is only rebuilt when the lock changes. uv needs
+# the pyproject of every workspace member to read the lock.
 COPY pyproject.toml uv.lock ./
 COPY engines/pyproject.toml engines/README.md engines/
 COPY server/pyproject.toml server/README.md server/
@@ -46,8 +46,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
 COPY --from=claudecli /out/ /usr/local/bin/
 COPY --from=build /app/.venv /app/.venv
-# uid 1000 é o dono de /srv/eclume no host. A credencial do claude-cli não vem do host: o token
-# chega por env (CLAUDE_CODE_OAUTH_TOKEN) ou pelo cadastro do provider no painel.
+# uid 1000 owns /srv/eclume on the host. The claude-cli credential does not come from the host: the
+# token arrives by env (CLAUDE_CODE_OAUTH_TOKEN) or through the provider registered in the panel.
 RUN mkdir -p /home/app/.claude && chown -R 1000:1000 /home/app
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
@@ -58,8 +58,8 @@ ENV PATH=/app/.venv/bin:$PATH \
 WORKDIR /home/app
 USER 1000:1000
 EXPOSE 8000
-# Por último: o SHA muda a cada deploy e não pode invalidar as camadas pesadas acima.
+# Last: the SHA changes on every deploy and must not invalidate the heavy layers above.
 ARG ECLUME_COMMIT=""
 ENV ECLUME_COMMIT=$ECLUME_COMMIT
-# Migrations rodam no one-shot `migrate` do compose, nunca aqui.
+# Migrations run in the compose one-shot `migrate`, never here.
 CMD ["uvicorn", "eclume_server.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

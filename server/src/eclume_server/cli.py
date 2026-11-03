@@ -305,8 +305,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ca_generate.add_argument(
         "--nomes",
-        default=os.environ.get("ECLUME_CA_NOMES"),
-        help="other permitted IPs or DNS names, comma- or space-separated (ECLUME_CA_NOMES)",
+        # ECLUME_CA_NOMES is the deprecated pt-BR name, still read when the English one is unset.
+        default=os.environ.get("ECLUME_CA_NAMES", os.environ.get("ECLUME_CA_NOMES")),
+        help="other permitted IPs or DNS names, comma- or space-separated (ECLUME_CA_NAMES)",
     )
 
     admin = commands.add_parser("admin", help="admin panel accounts").add_subparsers(dest="admin", required=True)

@@ -1,75 +1,77 @@
 #!/usr/bin/env bash
-# Pilar `gpu-e2e` do gate: a prova de ponta a ponta do caminho CUDA (WhisperX e diarização na GPU do
-# host, fila eclume:gpu, MinIO). Sobe deploy/docker-compose.gpu-test.yml (projeto eclume-gpu-test),
-# roda os 2 testes de worker-gpu/tests/test_gpu_e2e.py com ECLUME_GPU_E2E=1 num contêiner da imagem
-# eclume-gate (--network host: as portas 16379 e 19000 já estão em 127.0.0.1) e derruba o compose
-# com `down -v` em todos os caminhos. Pulo vale falha (deploy/pulos-esperados-gpu-e2e.txt é vazia).
-# Roda no host GPU, com o docker local dele; o gate-host.sh a chama fora do contêiner dos pilares.
-# Contrato: docs/standards/code/monorepo.md.
+# The gate's `gpu-e2e` pillar: the end-to-end proof of the CUDA path (WhisperX and diarization on the
+# host GPU, the eclume:gpu queue, MinIO). Starts deploy/docker-compose.gpu-test.yml (project
+# eclume-gpu-test), runs the 2 tests of worker-gpu/tests/test_gpu_e2e.py with ECLUME_GPU_E2E=1 in a
+# container of the eclume-gate image (--network host: ports 16379 and 19000 are already on 127.0.0.1)
+# and tears the compose down with `down -v` on every path. A skip counts as a failure
+# (deploy/expected-skips-gpu-e2e.txt is empty). Runs on the GPU host, with its local docker;
+# gate-host.sh calls it outside the pillars container. Contract: docs/standards/code/monorepo.md.
 #
-# Antes de subir, espera a GPU livre: o sinal `busy` do worker-gpu de produção (gpu_busy, o mesmo do
-# deploy.sh) e a VRAM livre mínima, porque o worker de produção pode manter o modelo residente.
-# O mínimo é o pico do teste (3876 MiB) mais folga, não um host vazio: parado, o host já tem ~0,9 GB
-# da sessão gráfica (Xorg e apps do desktop) e ~400 MiB que o driver nunca dá como livres (medido em
-# 2026-10-07, holetz/eclume#159), então 5120 MiB livres só passariam com o desktop quase fechado.
-# Passado o limite, avisa e sai com 75 (inconclusivo), sem subir nada e sem tocar na produção.
+# Before starting, it waits for a free GPU: the `busy` signal of the production worker-gpu (gpu_busy,
+# the same as deploy.sh's) and the minimum free VRAM, because the production worker may keep the model
+# resident. The minimum is the test's peak (3876 MiB) plus slack, not an empty host: idle, the host
+# already has ~0.9 GB of the graphical session (Xorg and desktop apps) and ~400 MiB the driver never
+# reports as free (measured on 2026-10-07, holetz/eclume#159), so 5120 MiB free would only pass with
+# the desktop almost closed. Past the limit, it warns and exits 75 (inconclusive), starting nothing
+# and touching nothing in production.
 #
-# Uso: bash deploy/gpu-e2e.sh
-# Variáveis: ECLUME_GPU_E2E_ESPERA (minutos de espera pela GPU, 20), ECLUME_GPU_E2E_INTERVALO
-#            (segundos entre consultas, 30), ECLUME_GPU_E2E_VRAM_MIN_MIB (VRAM livre mínima, 4096),
-#            ECLUME_GATE_IMAGE (imagem do pytest; padrão eclume-gate:<Rust>), ECLUME_GATE_CACHE_HOME
-#            (cache do uv, padrão ~/eclume-gate/cache/home).
-# Saída: a do pytest (e da checagem de pulos); 75 com a GPU ocupada além da espera.
+# Usage: bash deploy/gpu-e2e.sh
+# Variables: ECLUME_GPU_E2E_WAIT (minutes of waiting for the GPU, 20), ECLUME_GPU_E2E_INTERVAL
+#            (seconds between checks, 30), ECLUME_GPU_E2E_VRAM_MIN_MIB (minimum free VRAM, 4096),
+#            ECLUME_GATE_IMAGE (pytest image; default eclume-gate:<Rust>), ECLUME_GATE_CACHE_HOME
+#            (uv cache, default ~/eclume-gate/cache/home). ECLUME_GPU_E2E_ESPERA and
+#            ECLUME_GPU_E2E_INTERVALO are the deprecated pt-BR names, still read.
+# Exit: pytest's (and the skip check's); 75 with the GPU busy past the wait.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 # shellcheck source=deploy/gpu-lib.sh
 source "$ROOT/deploy/gpu-lib.sh"
 
-INCONCLUSIVO=75
-ESPERA="${ECLUME_GPU_E2E_ESPERA:-20}"
-INTERVALO="${ECLUME_GPU_E2E_INTERVALO:-30}"
+INCONCLUSIVE=75
+WAIT="${ECLUME_GPU_E2E_WAIT:-${ECLUME_GPU_E2E_ESPERA:-20}}"
+INTERVAL="${ECLUME_GPU_E2E_INTERVAL:-${ECLUME_GPU_E2E_INTERVALO:-30}}"
 VRAM_MIN="${ECLUME_GPU_E2E_VRAM_MIN_MIB:-4096}"
 RUST="$(sed -n 's/^channel = "\(.*\)"/\1/p' desktop/rust-toolchain.toml 2>/dev/null || true)"
 IMG="${ECLUME_GATE_IMAGE:-eclume-gate:$RUST}"
 CACHE_HOME="${ECLUME_GATE_CACHE_HOME:-$HOME/eclume-gate/cache/home}"
 COMPOSE=(docker compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml)
 
-derrubar() { "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true; }
+teardown() { "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true; }
 
-# VRAM livre em MiB; vazio quando o nvidia-smi não responde.
-vram_livre() {
+# Free VRAM in MiB; empty when nvidia-smi does not answer.
+free_vram() {
   nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits 2>/dev/null | head -n 1 | tr -dc 0-9
 }
 
-# 0 quando a GPU está livre; senão diz o motivo em $motivo.
-motivo=""
-gpu_livre() {
-  local livre
+# 0 when the GPU is free; otherwise it says why in $reason.
+reason=""
+gpu_free() {
+  local free
   if [[ "$(gpu_busy)" == 1 ]]; then
-    motivo="o worker-gpu de produção está transcrevendo"
+    reason="the production worker-gpu is transcribing"
     return 1
   fi
-  livre="$(vram_livre)"
-  if [[ -n "$livre" ]] && (( livre < VRAM_MIN )); then
-    motivo="VRAM livre ${livre} MiB, abaixo do mínimo de ${VRAM_MIN} MiB"
+  free="$(free_vram)"
+  if [[ -n "$free" ]] && (( free < VRAM_MIN )); then
+    reason="free VRAM ${free} MiB, below the minimum of ${VRAM_MIN} MiB"
     return 1
   fi
   return 0
 }
 
-# Um compose de teste deixado de pé por um gate que caiu segura a GPU.
-derrubar
-trap derrubar EXIT
+# A test compose left up by a gate that crashed holds the GPU.
+teardown
+trap teardown EXIT
 
-prazo=$(( SECONDS + ESPERA * 60 ))
-until gpu_livre; do
-  if (( SECONDS >= prazo )); then
-    echo "gpu-e2e inconclusivo: GPU ocupada por ${ESPERA} min ($motivo); nada foi subido nem parado." >&2
-    exit "$INCONCLUSIVO"
+deadline=$(( SECONDS + WAIT * 60 ))
+until gpu_free; do
+  if (( SECONDS >= deadline )); then
+    echo "gpu-e2e inconclusive: GPU busy for ${WAIT} min ($reason); nothing was started or stopped." >&2
+    exit "$INCONCLUSIVE"
   fi
-  echo "GPU ocupada ($motivo); esperando (até ${ESPERA} min)…" >&2
-  sleep "$INTERVALO"
+  echo "GPU busy ($reason); waiting (up to ${WAIT} min)…" >&2
+  sleep "$INTERVAL"
 done
 
 echo "::group::compose up ($PWD)"
@@ -85,8 +87,8 @@ docker run --rm --name eclume-gpu-test-pytest --network host -u 1000:1000 \
   -v "$ROOT:/src" -v "$CACHE_HOME:/tmp/.cache" -w /src "$IMG" \
   bash -c "set -e; uv sync --all-packages --locked; \
     uv run pytest worker-gpu/tests/test_gpu_e2e.py -v -s --junitxml=$junit; \
-    python3 deploy/pulos.py $junit deploy/pulos-esperados-gpu-e2e.txt"
-codigo=$?
+    python3 deploy/skips.py $junit deploy/expected-skips-gpu-e2e.txt"
+code=$?
 set -e
 rm -f "$ROOT/.gpu-e2e-junit.xml"
-exit "$codigo"
+exit "$code"

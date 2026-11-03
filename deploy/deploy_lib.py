@@ -1,28 +1,30 @@
-# ruff: noqa: INP001  # script solto, chamado pelo deploy.sh; deploy/ não é pacote
-"""Decisões testáveis do deploy de produção (`deploy/deploy.sh`), só com a stdlib.
+# ruff: noqa: INP001  # loose script, called by deploy.sh; deploy/ is not a package
+"""Testable decisions of the production deploy (`deploy/deploy.sh`), stdlib only.
 
-Subcomandos:
+Subcommands:
 
-- `env-diverge <hashes-do-host> <env-local>` — o host manda, por SSH, uma linha `CHAVE<TAB>sha256`
-  por chave do `secrets/env.prod` (o valor nunca sai do host); diverge quando uma chave do host
-  falta no env local ou tem outro valor. Chave nova só no local passa. Imprime as chaves
-  divergentes e sai 1; sem divergência, sai 0.
-- `env-hashes <env>` — as linhas `CHAVE<TAB>sha256` de um env, no formato que o host produz.
-- `retidos <deploys.log> [N]` — os SHAs dos últimos N deploys distintos (`manter<TAB>sha`) e os
-  dumps pré-deploy dos deploys fora da janela (`remover-dump<TAB>caminho`).
-- `voltar <deploys.log> <sha-alvo> <migrations-do-banco> <migrations-do-alvo>` — se o
-  `--voltar` ao SHA é permitido: o trio dele precisa estar retido, e o banco não pode ter
-  migrations que o alvo não conhece, salvo um passo atrás (a regra expandir/contrair garante que o
-  código do deploy anterior roda sobre o schema novo). Recusa aponta o dump pré-deploy.
-- `topologia <compose.json>` — a topologia do compose do SHA (`docker compose config --format json`
-  da árvore dele, então vale também para um `--voltar` a um compose anterior ao worker único e à
-  borda com o SPA, holetz/eclume#151): `imagem<TAB>nome<TAB>serviço` por imagem `eclume-<nome>:prod`
-  construída (o trio retido: `server`, `edge` ou o antigo `web`, `worker-gpu`), `app<TAB>serviço`
-  por serviço que sobe antes da borda (todos menos a infraestrutura, o `caddy` e o `mdns`) e
-  `problema<TAB>texto` por `memswap_limit` menor que o `mem_limit`.
+- `env-diverge <host-hashes> <local-env>` — the host sends, over SSH, one `KEY<TAB>sha256` line per
+  key of `secrets/env.prod` (the value never leaves the host); it diverges when a host key is missing
+  from the local env or has another value. A new key only in the local one passes. Prints the
+  diverging keys and exits 1; without divergence, exits 0.
+- `env-hashes <env>` — the `KEY<TAB>sha256` lines of an env, in the format the host produces.
+- `kept <deploys.log> [N]` — the SHAs of the last N distinct deploys (`keep<TAB>sha`) and the
+  pre-deploy dumps of the deploys outside the window (`remove-dump<TAB>path`).
+- `rollback <deploys.log> <target-sha> <database-migrations> <target-migrations> [--kept N]` —
+  whether the `--rollback` to the SHA is allowed: its trio must be kept, and the database must not
+  have migrations the target does not know, except one step back (the expand/contract rule
+  guarantees the previous deploy's code runs on the new schema). A refusal points at the
+  pre-deploy dump.
+- `topology <compose.json>` — the topology of the SHA's compose (`docker compose config --format
+  json` of its tree, so it also holds for a `--rollback` to a compose before the single worker and
+  the edge with the SPA, holetz/eclume#151): `image<TAB>name<TAB>service` per built
+  `eclume-<name>:prod` image (the kept trio: `server`, `edge` or the old `web`, `worker-gpu`),
+  `app<TAB>service` per service that starts before the edge (all but the infrastructure, `caddy` and
+  `mdns`) and `problem<TAB>text` per `memswap_limit` lower than the `mem_limit`.
 
-`deploys.log` (TSV, uma linha por deploy, do mais antigo ao mais novo): data, SHA, flags, motivo,
-migrations aplicadas (separadas por vírgula, ou `-`) e o dump pré-deploy (caminho, ou `-`).
+`deploys.log` (TSV, one line per deploy, oldest to newest): date, SHA, flags, reason, applied
+migrations (comma-separated, or `-`) and the pre-deploy dump (path, or `-`). Entries written before
+the English rename carry the pt-BR flag names (`--voltar`, `--sem-gate`…); only the columns matter.
 Runbook: docs/project/deploy-producao.md.
 """
 
@@ -36,243 +38,241 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-RETIDOS = 3
-_CHAVE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
-_VAZIO = "-"
+KEPT = 3
+_KEY = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+_EMPTY = "-"
 
 
 @dataclass(frozen=True)
 class Deploy:
-    """Uma linha do `deploys.log`."""
+    """One line of `deploys.log`."""
 
-    data: str
+    date: str
     sha: str
     flags: str
-    motivo: str
+    reason: str
     migrations: tuple[str, ...]
     dump: str | None
 
 
-def ler_env(texto: str) -> dict[str, str]:
-    """As chaves de um env (`CHAVE=valor`); a última ocorrência vence, como no `env_value` do deploy."""
-    valores: dict[str, str] = {}
-    for linha in texto.splitlines():
-        achado = _CHAVE.match(linha)
-        if achado:
-            valores[achado.group(1)] = achado.group(2)
-    return valores
+def read_env(text: str) -> dict[str, str]:
+    """The keys of an env (`KEY=value`); the last occurrence wins, as in deploy.sh's `env_value`."""
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        found = _KEY.match(line)
+        if found:
+            values[found.group(1)] = found.group(2)
+    return values
 
 
-def hash_valor(valor: str) -> str:
-    """O hash de um valor, igual ao `printf '%s' "$v" | sha256sum` do host."""
-    return hashlib.sha256(valor.encode()).hexdigest()
+def hash_value(value: str) -> str:
+    """The hash of a value, equal to the host's `printf '%s' "$v" | sha256sum`."""
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
-def env_hashes(texto: str) -> dict[str, str]:
-    """`{chave: sha256(valor)}` de um env."""
-    return {chave: hash_valor(valor) for chave, valor in ler_env(texto).items()}
+def env_hashes(text: str) -> dict[str, str]:
+    """`{key: sha256(value)}` of an env."""
+    return {key: hash_value(value) for key, value in read_env(text).items()}
 
 
-def ler_hashes(texto: str) -> dict[str, str]:
-    """As linhas `CHAVE<TAB>sha256` que o host produz; a última ocorrência vence."""
+def read_hashes(text: str) -> dict[str, str]:
+    """The `KEY<TAB>sha256` lines the host produces; the last occurrence wins."""
     hashes: dict[str, str] = {}
-    for linha in texto.splitlines():
-        if "\t" in linha:
-            chave, valor = linha.split("\t", 1)
-            hashes[chave.strip()] = valor.strip()
+    for line in text.splitlines():
+        if "\t" in line:
+            key, value = line.split("\t", 1)
+            hashes[key.strip()] = value.strip()
     return hashes
 
 
 def env_diverge(host: dict[str, str], local: dict[str, str]) -> list[str]:
-    """As chaves do host (por hash) que faltam no local ou mudaram; chave nova só no local passa."""
-    return sorted(chave for chave, valor in host.items() if local.get(chave) != valor)
+    """The host keys (by hash) missing from the local env or changed; a new key only in the local one passes."""
+    return sorted(key for key, value in host.items() if local.get(key) != value)
 
 
-def ler_log(texto: str) -> list[Deploy]:
-    """As linhas do `deploys.log`, na ordem; linha malformada é ignorada."""
+def read_log(text: str) -> list[Deploy]:
+    """The lines of `deploys.log`, in order; a malformed line is ignored."""
     deploys = []
-    for linha in texto.splitlines():
-        campos = linha.split("\t")
-        if len(campos) < 6 or not campos[1]:  # noqa: PLR2004 — as seis colunas do log
+    for line in text.splitlines():
+        fields = line.split("\t")
+        if len(fields) < 6 or not fields[1]:  # noqa: PLR2004 — the log's six columns
             continue
-        data, sha, flags, motivo, migrations, dump = campos[:6]
+        date, sha, flags, reason, migrations, dump = fields[:6]
         deploys.append(
             Deploy(
-                data=data,
+                date=date,
                 sha=sha,
                 flags=flags,
-                motivo=motivo,
-                migrations=tuple(m for m in migrations.split(",") if m and m != _VAZIO),
-                dump=None if dump in {"", _VAZIO} else dump,
+                reason=reason,
+                migrations=tuple(m for m in migrations.split(",") if m and m != _EMPTY),
+                dump=None if dump in {"", _EMPTY} else dump,
             )
         )
     return deploys
 
 
-def janela(deploys: list[Deploy], n: int = RETIDOS) -> list[str]:
-    """Os SHAs dos últimos `n` deploys distintos, do mais novo ao mais antigo."""
-    vistos: list[str] = []
+def window(deploys: list[Deploy], n: int = KEPT) -> list[str]:
+    """The SHAs of the last `n` distinct deploys, newest to oldest."""
+    seen: list[str] = []
     for deploy in reversed(deploys):
-        if deploy.sha not in vistos:
-            vistos.append(deploy.sha)
-        if len(vistos) == n:
+        if deploy.sha not in seen:
+            seen.append(deploy.sha)
+        if len(seen) == n:
             break
-    return vistos
+    return seen
 
 
-def retidos(deploys: list[Deploy], n: int = RETIDOS) -> tuple[list[str], list[str]]:
-    """`(SHAs a manter, dumps a remover)`: os dumps dos deploys fora da janela saem."""
-    manter = janela(deploys, n)
-    remover = [d.dump for d in deploys if d.dump and d.sha not in manter]
-    # Um dump citado também por um deploy da janela fica.
-    citados = {d.dump for d in deploys if d.dump and d.sha in manter}
-    return manter, [dump for dump in dict.fromkeys(remover) if dump not in citados]
+def kept(deploys: list[Deploy], n: int = KEPT) -> tuple[list[str], list[str]]:
+    """`(SHAs to keep, dumps to remove)`: the dumps of the deploys outside the window go."""
+    keep = window(deploys, n)
+    remove = [d.dump for d in deploys if d.dump and d.sha not in keep]
+    # A dump also cited by a deploy in the window stays.
+    cited = {d.dump for d in deploys if d.dump and d.sha in keep}
+    return keep, [dump for dump in dict.fromkeys(remove) if dump not in cited]
 
 
 @dataclass(frozen=True)
-class Decisao:
-    """O `--voltar` é permitido? Se não, por quê."""
+class Decision:
+    """Is the `--rollback` allowed? If not, why."""
 
-    permitido: bool
-    motivo: str
+    allowed: bool
+    reason: str
 
 
-def voltar(deploys: list[Deploy], alvo: str, banco: set[str], conhecidas: set[str], n: int = RETIDOS) -> Decisao:
-    """Decide o `--voltar` ao SHA `alvo` (veja o docstring do módulo)."""
-    retido = janela(deploys, n)
-    if alvo not in retido:
-        return Decisao(
-            permitido=False,
-            motivo=f"o trio de {alvo[:12]} não está retido (só os últimos {n} deploys: {', '.join(s[:12] for s in retido)})",
+def rollback(deploys: list[Deploy], target: str, database: set[str], known: set[str], n: int = KEPT) -> Decision:
+    """Decides the `--rollback` to the `target` SHA (see the module docstring)."""
+    retained = window(deploys, n)
+    if target not in retained:
+        return Decision(
+            allowed=False,
+            reason=f"the trio of {target[:12]} is not kept (only the last {n} deploys: {', '.join(s[:12] for s in retained)})",
         )
-    desconhecidas = sorted(banco - conhecidas)
-    if not desconhecidas:
-        return Decisao(permitido=True, motivo="o banco só tem migrations que o alvo conhece")
-    # Um passo atrás: o alvo é o deploy distinto imediatamente anterior ao atual.
-    if len(retido) >= 2 and retido[1] == alvo:  # noqa: PLR2004 — o atual e o anterior
-        return Decisao(
-            permitido=True, motivo=f"um passo atrás; o schema novo é expandir/contrair ({', '.join(desconhecidas)})"
-        )
-    ultimo_do_alvo = max(i for i, d in enumerate(deploys) if d.sha == alvo)
-    dump = next((d.dump for d in deploys[ultimo_do_alvo + 1 :] if d.dump), None)
-    onde = f"; restaure o banco do dump {dump} (restaurar-backup.sh --banco)" if dump else ""
-    return Decisao(
-        permitido=False,
-        motivo=f"mais de um passo atrás com migrations que o alvo não conhece: {', '.join(desconhecidas)}{onde}",
+    unknown = sorted(database - known)
+    if not unknown:
+        return Decision(allowed=True, reason="the database only has migrations the target knows")
+    # One step back: the target is the distinct deploy right before the current one.
+    if len(retained) >= 2 and retained[1] == target:  # noqa: PLR2004 — the current one and the previous one
+        return Decision(allowed=True, reason=f"one step back; the new schema is expand/contract ({', '.join(unknown)})")
+    last_of_target = max(i for i, d in enumerate(deploys) if d.sha == target)
+    dump = next((d.dump for d in deploys[last_of_target + 1 :] if d.dump), None)
+    where = f"; restore the database from the dump {dump} (restore-backup.sh --database)" if dump else ""
+    return Decision(
+        allowed=False,
+        reason=f"more than one step back with migrations the target does not know: {', '.join(unknown)}{where}",
     )
 
 
 INFRA = ("postgres", "redis", "minio")
-# Sobem depois do resto, cada um com o próprio passo: a borda recriada e o anúncio depois do `publish-ca`.
-POR_ULTIMO = ("caddy", "mdns")
-_IMAGEM = re.compile(r"^eclume-([a-z0-9][a-z0-9-]*):prod$")
+# They start after the rest, each in its own step: the edge recreated, and the announcement after `publish-ca`.
+LAST = ("caddy", "mdns")
+_IMAGE = re.compile(r"^eclume-([a-z0-9][a-z0-9-]*):prod$")
 _BYTES = re.compile(r"^(\d+)([bkmg]?)b?$", re.IGNORECASE)
-_FATOR = {"": 1, "b": 1, "k": 1024, "m": 1024**2, "g": 1024**3}
+_FACTOR = {"": 1, "b": 1, "k": 1024, "m": 1024**2, "g": 1024**3}
 
 
 @dataclass(frozen=True)
-class Topologia:
-    """O que o deploy sobe e retém, lido do compose do SHA."""
+class Topology:
+    """What the deploy starts and keeps, read from the SHA's compose."""
 
-    imagens: tuple[tuple[str, str], ...]
+    images: tuple[tuple[str, str], ...]
     app: tuple[str, ...]
-    problemas: tuple[str, ...]
+    problems: tuple[str, ...]
 
 
-def _bytes(valor: object) -> int | None:
-    """`mem_limit`/`memswap_limit` em bytes: o `config` dá o número; `256m` também passa."""
-    if isinstance(valor, int):
-        return valor
-    achado = _BYTES.match(str(valor).strip())
-    return int(achado.group(1)) * _FATOR[achado.group(2).lower()] if achado else None
+def _bytes(value: object) -> int | None:
+    """`mem_limit`/`memswap_limit` in bytes: `config` gives the number; `256m` also passes."""
+    if isinstance(value, int):
+        return value
+    found = _BYTES.match(str(value).strip())
+    return int(found.group(1)) * _FACTOR[found.group(2).lower()] if found else None
 
 
-def topologia(config: dict[str, object]) -> Topologia:
-    """A topologia do compose resolvido (veja o docstring do módulo)."""
-    servicos = {
-        nome: servico
-        for nome, servico in (config.get("services") or {}).items()  # type: ignore[union-attr]
-        if isinstance(servico, dict) and not servico.get("profiles")
+def topology(config: dict[str, object]) -> Topology:
+    """The topology of the resolved compose (see the module docstring)."""
+    services = {
+        name: service
+        for name, service in (config.get("services") or {}).items()  # type: ignore[union-attr]
+        if isinstance(service, dict) and not service.get("profiles")
     }
-    donos: dict[str, list[str]] = {}
-    for nome, servico in servicos.items():
-        achado = _IMAGEM.match(str(servico.get("image") or ""))
-        if achado and servico.get("build"):
-            donos.setdefault(achado.group(1), []).append(nome)
-    # O serviço que constrói cada imagem: o de mesmo nome (server, worker-gpu) ou o único (caddy).
-    imagens = tuple((imagem, imagem if imagem in nomes else min(nomes)) for imagem, nomes in sorted(donos.items()))
-    app = tuple(nome for nome in sorted(servicos) if nome not in INFRA + POR_ULTIMO)
-    problemas = []
-    for nome in sorted(servicos):
-        teto = _bytes(servicos[nome].get("mem_limit")) if servicos[nome].get("mem_limit") else None
-        swap = _bytes(servicos[nome].get("memswap_limit")) if servicos[nome].get("memswap_limit") else None
-        if teto and swap and swap < teto:
-            problemas.append(
-                f"{nome}: memswap_limit ({swap // 1024**2} MiB) menor que o mem_limit ({teto // 1024**2} MiB);"
-                f" suba ECLUME_MEMSWAP_{nome.upper().replace('-', '_')} junto com o teto"
+    owners: dict[str, list[str]] = {}
+    for name, service in services.items():
+        found = _IMAGE.match(str(service.get("image") or ""))
+        if found and service.get("build"):
+            owners.setdefault(found.group(1), []).append(name)
+    # The service that builds each image: the one with the same name (server, worker-gpu) or the only one (caddy).
+    images = tuple((image, image if image in names else min(names)) for image, names in sorted(owners.items()))
+    app = tuple(name for name in sorted(services) if name not in INFRA + LAST)
+    problems = []
+    for name in sorted(services):
+        ceiling = _bytes(services[name].get("mem_limit")) if services[name].get("mem_limit") else None
+        swap = _bytes(services[name].get("memswap_limit")) if services[name].get("memswap_limit") else None
+        if ceiling and swap and swap < ceiling:
+            problems.append(
+                f"{name}: memswap_limit ({swap // 1024**2} MiB) lower than mem_limit ({ceiling // 1024**2} MiB);"
+                f" raise ECLUME_MEMSWAP_{name.upper().replace('-', '_')} together with the ceiling"
             )
-    return Topologia(imagens=imagens, app=app, problemas=tuple(problemas))
+    return Topology(images=images, app=app, problems=tuple(problems))
 
 
-def _ler(caminho: str) -> str:
-    return Path(caminho).read_text(encoding="utf-8") if Path(caminho).exists() else ""
+def _read(path: str) -> str:
+    return Path(path).read_text(encoding="utf-8") if Path(path).exists() else ""
 
 
-def _linhas(caminho: str) -> set[str]:
-    return {linha.strip() for linha in _ler(caminho).splitlines() if linha.strip()}
+def _lines(path: str) -> set[str]:
+    return {line.strip() for line in _read(path).splitlines() if line.strip()}
 
 
-def _imprimir_topologia(caminho: str) -> int:
-    topo = topologia(json.loads(_ler(caminho) or "{}"))
-    for imagem, servico in topo.imagens:
-        sys.stdout.write(f"imagem\t{imagem}\t{servico}\n")
-    for servico in topo.app:
-        sys.stdout.write(f"app\t{servico}\n")
-    for problema in topo.problemas:
-        sys.stdout.write(f"problema\t{problema}\n")
+def _print_topology(path: str) -> int:
+    topo = topology(json.loads(_read(path) or "{}"))
+    for image, service in topo.images:
+        sys.stdout.write(f"image\t{image}\t{service}\n")
+    for service in topo.app:
+        sys.stdout.write(f"app\t{service}\n")
+    for problem in topo.problems:
+        sys.stdout.write(f"problem\t{problem}\n")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Ponto de entrada; veja o docstring do módulo."""
+    """Entry point; see the module docstring."""
     parser = argparse.ArgumentParser(prog="deploy_lib.py")
-    sub = parser.add_subparsers(dest="comando", required=True)
+    sub = parser.add_subparsers(dest="command", required=True)
     diverge = sub.add_parser("env-diverge")
     diverge.add_argument("host")
     diverge.add_argument("local")
     sub.add_parser("env-hashes").add_argument("env")
-    ret = sub.add_parser("retidos")
+    ret = sub.add_parser("kept")
     ret.add_argument("log")
-    ret.add_argument("n", nargs="?", type=int, default=RETIDOS)
-    volta = sub.add_parser("voltar")
-    for nome in ("log", "alvo", "banco", "conhecidas"):
-        volta.add_argument(nome)
-    volta.add_argument("--retidos", type=int, default=RETIDOS)
-    sub.add_parser("topologia").add_argument("compose")
+    ret.add_argument("n", nargs="?", type=int, default=KEPT)
+    back = sub.add_parser("rollback")
+    for name in ("log", "target", "database", "known"):
+        back.add_argument(name)
+    back.add_argument("--kept", type=int, default=KEPT)
+    sub.add_parser("topology").add_argument("compose")
     args = parser.parse_args(argv)
 
-    if args.comando == "topologia":
-        return _imprimir_topologia(args.compose)
+    if args.command == "topology":
+        return _print_topology(args.compose)
 
-    if args.comando == "env-hashes":
-        for chave, valor in env_hashes(_ler(args.env)).items():
-            sys.stdout.write(f"{chave}\t{valor}\n")
+    if args.command == "env-hashes":
+        for key, value in env_hashes(_read(args.env)).items():
+            sys.stdout.write(f"{key}\t{value}\n")
         return 0
-    if args.comando == "env-diverge":
-        chaves = env_diverge(ler_hashes(_ler(args.host)), env_hashes(_ler(args.local)))
-        for chave in chaves:
-            sys.stdout.write(f"{chave}\n")
-        return 1 if chaves else 0
-    if args.comando == "retidos":
-        manter, remover = retidos(ler_log(_ler(args.log)), args.n)
-        for sha in manter:
-            sys.stdout.write(f"manter\t{sha}\n")
-        for dump in remover:
-            sys.stdout.write(f"remover-dump\t{dump}\n")
+    if args.command == "env-diverge":
+        keys = env_diverge(read_hashes(_read(args.host)), env_hashes(_read(args.local)))
+        for key in keys:
+            sys.stdout.write(f"{key}\n")
+        return 1 if keys else 0
+    if args.command == "kept":
+        keep, remove = kept(read_log(_read(args.log)), args.n)
+        for sha in keep:
+            sys.stdout.write(f"keep\t{sha}\n")
+        for dump in remove:
+            sys.stdout.write(f"remove-dump\t{dump}\n")
         return 0
-    decisao = voltar(ler_log(_ler(args.log)), args.alvo, _linhas(args.banco), _linhas(args.conhecidas), args.retidos)
-    sys.stdout.write(decisao.motivo + "\n")
-    return 0 if decisao.permitido else 1
+    decision = rollback(read_log(_read(args.log)), args.target, _lines(args.database), _lines(args.known), args.kept)
+    sys.stdout.write(decision.reason + "\n")
+    return 0 if decision.allowed else 1
 
 
 if __name__ == "__main__":

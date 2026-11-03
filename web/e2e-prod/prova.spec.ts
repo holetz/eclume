@@ -1,13 +1,14 @@
-// Prova do web do usuário (holetz/eclume#38) no staging (holetz/eclume#91), num navegador real e
-// com a conta descartável do `staging.sh subir`: ECLUME_PROVA_URL (padrão https://127.0.0.1:18444),
-// ECLUME_PROD_EMAIL e ECLUME_PROD_PASSWORD (deploy/prova-web-prod.sh os preenche). Recusa a URL de
-// produção: lá só roda o admin.spec.ts, de leitura.
-// Cria só o que desfaz: um campo temporário (excluído no fim) e um token só de leitura (revogado).
-// Os códigos de vínculo gerados vencem sozinhos em 10 minutos. Screenshots em test-results/prod/.
+// Proof of the user web (holetz/eclume#38) on staging (holetz/eclume#91), in a real browser and with
+// the disposable account of `staging.sh up`: ECLUME_PROOF_URL (default https://127.0.0.1:18444),
+// ECLUME_PROD_EMAIL and ECLUME_PROD_PASSWORD (deploy/prove-web-prod.sh fills them). Refuses the
+// production URL: only the read-only admin.spec.ts runs there.
+// Creates only what it undoes: a temporary field (deleted at the end) and a read-only token (revoked).
+// The generated link codes expire on their own in 10 minutes. Screenshots in test-results/prod/.
 import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 
-const URL_BASE = process.env.ECLUME_PROVA_URL ?? 'https://127.0.0.1:18444'
+// ECLUME_PROVA_URL is the deprecated pt-BR name, still read.
+const URL_BASE = process.env.ECLUME_PROOF_URL ?? process.env.ECLUME_PROVA_URL ?? 'https://127.0.0.1:18444'
 const EMAIL = process.env.ECLUME_PROD_EMAIL
 const PASSWORD = process.env.ECLUME_PROD_PASSWORD
 const SHOTS = 'test-results/prod'

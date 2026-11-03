@@ -34,9 +34,9 @@ docker compose -f deploy/docker-compose.mock.yml down
 The gate that clears deploys and releases (status `eclume/gate` on the commit), with the rule in
 [monorepo.md](../docs/standards/code/monorepo.md):
 
-- `pilares.sh`: each pillar's proof commands (`--lista`), the single source for CI and the gate.
+- `pillars.sh`: each pillar's proof commands (`--list`), the single source for CI and the gate.
 - `gate.sh`: on the workstation, sends the commit's `git archive` to the host and runs the gate
-  (`--pilares`, `--fundo`, `--estado`, `--plan`); `gate-host.sh` is the host side and
+  (`--pillars`, `--background`, `--status`, `--plan`); `gate-host.sh` is the host side and
   `gate.Dockerfile` the pillars' `eclume-gate:<Rust version>` image.
 - `gate.py` (tests in `test_gate.py`): the decision on the status, the description and the
   pre-push hook's targets (`.githooks/pre-push`).
@@ -44,9 +44,14 @@ The gate that clears deploys and releases (status `eclume/gate` on the commit), 
 ```bash
 git config core.hooksPath .githooks       # once per clone: pushing main fires the gate
 bash deploy/gate.sh                       # full gate on HEAD (published), in the foreground
-bash deploy/gate.sh --pilares python,web  # some of the pillars, unpublished
-bash deploy/gate.sh --estado              # status and log tail on the host
+bash deploy/gate.sh --pillars python,web  # some of the pillars, unpublished
+bash deploy/gate.sh --status              # status and log tail on the host
 ```
+
+The gate sends the archive of the SHA it proves with the scripts of the checkout that runs it. The
+scripts and flags were renamed to English in #244 (`pilares.sh` → `pillars.sh`, `--estado` →
+`--status`, pillar `auditoria` → `audit`, and so on): proving a SHA from before that rename needs
+the gate from that SHA's own checkout.
 
 ## Production
 
@@ -61,17 +66,17 @@ The production stack on the GPU host (`https://192.168.15.199:8443`), with the f
   `eclume-edge:prod` images (Caddy with the SPA and its rules), each with its `.dockerignore`
   alongside. The `claude` CLI only goes into the server image with `ECLUME_CLAUDE_CLI=1`
   (required in `.env.prod`, 0 or 1; this production uses 1).
-- `.env.prod.example`: the variables; `deploy.sh --gerar-env` creates the real `deploy/.env.prod`
+- `.env.prod.example`: the variables; `deploy.sh --generate-env` creates the real `deploy/.env.prod`
   (600, outside git).
 - `deploy.sh`: build on the host's daemon through the Docker context and startup in order;
   `bootstrap-admin.sh`: the first admin account; `smoke_prod.py`: proves the whole path through the
   public API, with the summary provider already registered (of any kind, or `--provider <id>`);
   `smoke_mcp.py`: proves the MCP server with the `mcp` SDK and the pairing of a device.
-- `backup.sh` and `restaurar-backup.sh`: installed in `/srv/eclume/bin/` by the deploy; the backup
+- `backup.sh` and `restore-backup.sh`: installed in `/srv/eclume/bin/` by the deploy; the backup
   runs in the host's cron.
 - `release-desktop.sh`: builds the desktop app on the host (CPU-limited container), signs it with
-  the host's updater key and, with `--publicar`, creates the GitHub Release `desktop-v<version>`;
-  `publicar-desktop.sh`: publishes that release to `/srv/eclume/downloads/`.
+  the host's updater key and, with `--publish`, creates the GitHub Release `desktop-v<version>`;
+  `publish-desktop.sh`: publishes that release to `/srv/eclume/downloads/`.
 
 ```bash
 bash deploy/deploy.sh --plan --context gpu-host

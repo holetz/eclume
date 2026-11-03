@@ -1,0 +1,41 @@
+# On-demand check of the desktop app on Windows: the workspace's `cargo check` and the tests of the
+# pure-logic crates (`eclume-mirror`, `eclume-sync`: file names, paths and the client), fired by hand
+# (`gh workflow run desktop-platforms.yml`). It runs on neither PR nor push: with the repository
+# private, a Windows minute costs 2x, and macOS (10x) stays out until the repository is public.
+# The Linux job of `ci.yml` remains the proof of each PR, and the Windows-only code already compiles
+# (clippy -D warnings, cross-compilation) on every host gate (the `windows` pillar of
+# deploy/pillars.sh); this only adds the proof of running on a real Windows. The installers come
+# from `deploy/release-desktop.sh` or `desktop-release.yml`.
+name: desktop-platforms
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-platforms-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The Rust of desktop/rust-toolchain.toml (version, components and targets), through the runner's rustup.
+      - name: Rust from desktop/rust-toolchain.toml
+        working-directory: desktop
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: desktop
+      # From inside desktop/, where rustup reads rust-toolchain.toml.
+      - run: cargo check --workspace --all-targets --locked
+        working-directory: desktop
+      - run: cargo test -p eclume-mirror -p eclume-sync --locked
+        working-directory: desktop

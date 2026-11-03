@@ -49,13 +49,13 @@ server; the concrete record of the institution's production, which follows these
 
 ## Without a GPU
 
-A server without an NVIDIA GPU brings up the same stack with `--sem-gpu`: the deploy adds
+A server without an NVIDIA GPU brings up the same stack with `--no-gpu`: the deploy adds
 `deploy/docker-compose.cpu.yml`, and the transcription worker uses the same image with the `cpu` engine
 (faster-whisper `small` int8), without a GPU reservation. The limit: **no diarization** (the transcription
 comes out with a single speaker, and voice identification has nothing to suggest) and several times slower
 than on the GPU. The engine's contract is in
 [jobs-transcricao.md](../standards/api/jobs-transcricao.md#how-the-worker-does-its-part).
-Pass `--sem-gpu` on **every** deploy of that server: without it, compose asks for the GPU and the worker does not
+Pass `--no-gpu` on **every** deploy of that server: without it, compose asks for the GPU and the worker does not
 come up.
 
 ## 1. Docker context
@@ -73,7 +73,7 @@ The deploy scripts have no default context: pass `--context my-server` or export
 ## 2. `deploy/.env.prod`
 
 ```bash
-bash deploy/deploy.sh --context my-server --gerar-env
+bash deploy/deploy.sh --context my-server --generate-env
 ```
 
 generates `deploy/.env.prod` (600, outside git) from `deploy/.env.prod.example`, with random
@@ -94,13 +94,13 @@ in the table of [deploy-producao.md](../project/deploy-producao.md#secrets).
 ```bash
 bash deploy/deploy.sh --context my-server --plan      # only shows what it would do
 bash deploy/deploy.sh --context my-server             # with a GPU
-bash deploy/deploy.sh --context my-server --sem-gpu   # without a GPU
+bash deploy/deploy.sh --context my-server --no-gpu   # without a GPU
 ```
 
 The deploy goes out from the `HEAD` commit, clean and published on GitHub, and requires on it the status
 `eclume/gate` = `success`. A published `main` commit already has the gate; for another commit (a fork,
-a branch of yours), `--sem-gate "<reason>"` and `--fora-do-main "<reason>"` waive those two
-requirements and leave the reason in the history. The steps, the retention and the rollback (`--voltar`) are in
+a branch of yours), `--skip-gate "<reason>"` and `--off-main "<reason>"` waive those two
+requirements and leave the reason in the history. The steps, the retention and the rollback (`--rollback`) are in
 [deploy-producao.md](../project/deploy-producao.md#deploy).
 
 ## 4. First admin
@@ -154,7 +154,7 @@ an account. To close it, put `ECLUME_SIGNUP_OPEN=false` in `deploy/.env.prod` an
 without a build:
 
 ```bash
-bash deploy/deploy.sh --context my-server --sem-build    # + --sem-gpu, if applicable
+bash deploy/deploy.sh --context my-server --no-build    # + --no-gpu, if applicable
 ```
 
 The admin activates and deactivates accounts in **Admin → Usuários**; there is no invitation.

@@ -37,7 +37,7 @@ In the order of `index.html`:
 | `app.css` | product only: `.tray.tray-window` filling the whole window, the utilities the examples do through `style=""` (`.row`, `.stack`, `.grid-2`...), the 16-bar meter, the first-run fields |
 
 - **Syncing.** `desktop/ui/eclume.css` is generated from `design-system/styles.css` by
-  `uv run python design-system/sincronizar.py`, together with the web and phone copies
+  `uv run python design-system/sync.py`, together with the web and phone copies
   ([web-design-system.md](web-design-system.md)); `bash desktop/scripts/sincronizar_ds.sh` only
   downloads the `@fontsource` fonts through `npm pack` into a temporary directory, at the same
   version as the web, without depending on `web/node_modules`. A product adjustment goes in

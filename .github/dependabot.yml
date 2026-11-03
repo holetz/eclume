@@ -1,7 +1,7 @@
-# Atualizações de dependências do eclume: PRs semanais, agrupados por ecossistema, com espera de 7
-# dias depois da publicação (cooldown). Um PR do Dependabot só entra com o status eclume/gate =
-# success no SHA dele (bash deploy/gate.sh <ref>), já que a CI está parada. deploy/test_fixacoes.py
-# falha se um diretório com manifesto ficar sem entrada aqui. Contrato: docs/standards/code/monorepo.md.
+# eclume dependency updates: weekly PRs, grouped by ecosystem, with a 7-day wait after publication
+# (cooldown). A Dependabot PR only lands with the eclume/gate status = success on its SHA
+# (bash deploy/gate.sh <ref>). deploy/test_pins.py fails if a directory with a manifest has no entry
+# here. Contract: docs/standards/code/monorepo.md.
 version: 2
 updates:
   - package-ecosystem: uv

@@ -35,14 +35,14 @@ uv run arq eclume_server.worker.WorkerSettings
 uv run arq eclume_server.worker.AgentWorkerSettings
 git config core.hooksPath .githooks
 bash deploy/gate.sh
-bash deploy/gate.sh --estado
+bash deploy/gate.sh --status
 bash deploy/deploy.sh --plan --context gpu-host
 bash deploy/deploy.sh --context gpu-host
 cq knowledge validate
 ```
 
 - CI (`.github/workflows/ci.yml`) runs the `python`, `contracts`, `web`, `web-browser`, `desktop`
-  and `mobile` jobs on Linux for every PR and every push to `main`, each through `deploy/pilares.sh`.
+  and `mobile` jobs on Linux for every PR and every push to `main`, each through `deploy/pillars.sh`.
 - The host gate (`bash deploy/gate.sh`, status `eclume/gate`) runs the same pillars plus `windows`
   and is what clears deploys and releases; the pre-push hook fires it on every push to `main`.
 - Rust/Tauri never builds on this workstation: the `desktop`, `mobile`, `android` and `windows`

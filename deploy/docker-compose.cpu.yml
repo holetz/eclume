@@ -1,9 +1,9 @@
-# Override para um host sem GPU NVIDIA: `bash deploy/deploy.sh --context <ctx> --sem-gpu`.
+# Override for a host without an NVIDIA GPU: `bash deploy/deploy.sh --context <ctx> --no-gpu`.
 #
-# O worker de transcrição usa a mesma imagem (`eclume-worker-gpu`, que já traz o faster-whisper)
-# com a engine `cpu`, como o `docker-compose.e2e.yml`, e perde a reserva de GPU. Limite: a engine
-# `cpu` não diariza (sem falantes) e é várias vezes mais lenta que a GPU. `!reset` exige o
-# Docker Compose 2.24 ou mais novo.
+# The transcription worker uses the same image (`eclume-worker-gpu`, which already ships
+# faster-whisper) with the `cpu` engine, like `docker-compose.e2e.yml`, and loses the GPU
+# reservation. Limit: the `cpu` engine does not diarize (no speakers) and is several times slower
+# than the GPU. `!reset` needs Docker Compose 2.24 or newer.
 services:
   worker-gpu:
     environment:

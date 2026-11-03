@@ -1,18 +1,18 @@
-"""Smoke do servidor MCP e do pareamento em produção, com um cliente MCP real (o SDK Python).
+"""Smoke of the MCP server and of pairing in production, with a real MCP client (the Python SDK).
 
-Prova, pela CA publicada: o descritor `/api/v1/server` (e que a impressão digital bate com a CA
-dada), um PAT de leitura temporário com que o SDK `mcp` lista as ferramentas, busca e lê uma
-gravação e tem a exclusão recusada por falta de escopo, e um código de pareamento que vira uma
-credencial de dispositivo. Tudo o que o smoke cria é revogado no fim.
+Proves, through the published CA: the `/api/v1/server` descriptor (and that the fingerprint matches
+the given CA), a temporary read PAT with which the `mcp` SDK lists the tools, searches and reads a
+recording and has the deletion refused for lack of scope, and a pairing code that becomes a device
+credential. Everything the smoke creates is revoked at the end.
 
     ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
       | uv run python deploy/smoke_mcp.py --ca eclume-root.crt
 
-A senha da conta de usuário vem do stdin (ou de `ECLUME_SMOKE_PASSWORD`), como no smoke_prod.py.
+The user account password comes from stdin (or `ECLUME_SMOKE_PASSWORD`), as in smoke_prod.py.
 Runbook: docs/project/deploy-producao.md.
 """
 
-# ruff: noqa: INP001, T201 — script avulso de operação, fora de qualquer pacote
+# ruff: noqa: INP001, T201 — standalone operations script, outside any package
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ TOOLS = {
 
 
 def _fail(message: str) -> None:
-    print(f"FALHOU: {message}", file=sys.stderr)
+    print(f"FAILED: {message}", file=sys.stderr)
     raise SystemExit(1)
 
 
@@ -60,14 +60,14 @@ def _ca_sha256(path: str) -> str:
 
 
 class Session:
-    """A sessão do navegador (cookie + CSRF) com que o smoke cria e revoga o que usa."""
+    """The browser session (cookie + CSRF) with which the smoke creates and revokes what it uses."""
 
     def __init__(self, base: str, context: ssl.SSLContext) -> None:
-        """Cliente de `base`, confiando só na CA do contexto."""
+        """Client of `base`, trusting only the context's CA."""
         self.http = httpx2.Client(base_url=base, verify=context, timeout=30)
 
     def call(self, method: str, url: str, body: dict[str, Any] | None = None, expect: int = 200) -> Any:  # noqa: ANN401
-        """Requisição com o CSRF da sessão; status diferente de `expect` encerra o smoke."""
+        """Request with the session CSRF; a status other than `expect` ends the smoke."""
         headers = {}
         csrf = self.http.cookies.get("eclume_csrf")
         if csrf and method != "GET":
@@ -84,53 +84,53 @@ async def _mcp(mcp_url: str, token: str, context: ssl.SSLContext) -> None:
         read, write = streams[0], streams[1]
         async with ClientSession(read, write) as session:
             info = await session.initialize()
-            _step(f"MCP inicializado: {info.server_info.name}")
+            _step(f"MCP initialized: {info.server_info.name}")
             tools = {tool.name for tool in (await session.list_tools()).tools}
             if tools != TOOLS:
-                _fail(f"ferramentas: {sorted(tools)}")
-            _step(f"{len(tools)} ferramentas listadas")
+                _fail(f"tools: {sorted(tools)}")
+            _step(f"{len(tools)} tools listed")
             found = await session.call_tool("search_recordings", {"limit": 5})
             if found.is_error:
                 _fail(f"search_recordings: {found.content}")
             recordings = found.structured_content["recordings"]
             if not recordings:
-                _fail("a biblioteca está vazia: nada para ler")
+                _fail("the library is empty: nothing to read")
             first = recordings[0]
-            _step(f"search_recordings: {len(recordings)} gravações; a primeira é {first['id']}")
+            _step(f"search_recordings: {len(recordings)} recordings; the first is {first['id']}")
             detail = await session.call_tool("get_recording", {"recording_id": first["id"]})
             if detail.is_error or detail.structured_content["id"] != first["id"]:
                 _fail(f"get_recording: {detail.content}")
-            _step(f"get_recording: {len(detail.structured_content['fields'])} campos, status por etapa")
+            _step(f"get_recording: {len(detail.structured_content['fields'])} fields, status per step")
             if first["status"] == "transcribed":
                 transcript = await session.call_tool("get_transcript", {"recording_id": first["id"]})
                 if transcript.is_error:
                     _fail(f"get_transcript: {transcript.content}")
-                _step(f"get_transcript: {len(transcript.structured_content['text'])} caracteres")
+                _step(f"get_transcript: {len(transcript.structured_content['text'])} characters")
             refused = await session.call_tool("delete_recording", {"recording_id": first["id"]})
             text = refused.content[0].text if refused.content else ""
             if not refused.is_error or "recordings:delete" not in text:
-                _fail(f"delete_recording deveria ser recusado: {refused}")
-            _step("delete_recording recusado: falta recordings:delete")
+                _fail(f"delete_recording should be refused: {refused}")
+            _step("delete_recording refused: recordings:delete is missing")
 
 
 def main() -> int:
-    """Roda o smoke; 0 quando tudo passa."""
+    """Runs the smoke; 0 when everything passes."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", default="https://192.168.15.199:8443")
-    parser.add_argument("--ca", required=True, help="a CA raiz publicada em /downloads/eclume-root.crt")
-    parser.add_argument("--email", default=os.environ.get("ECLUME_ADMIN_EMAIL"), help="padrão: $ECLUME_ADMIN_EMAIL")
+    parser.add_argument("--ca", required=True, help="the root CA published at /downloads/eclume-root.crt")
+    parser.add_argument("--email", default=os.environ.get("ECLUME_ADMIN_EMAIL"), help="default: $ECLUME_ADMIN_EMAIL")
     args = parser.parse_args()
     if not args.email:
-        _fail("informe a conta por --email ou ECLUME_ADMIN_EMAIL")
+        _fail("give the account through --email or ECLUME_ADMIN_EMAIL")
     password = os.environ.get("ECLUME_SMOKE_PASSWORD") or sys.stdin.readline().strip()
     context = ssl.create_default_context(cafile=args.ca)
 
     session = Session(args.base, context)
     server = session.call("GET", "/api/v1/server")
     if server["ca_sha256"] != _ca_sha256(args.ca):
-        _fail(f"impressão digital do descritor ({server['ca_sha256']}) não é a da CA dada")
+        _fail(f"descriptor fingerprint ({server['ca_sha256']}) is not the given CA's")
     _step(
-        f"descritor: {server['name']} em {server['url']}, MCP em {server['mcp_url']}, contrato {server['contract_version']}"
+        f"descriptor: {server['name']} at {server['url']}, MCP at {server['mcp_url']}, contract {server['contract_version']}"
     )
 
     session.call("POST", "/api/v1/auth/login", {"email": args.email, "password": password}, expect=204)
@@ -145,10 +145,10 @@ def main() -> int:
         code = session.call("POST", "/api/v1/devices/pairing-codes", expect=201)
         if f"codigo={code['code']}" not in code["pair_url"] or f"ca={server['ca_sha256']}" not in code["pair_url"]:
             _fail(f"pair_url: {code['pair_url']}")
-        _step(f"código de pareamento {code['display']} com o link do QR")
+        _step(f"pairing code {code['display']} with the QR link")
         device = httpx2.post(
             f"{args.base}/api/v1/devices/pair",
-            json={"code": code["display"].lower(), "device_name": "smoke de pareamento", "platform": "linux"},
+            json={"code": code["display"].lower(), "device_name": "pairing smoke", "platform": "linux"},
             verify=context,
             timeout=30,
         )
@@ -157,21 +157,21 @@ def main() -> int:
         credential = device.json()
         cleanup.append(credential["token"]["id"])
         if credential["token"]["kind"] != "device":
-            _fail(f"credencial: {json.dumps(credential['token'])}")
+            _fail(f"credential: {json.dumps(credential['token'])}")
         state = session.call("GET", f"/api/v1/devices/pairing-codes/{code['id']}")
         if (state["status"], state["token_id"]) != ("used", credential["token"]["id"]):
-            _fail(f"estado do código: {state}")
+            _fail(f"code state: {state}")
         me = httpx2.get(
             f"{args.base}/api/v1/me",
             headers={"Authorization": f"Bearer {credential['secret']}"},
             verify=context,
             timeout=30,
         ).json()
-        _step(f"pareamento virou o token de dispositivo de {me['user']['email']}")
+        _step(f"pairing became the device token of {me['user']['email']}")
     finally:
         for token_id in cleanup:
             session.call("DELETE", f"/api/v1/tokens/{token_id}", expect=204)
-        print(f"revogados {len(cleanup)} tokens do smoke")
+        print(f"revoked {len(cleanup)} smoke tokens")
     print("smoke MCP ok")
     return 0
 

@@ -1,8 +1,8 @@
 ---
 type: standard
 title: Mobile app distribution
-description: How the eclume mobile app becomes an APK and updates itself — version in tauri.conf.json, tag mobile-v<version>, release on the host through deploy/release-movel.sh (container with the read-only keystore, signed universal APK, certificate checked against mobile/certificado-release.sha256, smoke of the minified APK on the emulator), keystore only on the host, movel.json and SHA256SUMS, publishing to /srv/eclume/downloads/movel through deploy/publicar-movel.sh, which refuses an undeclared certificate change, and the in-app update through the pinned CA.
-resource: mobile/src-tauri/tauri.conf.json, mobile/src-tauri/gen/android/app/build.gradle.kts, mobile/scripts/manifesto_movel.py, mobile/scripts/criar-keystore.sh, mobile/scripts/simbolos_jni.py, mobile/scripts/prova-emulador.sh, mobile/build.Dockerfile, mobile/INSTALACAO.md, deploy/release-movel.sh, deploy/publicar-movel.sh
+description: How the eclume mobile app becomes an APK and updates itself — version in tauri.conf.json, tag mobile-v<version>, release on the host through deploy/release-mobile.sh (container with the read-only keystore, signed universal APK, certificate checked against mobile/certificado-release.sha256, smoke of the minified APK on the emulator), keystore only on the host, movel.json and SHA256SUMS, publishing to /srv/eclume/downloads/movel through deploy/publish-mobile.sh, which refuses an undeclared certificate change, and the in-app update through the pinned CA.
+resource: mobile/src-tauri/tauri.conf.json, mobile/src-tauri/gen/android/app/build.gradle.kts, mobile/scripts/manifesto_movel.py, mobile/scripts/criar-keystore.sh, mobile/scripts/simbolos_jni.py, mobile/scripts/prova-emulador.sh, mobile/build.Dockerfile, mobile/INSTALACAO.md, deploy/release-mobile.sh, deploy/publish-mobile.sh
 tags: [code, mobile, android, release, apk, host]
 timestamp: 2026-10-01
 audience: both
@@ -23,19 +23,19 @@ owner's decision and account. iOS is out of scope, with no open spec.
   `[workspace.package]` of `mobile/Cargo.toml`, which move together. Android's `versionCode` comes
   from the version through Tauri.
 - The tag is `mobile-v<versão>`. The bump belongs to the conclude of the spec that changes the app,
-  never to a task, through `deploy/versao.py definir movel <versão>` with its section in
+  never to a task, through `deploy/version.py set mobile <versão>` with its section in
   `mobile/CHANGELOG.md` ([versionamento.md](versionamento.md)).
 
-## Release on the host — `deploy/release-movel.sh`
+## Release on the host — `deploy/release-mobile.sh`
 
 Mirror of `release-desktop.sh` ([desktop-distribuicao.md](desktop-distribuicao.md)), with no GitHub
 Actions: the keystore **never** goes to the GitHub secrets.
 
 - It runs **on the workstation** and operates the host through the Docker context (`gpu-host`) and
   over SSH. `--plan` only shows version, tag, commit, expected certificate, disk and the blockers.
-- With `--publicar`, it refuses a dirty tree, a commit GitHub does not have, a commit without the
+- With `--publish`, it refuses a dirty tree, a commit GitHub does not have, a commit without the
   host gate's `eclume/gate` = `success` status ([monorepo.md](monorepo.md); the waiver is
-  `--sem-gate "<motivo>"`, with the `eclume/gate-dispensa` trail), a tag that already exists and the
+  `--skip-gate "<motivo>"`, with the `eclume/gate-dispensa` trail), a tag that already exists and the
   absence of `mobile/certificado-release.sha256` or of the keystore on the host. It refuses to start
   with the host disk at 90% or more, and the `~/eclume-build/movel/.trava` lock prevents two
   releases at the same time.
@@ -56,8 +56,8 @@ Actions: the keystore **never** goes to the GitHub secrets.
   (`cmd jobscheduler run -f`) and requires the sync log, with no `UnsatisfiedLinkError`,
   `ClassNotFoundException` or `FATAL EXCEPTION` in logcat. Playwright does not open the WebView of a
   release APK; the smoke proves R8 and the JNI bridge through the path that does not depend on it.
-  `--publicar` always runs it.
-- With `--publicar`, the GitHub Release (private, like the repo) `mobile-v<versão>` with the APK,
+  `--publish` always runs it.
+- With `--publish`, the GitHub Release (private, like the repo) `mobile-v<versão>` with the APK,
   `movel.json`, `INSTALACAO.md` and `SHA256SUMS`, through the host's `gh`.
 
 The release APK is also proved on every gate, in the `android` pillar ([monorepo.md](monorepo.md)):
@@ -79,13 +79,13 @@ its `Java_…` symbol in the `.so`, and the class with the native methods in the
 - **Backup**: the keystore and the password go, with the whole `/srv/eclume/secrets/` folder, into
   the encrypted restic snapshot of `deploy/backup.sh` (holetz/eclume#91), in the local repository and
   in the off-host copy; the nightly rehearsal checks the sha256 of the restored files, and a new host
-  gets them back through `restaurar-backup.sh --host-novo`
+  gets them back through `restore-backup.sh --new-host`
   ([deploy-producao.md](../../project/deploy-producao.md)). A GitHub secret is **not** a
   recoverable copy: it cannot be read back. The configured off-host copy
   (`secrets/restic-fora.env`, with the repository password kept outside it) is a precondition of the
   first release.
 - Order of the first release: identity decided (#17) → keystore created with it → SHA-256
-  versioned → off-host copy → green gate → `release-movel.sh --publicar` → `publicar-movel.sh`.
+  versioned → off-host copy → green gate → `release-mobile.sh --publish` → `publish-mobile.sh`.
 - The debug build (the emulator's and the proof's) uses the SDK debug key and is never published.
 
 ## `movel.json`
@@ -97,7 +97,7 @@ installed app. Changing a field name requires changing both.
 |---|---|
 | `versao` | the version (`0.1.0`) |
 | `publicado_em` | ISO 8601 in UTC (`2026-09-27T18:30:05Z`) |
-| `notas` | the release text, which the app shows in "Nova versão disponível": the version's section in `mobile/CHANGELOG.md` (`deploy/versao.py notas movel <versão>`), unless `--notas` is explicit; a version with no section refuses the release |
+| `notas` | the release text, which the app shows in "Nova versão disponível": the version's section in `mobile/CHANGELOG.md` (`deploy/version.py notas movel <versão>`), unless `--notes` is explicit; a version with no section refuses the release |
 | `apk.arquivo` | `eclume-<versão>.apk` |
 | `apk.url` | absolute path on the server, `/downloads/movel/<versão>/eclume-<versão>.apk`: works for any server address |
 | `apk.tamanho` | bytes |
@@ -111,9 +111,9 @@ The script refuses a folder without exactly one `eclume-<versão>.apk` APK, with
 
 ## Publishing on the host
 
-`deploy/publicar-movel.sh [mobile-v<versão>]`, mirror of `publicar-desktop.sh`, runs on the host
+`deploy/publish-mobile.sh [mobile-v<versão>]`, mirror of `publish-desktop.sh`, runs on the host
 (where `gh` is authenticated; from the dev machine, `ssh holetz@192.168.15.199 'bash -s -- mobile-v0.1.0' <
-deploy/publicar-movel.sh`):
+deploy/publish-mobile.sh`):
 
 - downloads the release to `/srv/eclume/downloads/movel/<versão>/` and checks `SHA256SUMS` before
   any swap;

@@ -1,18 +1,18 @@
-# CI do eclume: lint e teste dos pilares e do contrato v1 em Linux a cada PR e a cada push em main.
-# macOS e Windows ficam fora (repo privado: minutos 10× e 2×); os instaladores do desktop saem
-# do host, por `deploy/release-desktop.sh`; o `desktop-release.yml` é só a alternativa manual.
+# eclume CI: lint and tests of the pillars and of the v1 contract on Linux for every PR and every push to main.
+# macOS and Windows stay out (private repo: 10x and 2x minutes); the desktop installers come from
+# the host, through `deploy/release-desktop.sh`; `desktop-release.yml` is only the manual alternative.
 #
-# Economia de minutos: o job `mudancas` liga só os jobs dos pilares tocados (mudança só de
-# documentação liga só o job `docs`). Cada job cobra ao menos 1 minuto; os filtros seguem as
-# dependências entre pilares (o server e o web leem o contrato, o desktop lê o CSS e os artigos de
-# ajuda do web, o mobile compila `desktop/crates`). Mexer neste arquivo ou em `deploy/pilares.sh` roda tudo;
-# `workflow_dispatch` também, e o noturno (`schedule`) roda tudo só se o `main` mudou desde o último
-# noturno verde.
+# Saving minutes: the `changes` job turns on only the jobs of the pillars touched (a docs-only change
+# turns on only the `docs` job). Each job bills at least 1 minute; the filters follow the dependencies
+# between pillars (the server and the web read the contract, the desktop reads the web CSS and help
+# articles, the mobile compiles `desktop/crates`). Touching this file or `deploy/pillars.sh` runs everything;
+# so does `workflow_dispatch`, and the nightly (`schedule`) runs everything only if `main` changed since
+# the last green nightly.
 #
-# Os comandos de cada pilar vêm de `deploy/pilares.sh`, a mesma fonte do gate do host
-# (`deploy/gate.sh`, status `eclume/gate`); cada job aqui só prepara o ambiente e chama o seu pilar.
-# Os pilares `windows` e `auditoria` são só do gate. `deploy/test_gate.py` falha se um job deixar de chamar o seu pilar
-# ou se uma pasta do `testpaths` do pytest ficar fora do filtro `python`.
+# Each pillar's commands come from `deploy/pillars.sh`, the same source as the host gate
+# (`deploy/gate.sh`, status `eclume/gate`); each job here only prepares the environment and calls its pillar.
+# The gate-only pillars (`windows`, `audit`, `android`, `gpu-e2e`) stay out. `deploy/test_gate.py` fails if a
+# job stops calling its pillar or if a pytest `testpaths` folder falls outside the `python` filter.
 name: ci
 
 on:
@@ -31,7 +31,7 @@ on:
       - "LICENSE"
   workflow_dispatch:
   schedule:
-    - cron: "0 6 * * *" # 03:00 em Brasília
+    - cron: "0 6 * * *" # 03:00 in Brasília
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -41,7 +41,7 @@ permissions:
   contents: read
 
 jobs:
-  mudancas:
+  changes:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -49,28 +49,28 @@ jobs:
       pull-requests: read
       actions: read
     outputs:
-      python: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.python == 'true') }}
-      contracts: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.contracts == 'true') }}
-      web: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.web == 'true') }}
-      web-browser: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.web-browser == 'true') }}
-      desktop: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.desktop == 'true') }}
-      mobile: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.mobile == 'true') }}
-      docs: ${{ steps.noturno.outputs.pular != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filtro.outputs.docs == 'true') }}
+      python: ${{ steps.nightly.outputs.skip != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filter.outputs.python == 'true') }}
+      contracts: ${{ steps.nightly.outputs.skip != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filter.outputs.contracts == 'true') }}
+      web: ${{ steps.nightly.outputs.skip != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filter.outputs.web == 'true') }}
+      web-browser: ${{ steps.nightly.outputs.skip != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filter.outputs.web-browser == 'true') }}
+      desktop: ${{ steps.nightly.outputs.skip != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filter.outputs.desktop == 'true') }}
+      mobile: ${{ steps.nightly.outputs.skip != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filter.outputs.mobile == 'true') }}
+      docs: ${{ steps.nightly.outputs.skip != 'true' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || steps.filter.outputs.docs == 'true') }}
     steps:
-      # No PR a lista de arquivos vem da API; no push em main o filtro compara com o commit
-      # anterior ao push e precisa do checkout.
+      # On a PR the file list comes from the API; on a push to main the filter compares with the
+      # commit before the push and needs the checkout.
       - if: github.event_name == 'push'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # O noturno só gasta minutos quando o `main` mudou desde o último noturno verde.
+      # The nightly only spends minutes when `main` changed since the last green nightly.
       - if: github.event_name == 'schedule'
-        id: noturno
+        id: nightly
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ultimo="$(gh run list -R "$GITHUB_REPOSITORY" -w ci -e schedule -s success -L 1 --json headSha --jq '.[0].headSha // ""')"
-          if [ "$ultimo" = "$GITHUB_SHA" ]; then echo "pular=true" >> "$GITHUB_OUTPUT"; fi
+          last="$(gh run list -R "$GITHUB_REPOSITORY" -w ci -e schedule -s success -L 1 --json headSha --jq '.[0].headSha // ""')"
+          if [ "$last" = "$GITHUB_SHA" ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
       - if: github.event_name != 'workflow_dispatch' && github.event_name != 'schedule'
-        id: filtro
+        id: filter
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
           base: ${{ github.event_name == 'push' && github.ref || '' }}
@@ -78,7 +78,7 @@ jobs:
             ci: &ci
               - ".github/workflows/ci.yml"
               - ".github/actions/**"
-              - "deploy/pilares.sh"
+              - "deploy/pillars.sh"
             uv: &uv
               - "pyproject.toml"
               - "uv.lock"
@@ -91,14 +91,14 @@ jobs:
               - "worker-gpu/**"
               - "contracts/**"
               - "mobile/scripts/**"
-              # A fonte do DS e as três cópias geradas dela (design-system/test_sincronizar.py).
+              # The DS source and the three copies generated from it (design-system/test_sync.py).
               - "design-system/**"
               - "web/src/styles/eclume.css"
               - "desktop/ui/eclume.css"
               - "mobile/ui/src/styles/eclume.css"
               - "deploy/**"
               - ".github/workflows/desktop-release.yml"
-              # As três linhas de versão e os CHANGELOGs que o deploy/test_versao.py amarra.
+              # The three version lines and the CHANGELOGs that deploy/test_version.py ties together.
               - "CHANGELOG.md"
               - "desktop/CHANGELOG.md"
               - "mobile/CHANGELOG.md"
@@ -144,8 +144,8 @@ jobs:
               - "deploy/test_docs_check.py"
 
   python:
-    needs: mudancas
-    if: needs.mudancas.outputs.python == 'true'
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -154,15 +154,15 @@ jobs:
         with:
           enable-cache: true
       - uses: ./.github/actions/ffmpeg
-      - name: Serviços de teste do server (Postgres, Redis, MinIO)
+      - name: Server test services (Postgres, Redis, MinIO)
         run: docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
-      - run: bash deploy/pilares.sh python
+      - run: bash deploy/pillars.sh python
       - if: failure()
         run: docker compose -p eclume-test -f deploy/docker-compose.test.yml logs
 
   contracts:
-    needs: mudancas
-    if: needs.mudancas.outputs.contracts == 'true'
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -172,13 +172,13 @@ jobs:
           enable-cache: true
       - name: Mock server (Prism)
         run: docker compose -f deploy/docker-compose.mock.yml up -d --wait
-      - run: bash deploy/pilares.sh contracts
+      - run: bash deploy/pillars.sh contracts
       - if: failure()
         run: docker compose -f deploy/docker-compose.mock.yml logs mock
 
   web:
-    needs: mudancas
-    if: needs.mudancas.outputs.web == 'true'
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -188,14 +188,14 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: bash deploy/pilares.sh web
+      - run: bash deploy/pillars.sh web
 
-  # Testes que precisam de navegador: a conversão de mídia (vitest browser mode) e o E2E do app
-  # contra o mock do contrato. Os dois usam o Google Chrome que já vem no runner (canal `chrome`,
-  # com os decoders proprietários), sem baixar navegador.
+  # Tests that need a browser: media conversion (vitest browser mode) and the app E2E against the
+  # contract mock. Both use the Google Chrome that ships with the runner (`chrome` channel, with the
+  # proprietary decoders), without downloading a browser.
   web-browser:
-    needs: mudancas
-    if: needs.mudancas.outputs.web-browser == 'true'
+    needs: changes
+    if: needs.changes.outputs.web-browser == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -208,38 +208,38 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - uses: ./.github/actions/ffmpeg
-      - name: Dependências de sistema do WebKit e do Firefox (Playwright do lockfile)
+      - name: WebKit and Firefox system dependencies (Playwright from the lockfile)
         run: |
           npm --prefix web ci
           npx --prefix web --no-install playwright install-deps webkit firefox
       - name: Mock server (Prism)
         run: docker compose -f deploy/docker-compose.mock.yml up -d --wait
-      - run: bash deploy/pilares.sh web-browser
+      - run: bash deploy/pillars.sh web-browser
       - if: failure()
         run: docker compose -f deploy/docker-compose.mock.yml logs mock
 
   desktop:
-    needs: mudancas
-    if: needs.mudancas.outputs.desktop == 'true'
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Dependências de sistema do Tauri 2 e da captura de áudio
+      - name: System dependencies of Tauri 2 and audio capture
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
             libxdo-dev libssl-dev build-essential \
             libasound2-dev libpipewire-0.3-dev libpulse-dev clang cmake
-      # O Rust de desktop/rust-toolchain.toml (versão, componentes e alvos), pelo rustup do runner.
-      - name: Rust de desktop/rust-toolchain.toml
+      # The Rust of desktop/rust-toolchain.toml (version, components and targets), through the runner's rustup.
+      - name: Rust from desktop/rust-toolchain.toml
         working-directory: desktop
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: desktop
-      # A UI da janela (desktop/ui) roda num Chromium: as dependências de sistema dele vêm daqui.
+      # The window UI (desktop/ui) runs in a Chromium: its system dependencies come from here.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
@@ -248,19 +248,19 @@ jobs:
       - run: |
           npm --prefix desktop/ui-tests ci
           npm --prefix desktop/ui-tests exec -- playwright install --with-deps chromium
-      # Diagnóstico do `Bus error` no link: disco e memória antes do cargo.
-      - name: Disco e memória
+      # Diagnosing the `Bus error` at link time: disk and memory before cargo.
+      - name: Disk and memory
         run: df -h && free -m
-      - run: bash deploy/pilares.sh desktop
+      - run: bash deploy/pillars.sh desktop
 
   mobile:
-    needs: mudancas
-    if: needs.mudancas.outputs.mobile == 'true'
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Dependências de sistema do Tauri 2 e do microfone
+      - name: System dependencies of Tauri 2 and the microphone
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -272,11 +272,11 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: mobile/package-lock.json
-      # O Rust de mobile/rust-toolchain.toml (versão, componentes e alvos), pelo rustup do runner.
-      - name: Rust de mobile/rust-toolchain.toml
+      # The Rust of mobile/rust-toolchain.toml (version, components and targets), through the runner's rustup.
+      - name: Rust from mobile/rust-toolchain.toml
         working-directory: mobile
         run: rustup toolchain install
-      # O NDK que mobile/scripts/android-sdk.sh instala, não o mais novo do runner.
+      # The NDK that mobile/scripts/android-sdk.sh installs, not the runner's newest.
       - name: NDK 28.2.13676358
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358" >/dev/null
@@ -284,14 +284,14 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: mobile
-      # O pilar compila o núcleo para o Android com o NDK fixado acima (ECLUME_ANDROID_NDK).
-      - run: bash deploy/pilares.sh mobile
+      # The pillar compiles the core for Android with the NDK pinned above (ECLUME_ANDROID_NDK).
+      - run: bash deploy/pillars.sh mobile
 
-  # A documentação: o bundle OKF (`cq`, do holetz/quenching público na ref fixada, a mesma do
-  # deploy/gate.Dockerfile) e links, âncoras, caminhos em crase e ordem do glossário.
+  # The documentation: the OKF bundle (`cq`, from the public holetz/quenching at the pinned ref, the
+  # same as deploy/gate.Dockerfile) and links, anchors, backticked paths and glossary order.
   docs:
-    needs: mudancas
-    if: needs.mudancas.outputs.docs == 'true'
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -301,8 +301,8 @@ jobs:
           repository: holetz/quenching
           ref: 200373a8a804aa9426351c5ed3271fabc493ba38 # 6.14.0
           path: .quenching
-      # Fora da árvore do eclume, para a checagem não varrer o quenching.
+      # Outside the eclume tree, so the check does not sweep quenching.
       - run: |
           mv .quenching "$RUNNER_TEMP/quenching"
           echo "$RUNNER_TEMP/quenching/plugins/quenching/bin" >> "$GITHUB_PATH"
-      - run: bash deploy/pilares.sh docs
+      - run: bash deploy/pillars.sh docs

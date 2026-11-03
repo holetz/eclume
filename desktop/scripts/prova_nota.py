@@ -1,7 +1,8 @@
 # ruff: noqa: INP001  # script solto da prova no Windows; desktop/ não é pacote Python
 """Confere pela API que uma nota por voz gravada pelo desktop chegou à biblioteca.
 
-Entra com a conta de teste (`ECLUME_PROVA_EMAIL` e `ECLUME_PROVA_SENHA`) como o navegador faz
+Entra com a conta de teste (`ECLUME_PROOF_EMAIL` e `ECLUME_PROOF_PASSWORD`; os nomes antigos
+`ECLUME_PROVA_EMAIL` e `ECLUME_PROVA_SENHA` ainda valem) como o navegador faz
 (`POST /api/v1/auth/login`, cookies `eclume_session` e `eclume_csrf`), lê a gravação e espera a
 transcrição. Passa quando a gravação é uma nota (`kind: note`), veio do desktop na versão pedida
 (`capture.client_version`) e chegou a `transcribed`.
@@ -98,10 +99,11 @@ def main() -> int:
     parser.add_argument("--espera", type=int, default=900, help="segundos para a transcrição terminar")
     args = parser.parse_args()
 
-    email = os.environ.get("ECLUME_PROVA_EMAIL")
-    senha = os.environ.get("ECLUME_PROVA_SENHA")
+    # ECLUME_PROVA_EMAIL/ECLUME_PROVA_SENHA are the deprecated pt-BR names, still read.
+    email = os.environ.get("ECLUME_PROOF_EMAIL") or os.environ.get("ECLUME_PROVA_EMAIL")
+    senha = os.environ.get("ECLUME_PROOF_PASSWORD") or os.environ.get("ECLUME_PROVA_SENHA")
     if not email or not senha:
-        sys.stderr.write("defina ECLUME_PROVA_EMAIL e ECLUME_PROVA_SENHA\n")
+        sys.stderr.write("set ECLUME_PROOF_EMAIL and ECLUME_PROOF_PASSWORD\n")
         return 2
 
     base = args.servidor.rstrip("/")
