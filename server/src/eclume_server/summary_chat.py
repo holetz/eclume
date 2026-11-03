@@ -31,6 +31,7 @@ from eclume_server.agents.prompting import hms
 from eclume_server.crypto import SecretDecryptError
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
+from eclume_server.locale import job_locale
 from eclume_server.pagination import iso
 from eclume_server.problems import conflict
 from eclume_server.summaries import (
@@ -199,7 +200,7 @@ async def _context(conn: AsyncConnection, reply: Row) -> tuple[ChatContext, dict
     duration = (
         await conn.execute(select(t.transcripts.c.duration_ms).where(t.transcripts.c.id == reply["transcript_id"]))
     ).scalar()
-    header = transcript.header + f"\nDuração: {hms(duration or 0)}"
+    header = transcript.header + f"\nDuration: {hms(duration or 0)}"
     mk = t.markers.c
     notes = (
         await conn.execute(
@@ -209,7 +210,7 @@ async def _context(conn: AsyncConnection, reply: Row) -> tuple[ChatContext, dict
         )
     ).all()
     if notes:
-        header += "\nMarcadores:\n" + "\n".join(f"- [{hms(at_ms)}] {note}" for at_ms, note in notes)
+        header += "\nMarkers:\n" + "\n".join(f"- [{hms(at_ms)}] {note}" for at_ms, note in notes)
     summary = None
     if reply["base_summary_id"] is not None:
         summary = (
@@ -245,6 +246,7 @@ async def _context(conn: AsyncConnection, reply: Row) -> tuple[ChatContext, dict
         summary_md=summary,
         history=[(role, content) for role, content in reversed(earlier)],
         request=request,
+        locale=await job_locale(conn, reply["owner_id"]),
     )
     return context, speakers
 

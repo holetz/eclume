@@ -107,7 +107,7 @@ def test_question_with_attachment_generates_a_file_to_download(user: Api, servic
     assert (output["direction"], output["name"]) == ("output", "prazos.csv")
     assert output["media_type"] == "text/csv; charset=utf-8"
     prompts = [prompt for _, _, prompt in agents.of("agent")]
-    assert f"arquivo {file['id']}" in prompts[0]
+    assert f"file {file['id']}" in prompts[0]
     assert "Prazo: sexta-feira." in prompts[1]
 
     downloaded = user.get(f"/api/v1/agent/files/{output['id']}/content")
@@ -133,8 +133,8 @@ def test_history_comes_from_the_server(user: Api, services: Services):
     _ask(user, session["id"], "Segunda pergunta")
     run_cpu(services.settings, agents)
     [(_, _, prompt)] = agents.of("agent")
-    assert "Pessoa: Primeira pergunta\nAgente: Primeira resposta." in prompt
-    assert prompt.endswith("## Pergunta\n\nSegunda pergunta")
+    assert "Person: Primeira pergunta\nAgent: Primeira resposta." in prompt
+    assert prompt.endswith("## Question\n\nSegunda pergunta\n\nWrite the output in English.")
 
 
 def test_the_knowledge_base_stays_available_with_sources(user: Api, services: Services):

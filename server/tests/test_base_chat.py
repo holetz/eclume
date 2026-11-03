@@ -65,7 +65,7 @@ def test_question_queries_the_summaries_and_returns_the_sources(user: Api, servi
     assert done["sources"] == [{"recording_id": rid, "title": "Alinhamento da turma"}]
     assert (done["queries"], done["model"]) == (2, "sonnet-fake")
     prompts = [prompt for _, _, prompt in agents.of("base_chat")]
-    assert "Pessoa: Oi\nAgente: Olá." in prompts[0]
+    assert "Person: Oi\nAgent: Olá." in prompts[0]
     assert f'<ferramenta nome="read_summary" gravacao="{rid}">' in prompts[2]
     assert "gerado por" in prompts[2]
 
@@ -113,8 +113,8 @@ def test_another_account_sees_neither_the_question_nor_the_recordings(
     done = other.get(f"/api/v1/base-chat/{created['id']}").json()
     assert (done["status"], done["sources"]) == ("done", [])
     prompts = [prompt for _, _, prompt in agents.of("base_chat")]
-    assert "nenhum resultado" in prompts[1]
-    assert "gravação inexistente ou sem acesso" in prompts[2]
+    assert "no result" in prompts[1]
+    assert "recording does not exist or is not accessible" in prompts[2]
     assert "Confidencial" not in prompts[2]
 
 

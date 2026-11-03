@@ -77,12 +77,12 @@ def test_fields_filled_by_the_agent(user: Api, services: Services):
     ((config, system, prompt),) = agents.of("fields")
     assert (config.name, system) == ("Claude (servidor)", SHARED_SYSTEM)
     assert FIELDS_SYSTEM in prompt
-    assert "- cliente (escolha, opções: Serra Azul | Vale Verde): A empresa." in prompt
-    assert "- pendencias (lista): O que ficou para depois." in prompt
+    assert "- cliente (choice, options: Serra Azul | Vale Verde): A empresa." in prompt
+    assert "- pendencias (list): O que ficou para depois." in prompt
     assert "manual" not in prompt
     assert "<transcricao>" in prompt
     assert "- contrato — Contratos e renovações." in prompt
-    assert "use só tags desta lista" in prompt
+    assert "use only tags from this list" in prompt
 
     # The detected type (the first, by the default reply) applies its title pattern and its tags.
     assert recording["title"] == "Reunião de equipe · Revisão do contrato de manutenção"
@@ -396,7 +396,7 @@ def test_automatic_collections_by_the_rule_with_participants(user: Api, services
     assert f"- C1: Agro Sul — {rule}" in prompt
     assert "Manual" not in prompt
     assert "Sem regra" not in prompt
-    assert "## Tipo de agenda da gravação\n\nReunião de equipe" in prompt
+    assert "## Agenda type of the recording\n\nReunião de equipe" in prompt
     assert recording["collection_ids"] == [kept["id"], agro["id"]]
     assert recording["collections_origin"] == "auto"
     assert manual.status_code == 201
@@ -416,7 +416,7 @@ def test_automatic_collections_by_the_rule_with_participants(user: Api, services
     run_gpu(services.settings)
     agents = run_cpu(services.settings, FakeAgents(replies={"fields": ['{"colecoes": []}']}))
     prompt = agents.of("fields")[0][2]
-    assert "- Bruna Reis — empresa: Agro Sul; área: Compras; tags: cliente" in prompt
+    assert "- Bruna Reis — company: Agro Sul; department: Compras; tags: cliente" in prompt
     body = user.get(f"/api/v1/recordings/{recording['id']}").json()
     assert body["collection_ids"] == [kept["id"]]
 
@@ -425,7 +425,7 @@ def test_automatic_collections_by_the_rule_with_participants(user: Api, services
     user.post(f"/api/v1/recordings/{recording['id']}/retranscribe")
     run_gpu(services.settings)
     agents = run_cpu(services.settings, FakeAgents(replies={"fields": ['{"colecoes": ["C1"]}']}))
-    assert "## Coleções" not in agents.of("fields")[0][2]
+    assert "## Collections" not in agents.of("fields")[0][2]
     body = user.get(f"/api/v1/recordings/{recording['id']}").json()
     assert (body["collection_ids"], body["collections_origin"]) == ([agro["id"]], "edited")
 
@@ -438,7 +438,7 @@ def test_only_automatic_collections_also_call_the_agent(user: Api, services: Ser
     recording = _process(user, services, agents)
     assert _step(recording, "fields")["state"] == "done"
     assert recording["collection_ids"] == [coll.json()["id"]]
-    assert "## Campos" not in agents.of("fields")[0][2]
+    assert "## Fields" not in agents.of("fields")[0][2]
 
 
 def test_fixed_tags_match_variations_and_drop_the_new_ones(user: Api, services: Services):
@@ -456,7 +456,7 @@ def test_self_managed_tags_respect_the_limit_and_the_ceiling(
     assert user.patch("/api/v1/me/tag-assignment", json={"mode": "auto"}).json()["new_limit"] == 1
     agents = FakeAgents(replies={"fields": [json.dumps({"tags": ["interno", "nova um", "nova dois"]})]})
     recording = _process(user, services, agents)
-    assert "crie uma nova, curta e em minúsculas: no máximo 1 nova(s) por gravação" in agents.of("fields")[0][2]
+    assert "a new one, short and lowercase: at most 1 new tag(s) per recording" in agents.of("fields")[0][2]
     assert recording["tags"] == ["interno", "nova um", "planejamento"]
     created = {tag["name"]: tag["origin"] for tag in user.get("/api/v1/tags").json()["items"]}
     assert (created["nova um"], created["interno"]) == ("auto", "user")

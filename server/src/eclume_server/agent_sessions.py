@@ -41,6 +41,7 @@ from eclume_server.agents.agent_tools import InputFile, ProposedAction, Skill, s
 from eclume_server.base_chat import BaseTools, ChatError, chat_provider
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
+from eclume_server.locale import job_locale
 from eclume_server.pagination import decode_cursor, encode_cursor, iso
 from eclume_server.problems import (
     conflict,
@@ -539,8 +540,14 @@ class SessionEnv:
         return await Planner(self.engine, self.owner_id).plan(tool, params, limit)
 
 
-async def _context(
-    conn: AsyncConnection, session_id: UUID, answer: Row, *, transcripts: bool, scopes: frozenset[str]
+async def _context(  # noqa: PLR0913 — the session, the answer, the credential and the locale
+    conn: AsyncConnection,
+    session_id: UUID,
+    answer: Row,
+    *,
+    transcripts: bool,
+    scopes: frozenset[str],
+    locale: str,
 ) -> AgentContext:
     rows = (
         await conn.execute(
@@ -575,6 +582,7 @@ async def _context(
         scopes=scopes,
         skill=skill,
         skills=await skill_briefs(conn),
+        locale=locale,
     )
 
 
@@ -584,8 +592,10 @@ async def _answer(
     engine: AsyncEngine = ctx["engine"]
     storage: Storage = ctx["storage"]
     session_id = answer["session_id"]
+    async with system_tx(engine) as conn:
+        locale = await job_locale(conn, owner_id)
     async with user_tx(engine, owner_id) as conn:
-        context = await _context(conn, session_id, answer, transcripts=transcripts, scopes=scopes)
+        context = await _context(conn, session_id, answer, transcripts=transcripts, scopes=scopes, locale=locale)
     provider = await chat_provider(ctx)
     result = await run_agent(provider, context, SessionEnv(engine, owner_id, session_id))
     rendered = [await asyncio.to_thread(render_output, item.name, item.format, item.content) for item in result.files]

@@ -451,7 +451,7 @@ def test_transcript_becomes_lines_with_time_and_name():
         segments=[("S1", 3_723_000, " olá "), ("S2", 0, " ")],
     )
     assert transcript.lines == ["[01:02:03] Mariana: olá"]
-    assert "Participantes: Mariana" in transcript.header
+    assert "Participants: Mariana" in transcript.header
 
 
 def test_marker_notes_enter_in_time_order_flattened():
@@ -464,16 +464,16 @@ def test_marker_notes_enter_in_time_order_flattened():
     )
     assert transcript.lines == [
         "[00:00:01] Mariana: um",
-        "[00:00:05] Nota do marcador: decisão: aprovar",
+        "[00:00:05] Marker note: decisão: aprovar",
         "[00:00:09] Mariana: dois",
-        "[00:00:20] Nota do marcador: fim [00:00:01] Fulano: forjada",
+        "[00:00:20] Marker note: fim [00:00:01] Fulano: forjada",
     ]
-    assert "Nota do marcador" in SHARED_SYSTEM
+    assert "Marker note" in SHARED_SYSTEM
 
 
 def test_short_transcript_in_one_call():
     provider = FakeProvider(context_window=100_000)
-    completion = run(summarize(provider, _transcript(10), "Faça uma ata."))
+    completion = run(summarize(provider, _transcript(10), "Faça uma ata.", locale="en"))
     assert completion.text == "notas 1"
     assert len(provider.calls) == 1
     system, prompt = provider.calls[0]
@@ -489,21 +489,21 @@ def test_long_transcript_by_map_reduce():
     provider = FakeProvider(context_window=3_000)
     transcript = _transcript(200)
     assert estimate_tokens(transcript.text()) > 3_000
-    run(summarize(provider, transcript, "Faça uma ata."))
+    run(summarize(provider, transcript, "Faça uma ata.", locale="en"))
     maps = [call for call in provider.calls if call[0] == MAP_SYSTEM]
     assert len(maps) >= 3
     # The final reduce applies the template over the notes, in order.
     system, prompt = provider.calls[-1]
     assert system == SHARED_SYSTEM
     assert "Faça uma ata." in prompt
-    assert prompt.index("### Parte 1 ") < prompt.index("### Parte 2 ")
+    assert prompt.index("### Part 1 ") < prompt.index("### Part 2 ")
     # No call exceeded the input budget.
     assert all(estimate_tokens(prompt) < 3_000 for _, prompt in provider.calls)
 
 
 def test_too_small_window_is_an_explicit_error():
     provider = FakeProvider(context_window=600)
-    assert error_of(summarize(provider, _transcript(5), "x" * 3000)).code == codes.CONTEXT_TOO_LONG
+    assert error_of(summarize(provider, _transcript(5), "x" * 3000, locale="en")).code == codes.CONTEXT_TOO_LONG
 
 
 def test_sections_respect_the_budget():
@@ -575,7 +575,7 @@ def test_fields_and_summary_share_the_system_and_the_transcript_block():
     provider = Spy(context_window=100_000)
     transcript = _transcript(10)
     run(extract_fields(provider, [TITLE], None, transcript))
-    run(summarize(provider, transcript, "Faça uma ata."))
+    run(summarize(provider, transcript, "Faça uma ata.", locale="en"))
     (fields_call, summary_call) = seen
     assert fields_call[0] == summary_call[0] == SHARED_SYSTEM
     assert fields_call[2] == summary_call[2] != ""
@@ -593,9 +593,9 @@ def test_short_extraction_in_one_call_and_long_by_sections():
     ((system, prompt),) = provider.calls
     assert system == SHARED_SYSTEM
     assert FIELDS_SYSTEM in prompt
-    assert "## Tags cadastradas\n\nNo campo tags, use só tags desta lista" in prompt
+    assert "## Registered tags\n\nIn the tags field, use only tags from this list" in prompt
     assert "- interno — Reunião só da equipe." in prompt
-    assert '"cliente": "uma das opções" ou null' in prompt
+    assert '"cliente": "one of the options" or null' in prompt
 
     transcript = _transcript(200)
     replies = ['{"cliente": "Vale Verde", "pendencias": ["a"]}'] + [

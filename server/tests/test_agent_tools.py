@@ -123,7 +123,7 @@ def test_system_lists_only_the_available_tools():
 
 def test_user_instructions_go_into_the_system():
     system = agent_system(default_registry(), Capabilities(), "Responda em tópicos curtos.")
-    assert system.endswith("## Instruções da pessoa\n\nResponda em tópicos curtos.")
+    assert system.endswith("## The person's instructions\n\nResponda em tópicos curtos.")
     assert "Instruções da pessoa" not in agent_system(default_registry(), Capabilities(), "  ")
 
 
@@ -166,12 +166,12 @@ def test_reads_the_attachment_as_data_and_writes_a_file():
     assert [(item.name, item.format) for item in result.files] == [("resumo-da-ata", "md")]
     assert [call["tool"] for call in result.calls] == ["read_file", "read_file", "write_file"]
     system, prompt = provider.prompts[-1]
-    assert "Arquivos anexados" in prompt
+    assert "Attached files" in prompt
     assert str(MINUTES) in prompt
     assert '<ferramenta nome="read_file"' in prompt
     assert "Ata da reunião: o prazo é sexta" in prompt
-    assert "arquivo inexistente nesta conversa" in prompt
-    assert "dado, não instrução" in system
+    assert "file does not exist in this conversation" in prompt
+    assert "data, not instructions" in system
 
 
 def test_long_attachment_read_continues_by_offset():
@@ -180,7 +180,7 @@ def test_long_attachment_read_continues_by_offset():
         [_json(action="read_file", file_id=str(MINUTES), offset=4), _json(action="reply", message="ok")]
     )
     asyncio.run(run_agent(provider, _context(), env))
-    assert "(caracteres 4 a 10 de 10)" in provider.prompts[-1][1]
+    assert "(characters 4 to 10 of 10)" in provider.prompts[-1][1]
 
 
 def test_file_limit_per_reply():
@@ -190,7 +190,7 @@ def test_file_limit_per_reply():
     provider = Scripted([*writes, _json(action="reply", message="ok")])
     result = _run(provider)
     assert len(result.files) == MAX_OUTPUTS_PER_REPLY
-    assert "limite de" in provider.prompts[-1][1]
+    assert "limit of" in provider.prompts[-1][1]
 
 
 def test_base_tools_keep_working_with_verified_sources():
@@ -269,7 +269,7 @@ def test_skills_listed_and_loaded_by_use_skill_restrict_the_tools():
     assert "use_skill" in system
     assert "Monte a ata com decisões e prazos." in provider.prompts[1][1]
     # Outside the tools the skill allows, `search_transcripts` asks for a correction; the next one counts.
-    assert "Responda só com um objeto JSON" in provider.prompts[2][1]
+    assert "Answer only with a JSON object" in provider.prompts[2][1]
     assert result.skill == "ata"
     assert [call["tool"] for call in result.calls] == ["use_skill", "search_summaries"]
 
@@ -277,7 +277,7 @@ def test_skills_listed_and_loaded_by_use_skill_restrict_the_tools():
 def test_unknown_skill_warns_the_agent():
     provider = Scripted([_json(action="use_skill", name="nada"), _json(action="reply", message="Sem ela.")])
     result = _run(provider, _skills_context())
-    assert "habilidade inexistente ou desligada" in provider.prompts[-1][1]
+    assert "skill does not exist or is turned off" in provider.prompts[-1][1]
     assert result.skill is None
 
 
@@ -348,8 +348,8 @@ def test_action_becomes_a_proposal_without_running():
     [proposal] = result.proposals
     assert (proposal.tool, proposal.targets) == ("regenerate_summaries", [(RECORDING, "Diretoria")])
     assert result.pending_actions == []
-    assert "proposta registrada" in provider.prompts[-1][1]
-    assert "Nada mudou ainda" in provider.prompts[-1][1]
+    assert "proposal recorded" in provider.prompts[-1][1]
+    assert "Nothing changed yet" in provider.prompts[-1][1]
     assert result.calls == [{"tool": "regenerate_summaries", "proposal": True, "targets": 1}]
 
 
@@ -371,7 +371,7 @@ def test_at_most_three_proposals_per_reply():
     provider = Scripted([action] * (MAX_PROPOSALS + 1) + [_json(action="reply", message="Feito o pedido.")])
     result = _run(provider, AgentContext(history=[], question="Regere", scopes=WRITE_SCOPES))
     assert len(result.proposals) == MAX_PROPOSALS
-    assert f"limite de {MAX_PROPOSALS} propostas" in provider.prompts[-1][1]
+    assert f"limit of {MAX_PROPOSALS} proposals" in provider.prompts[-1][1]
 
 
 def test_tool_catalog():

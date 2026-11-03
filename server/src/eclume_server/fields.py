@@ -29,6 +29,7 @@ from eclume_server.agents.extraction import (
 )
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
+from eclume_server.locale import job_locale
 from eclume_server.pagination import iso
 from eclume_server.pipeline import GONE, STALE, current_revision, get_step, set_step
 from eclume_server.problems import invalid_field, not_found
@@ -428,6 +429,7 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
         transcript = await transcript_text(conn, transcript_id)
         tags, catalog_names = await tag_guide(conn, recording["owner_id"])
         rule = await title_rule(conn, recording)
+        locale = await job_locale(conn, recording["owner_id"])
         started = step["started_at"] if step is not None and step["started_at"] else None
         detail = dict(step["detail"]) if step is not None else {}
         await set_step(conn, recording, revision, "fields", "active", detail=detail, started_at=started)
@@ -435,7 +437,9 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
         ctx,
         AgentStep(recording, revision, "fields", started, detail),
         (provider_row, platform_key),
-        lambda provider: extract(provider, [spec(row, rule) for row in fields], tags, transcript, context),
+        lambda provider: extract(
+            provider, [spec(row, rule) for row in fields], tags, transcript, context, locale=locale
+        ),
     )
     if isinstance(outcome, str):
         async with system_tx(engine) as conn:

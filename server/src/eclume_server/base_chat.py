@@ -26,6 +26,7 @@ from eclume_server.agents.prompting import hms
 from eclume_server.crypto import SecretDecryptError
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
+from eclume_server.locale import job_locale
 from eclume_server.problems import rate_limited
 from eclume_server.queue import AGENT_QUEUE
 from eclume_server.quotas import refunding, take_agent_request
@@ -268,9 +269,11 @@ async def chat_provider(ctx: dict[str, Any]) -> Provider:
 
 async def _answer(ctx: dict[str, Any], owner_id: UUID, request: dict[str, Any]) -> dict[str, Any]:
     provider = await chat_provider(ctx)
+    async with system_tx(ctx["engine"]) as conn:
+        locale = await job_locale(conn, owner_id)
     history = [(item["role"], item["content"]) for item in request.get("history", [])]
     context = BaseChatContext(
-        history=history, question=request["message"], transcripts=request.get("transcripts", True)
+        history=history, question=request["message"], transcripts=request.get("transcripts", True), locale=locale
     )
     result = await run_base_chat(provider, context, BaseTools(ctx["engine"], owner_id))
     return {

@@ -62,7 +62,7 @@ def test_test_a_field_rule(user: Api, services: Services):
         (first["id"], None),
     ]
     assert all(FIELDS_SYSTEM in prompt for _, _, prompt in agents.calls)
-    assert "- campo (escolha, opções: Serra Azul | Vale Verde): A empresa." in agents.calls[0][2]
+    assert "- campo (choice, options: Serra Azul | Vale Verde): A empresa." in agents.calls[0][2]
     # Nothing was saved: the field does not exist and the recording did not change.
     assert "cliente" not in {f["key"] for f in user.get("/api/v1/fields").json()["items"]}
 

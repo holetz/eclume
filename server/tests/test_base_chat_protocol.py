@@ -111,8 +111,8 @@ def test_summary_first_and_sources_only_from_the_queried_ones():
     assert result.calls[0] == {"tool": "search_summaries", "query": "orçamento", "hits": 1}
     first = provider.prompts[0]
     assert first[0] == BASE_CHAT_SYSTEM
-    assert "Pessoa: Oi\nAgente: Olá." in first[1]
-    assert "## Pergunta\n\nQual o orçamento?" in first[1]
+    assert "Person: Oi\nAgent: Olá." in first[1]
+    assert "## Question\n\nQual o orçamento?" in first[1]
     assert "Orçamento de 40 mil" in provider.prompts[2][1]
 
 
@@ -139,7 +139,7 @@ def test_unknown_recording_comes_back_as_a_result_and_does_not_become_a_source()
         ]
     )
     result = _run(provider)
-    assert "gravação inexistente ou sem acesso" in provider.prompts[1][1]
+    assert "recording does not exist or is not accessible" in provider.prompts[1][1]
     assert result.sources == []
 
 

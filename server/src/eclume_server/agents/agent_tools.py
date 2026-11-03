@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 ToolKind = Literal["read", "produce", "action"]
 REPLY = "reply"
-UNKNOWN_FILE = "arquivo inexistente nesta conversa"
+UNKNOWN_FILE = "file does not exist in this conversation"
 MAX_PROPOSALS = 3
 MAX_SKILL_CHARS = 8000
 # How many recordings an action may reach: regenerating summaries weighs on the queue and the quota.
@@ -36,8 +36,8 @@ TARGET_FILTERS = ("agenda_type", "from", "to", "collection", "tag")
 MAX_LABELS = 10
 SHOWN_TARGETS = 10
 NEEDS_CONFIRMATION = (
-    "esta ação muda o ambiente e precisa da confirmação de quem pergunta, que ainda não está disponível: "
-    "explique na resposta o que faria, sem dizer que fez"
+    "this action changes the environment and needs the asker's confirmation, which is not available yet: "
+    "explain in the answer what it would do, without saying it did it"
 )
 
 
@@ -249,9 +249,9 @@ async def _read_file(
         return base._block("read_file", attributes, UNKNOWN_FILE), record  # noqa: SLF001
     chunk = clip_chars(found.text[offset:], budget)
     end = offset + len(chunk)
-    body = f'"{found.name}" (caracteres {offset} a {end} de {len(found.text)})\n{chunk or "(sem texto legível)"}'
+    body = f'"{found.name}" (characters {offset} to {end} of {len(found.text)})\n{chunk or "(no readable text)"}'
     if end < len(found.text):
-        body += f'\n(continua: leia de novo com "offset": {end})'
+        body += f'\n(continues: read again with "offset": {end})'
     return base._block("read_file", attributes, body), record  # noqa: SLF001
 
 
@@ -276,21 +276,21 @@ async def _write_file(
     record = {"tool": "write_file", "name": name, "format": fmt}
     attributes = f" nome={json.dumps(name, ensure_ascii=False)}"
     if len(state.produced) >= MAX_OUTPUTS_PER_REPLY:
-        body = f"limite de {MAX_OUTPUTS_PER_REPLY} arquivos por resposta atingido; nada foi gerado"
+        body = f"limit of {MAX_OUTPUTS_PER_REPLY} files per answer reached; nothing was generated"
         return base._block("write_file", attributes, body), record  # noqa: SLF001
     clipped = len(content) > MAX_OUTPUT_CHARS
     state.produced.append(ProducedFile(name=name, format=fmt, content=content[:MAX_OUTPUT_CHARS]))
-    body = f"arquivo .{fmt} preparado; ele vai anexado à resposta para baixar"
+    body = f".{fmt} file prepared; it goes attached to the answer for download"
     if clipped:
-        body += f" (cortado em {MAX_OUTPUT_CHARS} caracteres)"
+        body += f" (cut at {MAX_OUTPUT_CHARS} characters)"
     return base._block("write_file", attributes, body), record  # noqa: SLF001
 
 
 READ_FILE = AgentTool(
     name="read_file",
     usage=(
-        '{"action": "read_file", "file_id": "id", "offset": 0} — lê o texto de um arquivo anexado à '
-        "conversa, a partir do caractere `offset`;"
+        '{"action": "read_file", "file_id": "id", "offset": 0} — reads the text of a file attached to the '
+        "conversation, from character `offset`;"
     ),
     validate=_valid_read_file,
     run=_read_file,
@@ -300,8 +300,8 @@ READ_FILE = AgentTool(
 WRITE_FILE = AgentTool(
     name="write_file",
     usage=(
-        '{"action": "write_file", "name": "nome", "format": "md|txt|csv|docx", "content": "o conteúdo"} — '
-        "gera um arquivo para a pessoa baixar (o docx a partir de Markdown);"
+        '{"action": "write_file", "name": "name", "format": "md|txt|csv|docx", "content": "the content"} — '
+        "generates a file for the person to download (the docx from Markdown);"
     ),
     validate=_valid_write_file,
     run=_write_file,
@@ -327,18 +327,18 @@ async def _use_skill(
     record = {"tool": "use_skill", "name": name}
     attributes = f" nome={json.dumps(name, ensure_ascii=False)}"
     if state.skill is not None:
-        body = f"a habilidade /{state.skill} já está em uso nesta resposta"
+        body = f"the skill /{state.skill} is already in use in this answer"
         return base._block("use_skill", attributes, body), record  # noqa: SLF001
     found = await env.skill(name)
     if found is None:
-        return base._block("use_skill", attributes, "habilidade inexistente ou desligada"), record  # noqa: SLF001
+        return base._block("use_skill", attributes, "skill does not exist or is turned off"), record  # noqa: SLF001
     apply_skill(state, found)
     body = (
-        f"Instruções da habilidade /{found.name}, escritas pela própria pessoa: siga-as nesta resposta.\n"
+        f"Instructions of the skill /{found.name}, written by the person: follow them in this answer.\n"
         + found.instructions[:MAX_SKILL_CHARS]
     )
     if found.allowed_tools is not None:
-        body += f"\n(Com esta habilidade, só valem as ações: {', '.join([*found.allowed_tools, REPLY])}.)"
+        body += f"\n(With this skill, only these actions apply: {', '.join([*found.allowed_tools, REPLY])}.)"
     return base._block("use_skill", attributes, body), record  # noqa: SLF001
 
 
@@ -351,8 +351,8 @@ def apply_skill(state: RunState, skill: Skill) -> None:
 USE_SKILL = AgentTool(
     name="use_skill",
     usage=(
-        '{"action": "use_skill", "name": "nome"} — carrega as instruções de uma habilidade da pessoa (da lista '
-        "de habilidades), quando o pedido combina com a descrição dela;"
+        '{"action": "use_skill", "name": "name"} — loads the instructions of a skill of the person (from the '
+        "skill list), when the request matches its description;"
     ),
     validate=lambda action: skill_name(action.get("name")) is not None,
     run=_use_skill,
@@ -446,22 +446,22 @@ async def _plan(env: AgentEnv, action: dict[str, Any], state: RunState) -> tuple
     name = action["action"]
     record: dict[str, Any] = {"tool": name, "proposal": True}
     if len(state.proposals) >= MAX_PROPOSALS:
-        body = f"limite de {MAX_PROPOSALS} propostas por resposta atingido; nada foi proposto"
+        body = f"limit of {MAX_PROPOSALS} proposals per answer reached; nothing was proposed"
         return base._block(name, "", body), record  # noqa: SLF001
     params = action_params(action)
     assert params is not None  # noqa: S101 — validated
     planned = await env.plan_action(name, params, MAX_TARGETS[name])
     if isinstance(planned, str):
-        return base._block(name, "", f"{planned}; nada foi proposto"), record  # noqa: SLF001
+        return base._block(name, "", f"{planned}; nothing was proposed"), record  # noqa: SLF001
     state.proposals.append(planned)
     record["targets"] = len(planned.targets)
     listed = "\n".join(f"- {rid} — {title}" for rid, title in planned.targets[:SHOWN_TARGETS])
     if len(planned.targets) > SHOWN_TARGETS:
-        listed += f"\n- … e mais {len(planned.targets) - SHOWN_TARGETS}"
+        listed += f"\n- … and {len(planned.targets) - SHOWN_TARGETS} more"
     body = (
-        f"proposta registrada: {planned.summary}\nAlvos ({len(planned.targets)}):\n{listed}\n"
-        "Nada mudou ainda: a pessoa vê um cartão com esta proposta e confirma ou descarta. Na resposta, "
-        "explique o que será feito, sem dizer que já foi feito."
+        f"proposal recorded: {planned.summary}\nTargets ({len(planned.targets)}):\n{listed}\n"
+        "Nothing changed yet: the person sees a card with this proposal and confirms or discards it. In the "
+        "answer, explain what will be done, without saying it was already done."
     )
     return base._block(name, "", body), record  # noqa: SLF001
 
@@ -471,8 +471,8 @@ async def _never(_env: AgentEnv, _action: dict[str, Any], _budget: int, _state: 
 
 
 _TARGETS_USAGE = (
-    '"targets": {"recording_ids": ["id", …]} ou {"agenda_type": "nome", "from": "AAAA-MM-DD", '
-    '"to": "AAAA-MM-DD", "collection": "nome", "tag": "nome"}'
+    '"targets": {"recording_ids": ["id", …]} or {"agenda_type": "name", "from": "YYYY-MM-DD", '
+    '"to": "YYYY-MM-DD", "collection": "name", "tag": "name"}'
 )
 
 
@@ -499,29 +499,29 @@ ACTION_SCOPES = {
 ACTION_TOOLS = [
     _action(
         "regenerate_summaries",
-        f'{{"action": "regenerate_summaries", {_TARGETS_USAGE}}} — propõe gerar de novo o resumo das '
-        f"gravações (até {MAX_TARGETS['regenerate_summaries']}), pelas instruções do tipo de agenda de cada uma;",
+        f'{{"action": "regenerate_summaries", {_TARGETS_USAGE}}} — proposes generating the summary of the '
+        f"recordings again (up to {MAX_TARGETS['regenerate_summaries']}), by each one's agenda type instructions;",
         ACTION_SCOPES["regenerate_summaries"],
         "Propõe regenerar os resumos de várias gravações.",
     ),
     _action(
         "tag_recordings",
-        f'{{"action": "tag_recordings", {_TARGETS_USAGE}, "add": ["tag"], "remove": ["tag"]}} — propõe '
-        f"aplicar e remover tags (até {MAX_TARGETS['tag_recordings']} gravações);",
+        f'{{"action": "tag_recordings", {_TARGETS_USAGE}, "add": ["tag"], "remove": ["tag"]}} — proposes '
+        f"applying and removing tags (up to {MAX_TARGETS['tag_recordings']} recordings);",
         ACTION_SCOPES["tag_recordings"],
         "Propõe aplicar ou remover tags em lote.",
     ),
     _action(
         "collect_recordings",
-        f'{{"action": "collect_recordings", {_TARGETS_USAGE}, "add": ["coleção"], "remove": ["coleção"]}} — '
-        f"propõe incluir e tirar as gravações de coleções existentes (até {MAX_TARGETS['collect_recordings']});",
+        f'{{"action": "collect_recordings", {_TARGETS_USAGE}, "add": ["collection"], "remove": ["collection"]}} — '
+        f"proposes adding the recordings to and removing them from existing collections (up to {MAX_TARGETS['collect_recordings']});",
         ACTION_SCOPES["collect_recordings"],
         "Propõe incluir ou tirar gravações de coleções em lote.",
     ),
     _action(
         "set_agenda_type",
-        f'{{"action": "set_agenda_type", {_TARGETS_USAGE}, "agenda_type": "nome"}} — propõe trocar o tipo '
-        f"de agenda das gravações (até {MAX_TARGETS['set_agenda_type']}), o que abre um resumo novo;",
+        f'{{"action": "set_agenda_type", {_TARGETS_USAGE}, "agenda_type": "name"}} — proposes changing the agenda '
+        f"type of the recordings (up to {MAX_TARGETS['set_agenda_type']}), which opens a new summary;",
         ACTION_SCOPES["set_agenda_type"],
         "Propõe trocar o tipo de agenda de várias gravações.",
     ),
