@@ -1,5 +1,5 @@
-# ruff: noqa: INP001, S101  # testes soltos dos scripts de deploy; deploy/ não é pacote Python
-"""Testes do `docs_check.py`: cada problema provado num repositório de mentira."""
+# ruff: noqa: INP001, S101  # loose tests of the deploy scripts; deploy/ is not a Python package
+"""Tests of `docs_check.py`: each problem proved in a fake repository."""
 
 from __future__ import annotations
 
@@ -17,118 +17,118 @@ docs_check = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(docs_check)
 
 
-def repo(tmp_path: Path, arquivos: dict[str, str]) -> Path:
-    """Um repositório de mentira com os arquivos dados."""
-    for nome, texto in arquivos.items():
-        caminho = tmp_path / nome
-        caminho.parent.mkdir(parents=True, exist_ok=True)
-        caminho.write_text(texto, encoding="utf-8")
+def repo(tmp_path: Path, files: dict[str, str]) -> Path:
+    """A fake repository with the given files."""
+    for name, text in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
     return tmp_path
 
 
 @pytest.fixture(autouse=True)
-def sem_excecoes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Os testes declaram as próprias exceções; as do repositório não valem aqui."""
-    monkeypatch.setattr(docs_check, "EXCECOES", ())
+def no_exceptions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The tests declare their own exceptions; the repository's do not apply here."""
+    monkeypatch.setattr(docs_check, "EXCEPTIONS", ())
 
 
 @pytest.mark.parametrize(
-    ("titulo", "esperado"),
+    ("heading", "expected"),
     [
         ("Gravação, data, natureza e marcadores", "gravação-data-natureza-e-marcadores"),
-        ("CI e gate — `deploy/pilares.sh` e `deploy/gate.sh`", "ci-e-gate--deploypilaressh-e-deploygatesh"),
+        ("CI and gate — `deploy/pillars.sh` and `deploy/gate.sh`", "ci-and-gate--deploypillarssh-and-deploygatesh"),
         ("Fixação da CA pelos apps", "fixação-da-ca-pelos-apps"),
         ("Ver [o contrato](contrato.md) v1", "ver-o-contrato-v1"),
     ],
 )
-def test_slug_no_estilo_do_github(titulo: str, esperado: str) -> None:
-    """Minúsculas, acento mantido, pontuação fora, espaço vira hífen; crase e link viram texto."""
-    assert docs_check.slug(titulo) == esperado
+def test_github_style_slug(heading: str, expected: str) -> None:
+    """Lowercase, accents kept, punctuation dropped, a space becomes a hyphen; backticks and links become text."""
+    assert docs_check.slug(heading) == expected
 
 
-def test_titulo_repetido_ganha_sufixo() -> None:
-    """O segundo título igual vira `-1`, como no GitHub."""
-    assert docs_check.ancoras("# Uso\n\n## Uso\n") == {"uso", "uso-1"}
+def test_repeated_heading_gets_a_suffix() -> None:
+    """The second equal heading becomes `-1`, as on GitHub."""
+    assert docs_check.anchors("# Usage\n\n## Usage\n") == {"usage", "usage-1"}
 
 
-def test_link_para_arquivo_ou_ancora_que_nao_existe(tmp_path: Path) -> None:
-    """Link relativo, absoluto ou só âncora é conferido; externo não."""
-    raiz = repo(
+def test_link_to_a_file_or_anchor_that_does_not_exist(tmp_path: Path) -> None:
+    """A relative, absolute or anchor-only link is checked; an external one is not."""
+    root = repo(
         tmp_path,
         {
-            "docs/a.md": "# A\n\n## Parte boa\n",
+            "docs/a.md": "# A\n\n## Good part\n",
             "docs/b.md": (
-                "# B\n\n[ok](a.md#parte-boa) [abs](/docs/a.md) [web](https://x.y/z)\n"
-                "[sumiu](c.md)\n[âncora](a.md#parte-ruim)\n[aqui](#b) [aqui não](#c)\n"
+                "# B\n\n[ok](a.md#good-part) [abs](/docs/a.md) [web](https://x.y/z)\n"
+                "[gone](c.md)\n[anchor](a.md#bad-part)\n[here](#b) [not here](#c)\n"
             ),
         },
     )
-    assert docs_check.verificar(raiz) == [
-        "docs/b.md:4: link para c.md, que não existe",
-        "docs/b.md:5: âncora #parte-ruim não existe em docs/a.md",
-        "docs/b.md:6: âncora #c não existe em docs/b.md",
+    assert docs_check.check(root) == [
+        "docs/b.md:4: link to c.md, which does not exist",
+        "docs/b.md:5: anchor #bad-part does not exist in docs/a.md",
+        "docs/b.md:6: anchor #c does not exist in docs/b.md",
     ]
 
 
-def test_link_em_codigo_nao_conta(tmp_path: Path) -> None:
-    """Link dentro de crase ou de bloco de código é exemplo, não link."""
-    raiz = repo(tmp_path, {"docs/a.md": "# A\n\n`[x](nada.md)`\n\n```\n[y](nada.md)\n```\n"})
-    assert docs_check.verificar(raiz) == []
+def test_link_in_code_does_not_count(tmp_path: Path) -> None:
+    """A link inside backticks or a code block is an example, not a link."""
+    root = repo(tmp_path, {"docs/a.md": "# A\n\n`[x](none.md)`\n\n```\n[y](none.md)\n```\n"})
+    assert docs_check.check(root) == []
 
 
-def test_caminho_em_crase_que_nao_existe(tmp_path: Path) -> None:
-    """Caminho que começa por pasta de topo é conferido (`:linha` ignorado); curinga, comando e variável não."""
-    raiz = repo(
+def test_backticked_path_that_does_not_exist(tmp_path: Path) -> None:
+    """A path starting with a top-level folder is checked (`:line` ignored); a wildcard, command or variable is not."""
+    root = repo(
         tmp_path,
         {
             "deploy/gate.sh": "",
             "docs/a.md": (
-                "# A\n\n`deploy/gate.sh:12` `deploy/gate.sh` `deploy/sumiu.sh` `deploy/*.sh`\n"
-                "`bash deploy/sumiu.sh` `deploy/<nome>.yml` `$HOME/x` `outra/coisa.txt`\n"
+                "# A\n\n`deploy/gate.sh:12` `deploy/gate.sh` `deploy/gone.sh` `deploy/*.sh`\n"
+                "`bash deploy/gone.sh` `deploy/<name>.yml` `$HOME/x` `other/thing.txt`\n"
             ),
         },
     )
-    assert docs_check.verificar(raiz) == ["docs/a.md:3: caminho `deploy/sumiu.sh` não existe"]
+    assert docs_check.check(root) == ["docs/a.md:3: path `deploy/gone.sh` does not exist"]
 
 
-def test_excecao_cobre_o_caminho_e_a_obsoleta_falha(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A exceção vale só no arquivo dela; a que não é mais usada vira problema."""
-    raiz = repo(tmp_path, {"deploy/x.sh": "", "docs/a.md": "# A\n\n`deploy/.env`\n"})
+def test_exception_covers_the_path_and_a_stale_one_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An exception applies only in its own file; one that is no longer used becomes a problem."""
+    root = repo(tmp_path, {"deploy/x.sh": "", "docs/a.md": "# A\n\n`deploy/.env`\n"})
     monkeypatch.setattr(
         docs_check,
-        "EXCECOES",
+        "EXCEPTIONS",
         (
-            docs_check.Excecao("docs/a.md", "deploy/.env", "fora do git"),
-            docs_check.Excecao("docs/a.md", "deploy/velho", "não citado mais"),
+            docs_check.PathException("docs/a.md", "deploy/.env", "outside git"),
+            docs_check.PathException("docs/a.md", "deploy/old", "no longer cited"),
         ),
     )
-    assert docs_check.verificar(raiz) == [
-        "exceção obsoleta: `deploy/velho` em docs/a.md (não citado mais); tire-a de EXCECOES",
+    assert docs_check.check(root) == [
+        "stale exception: `deploy/old` in docs/a.md (no longer cited); remove it from EXCEPTIONS",
     ]
 
 
-def test_glossario_em_ordem_sem_caixa_nem_acento() -> None:
-    """A ordem ignora caixa e acento; a entrada fora de ordem é apontada."""
-    texto = (
-        "# Glossário\n\n## Terms\n\n- **Ágora** — a\n- [banco](x.md) — b\n- **Canto** — c\n"
-        "- **bola** — d\n\n## Outra\n\n- **Zeta**\n- **alfa**\n"
+def test_glossary_in_order_ignoring_case_and_accents() -> None:
+    """The order ignores case and accents; the entry out of order is pointed out."""
+    text = (
+        "# Glossary\n\n## Terms\n\n- **Ágora** — a\n- [bank](x.md) — b\n- **Canto** — c\n"
+        "- **ball** — d\n\n## Other\n\n- **Zeta**\n- **alpha**\n"
     )
-    assert docs_check.problemas_do_glossario(texto) == [
-        "docs/glossary.md:8: 'bola' fora da ordem alfabética (depois de 'Canto')",
+    assert docs_check.glossary_problems(text) == [
+        "docs/glossary.md:8: 'ball' out of alphabetical order (after 'Canto')",
     ]
 
 
-def test_quenching_na_mesma_ref_no_gate_e_na_ci() -> None:
-    """O `cq` do pilar `docs` é o mesmo commit do holetz/quenching na imagem do gate e no job da CI."""
-    raiz = Path(__file__).resolve().parent.parent
-    dockerfile = (raiz / "deploy/gate.Dockerfile").read_text(encoding="utf-8")
-    ci = yaml.safe_load((raiz / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+def test_quenching_at_the_same_ref_in_the_gate_and_in_ci() -> None:
+    """The `cq` of the `docs` pillar is the same holetz/quenching commit in the gate image and in the CI job."""
+    root = Path(__file__).resolve().parent.parent
+    dockerfile = (root / "deploy/gate.Dockerfile").read_text(encoding="utf-8")
+    ci = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
     gate = re.search(r"^ARG QUENCHING_SHA=([0-9a-f]{40})$", dockerfile, re.MULTILINE)
     assert gate is not None
     refs = [
-        passo["with"]["ref"]
-        for passo in ci["jobs"]["docs"]["steps"]
-        if (passo.get("with") or {}).get("repository") == "holetz/quenching"
+        step["with"]["ref"]
+        for step in ci["jobs"]["docs"]["steps"]
+        if (step.get("with") or {}).get("repository") == "holetz/quenching"
     ]
     assert refs == [gate[1]]
-    assert any("bash deploy/pilares.sh docs" in str(passo.get("run", "")) for passo in ci["jobs"]["docs"]["steps"])
+    assert any("bash deploy/pillars.sh docs" in str(step.get("run", "")) for step in ci["jobs"]["docs"]["steps"])

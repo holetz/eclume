@@ -1,18 +1,18 @@
-# cargo-deny do pilar `auditoria` (deploy/pilares.sh): `cargo deny --locked check advisories` falha
-# em advisory do RustSec que afete o Cargo.lock deste workspace. Exceção só com motivo e prazo:
-#   ignore = [{ id = "RUSTSEC-AAAA-NNNN", reason = "<motivo> · prazo AAAA-MM-DD" }]
-# Contrato: docs/standards/code/monorepo.md.
+# cargo-deny of the `audit` pillar (deploy/pillars.sh): `cargo deny --locked check advisories` fails
+# on a RustSec advisory that affects this workspace's Cargo.lock. An exception only with a reason and a deadline:
+#   ignore = [{ id = "RUSTSEC-YYYY-NNNN", reason = "<reason> · deadline YYYY-MM-DD" }]
+# Contract: docs/standards/code/monorepo.md.
 [advisories]
-# Crate sem manutenção só falha quando é dependência direta de um crate do workspace; as
-# transitivas (proc-macro-error, pela pilha GTK do Tauri) aparecem no log sem barrar.
+# An unmaintained crate only fails when it is a direct dependency of a workspace crate; the
+# transitive ones (proc-macro-error, through Tauri's GTK stack) show in the log without blocking.
 unmaintained = "workspace"
 ignore = [
-  # Double free em Consumer::skip/clear só quando o Drop de um elemento entra em pânico: o anel do
-  # eclume-audio-capture (src/ring.rs) guarda f32, que não tem Drop. Trocar para ringbuf 0.5.
-  { id = "RUSTSEC-2026-0293", reason = "elementos f32 sem Drop; subir o ringbuf para 0.5 · prazo 2026-12-31" },
+  # Double free in Consumer::skip/clear only when an element's Drop panics: the ring of
+  # eclume-audio-capture (src/ring.rs) holds f32, which has no Drop. Move to ringbuf 0.5.
+  { id = "RUSTSEC-2026-0293", reason = "f32 elements without Drop; bump ringbuf to 0.5 · deadline 2026-12-31" },
   # zip 4.x is locked only through tauri-plugin-updater (Windows update unpacking, minisign-verified
   # before extraction); the fix needs zip >=9 and the latest updater (2.14.0) still pins 4.x.
-  { id = "RUSTSEC-2026-0367", reason = "zip 9 unreachable: tauri-plugin-updater pins zip 4.x; archive is signature-verified · prazo 2026-12-31" },
-  { id = "RUSTSEC-2026-0368", reason = "zip 9 unreachable: tauri-plugin-updater pins zip 4.x; archive is signature-verified · prazo 2026-12-31" },
-  { id = "RUSTSEC-2026-0369", reason = "zip 9 unreachable: tauri-plugin-updater pins zip 4.x; archive is signature-verified · prazo 2026-12-31" },
+  { id = "RUSTSEC-2026-0367", reason = "zip 9 unreachable: tauri-plugin-updater pins zip 4.x; archive is signature-verified · deadline 2026-12-31" },
+  { id = "RUSTSEC-2026-0368", reason = "zip 9 unreachable: tauri-plugin-updater pins zip 4.x; archive is signature-verified · deadline 2026-12-31" },
+  { id = "RUSTSEC-2026-0369", reason = "zip 9 unreachable: tauri-plugin-updater pins zip 4.x; archive is signature-verified · deadline 2026-12-31" },
 ]
