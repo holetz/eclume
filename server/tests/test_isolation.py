@@ -1,8 +1,8 @@
-"""Isolamento: cada conta enxerga só o que é dela.
+"""Isolation: each account sees only what is its own.
 
-Provado duas vezes: pela API (404, sem distinguir "não existe" de "não é de você") e por SQL direto
-sob o papel `eclume_app` com `app.user_id` fixado — o que a RLS garante mesmo que uma rota esqueça
-um filtro.
+Proved twice: through the API (404, without telling "does not exist" from "is not yours") and through
+direct SQL under the `eclume_app` role with `app.user_id` set — what RLS guarantees even if a route
+forgets a filter.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from eclume_server_testing.api import Account, Api
     from eclume_server_testing.harness import Services
 
-# Toda tabela de conteúdo tem `owner_id` e a política `<tabela>_own` (migrations 008 em diante).
+# Every content table has `owner_id` and the `<table>_own` policy (migrations 008 onwards).
 CONTENT_TABLES = (
     "recordings",
     "uploads",
@@ -48,7 +48,7 @@ CONTENT_TABLES = (
 
 
 def _as_app(services: Services, user_id: UUID | None, sql: str, **params: Any) -> Any:  # noqa: ANN401
-    """Roda `sql` como `eclume_app` com o contexto de RLS dado; devolve as linhas ou o rowcount."""
+    """Run `sql` as `eclume_app` with the given RLS context; return the rows or the rowcount."""
 
     async def go(conn: Any) -> Any:  # noqa: ANN401
         await conn.execute(text("SET LOCAL ROLE eclume_app"))
@@ -61,7 +61,7 @@ def _as_app(services: Services, user_id: UUID | None, sql: str, **params: Any) -
 
 
 def _owned(services: Services, table: str, owner: UUID) -> int:
-    """Linhas da tabela do dono, pelo papel de conexão (fora da RLS)."""
+    """The owner's rows in the table, through the connection role (outside RLS)."""
 
     async def go(conn: Any) -> int:  # noqa: ANN401
         sql = f"SELECT count(*) FROM {table} WHERE owner_id = :o"  # noqa: S608
@@ -71,7 +71,7 @@ def _owned(services: Services, table: str, owner: UUID) -> int:
 
 
 def _seed_voice(services: Services, transcript_id: str, person_id: str) -> None:
-    """Embedding, amostra e sugestão na transcrição, pelo papel de conexão (como a ingestão)."""
+    """Embedding, sample and suggestion on the transcript, through the connection role (like ingestion)."""
 
     async def go(conn: Any) -> None:  # noqa: ANN401
         await conn.execute(
@@ -117,8 +117,8 @@ def scenario(
     person = apis["alice"].post("/api/v1/people", json={"name": "Rafael Lima"}).json()
     apis["alice"].post("/api/v1/collections", json={"name": "Cliente X"})
     _seed_voice(services, recording["transcript_id"], person["id"])
-    # Um upload em andamento, um resumo, um pedido de ajuste e um marcador, para toda tabela de
-    # conteúdo ter linha da Alice (o título do upload já é um valor de campo).
+    # An upload in progress, a summary, an adjustment request and a marker, so every content table
+    # has a row of Alice's (the upload title is already a field value).
     apis["alice"].post(
         "/api/v1/uploads",
         json={"filename": "b.ogg", "content_type": "audio/ogg", "size_bytes": 10, "sha256": "0" * 64},
@@ -170,7 +170,7 @@ def _api_sees(api: Api, recording: dict[str, Any]) -> bool:
     return statuses != {404}
 
 
-def test_cada_conta_so_enxerga_o_que_e_dela_via_api_e_via_sql(scenario: dict[str, Any], services: Services):
+def test_each_account_sees_only_its_own_via_api_and_via_sql(scenario: dict[str, Any], services: Services):
     accounts, apis, recording = scenario["accounts"], scenario["apis"], scenario["recording"]
     alice, bob = accounts["alice"], accounts["bob"]
     assert _api_sees(apis["alice"], recording)
@@ -183,12 +183,12 @@ def test_cada_conta_so_enxerga_o_que_e_dela_via_api_e_via_sql(scenario: dict[str
         assert owned > 0, table
         count = f"SELECT count(*) FROM {table}"  # noqa: S608
         assert _as_app(services, alice.user_id, count)[0][0] == owned, table
-        # Bob vê só as dele (os tipos de agenda semeados no cadastro), nada da Alice.
+        # Bob sees only his own (the agenda types seeded at signup), nothing of Alice's.
         assert _as_app(services, bob.user_id, count)[0][0] == _owned(services, table, bob.user_id), table
         of_alice = f"SELECT count(*) FROM {table} WHERE owner_id = :o"  # noqa: S608
         assert _as_app(services, bob.user_id, of_alice, o=alice.user_id)[0][0] == 0, table
 
-    # Escrever por fora também não passa: nada é alterado nem removido.
+    # Writing from outside does not get through either: nothing is changed or removed.
     rid = recording["id"]
     assert apis["bob"].patch(f"/api/v1/recordings/{rid}", json={"title": "x"}).status_code == 404
     assert apis["bob"].delete(f"/api/v1/recordings/{rid}").status_code == 404
@@ -204,7 +204,7 @@ def test_cada_conta_so_enxerga_o_que_e_dela_via_api_e_via_sql(scenario: dict[str
         assert _as_app(services, bob.user_id, sql, r=rid, o=alice.user_id) == 0, sql
     assert apis["alice"].get(f"/api/v1/recordings/{rid}").json()["title"] == "Reunião sigilosa"
 
-    # Nem por SQL Bob grava algo em nome da Alice.
+    # Not even through SQL does Bob write anything on Alice's behalf.
     with pytest.raises(DBAPIError, match="row-level security"):
         _as_app(
             services,
@@ -242,8 +242,8 @@ def test_cada_conta_so_enxerga_o_que_e_dela_via_api_e_via_sql(scenario: dict[str
         ),
     ],
 )
-def test_filho_so_tem_o_dono_do_pai(scenario: dict[str, Any], services: Services, sql: str):
-    """Nem o papel de conexão (fora da RLS) liga o conteúdo de uma conta ao de outra: FKs compostas."""
+def test_child_only_has_the_parents_owner(scenario: dict[str, Any], services: Services, sql: str):
+    """Not even the connection role (outside RLS) links one account's content to another's: composite FKs."""
     bob = scenario["accounts"]["bob"]
 
     async def go(conn: Any) -> None:  # noqa: ANN401
@@ -253,13 +253,13 @@ def test_filho_so_tem_o_dono_do_pai(scenario: dict[str, Any], services: Services
         run(services.sql(go))
 
 
-def test_sem_contexto_de_rls_nada_e_visivel(scenario: dict[str, Any], services: Services):
+def test_without_rls_context_nothing_is_visible(scenario: dict[str, Any], services: Services):
     for table in (*CONTENT_TABLES, "users", "api_tokens", "pairing_codes"):
         assert _as_app(services, None, f"SELECT count(*) FROM {table}")[0][0] == 0, table  # noqa: S608
     del scenario
 
 
-def test_cada_um_ve_so_a_propria_conta(make_user: Callable[..., Account], services: Services):
+def test_each_one_sees_only_their_own_account(make_user: Callable[..., Account], services: Services):
     alice, bob = make_user(), make_user()
     assert _as_app(services, alice.user_id, "SELECT id FROM users") == [(alice.user_id,)]
     rename = "UPDATE users SET name = 'Novo nome' WHERE id = :u"
@@ -267,11 +267,11 @@ def test_cada_um_ve_so_a_propria_conta(make_user: Callable[..., Account], servic
     assert _as_app(services, alice.user_id, rename, u=str(alice.user_id)) == 1
 
 
-def test_pat_de_outro_usuario_nao_enxerga_nada(scenario: dict[str, Any]):
+def test_another_users_pat_sees_nothing(scenario: dict[str, Any]):
     recording = scenario["recording"]
-    lumea_do_bob = scenario["apis"]["bob"].pat("transcripts:read", "recordings:read")
-    assert lumea_do_bob.get(f"/api/v1/transcripts/{recording['transcript_id']}").status_code == 404
-    assert lumea_do_bob.get("/api/v1/transcripts").json()["items"] == []
+    bobs_lumea = scenario["apis"]["bob"].pat("transcripts:read", "recordings:read")
+    assert bobs_lumea.get(f"/api/v1/transcripts/{recording['transcript_id']}").status_code == 404
+    assert bobs_lumea.get("/api/v1/transcripts").json()["items"] == []
 
 
 @pytest.mark.parametrize(
@@ -286,13 +286,13 @@ def test_pat_de_outro_usuario_nao_enxerga_nada(scenario: dict[str, Any]):
         "UPDATE platform_settings SET updated_at = now()",
     ],
 )
-def test_eclume_app_nao_alcanca_a_plataforma(make_user: Callable[..., Account], services: Services, sql: str):
+def test_eclume_app_does_not_reach_the_platform(make_user: Callable[..., Account], services: Services, sql: str):
     with pytest.raises(DBAPIError, match="permission denied"):
         _as_app(services, make_user().user_id, sql)
 
 
-def test_papel_de_conexao_nao_e_superusuario_nem_dono(services: Services):
-    """A suíte conecta como `eclume_server`: sem superusuário, sem DDL, dono de nada, membro de `eclume_app`."""
+def test_connection_role_is_neither_superuser_nor_owner(services: Services):
+    """The suite connects as `eclume_server`: no superuser, no DDL, owner of nothing, member of `eclume_app`."""
 
     async def attributes(conn: Any) -> Any:  # noqa: ANN401
         role = (

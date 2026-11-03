@@ -1,4 +1,4 @@
-"""As operações de escrita compartilhadas (MCP, API e Agente), sob a RLS do dono."""
+"""The shared write operations (MCP, API and Agent), under the owner's RLS."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def owner(admin: Api, make_user: Callable[..., Account]) -> Account:
     return make_user()
 
 
-def test_tags_acrescentadas_e_tiradas_sem_repetir(
+def test_tags_added_and_removed_without_duplicates(
     owner: Account, as_user: Callable[[Account], Api], services: Services
 ):
     api = as_user(owner)
@@ -60,7 +60,7 @@ def test_tags_acrescentadas_e_tiradas_sem_repetir(
     assert tags(["auditoria"], []) is False
 
 
-def test_colecoes_e_tipo_de_agenda(owner: Account, as_user: Callable[[Account], Api], services: Services):
+def test_collections_and_agenda_type(owner: Account, as_user: Callable[[Account], Api], services: Services):
     api = as_user(owner)
     rid = UUID(transcribed(api, services.settings)["id"])
     collection = UUID(api.post("/api/v1/collections", json={"name": "Diretoria"}).json()["id"])
@@ -77,7 +77,7 @@ def test_colecoes_e_tipo_de_agenda(owner: Account, as_user: Callable[[Account], 
     assert api.get(f"/api/v1/recordings/{rid}").json()["agenda_type"]["id"] == str(agenda["id"])
 
 
-def test_gravacao_de_outra_conta_e_404(
+def test_recording_from_another_account_is_404(
     owner: Account, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     rid = UUID(transcribed(as_user(owner), services.settings)["id"])
@@ -90,7 +90,9 @@ def test_gravacao_de_outra_conta_e_404(
     assert collections.value.status_code == 404
 
 
-def test_regenerar_resumo_abre_versao_na_fila(owner: Account, as_user: Callable[[Account], Api], services: Services):
+def test_regenerate_summary_opens_a_queued_version(
+    owner: Account, as_user: Callable[[Account], Api], services: Services
+):
     rid = UUID(transcribed(as_user(owner), services.settings)["id"])
 
     async def regenerate(conn: Any) -> Any:  # noqa: ANN401

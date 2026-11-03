@@ -1,4 +1,4 @@
-"""Pool de conexões por processo (`ECLUME_DB_POOL_SIZE`, `ECLUME_DB_MAX_OVERFLOW`) e o índice dos jobs em aberto."""
+"""Per-process connection pool (`ECLUME_DB_POOL_SIZE`, `ECLUME_DB_MAX_OVERFLOW`) and the open-jobs index."""
 
 from __future__ import annotations
 
@@ -20,24 +20,24 @@ if TYPE_CHECKING:
 def _pool(settings: Settings, *, worker: bool) -> tuple[int, int]:
     engine = make_runtime_engine(settings, worker=worker)
     try:
-        return engine.pool.size(), engine.pool._max_overflow  # noqa: SLF001 — o SQLAlchemy não expõe o teto
+        return engine.pool.size(), engine.pool._max_overflow  # noqa: SLF001 — SQLAlchemy does not expose the ceiling
     finally:
         run(engine.dispose())
 
 
-def test_pool_padrao_da_api_e_do_worker():
+def test_default_pool_of_the_api_and_the_worker():
     assert _pool(Settings(), worker=False) == (5, 5)
     assert _pool(Settings(), worker=True) == (3, 2)
 
 
-def test_pool_por_env(monkeypatch: pytest.MonkeyPatch):
+def test_pool_from_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ECLUME_DB_POOL_SIZE", "7")
     monkeypatch.setenv("ECLUME_DB_MAX_OVERFLOW", "0")
     assert _pool(Settings(), worker=False) == (7, 0)
     assert _pool(Settings(), worker=True) == (7, 0)
 
 
-def test_indice_parcial_dos_jobs_em_aberto(services: Services):
+def test_partial_index_of_the_open_jobs(services: Services):
     async def go(conn: AsyncConnection) -> str:
         sql = "SELECT indexdef FROM pg_indexes WHERE indexname = 'transcription_jobs_open_state_idx'"
         return (await conn.execute(text(sql))).scalar_one()

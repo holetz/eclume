@@ -1,4 +1,4 @@
-"""Busca full-text: português sem acento, filtros, paginação e isolamento."""
+"""Full-text search: Portuguese without accents, filters, pagination and isolation."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def alice(as_user: Callable[[Account], Api], make_user: Callable[..., Account], 
     return {"api": api, "recording": recording}
 
 
-def test_portugues_sem_acento_frase_e_exclusao(alice: dict[str, Any]):
+def test_portuguese_without_accents_phrase_and_exclusion(alice: dict[str, Any]):
     api, recording = alice["api"], alice["recording"]
     response = api.get("/api/v1/search", params={"q": "turmas"}).json()
     assert {hit["segment"]["id"] for hit in response["items"]} == {"seg-0009", "seg-0010", "seg-0011"}
@@ -57,7 +57,7 @@ def test_portugues_sem_acento_frase_e_exclusao(alice: dict[str, Any]):
     assert api.get("/api/v1/search", params={"q": "   "}).status_code == 422
 
 
-def test_paginacao(alice: dict[str, Any]):
+def test_pagination(alice: dict[str, Any]):
     api = alice["api"]
     seen, cursor = [], None
     while True:
@@ -71,7 +71,7 @@ def test_paginacao(alice: dict[str, Any]):
     assert api.get("/api/v1/search", params={"q": "turmas", "cursor": "lixo"}).status_code == 422
 
 
-def test_destaque_nao_carrega_outro_html(alice: dict[str, Any]):
+def test_highlight_does_not_carry_other_html(alice: dict[str, Any]):
     api, recording = alice["api"], alice["recording"]
     base = f"/api/v1/transcripts/{recording['transcript_id']}"
     api.patch(f"{base}/segments/seg-0009", json={"text": "Use <b>turmas</b> & \x02mais\x03 grupos"})
@@ -81,7 +81,7 @@ def test_destaque_nao_carrega_outro_html(alice: dict[str, Any]):
     assert hit["highlight"] == "Use &lt;b&gt;<mark>turmas</mark>&lt;/b&gt; &amp; mais grupos"
 
 
-def test_filtros(alice: dict[str, Any], services: Services):
+def test_filters(alice: dict[str, Any], services: Services):
     api, first = alice["api"], alice["recording"]
     collection = api.post("/api/v1/collections", json={"name": "Programa"}).json()
     second = transcribed(
@@ -108,7 +108,7 @@ def test_filtros(alice: dict[str, Any], services: Services):
     assert api.get("/api/v1/search", params={"q": "turmas", "from": "ontem"}).status_code == 422
 
     assert ids(api, q="turmas", person=person["id"]) == ["seg-0010", "seg-0010"]
-    # Só `person`: as falas da pessoa em ordem cronológica, sem destaque.
+    # Only `person`: the person's utterances in chronological order, without highlight.
     spoken = api.get("/api/v1/search", params={"person": person["id"]}).json()["items"]
     assert len(spoken) == 12
     assert [hit["transcript"]["recording_id"] for hit in spoken] == [second["id"]] * 6 + [first["id"]] * 6
@@ -119,7 +119,7 @@ def test_filtros(alice: dict[str, Any], services: Services):
     assert all(hit["rank"] == 0 and hit["highlight"] == hit["segment"]["text"] for hit in spoken)
 
 
-def test_filtro_por_campo_do_usuario(
+def test_filter_by_user_field(
     alice: dict[str, Any],
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
@@ -138,7 +138,7 @@ def test_filtro_por_campo_do_usuario(
         items = api.get("/api/v1/search", params={"q": "turmas", "field": list(field)}).json()["items"]
         return sorted({hit["transcript"]["recording_id"] for hit in items})
 
-    # OU no mesmo campo, E entre campos; lista vale por item; embutidos (título e tags) também.
+    # OR within the same field, AND across fields; a list matches per item; built-ins (title and tags) too.
     assert recordings(f"{client['id']}:A") == [first["id"]]
     assert recordings(f"{client['id']}:A", f"{client['id']}:B") == sorted([first["id"], second["id"]])
     assert recordings(f"{client['id']}:A", f"{teams['id']}:ti") == []
@@ -147,14 +147,14 @@ def test_filtro_por_campo_do_usuario(
     tags = next(f for f in api.get("/api/v1/fields").json()["items"] if f["builtin"] == "tags")
     assert recordings(f"{title['id']}:Segunda") == [second["id"]]
     assert recordings(f"{tags['id']}:cliente-a") == [first["id"]]
-    # Só `person` também aceita o filtro.
+    # Only `person` also accepts the filter.
     person = api.post("/api/v1/people", json={"name": "Mariana Couto"}).json()
     api.patch(f"/api/v1/transcripts/{second['transcript_id']}/speakers/S1", json={"person_id": person["id"]})
     spoken = api.get("/api/v1/search", params={"person": person["id"], "field": f"{client['id']}:B"}).json()["items"]
     assert {hit["transcript"]["recording_id"] for hit in spoken} == {second["id"]}
     assert api.get("/api/v1/search", params={"q": "turmas", "field": "sem-dois-pontos"}).status_code == 422
 
-    # O campo de outra conta não vaza: o valor dela não encontra nada aqui, e o daqui nada lá.
+    # Another account's field does not leak: its value finds nothing here, and ours finds nothing there.
     bob = as_user(make_user(name="Bob"))
     transcribed(bob, services.settings)
     assert bob.get("/api/v1/search", params={"q": "turmas", "field": f"{client['id']}:A"}).json()["items"] == []
@@ -163,7 +163,7 @@ def test_filtro_por_campo_do_usuario(
 
 
 def _matches_as(services: Services, account: Account) -> int:
-    """Chaves que `eclume_segment_matches` devolve a `eclume_app` no contexto da conta."""
+    """Keys that `eclume_segment_matches` returns to `eclume_app` in the account context."""
 
     async def go(conn: Any) -> int:  # noqa: ANN401
         await conn.execute(text("SET LOCAL ROLE eclume_app"))
@@ -174,7 +174,7 @@ def _matches_as(services: Services, account: Account) -> int:
     return run(services.sql(go))
 
 
-def test_busca_nunca_devolve_segmento_de_outra_conta(
+def test_search_never_returns_a_segment_of_another_account(
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
     services: Services,
@@ -185,7 +185,7 @@ def test_busca_nunca_devolve_segmento_de_outra_conta(
     person = apis["Alice"].post("/api/v1/people", json={"name": "Rafael"}).json()
     base = f"/api/v1/transcripts/{recording['transcript_id']}"
     apis["Alice"].patch(f"{base}/speakers/S2", json={"person_id": person["id"]})
-    # Dave tem a própria gravação com os mesmos termos.
+    # Dave has his own recording with the same terms.
     transcribed(apis["Dave"], services.settings)
 
     def finds(name: str) -> bool:
@@ -199,9 +199,9 @@ def test_busca_nunca_devolve_segmento_de_outra_conta(
     assert finds("Alice")
     assert not any(finds(name) for name in ("Bob", "Dave"))
     assert apis["Bob"].pat("transcripts:read").get("/api/v1/search", params={"q": "turmas"}).json()["items"] == []
-    assert len(ids(apis["Dave"], q="turmas")) == 3  # só a gravação dele
+    assert len(ids(apis["Dave"], q="turmas")) == 3  # only his recording
 
-    # A função do GIN nunca atravessa a conta: devolve só as chaves do usuário da transação.
+    # The GIN function never crosses the account: it returns only the transaction user's keys.
     assert _matches_as(services, accounts["Dave"]) == 3
     assert _matches_as(services, accounts["Bob"]) == 0
     assert _matches_as(services, accounts["Alice"]) == 3

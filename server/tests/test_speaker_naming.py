@@ -1,8 +1,8 @@
-"""Marcação obrigatória dos locutores (holetz/eclume#144): a etapa `speakers` para a cadeia.
+"""Required speaker naming (holetz/eclume#144): the `speakers` step halts the chain.
 
-Com a preferência da conta ligada, a ingestão deixa a etapa `waiting` quando algum locutor com fala
-suficiente está sem pessoa, e o tipo, os campos e o resumo não rodam; nomear o último, soltar a
-gravação ou desligar a preferência retoma a cadeia.
+With the account preference on, ingest leaves the step `waiting` when some speaker with enough
+speech has no person, and the agenda type, fields and summary do not run; naming the last one,
+releasing the recording or turning the preference off resumes the chain.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def _sql(services: Services, statement: str, **params: Any) -> Any:  # noqa: ANN
 
 
 def call(client: TestClient, token: str, tool: str, **arguments: Any) -> dict[str, Any]:  # noqa: ANN401
-    """`tools/call` no `/mcp`, como em test_mcp.py."""
+    """`tools/call` on `/mcp`, as in test_mcp.py."""
     body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": arguments}}
     headers = {"Accept": "application/json, text/event-stream", "Authorization": f"Bearer {token}"}
     client.cookies.clear()
@@ -56,7 +56,7 @@ def _recording(api: Api, recording_id: str) -> dict[str, Any]:
     return api.get(f"/api/v1/recordings/{recording_id}").json()
 
 
-def test_preferencia_desligada_segue_a_cadeia_como_antes(
+def test_preference_off_runs_the_chain_as_before(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -77,7 +77,7 @@ def test_preferencia_desligada_segue_a_cadeia_como_antes(
     assert recording["awaiting"] is None
 
 
-def test_preferencia_ligada_para_na_espera_dos_locutores(
+def test_preference_on_halts_waiting_for_speakers(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -89,7 +89,7 @@ def test_preferencia_ligada_para_na_espera_dos_locutores(
     assert steps["speakers"]["state"] == "waiting"
     assert steps["speakers"]["reason"] == "unnamed_speakers"
     assert steps["speakers"]["finished_at"] is not None
-    # Nada da cadeia por agente rodou: tipo, campos e resumo seguem esperando.
+    # Nothing of the agent chain ran: agenda type, fields and summary are still waiting.
     assert [steps[name]["state"] for name in ("agenda_type", "fields", "summary")] == ["pending"] * 3
     assert recording["awaiting"] == "speakers"
     detail = _sql(
@@ -102,12 +102,12 @@ def test_preferencia_ligada_para_na_espera_dos_locutores(
     )
 
 
-def test_locutor_com_pouca_fala_nao_prende_a_gravacao(
+def test_speaker_with_little_speech_does_not_hold_the_recording(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
     recording = transcribed(api, services.settings)
-    # Nenhum locutor chega ao piso de 10 s de fala: ninguém conta como faltando nome.
+    # No speaker reaches the 10 s speech floor: nobody counts as missing a name.
     _sql(services, "UPDATE speakers SET talk_ms = 9000 WHERE transcript_id = :t", t=recording["transcript_id"])
 
     async def check(conn: Any) -> int:  # noqa: ANN401
@@ -120,7 +120,7 @@ def test_locutor_com_pouca_fala_nao_prende_a_gravacao(
     assert run(services.sql(check)) == 0
 
 
-def test_retomada_do_cron_nao_relanca_a_gravacao_parada(
+def test_cron_resume_does_not_relaunch_the_halted_recording(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -158,7 +158,7 @@ def _link(api: Api, recording: dict[str, Any], speaker_id: str, name: str) -> No
     assert response.status_code == 200, response.text
 
 
-def test_preferencia_pela_rota_le_por_pat_e_escreve_so_com_sessao(
+def test_preference_route_reads_by_pat_and_writes_only_with_session(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     session = as_user(make_user())
@@ -173,7 +173,7 @@ def test_preferencia_pela_rota_le_por_pat_e_escreve_so_com_sessao(
     assert session.patch("/api/v1/me/speaker-naming", json={}).status_code == 422
 
 
-def test_nomear_o_ultimo_locutor_retoma_a_cadeia(
+def test_naming_the_last_speaker_resumes_the_chain(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -183,7 +183,7 @@ def test_nomear_o_ultimo_locutor_retoma_a_cadeia(
     speakers = _speakers(api, recording)
     for index, speaker in enumerate(speakers[:-1]):
         _link(api, recording, speaker["id"], f"Pessoa {index}")
-    # Falta um: segue parada, com a contagem atualizada no detalhe.
+    # One is missing: still halted, with the count updated in the detail.
     run_cpu(services.settings)
     assert _steps(_recording(api, recording["id"]))["speakers"]["state"] == "waiting"
     detail = _sql(
@@ -193,7 +193,7 @@ def test_nomear_o_ultimo_locutor_retoma_a_cadeia(
     )
     assert detail[0][0]["unnamed"] == 1
 
-    # Renomear sem ligar pessoa não conta como nomear.
+    # Renaming without linking a person does not count as naming.
     last = speakers[-1]["id"]
     api.patch(f"/api/v1/transcripts/{recording['transcript_id']}/speakers/{last}", json={"label": "Visitante"})
     assert _steps(_recording(api, recording["id"]))["speakers"]["state"] == "waiting"
@@ -210,7 +210,7 @@ def test_nomear_o_ultimo_locutor_retoma_a_cadeia(
     assert api.get("/api/v1/me/speaker-naming").json()["waiting_count"] == 0
 
 
-def test_mesclar_no_locutor_nomeado_tambem_retoma(
+def test_merging_into_the_named_speaker_also_resumes(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -226,7 +226,7 @@ def test_mesclar_no_locutor_nomeado_tambem_retoma(
     assert _steps(_recording(api, recording["id"]))["speakers"]["state"] == "done"
 
 
-def test_seguir_sem_nomear_solta_a_gravacao(
+def test_continue_without_naming_releases_the_recording(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -238,14 +238,14 @@ def test_seguir_sem_nomear_solta_a_gravacao(
     step = _steps(released.json())["speakers"]
     assert (step["state"], step["reason"]) == ("skipped", "continued_by_user")
     assert released.json()["awaiting"] is None
-    # Fora da espera, soltar de novo é conflito.
+    # Outside the wait, releasing again is a conflict.
     again = desktop.post(f"/api/v1/recordings/{recording['id']}/continue")
     assert again.status_code == 409
     run_cpu(services.settings)
     assert _steps(_recording(api, recording["id"]))["agenda_type"]["state"] != "pending"
 
 
-def test_continue_de_outra_conta_e_404(
+def test_continue_from_another_account_is_404(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     owner = as_user(make_user())
@@ -256,7 +256,7 @@ def test_continue_de_outra_conta_e_404(
     assert _steps(_recording(owner, recording["id"]))["speakers"]["state"] == "waiting"
 
 
-def test_desligar_a_preferencia_solta_as_paradas(
+def test_turning_the_preference_off_releases_the_halted(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -274,7 +274,7 @@ def test_desligar_a_preferencia_solta_as_paradas(
         assert _steps(_recording(api, recording["id"]))["agenda_type"]["state"] != "pending"
 
 
-def test_awaiting_na_gravacao_no_filtro_da_biblioteca_e_no_mcp(
+def test_awaiting_on_the_recording_the_library_filter_and_mcp(
     client: TestClient, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -290,7 +290,7 @@ def test_awaiting_na_gravacao_no_filtro_da_biblioteca_e_no_mcp(
     assert {item["id"] for item in everything} == {ready["id"], parked["id"]}
     assert api.get("/api/v1/recordings", params={"awaiting": "outra"}).status_code == 422
 
-    # Outra conta não vê a gravação parada de ninguém.
+    # Another account sees nobody's halted recording.
     other = as_user(make_user())
     assert other.get("/api/v1/recordings", params={"awaiting": "speakers"}).json()["items"] == []
 

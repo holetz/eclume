@@ -1,4 +1,4 @@
-"""Limite de login por falhas: par (conta, IP), teto da conta que poupa IP conhecido, sucesso que zera."""
+"""Login failure limit: (account, IP) pair, account ceiling that spares a known IP, success that resets."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ PER_ACCOUNT = 5
 
 @pytest.fixture
 def from_ip(services: Services) -> Iterator[Callable[[str], TestClient]]:
-    """Um cliente por IP, todos com 3 falhas por par e 5 por conta, sem as janelas de outros testes."""
+    """One client per IP, all with 3 failures per pair and 5 per account, without other tests' windows."""
     store = redis.Redis.from_url(services.settings.redis_url)
     for key in store.scan_iter("eclume:rl:*"):
         store.delete(key)
@@ -53,7 +53,7 @@ def _login(client: TestClient, email: str, password: str = PASSWORD, path: str =
     return client.post(path, json=body).status_code
 
 
-def test_falhas_de_um_ip_nao_trancam_a_dona_da_conta(
+def test_failures_from_one_ip_do_not_lock_out_the_account_owner(
     from_ip: Callable[[str], TestClient], make_user: Callable[..., Account]
 ):
     account = make_user()
@@ -65,7 +65,7 @@ def test_falhas_de_um_ip_nao_trancam_a_dona_da_conta(
     assert _login(from_ip("10.0.0.2"), account.email) == 204
 
 
-def test_navegador_e_aparelho_somam_as_falhas_do_par(
+def test_browser_and_device_add_up_the_pair_failures(
     from_ip: Callable[[str], TestClient], make_user: Callable[..., Account]
 ):
     account = make_user()
@@ -76,7 +76,7 @@ def test_navegador_e_aparelho_somam_as_falhas_do_par(
     assert _login(client, account.email, path="/api/v1/devices/login") == 429
 
 
-def test_sucesso_zera_as_falhas_do_par(from_ip: Callable[[str], TestClient], make_user: Callable[..., Account]):
+def test_success_resets_the_pair_failures(from_ip: Callable[[str], TestClient], make_user: Callable[..., Account]):
     account = make_user()
     client = from_ip("10.0.2.1")
     assert [_login(client, account.email, "errada") for _ in range(PER_PAIR - 1)] == [401] * (PER_PAIR - 1)
@@ -85,7 +85,7 @@ def test_sucesso_zera_as_falhas_do_par(from_ip: Callable[[str], TestClient], mak
     assert _login(client, account.email) == 204
 
 
-def test_teto_da_conta_barra_ip_novo_e_poupa_ip_conhecido(
+def test_account_ceiling_blocks_new_ip_and_spares_known_ip(
     from_ip: Callable[[str], TestClient], make_user: Callable[..., Account]
 ):
     account = make_user()
@@ -97,10 +97,10 @@ def test_teto_da_conta_barra_ip_novo_e_poupa_ip_conhecido(
     assert _login(known, account.email) == 204
 
 
-def test_admin_tem_contadores_proprios(from_ip: Callable[[str], TestClient], services: Services):
+def test_admin_has_its_own_counters(from_ip: Callable[[str], TestClient], services: Services):
     admin = new_admin(services)
     client = from_ip("10.0.6.1")
-    # As falhas na conta de usuário com o mesmo e-mail não contam para o admin.
+    # Failures on the user account with the same e-mail do not count for the admin.
     assert [_login(client, admin.email, "errada") for _ in range(PER_PAIR)] == [401] * PER_PAIR
     admin_path = "/api/v1/admin/auth/login"
     assert [_login(client, admin.email, "errada", admin_path) for _ in range(PER_PAIR)] == [401] * PER_PAIR

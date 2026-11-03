@@ -1,4 +1,4 @@
-"""Servidor MCP em `/mcp`: Bearer, ferramentas de leitura com escopos e o uso por MCP."""
+"""MCP server at `/mcp`: Bearer, read tools with scopes and MCP usage tracking."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ ALL_READ = ("recordings:read", "transcripts:read", "summaries:read")
 
 
 def rpc(client: TestClient, token: str | None, method: str, params: dict[str, Any] | None = None) -> Any:  # noqa: ANN401
-    """Uma chamada JSON-RPC ao `/mcp`, como um cliente MCP sem estado."""
+    """One JSON-RPC call to `/mcp`, as a stateless MCP client."""
     headers = {"Accept": "application/json, text/event-stream"}
     if token is not None:
         headers["Authorization"] = f"Bearer {token}"
@@ -33,7 +33,7 @@ def rpc(client: TestClient, token: str | None, method: str, params: dict[str, An
 
 
 def call(client: TestClient, token: str, tool: str, **arguments: Any) -> dict[str, Any]:  # noqa: ANN401
-    """`tools/call`: o resultado (`structuredContent`, `isError`, `content`)."""
+    """`tools/call`: the result (`structuredContent`, `isError`, `content`)."""
     response = rpc(client, token, "tools/call", {"name": tool, "arguments": arguments})
     assert response.status_code == 200, response.text
     return response.json()["result"]
@@ -44,20 +44,18 @@ def token_of(api: Api) -> str:
     return api.token
 
 
-def test_sem_bearer_valido_e_401(client: TestClient, as_user: Callable[[Account], Api], make_user: Callable):
+def test_without_a_valid_bearer_is_401(client: TestClient, as_user: Callable[[Account], Api], make_user: Callable):
     session = as_user(make_user())
     for token in (None, "eclp_inexistente0000000000000000000000000000"):
         response = rpc(client, token, "tools/list")
         assert response.status_code == 401
         assert response.headers["content-type"].startswith("application/problem+json")
         assert response.headers["WWW-Authenticate"].startswith("Bearer")
-    # A sessão do navegador não vale no /mcp.
+    # The browser session is not valid on /mcp.
     assert session.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).status_code == 401
 
 
-def test_lista_as_ferramentas_a_qualquer_token(
-    client: TestClient, as_user: Callable[[Account], Api], make_user: Callable
-):
+def test_lists_the_tools_to_any_token(client: TestClient, as_user: Callable[[Account], Api], make_user: Callable):
     token = token_of(as_user(make_user()).pat("people:read"))
     initialized = rpc(
         client,
@@ -70,13 +68,13 @@ def test_lista_as_ferramentas_a_qualquer_token(
     tools = {tool["name"]: tool for tool in rpc(client, token, "tools/list").json()["result"]["tools"]}
     assert set(tools) >= READ_TOOLS
     assert all(tools[name]["annotations"]["readOnlyHint"] for name in READ_TOOLS)
-    # A recusa nomeia o escopo; a ferramenta não some da lista.
+    # The refusal names the scope; the tool does not disappear from the list.
     denied = call(client, token, "list_fields_and_tags")
     assert denied["isError"] is True
     assert "recordings:read" in denied["content"][0]["text"]
 
 
-def test_busca_le_e_marca_o_uso_por_mcp(
+def test_searches_reads_and_marks_mcp_usage(
     client: TestClient, as_user: Callable[[Account], Api], make_user: Callable, services: Services
 ):
     session = as_user(make_user())
@@ -99,7 +97,7 @@ def test_busca_le_e_marca_o_uso_por_mcp(
     assert detail["id"] == rid
     assert "cliente-aurora" in detail["tags"]
     assert {f["name"] for f in detail["fields"]} >= {"Título", "Tags"}
-    assert len(detail["people"]) == 3  # a fixture tem 3 locutores
+    assert len(detail["people"]) == 3  # the fixture has 3 speakers
     assert {step["step"] for step in detail["pipeline"]} >= {"transcription"}
 
     catalog = call(client, token, "list_fields_and_tags")["structuredContent"]
@@ -124,7 +122,7 @@ def test_busca_le_e_marca_o_uso_por_mcp(
     assert run(services.sql(used)) is True
 
 
-def test_escopos_e_gravacao_de_outra_conta(
+def test_scopes_and_another_accounts_recording(
     client: TestClient, as_user: Callable[[Account], Api], make_user: Callable, services: Services
 ):
     owner = as_user(make_user())
@@ -146,7 +144,7 @@ WRITE_TOOLS = {"update_summary", "request_summary", "update_fields", "delete_rec
 CLAUDE = {"name": "Claude (servidor)", "kind": "claude-cli", "model": "sonnet"}
 
 
-def test_ferramentas_de_escrita_com_escopos(
+def test_write_tools_with_scopes(
     client: TestClient, admin: Api, as_user: Callable[[Account], Api], make_user: Callable, services: Services
 ):
     admin.post("/api/v1/admin/agent-providers", json=CLAUDE)
@@ -165,7 +163,7 @@ def test_ferramentas_de_escrita_com_escopos(
     assert tools["delete_recording"]["annotations"]["destructiveHint"] is True
     assert tools["update_fields"]["annotations"]["idempotentHint"] is True
 
-    # Resumo: edição sobre a atual e os dois pedidos.
+    # Summary: an edit over the current one and both requests.
     denied = call(client, reader, "update_summary", recording_id=rid, content_md="# Novo")
     assert denied["isError"] is True
     assert "summaries:write" in denied["content"][0]["text"]
@@ -184,7 +182,7 @@ def test_ferramentas_de_escrita_com_escopos(
     assert chat["mode"] == "chat"
     assert session.get(f"/api/v1/summary-chat-messages/{chat['pending_id']}").json()["status"] == "queued"
 
-    # Campos: título e tags viram `edited`; campo desconhecido é erro de ferramenta.
+    # Fields: title and tags become `edited`; an unknown field is a tool error.
     changed = call(client, writer, "update_fields", recording_id=rid, title="Com a Aurora", tags=["aurora", "1-1"])
     values = {f["name"]: f for f in changed["structuredContent"]["fields"]}
     assert (values["Título"]["value"], values["Título"]["origin"]) == ("Com a Aurora", "edited")
@@ -196,7 +194,7 @@ def test_ferramentas_de_escrita_com_escopos(
     assert unknown["isError"] is True
     assert call(client, writer, "update_fields", recording_id=rid)["isError"] is True
 
-    # Exclusão: escopo próprio.
+    # Deletion: its own scope.
     refused = call(client, writer, "delete_recording", recording_id=rid)
     assert refused["isError"] is True
     assert refused["content"][0]["text"].endswith("Falta o escopo recordings:delete neste token.")

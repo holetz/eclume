@@ -1,4 +1,4 @@
-"""Log JSON da API e dos workers: `X-Request-ID`, log de acesso sem query string, contexto do job."""
+"""JSON logs of the API and the workers: `X-Request-ID`, access log without query string, job context."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from eclume_server.app import RequestIdMiddleware
 from eclume_server.worker import job_start
 
 
-def _linhas(stream: io.StringIO) -> list[dict]:
-    return [json.loads(linha) for linha in stream.getvalue().splitlines()]
+def _lines(stream: io.StringIO) -> list[dict]:
+    return [json.loads(line) for line in stream.getvalue().splitlines()]
 
 
 def _app() -> FastAPI:
@@ -24,71 +24,71 @@ def _app() -> FastAPI:
 
     @app.get("/eco")
     def eco() -> dict:
-        logging.getLogger("eclume_server.teste").info("dentro")
+        logging.getLogger("eclume_server.teste").info("inside")
         return {}
 
     @app.get("/api/v1/health/ready")
-    def pronto() -> dict:
+    def ready() -> dict:
         return {}
 
     @app.get("/api/v1/health/falha", status_code=503)
-    def falha() -> dict:
+    def failing() -> dict:
         return {}
 
     app.add_middleware(RequestIdMiddleware)
     return app
 
 
-def test_request_id_novo_vai_na_resposta_e_no_log():
+def test_new_request_id_goes_in_the_response_and_the_log():
     stream = io.StringIO()
     registro.configurar_logs(stream=stream)
     response = TestClient(_app()).get("/eco?sig=segredo&token=x")
     rid = response.headers["x-request-id"]
     assert len(rid) == 32
-    dentro, acesso = _linhas(stream)
-    assert dentro["request_id"] == rid
-    assert acesso["request_id"] == rid
-    assert acesso["logger"] == "eclume_server.access"
-    assert acesso["msg"].startswith("GET /eco 200 ")
+    inside, access = _lines(stream)
+    assert inside["request_id"] == rid
+    assert access["request_id"] == rid
+    assert access["logger"] == "eclume_server.access"
+    assert access["msg"].startswith("GET /eco 200 ")
     assert "segredo" not in stream.getvalue()
 
 
-def test_log_de_acesso_pula_o_health_que_deu_certo():
+def test_access_log_skips_the_successful_health_check():
     stream = io.StringIO()
     registro.configurar_logs(stream=stream)
     client = TestClient(_app())
     assert client.get("/api/v1/health/ready").status_code == 200
-    assert _linhas(stream) == []
+    assert _lines(stream) == []
     assert client.get("/api/v1/health/falha").status_code == 503
-    (acesso,) = _linhas(stream)
-    assert acesso["msg"].startswith("GET /api/v1/health/falha 503 ")
+    (access,) = _lines(stream)
+    assert access["msg"].startswith("GET /api/v1/health/falha 503 ")
 
 
-def test_request_id_recebido_e_reaproveitado_so_se_for_seguro():
+def test_received_request_id_is_reused_only_if_safe():
     stream = io.StringIO()
     registro.configurar_logs(stream=stream)
     client = TestClient(_app())
     assert client.get("/eco", headers={"X-Request-ID": "abc-123"}).headers["x-request-id"] == "abc-123"
-    injetado = client.get("/eco", headers={"X-Request-ID": "a b\nlevel=ERROR"}).headers["x-request-id"]
-    assert injetado != "a b\nlevel=ERROR"
-    assert len(injetado) == 32
+    injected = client.get("/eco", headers={"X-Request-ID": "a b\nlevel=ERROR"}).headers["x-request-id"]
+    assert injected != "a b\nlevel=ERROR"
+    assert len(injected) == 32
 
 
-def test_resposta_da_api_real_leva_x_request_id(client: TestClient):
+def test_real_api_response_carries_x_request_id(client: TestClient):
     response = client.get("/api/v1/health")
     assert response.headers["x-request-id"]
 
 
-def test_job_start_define_o_contexto_do_job():
+def test_job_start_sets_the_job_context():
     stream = io.StringIO()
     registro.configurar_logs(stream=stream)
 
     async def job() -> None:
         await job_start({"job_id": "ingest_transcript:rec-1:2"})
-        logging.getLogger("eclume_server.worker").info("ingerindo")
+        logging.getLogger("eclume_server.worker").info("ingesting")
 
     asyncio.run(job())
-    (linha,) = _linhas(stream)
-    assert linha["job_id"] == "ingest_transcript:rec-1:2"
-    assert linha["recording_id"] == "rec-1"
-    assert linha["revision"] == 2
+    (line,) = _lines(stream)
+    assert line["job_id"] == "ingest_transcript:rec-1:2"
+    assert line["recording_id"] == "rec-1"
+    assert line["revision"] == 2

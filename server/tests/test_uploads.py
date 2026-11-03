@@ -1,4 +1,4 @@
-"""Upload multipart: partes assinadas, dedup e retomada por hash, hash divergente e enfileiramento."""
+"""Multipart upload: signed parts, dedup and resume by hash, mismatched hash and enqueueing."""
 
 from __future__ import annotations
 
@@ -33,18 +33,18 @@ def _body(data: bytes, **fields: object) -> dict[str, object]:
 
 
 def _queued_job(services: Services, job_id: str) -> tuple[str, tuple, dict] | None:
-    import pickle  # noqa: PLC0415 — o arq serializa o job com pickle
+    import pickle  # noqa: PLC0415 — arq serializes the job with pickle
 
     client = redis.Redis.from_url(services.settings.redis_url)
     raw = client.get(f"arq:job:{job_id}")
     in_queue = client.zscore("eclume:gpu", job_id) is not None
     if raw is None or not in_queue:
         return None
-    job = pickle.loads(raw)  # noqa: S301 — dado que o próprio teste enfileirou
+    job = pickle.loads(raw)  # noqa: S301 — data the test itself enqueued
     return job["f"], job["a"], job["k"]
 
 
-def test_upload_em_partes_cria_gravacao_e_enfileira_transcribe(
+def test_upload_in_parts_creates_recording_and_enqueues_transcribe(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user(name="Mariana Couto")
@@ -121,7 +121,7 @@ def test_upload_em_partes_cria_gravacao_e_enfileira_transcribe(
     assert pat.get(f"/api/v1/uploads/{upload['id']}").json()["status"] == "completed"
 
 
-def test_mesmo_hash_deduplica_sem_transferir(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_same_hash_deduplicates_without_transfer(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     data = audio_bytes(1000)
     recording = upload_file(api, data)
@@ -134,10 +134,10 @@ def test_mesmo_hash_deduplica_sem_transferir(as_user: Callable[[Account], Api], 
     assert body["part_count"] == 0
 
     other = as_user(make_user())
-    assert other.post("/api/v1/uploads", json=_body(data)).status_code == 201  # o dedup é por usuário
+    assert other.post("/api/v1/uploads", json=_body(data)).status_code == 201  # dedup is per user
 
 
-def test_retomada_pelo_hash_e_pelo_get(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_resume_by_hash_and_by_get(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     data = audio_bytes(11 * MIB)
     upload = api.post("/api/v1/uploads", json=_body(data)).json()
@@ -171,12 +171,12 @@ def _multipart(services: Services, upload_id: str) -> tuple[str, str]:
 
 
 def _lose_multipart(services: Services, upload_id: str) -> None:
-    """O multipart some do bucket (o MinIO o venceu ou alguém o abortou)."""
+    """The multipart vanishes from the bucket (MinIO expired it or someone aborted it)."""
     key, s3_upload_id = _multipart(services, upload_id)
     services.s3().abort_multipart_upload(Bucket=services.settings.s3_bucket, Key=key, UploadId=s3_upload_id)
 
 
-def test_multipart_sumido_e_expired_e_o_mesmo_hash_abre_outro(
+def test_vanished_multipart_is_expired_and_same_hash_opens_another(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -193,7 +193,7 @@ def test_multipart_sumido_e_expired_e_o_mesmo_hash_abre_outro(
     assert again.json()["status"] == "in_progress"
 
 
-def test_retomada_por_hash_com_multipart_sumido_abre_outro(
+def test_resume_by_hash_with_vanished_multipart_opens_another(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -206,7 +206,7 @@ def test_retomada_por_hash_com_multipart_sumido_abre_outro(
     assert api.get(f"/api/v1/uploads/{upload['id']}").json()["status"] == "expired"
 
 
-def test_parte_e_complete_com_multipart_sumido_respondem_409_upload_expired(
+def test_part_and_complete_with_vanished_multipart_return_409_upload_expired(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -225,14 +225,14 @@ def test_parte_e_complete_com_multipart_sumido_respondem_409_upload_expired(
     assert api.get(f"/api/v1/uploads/{other['id']}").json()["status"] == "expired"
 
 
-def test_complete_repetido_depois_do_objeto_montado_conclui(
+def test_repeated_complete_after_object_assembled_completes(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
     data = audio_bytes(1600)
     upload = api.post("/api/v1/uploads", json=_body(data)).json()
     sent = put_parts(api, upload, data)
-    # O `complete` anterior montou o objeto, mas o commit falhou: o upload segue `in_progress`.
+    # The previous `complete` assembled the object, but the commit failed: the upload stays `in_progress`.
     key, s3_upload_id = _multipart(services, upload["id"])
     services.s3().complete_multipart_upload(
         Bucket=services.settings.s3_bucket,
@@ -245,7 +245,7 @@ def test_complete_repetido_depois_do_objeto_montado_conclui(
     assert done.json()["status"] == "queued"
 
 
-def test_hash_divergente_vira_falha_do_job(
+def test_mismatched_hash_becomes_job_failure(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -259,11 +259,11 @@ def test_hash_divergente_vira_falha_do_job(
     assert recording["job"]["error"]["code"] == "hash_mismatch"
     assert recording["content_hash"] == f"sha256:{hashlib.sha256(data).hexdigest()}"
     assert _queued_job(services, f"transcribe:{recording['id']}:1") is None
-    # O hash declarado não ficou preso à gravação falha: um novo upload dele começa normalmente.
+    # The declared hash was not tied to the failed recording: a new upload of it starts normally.
     assert api.post("/api/v1/uploads", json=_body(b"outro conteudo")).status_code == 201
 
 
-def test_partes_invalidas(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_invalid_parts(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     data = audio_bytes(6 * MIB)
     upload = api.post("/api/v1/uploads", json=_body(data)).json()
@@ -291,7 +291,7 @@ def test_partes_invalidas(as_user: Callable[[Account], Api], make_user: Callable
     assert client.put(url, content=data[: 5 * MIB]).status_code == 409
 
 
-def test_validacao_da_criacao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_creation_validation(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     data = audio_bytes(100)
     cases = [
@@ -310,7 +310,7 @@ def test_validacao_da_criacao(as_user: Callable[[Account], Api], make_user: Call
         assert response.json()["errors"][0]["field"] == field
 
 
-def test_origem_da_data_e_natureza(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_date_source_and_kind(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     when = "2026-09-18T14:00:05Z"
 
@@ -318,8 +318,8 @@ def test_origem_da_data_e_natureza(as_user: Callable[[Account], Api], make_user:
         recording = upload_file(api, audio_bytes(100), **fields)
         return recording["recorded_at_source"], recording["kind"], recording["recorded_at"]
 
-    # Os apps (desktop e celular) mandam o relógio da captura; o navegador, a data que a pessoa
-    # confirmou ou digitou.
+    # The apps (desktop and mobile) send the capture clock; the browser, the date the person
+    # confirmed or typed.
     assert origin(source="desktop", recorded_at=when) == ("capture", "meeting", when)
     assert origin(source="mobile", recorded_at=when) == ("capture", "meeting", when)
     assert origin(recorded_at=when) == ("user", "meeting", when)
@@ -329,7 +329,7 @@ def test_origem_da_data_e_natureza(as_user: Callable[[Account], Api], make_user:
     assert recorded_at != when
 
 
-def test_escopo_e_dono_do_upload(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_upload_scope_and_owner(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     owner = as_user(make_user())
     reader = owner.pat("recordings:read")
     data = audio_bytes(100)
@@ -349,7 +349,7 @@ def test_escopo_e_dono_do_upload(as_user: Callable[[Account], Api], make_user: C
     assert json.loads(stranger.delete(f"/api/v1/uploads/{upload['id']}").text)["code"] == "not_found"
 
 
-def test_uploads_vencidos_sao_descartados_pelo_worker(
+def test_expired_uploads_are_discarded_by_worker(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -382,7 +382,7 @@ def test_uploads_vencidos_sao_descartados_pelo_worker(
     assert s3_upload_id not in {u["UploadId"] for u in pending}
 
 
-def test_parte_sem_content_length_acima_do_esperado_e_413(
+def test_part_without_content_length_above_expected_is_413(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     api = as_user(make_user())
@@ -399,7 +399,7 @@ def test_parte_sem_content_length_acima_do_esperado_e_413(
     assert put_parts(api, upload, data)
 
 
-def test_complete_com_outro_em_andamento_e_409_upload_completing_e_a_trava_vencida_e_retomada(
+def test_complete_with_another_in_progress_is_409_upload_completing_and_expired_lock_is_resumed(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -414,7 +414,7 @@ def test_complete_com_outro_em_andamento_e_409_upload_completing_e_a_trava_venci
     assert int(busy.headers["Retry-After"]) > 0
     assert api.get(f"/api/v1/uploads/{upload['id']}").json()["status"] == "in_progress"
 
-    # A trava do processo morto venceu: o próximo `complete` conclui e não deixa trava.
+    # The dead process's lock expired: the next `complete` completes and leaves no lock.
     conn.delete(key)
     done = api.post(f"/api/v1/uploads/{upload['id']}/complete", json={"parts": sent})
     assert done.status_code == 201, done.text

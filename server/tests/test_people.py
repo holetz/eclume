@@ -1,4 +1,4 @@
-"""Pessoas: diretório do usuário, isolamento, escopos e o filtro `person=` do lumea."""
+"""People: the user's directory, isolation, scopes and the lumea `person=` filter."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 def link(services: Services, transcript_id: str, speaker_id: str, person_id: str | None) -> None:
-    """Liga um locutor a uma pessoa direto no banco (a rota de edição tem os próprios testes)."""
+    """Link a speaker to a person directly in the database (the edit route has its own tests)."""
 
     async def go(conn: Any) -> None:  # noqa: ANN401
         await conn.execute(
@@ -30,7 +30,7 @@ def link(services: Services, transcript_id: str, speaker_id: str, person_id: str
     run(services.sql(go))
 
 
-def test_cadastro_edicao_e_exclusao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_create_edit_and_delete(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     created = api.post(
         "/api/v1/people", json={"name": "Rafael Lima", "email": "Rafael.Lima@example.com", "notes": "RH"}
@@ -62,7 +62,9 @@ def test_cadastro_edicao_e_exclusao(as_user: Callable[[Account], Api], make_user
     assert api.delete(f"/api/v1/people/{person['id']}").status_code == 404
 
 
-def test_lista_alfabetica_sem_acento_com_prefixo(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_alphabetical_list_accent_insensitive_with_prefix(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
     api = as_user(make_user())
     for name, email in (
         ("beatriz Nunes", None),
@@ -91,7 +93,7 @@ def test_lista_alfabetica_sem_acento_com_prefixo(as_user: Callable[[Account], Ap
     assert api.get("/api/v1/people", params={"cursor": "lixo"}).status_code == 422
 
 
-def test_pessoas_nao_atravessam_contas(
+def test_people_do_not_cross_accounts(
     as_user: Callable[[Account], Api],
     make_user: Callable[..., Account],
     services: Services,
@@ -104,16 +106,16 @@ def test_pessoas_nao_atravessam_contas(
     assert dave.delete(f"/api/v1/people/{person['id']}").status_code == 404
     assert dave.get(f"/api/v1/people/{person['id']}/transcripts").status_code == 404
     assert dave.get("/api/v1/people").json()["items"] == []
-    # O mesmo e-mail em outra conta é outra pessoa.
+    # The same e-mail in another account is another person.
     assert dave.post("/api/v1/people", json={"name": "Rafael", "email": "rafael@exemplo.com.br"}).status_code == 201
 
-    # Nem por SQL um locutor liga a pessoa de outra conta: a FK é composta com `owner_id`.
+    # Not even through SQL does a speaker link another account's person: the FK is composite with `owner_id`.
     recording = transcribed(dave, services.settings)
     with pytest.raises(IntegrityError, match="speakers_person_fk"):
         link(services, recording["transcript_id"], "S1", person["id"])
 
 
-def test_escopos_do_pat(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_pat_scopes(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     person = api.post("/api/v1/people", json={"name": "Rafael"}).json()
     reader = api.pat("people:read")
@@ -129,9 +131,7 @@ def test_escopos_do_pat(as_user: Callable[[Account], Api], make_user: Callable[.
     assert writer.get("/api/v1/people").status_code == 403
 
 
-def test_transcricoes_da_pessoa(
-    as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
-):
+def test_person_transcripts(as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services):
     alice = as_user(make_user())
     person = alice.post("/api/v1/people", json={"name": "Rafael Lima"}).json()
     old = transcribed(alice, services.settings, title="Antiga", recorded_at="2026-09-01T10:00:00Z")
@@ -143,7 +143,7 @@ def test_transcricoes_da_pessoa(
     seen = alice.get(f"/api/v1/people/{person['id']}").json()
     assert (seen["transcript_count"], seen["last_seen_at"]) == (2, "2026-09-18T14:00:00Z")
     talk = {speaker["id"]: speaker["talk_ms"] for speaker in contract_transcript()["speakers"]}
-    # O tempo de fala soma os locutores ligados, em todas as transcrições.
+    # Speaking time sums the linked speakers across every transcript.
     assert seen["speaking_time_ms"] == talk["S2"] + talk["S1"]
     assert seen["voice_sample_count"] == 0
     listed = alice.get(f"/api/v1/people/{person['id']}/transcripts").json()
@@ -156,7 +156,7 @@ def test_transcricoes_da_pessoa(
     ).json()
     assert [t["title"] for t in first["items"] + second["items"]] == ["Nova", "Antiga"]
 
-    # O filtro `person=` que o importador do lumea usa, por PAT.
+    # The `person=` filter the lumea importer uses, by PAT.
     lumea = alice.pat("transcripts:read")
     filtered = lumea.get("/api/v1/transcripts", params={"person": person["id"]}).json()
     assert {t["id"] for t in filtered["items"]} == {old["transcript_id"], new["transcript_id"]}
@@ -165,7 +165,7 @@ def test_transcricoes_da_pessoa(
     assert "**Rafael Lima** [" in exported
 
 
-def test_renomear_ou_excluir_a_pessoa_toca_as_transcricoes(
+def test_renaming_or_deleting_the_person_touches_the_transcripts(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     alice = as_user(make_user())
@@ -175,7 +175,7 @@ def test_renomear_ou_excluir_a_pessoa_toca_as_transcricoes(
     link(services, tid, "S2", person["id"])
     before = alice.get(f"/api/v1/transcripts/{tid}").json()
 
-    # Renomear a pessoa muda o nome na transcrição: o `?since=` enxerga a mudança.
+    # Renaming the person changes the name in the transcript: `?since=` sees the change.
     assert alice.patch(f"/api/v1/people/{person['id']}", json={"name": "Rafael Lima"}).status_code == 200
     renamed = alice.get(f"/api/v1/transcripts/{tid}").json()
     assert renamed["updated_at"] > before["updated_at"]
@@ -191,7 +191,7 @@ def test_renomear_ou_excluir_a_pessoa_toca_as_transcricoes(
     assert unlinked["updated_at"] > renamed["updated_at"]
 
 
-def test_atributos_de_cadastro_e_facetas(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_profile_attributes_and_facets(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     created = api.post(
         "/api/v1/people",
@@ -204,7 +204,7 @@ def test_atributos_de_cadastro_e_facetas(as_user: Callable[[Account], Api], make
             "tags": ["cliente", " Cliente ", "diretoria", ""],
         },
     )
-    assert created.status_code == 422, "tag vazia não passa"
+    assert created.status_code == 422, "an empty tag does not pass"
     created = api.post(
         "/api/v1/people",
         json={
@@ -251,7 +251,7 @@ def test_atributos_de_cadastro_e_facetas(as_user: Callable[[Account], Api], make
     assert other.get("/api/v1/people/facets").json() == {"companies": [], "departments": [], "tags": []}
 
 
-def test_nome_acima_do_teto_e_recusado(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_name_above_the_cap_is_rejected(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     assert api.post("/api/v1/people", json={"name": "A" * 201}).status_code == 422
     created = api.post("/api/v1/people", json={"name": "A" * 200})
@@ -259,12 +259,12 @@ def test_nome_acima_do_teto_e_recusado(as_user: Callable[[Account], Api], make_u
     assert api.patch(f"/api/v1/people/{created.json()['id']}", json={"name": "B" * 201}).status_code == 422
 
 
-def test_cursor_de_nome_longo_ou_emoji_e_aceito_de_volta(
+def test_cursor_of_long_or_emoji_name_is_accepted_back(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     api = as_user(make_user())
-    longo = "a" + "\U0001f600" * 199
-    for name in ("Ana", longo, "zélia"):
+    long_name = "a" + "\U0001f600" * 199
+    for name in ("Ana", long_name, "zélia"):
         assert api.post("/api/v1/people", json={"name": name}).status_code == 201
 
     seen: list[str] = []
@@ -277,4 +277,4 @@ def test_cursor_de_nome_longo_ou_emoji_e_aceito_de_volta(
         cursor = response.json()["next_cursor"]
         if cursor is None:
             break
-    assert seen == [longo, "Ana", "zélia"]
+    assert seen == [long_name, "Ana", "zélia"]

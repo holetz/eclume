@@ -1,4 +1,4 @@
-"""CLI `eclume-server`: migrate e as contas de admin (`admin create`, `admin set-password`)."""
+"""The `eclume-server` CLI: migrate and the admin accounts (`admin create`, `admin set-password`)."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def _run(monkeypatch: pytest.MonkeyPatch, stdin: str, *args: str) -> int:
     return cli.main(["admin", *args, "--password-stdin"])
 
 
-def test_admin_create_cria_a_conta_que_entra_no_painel(
+def test_admin_create_creates_the_account_that_signs_in_to_the_panel(
     monkeypatch: pytest.MonkeyPatch, services: Services, client: TestClient, capsys: pytest.CaptureFixture[str]
 ):
     _env(monkeypatch, services)
@@ -49,14 +49,14 @@ def test_admin_create_cria_a_conta_que_entra_no_painel(
     assert me["email"] == email
     assert me["name"] == "Administrator"
 
-    # E-mail repetido e senha curta saem com código 2.
+    # A repeated e-mail and a short password exit with code 2.
     assert _run(monkeypatch, "uma-senha-bem-longa", "create", "--email", email.upper(), "--name", "X") == 2
     assert "já cadastrado" in capsys.readouterr().err
     other = f"admin-{secrets.token_hex(4)}@example.com"
     assert _run(monkeypatch, "curta", "create", "--email", other, "--name", "X") == 2
 
 
-def test_admin_set_password_troca_a_senha_e_encerra_as_sessoes(
+def test_admin_set_password_changes_the_password_and_ends_the_sessions(
     monkeypatch: pytest.MonkeyPatch, services: Services, client: TestClient, capsys: pytest.CaptureFixture[str]
 ):
     _env(monkeypatch, services)
@@ -77,7 +77,7 @@ def test_admin_set_password_troca_a_senha_e_encerra_as_sessoes(
 
 
 def _as_owner(services: Services, statement: str, **params: object) -> None:
-    """Como o migrador (o papel de conexão não escreve em `schema_migrations`)."""
+    """As the migrator (the connection role does not write to `schema_migrations`)."""
 
     async def go() -> None:
         engine = create_async_engine(make_url(DATABASE_URL).set(database=services.database))
@@ -90,7 +90,7 @@ def _as_owner(services: Services, statement: str, **params: object) -> None:
     run(go())
 
 
-def test_migrate_pendentes_lista_sem_aplicar(
+def test_migrate_pending_lists_without_applying(
     monkeypatch: pytest.MonkeyPatch, services: Services, capsys: pytest.CaptureFixture[str]
 ):
     _env(monkeypatch, services)
@@ -101,14 +101,14 @@ def test_migrate_pendentes_lista_sem_aplicar(
     try:
         assert cli.main(["migrate", "--pendentes"]) == 0
         assert capsys.readouterr().out.splitlines() == [latest]
-        # Listar não aplica: segue pendente.
+        # Listing does not apply: it stays pending.
         assert cli.main(["migrate", "--pendentes"]) == 0
         assert capsys.readouterr().out.splitlines() == [latest]
     finally:
         _as_owner(services, "INSERT INTO schema_migrations (version) VALUES (:v)", v=latest)
 
 
-def test_migrate_sem_pendencias(
+def test_migrate_with_nothing_pending(
     monkeypatch: pytest.MonkeyPatch, services: Services, capsys: pytest.CaptureFixture[str]
 ):
     _env(monkeypatch, services)
@@ -125,7 +125,7 @@ def _sql(services: Services, statement: str, **params: object) -> Any:  # noqa: 
 
 
 def _make_legacy(services: Services, recording_id: str, *, finished: bool) -> tuple[str, str]:
-    """Põe o áudio da gravação numa chave da época da organização, como as gravações antigas."""
+    """Put the recording's audio under an organization-era key, like the old recordings."""
     new_key = _sql(services, "SELECT audio_key FROM recordings WHERE id = :r", r=recording_id)[0][0]
     old_key = f"orgs/{uuid4()}/{new_key}"
     s3, bucket = services.s3(), services.settings.s3_bucket
@@ -137,7 +137,7 @@ def _make_legacy(services: Services, recording_id: str, *, finished: bool) -> tu
     return old_key, new_key
 
 
-def test_relocate_legacy_move_as_chaves_orgs_uma_vez(
+def test_relocate_legacy_moves_the_orgs_keys_once(
     monkeypatch: pytest.MonkeyPatch,
     services: Services,
     as_user: Callable[[Account], Api],
@@ -168,16 +168,16 @@ def test_relocate_legacy_move_as_chaves_orgs_uma_vez(
     assert _sql(services, "SELECT audio_key FROM recordings WHERE id = :r", r=legacy["id"]) == [(new_key,)]
     body = services.s3().get_object(Bucket=services.settings.s3_bucket, Key=new_key)["Body"].read()
     assert body == data
-    # A chave antiga sai pela fila de exclusão; a da gravação em andamento fica.
+    # The old key leaves through the deletion queue; the in-progress recording's key stays.
     assert _sql(services, "SELECT count(*) FROM storage_deletions WHERE key = :k", k=old_key) == [(1,)]
     assert _sql(services, "SELECT audio_key FROM recordings WHERE id = :r", r=busy["id"]) == [(busy_key,)]
 
-    # Idempotente: na segunda vez, nada a mover além da que segue em andamento.
+    # Idempotent: the second time, nothing to move besides the one still in progress.
     assert cli.main(["storage", "relocate-legacy"]) == 0
     assert "movida" not in capsys.readouterr().out
 
 
-def test_sonda_fila_pela_chave_de_health_check(monkeypatch: pytest.MonkeyPatch, services: Services):
+def test_probe_queue_by_the_health_check_key(monkeypatch: pytest.MonkeyPatch, services: Services):
     monkeypatch.setenv("ECLUME_REDIS_URL", services.settings.redis_url)
     cli.get_settings.cache_clear()
     client = redis.Redis.from_url(services.settings.redis_url)
@@ -191,7 +191,7 @@ def test_sonda_fila_pela_chave_de_health_check(monkeypatch: pytest.MonkeyPatch, 
         cli.get_settings.cache_clear()
 
 
-def test_token_validity_pelo_cadastro_da_chave_oat():
+def test_token_validity_from_the_oat_key_registration():
     now = datetime(2026, 10, 1, tzinfo=UTC)
     oat = {"name": "Claude", "key": "sk-ant-oat01-x", "key_set_at": now - timedelta(days=340)}
     api = {"name": "API", "key": "sk-ant-api03-x", "key_set_at": now - timedelta(days=400)}
@@ -202,7 +202,7 @@ def test_token_validity_pelo_cadastro_da_chave_oat():
     assert cli.token_validity([api], now) == {"status": "unknown", "expires_at": None, "days_left": None}
 
 
-def test_saude_json_resume_a_saude_e_o_token(
+def test_saude_json_summarizes_health_and_the_token(
     monkeypatch: pytest.MonkeyPatch, services: Services, admin: Api, capsys: pytest.CaptureFixture[str]
 ):
     created = admin.post(

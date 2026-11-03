@@ -1,4 +1,4 @@
-"""As habilidades na conversa e as ações do Agente: proposta, confirmação, execução e auditoria."""
+"""Skills in the chat and the Agent's actions: proposal, confirmation, execution and audit."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def _propose_tags(api: Api, services: Services) -> dict[str, Any]:
     return turn | {"action": action}
 
 
-def test_proposta_confirmada_executa_uma_vez_e_fica_na_auditoria(user: Api, services: Services):
+def test_confirmed_proposal_runs_once_and_stays_in_the_audit(user: Api, services: Services):
     first = transcribed(user, services.settings, tags=["cliente-aurora"])
     second = transcribed(user, services.settings, tags=["cliente-aurora"])
     transcribed(user, services.settings, tags=["outro"])
@@ -81,7 +81,7 @@ def test_proposta_confirmada_executa_uma_vez_e_fica_na_auditoria(user: Api, serv
     assert (action["tool"], action["status"]) == ("tag_recordings", "proposed")
     assert action["summary"] == 'Nas tags de 2 gravações: aplicar "auditoria".'
     assert {item["recording_id"] for item in action["targets"]} == {first["id"], second["id"]}
-    # Nada mudou antes da confirmação.
+    # Nothing changed before the confirmation.
     assert "auditoria" not in user.get(f"/api/v1/recordings/{first['id']}").json()["tags"]
 
     confirmed = user.post(f"{ACTIONS}/{action['id']}/confirm")
@@ -100,18 +100,18 @@ def test_proposta_confirmada_executa_uma_vez_e_fica_na_auditoria(user: Api, serv
     assert user.post(f"{ACTIONS}/{action['id']}/confirm").json()["status"] == "done"
     assert user.post(f"{ACTIONS}/{action['id']}/cancel").status_code == 409
 
-    # A auditoria sobrevive à conversa.
+    # The audit outlives the chat.
     assert user.delete(f"{SESSIONS}/{turn['session']['id']}").status_code == 204
     [audited] = user.get(ACTIONS).json()["items"]
     assert (audited["id"], audited["session_id"], audited["status"]) == (action["id"], None, "done")
 
 
-def test_execucao_retomada_pula_os_alvos_ja_feitos(user: Api, services: Services):
+def test_resumed_execution_skips_the_targets_already_done(user: Api, services: Services):
     first = transcribed(user, services.settings, tags=["cliente-aurora"])
     second = transcribed(user, services.settings, tags=["cliente-aurora"])
     action = _propose_tags(user, services)["action"]
     assert user.post(f"{ACTIONS}/{action['id']}/confirm").status_code == 202
-    # Como se uma execução anterior tivesse feito o primeiro alvo e caído.
+    # As if an earlier execution had done the first target and crashed.
     _sql(
         services,
         'UPDATE agent_actions SET results = jsonb_build_object(CAST(:rid AS text), \'{"status": "done"}\'::jsonb)'
@@ -126,7 +126,7 @@ def test_execucao_retomada_pula_os_alvos_ja_feitos(user: Api, services: Services
     assert "auditoria" in user.get(f"/api/v1/recordings/{second['id']}").json()["tags"]
 
 
-def test_regenerar_resumos_abre_um_resumo_por_alvo(user: Api, services: Services):
+def test_regenerate_summaries_opens_one_summary_per_target(user: Api, services: Services):
     recording = transcribed(user, services.settings)
     count = "SELECT count(*) FROM summaries s JOIN transcripts t ON t.id = s.transcript_id WHERE t.recording_id = :id"
     before = _sql(services, count, id=recording["id"])[0][0]
@@ -151,7 +151,7 @@ def test_regenerar_resumos_abre_um_resumo_por_alvo(user: Api, services: Services
     assert after == before + 1
 
 
-def test_tipo_inexistente_nao_vira_proposta(user: Api, services: Services):
+def test_unknown_agenda_type_does_not_become_a_proposal(user: Api, services: Services):
     transcribed(user, services.settings, tags=["cliente-aurora"])
     turn = _turn(
         user,
@@ -164,7 +164,7 @@ def test_tipo_inexistente_nao_vira_proposta(user: Api, services: Services):
     assert turn["answer"]["actions"] == []
 
 
-def test_descartar_vencer_e_escopo_do_pat(user: Api, services: Services):
+def test_discard_expiry_and_pat_scope(user: Api, services: Services):
     transcribed(user, services.settings, tags=["cliente-aurora"])
     discarded = _propose_tags(user, services)["action"]
     cancelled = user.post(f"{ACTIONS}/{discarded['id']}/cancel")
@@ -186,7 +186,7 @@ def test_descartar_vencer_e_escopo_do_pat(user: Api, services: Services):
     assert (confirmed.status_code, confirmed.json()["confirmed_via"]) == (202, "pat")
 
 
-def test_outra_conta_nao_ve_nem_confirma(
+def test_another_account_neither_sees_nor_confirms(
     user: Api, services: Services, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     transcribed(user, services.settings, tags=["cliente-aurora"])
@@ -197,7 +197,7 @@ def test_outra_conta_nao_ve_nem_confirma(
     assert stranger.get(ACTIONS).json()["items"] == []
 
 
-def test_habilidade_por_barra_ou_pelo_corpo(user: Api, services: Services):
+def test_skill_by_slash_or_by_body(user: Api, services: Services):
     skill = {
         "name": "ata",
         "description": "Escreve a ata de uma reunião.",
@@ -231,7 +231,7 @@ def test_habilidade_por_barra_ou_pelo_corpo(user: Api, services: Services):
     assert only_prefix.status_code == 422
 
 
-def test_habilidades_ligadas_listadas_ao_agente(user: Api, services: Services):
+def test_enabled_skills_listed_to_the_agent(user: Api, services: Services):
     for name, enabled in (("ata", True), ("rascunho", False)):
         body = {"name": name, "description": f"Habilidade {name}.", "instructions": "Faça.", "enabled": enabled}
         assert user.post("/api/v1/agent/skills", json=body).status_code == 201

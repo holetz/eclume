@@ -1,4 +1,4 @@
-"""Conta de admin: login, sessão própria, fronteira com as credenciais de usuário e logout."""
+"""Admin account: login, its own session, the boundary with user credentials, and logout."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 
-def test_login_de_admin_define_cookies_proprios(client: TestClient, services: Services):
+def test_admin_login_sets_its_own_cookies(client: TestClient, services: Services):
     account = new_admin(services)
     client.cookies.clear()
     response = client.post("/api/v1/admin/auth/login", json={"email": account.email.upper(), "password": PASSWORD})
@@ -42,22 +42,22 @@ def test_login_de_admin_define_cookies_proprios(client: TestClient, services: Se
     assert me["last_login_at"] is not None
 
 
-def test_login_de_admin_errado_e_401(client: TestClient, services: Services, make_user: Callable[..., Account]):
+def test_wrong_admin_login_is_401(client: TestClient, services: Services, make_user: Callable[..., Account]):
     account = new_admin(services)
     client.cookies.clear()
     wrong = client.post("/api/v1/admin/auth/login", json={"email": account.email, "password": "outra-senha-qualquer"})
     assert wrong.status_code == 401
-    # A conta de usuário não entra no painel, nem com a senha certa.
+    # A user account does not enter the panel, not even with the right password.
     user = make_user()
     as_user = client.post("/api/v1/admin/auth/login", json={"email": user.email, "password": PASSWORD})
     assert as_user.status_code == 401
 
 
-def test_sessao_de_admin_so_alcanca_o_painel(
+def test_admin_session_reaches_only_the_panel(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     assert admin.get("/api/v1/admin/users").status_code == 200
-    # Fora de /admin/*, o cookie de admin é ignorado: sem credencial de usuário, 401.
+    # Outside /admin/*, the admin cookie is ignored: without a user credential, 401.
     for url in ("/api/v1/me", "/api/v1/recordings", "/api/v1/people"):
         assert admin.get(url).status_code == 401, url
 
@@ -70,7 +70,7 @@ def test_sessao_de_admin_so_alcanca_o_painel(
             assert response.json()["code"] == "unauthorized"
 
 
-def test_csrf_da_sessao_de_admin(admin: Api):
+def test_admin_session_csrf(admin: Api):
     admin.send_csrf = False
     response = admin.patch("/api/v1/admin/settings", json={"asr": {"model": "large-v3"}})
     assert response.status_code == 401
@@ -79,12 +79,12 @@ def test_csrf_da_sessao_de_admin(admin: Api):
     assert admin.patch("/api/v1/admin/settings", json={"asr": {"model": "large-v3"}}).status_code == 200
 
 
-def test_logout_de_admin_encerra_a_sessao(admin: Api):
+def test_admin_logout_ends_the_session(admin: Api):
     assert admin.post("/api/v1/admin/auth/logout").status_code == 204
     assert admin.get("/api/v1/admin/me").status_code == 401
 
 
-def test_admin_desativado_nao_entra(client: TestClient, services: Services):
+def test_deactivated_admin_cannot_enter(client: TestClient, services: Services):
     account = new_admin(services)
     session = admin_login(client, account.email)
 
@@ -98,7 +98,7 @@ def test_admin_desativado_nao_entra(client: TestClient, services: Services):
     assert login.status_code == 401
 
 
-def test_uso_e_sobreposicao_das_cotas_em_usuarios(
+def test_quota_usage_and_override_in_users(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -131,6 +131,6 @@ def test_uso_e_sobreposicao_das_cotas_em_usuarios(
     assert admin.patch(url, json={}).status_code == 422
     assert admin.patch(url, json={"quotas": None}).json()["quotas"] is None
     assert listed()["quotas"] is None
-    # A transcrição da gravação não fica na fila para a Saúde de outro teste.
+    # The recording's transcription does not stay in the queue for another test's Health.
     run_gpu(services.settings)
     run_cpu(services.settings)

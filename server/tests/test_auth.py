@@ -1,4 +1,4 @@
-"""Sessão, CSRF, `me` e PATs (escopos, só-sessão, revogação, expiração)."""
+"""Session, CSRF, `me` and PATs (scopes, session-only, revocation, expiry)."""
 
 from __future__ import annotations
 
@@ -31,15 +31,15 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 
-def test_health_sem_credencial(client: TestClient):
+def test_health_without_credential(client: TestClient):
     response = client.get("/api/v1/health")
     assert response.status_code == 200
-    # O server anuncia a versão do contrato a que conforma; fora de imagem de produção, sem commit.
+    # The server announces the contract version it conforms to; outside a production image, no commit.
     assert response.json()["contract_version"] == bundle()["info"]["version"]
     assert "commit" not in response.json()
 
 
-def test_health_diz_o_commit_da_imagem(services: Services):
+def test_health_reports_the_image_commit(services: Services):
     settings = services.settings.model_copy(update={"commit": "2c93963a4f1e0b7d8c6e5f4a3b2c1d0e9f8a7b6c"})
     with TestClient(create_app(settings), base_url="https://testserver") as client:
         client.event_hooks["response"] = [CONFORMANCE.check]
@@ -47,7 +47,7 @@ def test_health_diz_o_commit_da_imagem(services: Services):
     assert body["commit"] == "2c93963a4f1e0b7d8c6e5f4a3b2c1d0e9f8a7b6c"
 
 
-def test_login_define_cookies_seguros_e_me_por_sessao(client: TestClient, make_user: Callable[..., Account]):
+def test_login_sets_secure_cookies_and_me_by_session(client: TestClient, make_user: Callable[..., Account]):
     user = make_user(notice_version=None)
     client.cookies.clear()
     response = client.post("/api/v1/auth/login", json={"email": user.email.upper(), "password": PASSWORD})
@@ -66,14 +66,14 @@ def test_login_define_cookies_seguros_e_me_por_sessao(client: TestClient, make_u
     me = api.get("/api/v1/me").json()
     assert me["user"]["email"] == user.email
     assert me["user"]["last_login_at"] is not None
-    # Conta sem o aceite do aviso em vigor, como a migrada.
+    # An account without acceptance of the notice in force, like a migrated one.
     assert me["notice_required"] is True
     assert me["user"]["notice_version"] is None
     assert me["auth"] == {"method": "session", "scopes": me["auth"]["scopes"], "token_id": None}
     assert len(me["auth"]["scopes"]) == 9
 
 
-def test_login_errado_e_sem_credencial_sao_401(client: TestClient, make_user: Callable[..., Account]):
+def test_wrong_login_and_no_credential_are_401(client: TestClient, make_user: Callable[..., Account]):
     user = make_user()
     client.cookies.clear()
     wrong = client.post("/api/v1/auth/login", json={"email": user.email, "password": "outra-senha-qualquer"})
@@ -90,7 +90,7 @@ def test_login_errado_e_sem_credencial_sao_401(client: TestClient, make_user: Ca
     assert {e["field"] for e in invalid.json()["errors"]} == {"email", "password"}
 
 
-def test_csrf_obrigatorio_em_metodo_mutavel_com_sessao(
+def test_csrf_required_on_mutating_method_with_session(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     api = as_user(make_user())
@@ -102,10 +102,10 @@ def test_csrf_obrigatorio_em_metodo_mutavel_com_sessao(
         "/api/v1/tokens", json={"name": "x", "scopes": ["transcripts:read"]}, headers={"X-CSRF-Token": "errado"}
     )
     assert wrong.status_code == 401
-    assert api.get("/api/v1/me").status_code == 200  # GET não exige CSRF
+    assert api.get("/api/v1/me").status_code == 200  # GET does not require CSRF
 
 
-def test_pat_regrava_last_used_at_so_depois_de_60_s(
+def test_pat_rewrites_last_used_at_only_after_60_s(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     session = as_user(make_user())
@@ -124,7 +124,7 @@ def test_pat_regrava_last_used_at_so_depois_de_60_s(
     assert pat.get("/api/v1/me").status_code == 200
     first = last_used()
     assert pat.get("/api/v1/me").status_code == 200
-    assert last_used() == first  # menos de 60 s: sem escrita
+    assert last_used() == first  # under 60 s: no write
 
     async def backdate(conn: AsyncConnection) -> None:
         await conn.execute(
@@ -137,14 +137,14 @@ def test_pat_regrava_last_used_at_so_depois_de_60_s(
     assert last_used() > stale
 
 
-def test_logout_encerra_a_sessao(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_logout_ends_the_session(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     api = as_user(make_user())
     response = api.post("/api/v1/auth/logout")
     assert response.status_code == 204
     assert api.get("/api/v1/me").status_code == 401
 
 
-def test_pat_criado_listado_usado_e_revogado(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_pat_created_listed_used_and_revoked(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     session = as_user(make_user())
     created = session.post(
         "/api/v1/tokens", json={"name": "lumea — importador", "scopes": ["transcripts:read", "people:read"]}
@@ -173,13 +173,17 @@ def test_pat_criado_listado_usado_e_revogado(as_user: Callable[[Account], Api], 
     assert revoked["revoked_at"] is not None
 
 
-def test_pat_invalido_nunca_cai_para_o_cookie(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_invalid_pat_never_falls_back_to_the_cookie(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
     session = as_user(make_user())
     response = session.get("/api/v1/me", headers={"Authorization": "Bearer eclp_naoexiste"})
     assert response.status_code == 401
 
 
-def test_pat_nao_gere_pats_nem_alcanca_o_painel(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_pat_neither_manages_pats_nor_reaches_the_panel(
+    as_user: Callable[[Account], Api], make_user: Callable[..., Account]
+):
     pat = as_user(make_user()).pat("recordings:read", "recordings:write")
     response = pat.get("/api/v1/tokens")
     assert response.status_code == 403
@@ -187,11 +191,11 @@ def test_pat_nao_gere_pats_nem_alcanca_o_painel(as_user: Callable[[Account], Api
     assert "só sessão" in response.json()["detail"]
     created = pat.post("/api/v1/tokens", json={"name": "x", "scopes": ["recordings:read"]})
     assert created.status_code == 403
-    # O painel admin não é do usuário: nenhuma credencial dele passa por lá.
+    # The admin panel is not the user's: none of their credentials pass there.
     assert pat.get("/api/v1/admin/users").status_code == 401
 
 
-def test_pat_expirado_e_401(as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services):
+def test_expired_pat_is_401(as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services):
     session = as_user(make_user())
     soon = (datetime.now(UTC) + timedelta(seconds=1)).isoformat()
     created = session.post("/api/v1/tokens", json={"name": "curto", "scopes": ["recordings:read"], "expires_at": soon})
@@ -213,7 +217,7 @@ def test_pat_expirado_e_401(as_user: Callable[[Account], Api], make_user: Callab
     assert Api(session.client, token=created.json()["secret"]).get("/api/v1/me").status_code == 401
 
 
-def test_validacao_do_pat(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_pat_validation(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     session = as_user(make_user())
     for body in (
         {"name": "", "scopes": ["recordings:read"]},
@@ -226,7 +230,7 @@ def test_validacao_do_pat(as_user: Callable[[Account], Api], make_user: Callable
         assert response.json()["code"] == "validation_failed"
 
 
-def test_paginacao_dos_pats(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_pat_pagination(as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     session = as_user(make_user())
     ids = [
         session.post("/api/v1/tokens", json={"name": f"t{i}", "scopes": ["recordings:read"]}).json()["token"]["id"]
@@ -245,7 +249,7 @@ def test_paginacao_dos_pats(as_user: Callable[[Account], Api], make_user: Callab
     assert session.get("/api/v1/tokens", params={"limit": 0}).status_code == 422
 
 
-def test_tokens_tem_tipo_e_a_lista_filtra_por_tipo(
+def test_tokens_have_a_kind_and_the_list_filters_by_kind(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -271,8 +275,8 @@ def test_tokens_tem_tipo_e_a_lista_filtra_por_tipo(
     assert session.get("/api/v1/tokens", params={"kind": "outro"}).status_code == 422
 
 
-def test_migration_015_concede_a_exclusao_a_quem_tinha_recordings_write(services: Services):
-    del services  # só pela checagem dos serviços de teste
+def test_migration_015_grants_deletion_to_holders_of_recordings_write(services: Services):
+    del services  # only for the test services check
     database = f"eclume_mig015_{secrets.token_hex(4)}"
     target = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
     user, writer, reader = uuid4(), uuid4(), uuid4()
@@ -312,7 +316,7 @@ INSERT INTO api_tokens (id, user_id, name, token_hash, prefix, scopes) VALUES
     ]
 
 
-def test_health_ready_com_tudo_no_ar(client: TestClient):
+def test_health_ready_with_everything_up(client: TestClient):
     response = client.get("/api/v1/health/ready")
     assert response.status_code == 200
     assert response.json() == {
@@ -326,11 +330,11 @@ def test_health_ready_com_tudo_no_ar(client: TestClient):
     assert response.headers["x-request-id"]
 
 
-def test_health_ready_503_nomeia_o_que_caiu(client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    async def fora() -> None:
+def test_health_ready_503_names_what_went_down(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    async def down() -> None:
         raise ConnectionError
 
-    monkeypatch.setattr(client.app.state.ctx.storage, "head_bucket", fora)
+    monkeypatch.setattr(client.app.state.ctx.storage, "head_bucket", down)
     response = client.get("/api/v1/health/ready")
     assert response.status_code == 503
     checks = {c["name"]: c["status"] for c in response.json()["checks"]}
@@ -338,7 +342,7 @@ def test_health_ready_503_nomeia_o_que_caiu(client: TestClient, monkeypatch: pyt
     assert response.json()["status"] == "down"
 
 
-def test_argon2_lento_nao_trava_o_event_loop(
+def test_slow_argon2_does_not_block_the_event_loop(
     services: Services, make_user: Callable[..., Account], monkeypatch: pytest.MonkeyPatch
 ):
     account = make_user()

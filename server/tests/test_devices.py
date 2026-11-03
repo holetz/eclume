@@ -1,4 +1,4 @@
-"""Credencial de dispositivo: login por e-mail e senha, código de pareamento e limite de tentativas."""
+"""Device credential: login by e-mail and password, pairing code and attempt limit."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def _login(account: Account, **changes: Any) -> dict[str, Any]:  # noqa: ANN401
 
 @pytest.fixture
 def limited(services: Services) -> Iterator[TestClient]:
-    """App com 3 tentativas por minuto, sem as janelas que os outros testes abriram."""
+    """App with 3 attempts per minute, without the windows the other tests opened."""
     store = redis.Redis.from_url(services.settings.redis_url)
     for key in store.scan_iter("eclume:rl:*"):
         store.delete(key)
@@ -47,7 +47,7 @@ def limited(services: Services) -> Iterator[TestClient]:
         yield client
 
 
-def test_login_de_dispositivo_emite_o_token_do_aparelho(
+def test_device_login_issues_the_device_token(
     client: TestClient, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     account = make_user()
@@ -66,12 +66,12 @@ def test_login_de_dispositivo_emite_o_token_do_aparelho(
     me = device.get("/api/v1/me").json()
     assert me["auth"] == {"method": "pat", "scopes": token["scopes"], "token_id": token["id"]}
     assert device.get("/api/v1/recordings").status_code == 200
-    # O escopo `summaries:read` passa (o aviso com "Copiar" do desktop): 404 da gravação, não 403.
+    # The `summaries:read` scope passes (the desktop's notice with "Copiar"): 404 for the recording, not 403.
     assert device.get(f"/api/v1/recordings/{uuid4()}/summary").status_code == 404
-    # `transcripts:read` passa (a pasta sincronizada do desktop): a lista responde 200, não 403.
+    # `transcripts:read` passes (the desktop's synced folder): the list answers 200, not 403.
     assert device.get("/api/v1/transcripts").status_code == 200
 
-    # Aparece em "App móvel" e "App desktop", e desvincular desliga o aparelho.
+    # It shows under "App móvel" and "App desktop", and unlinking turns the device off.
     session = as_user(account)
     devices = session.get("/api/v1/tokens", params={"kind": "device"}).json()["items"]
     assert [d["id"] for d in devices] == [token["id"]]
@@ -79,7 +79,7 @@ def test_login_de_dispositivo_emite_o_token_do_aparelho(
     assert device.get("/api/v1/me").status_code == 401
 
 
-def test_login_de_dispositivo_errado_e_401_como_o_login(client: TestClient, make_user: Callable[..., Account]):
+def test_wrong_device_login_is_401_like_the_login(client: TestClient, make_user: Callable[..., Account]):
     account = make_user()
     client.cookies.clear()
     wrong = client.post("/api/v1/devices/login", json=_login(account, password="outra-senha-qualquer"))
@@ -107,26 +107,26 @@ def test_login_de_dispositivo_errado_e_401_como_o_login(client: TestClient, make
         ),
     ],
 )
-def test_tentativas_demais_do_mesmo_ip_sao_429(limited: TestClient, path: str, body: dict[str, Any]):
+def test_too_many_attempts_from_the_same_ip_are_429(limited: TestClient, path: str, body: dict[str, Any]):
     statuses = [limited.post(path, json=body).status_code for _ in range(3)]
-    assert 429 not in statuses  # as 3 primeiras passam (401 ou 422)
+    assert 429 not in statuses  # the first 3 pass (401 or 422)
     blocked = limited.post(path, json=body)
     assert blocked.status_code == 429
     assert blocked.json()["code"] == "rate_limited"
     assert 1 <= int(blocked.headers["Retry-After"]) <= 60
-    # Cada rota conta a sua janela.
+    # Each route counts its own window.
     other = "/api/v1/devices/login" if path != "/api/v1/devices/login" else "/api/v1/auth/login"
     assert limited.post(other, json={}).status_code == 422
 
 
-def test_troca_de_codigo_tem_teto_global(limited: TestClient, services: Services):
+def test_code_exchange_has_a_global_ceiling(limited: TestClient, services: Services):
     store = redis.Redis.from_url(services.settings.redis_url)
     store.set("eclume:rl:devices_pair:*", 3 * PAIR_GLOBAL_FACTOR, ex=60)
     blocked = limited.post("/api/v1/devices/pair", json={"code": "ZZZZZZ", "device_name": "d", "platform": "ios"})
     assert (blocked.status_code, blocked.json()["code"]) == (429, "rate_limited")
 
 
-def test_login_de_dispositivo_exige_o_aviso_aceito(client: TestClient, make_user: Callable[..., Account]):
+def test_device_login_requires_the_accepted_notice(client: TestClient, make_user: Callable[..., Account]):
     account = make_user(notice_version=None)
     client.cookies.clear()
     response = client.post("/api/v1/devices/login", json=_login(account))
@@ -137,7 +137,7 @@ def _pair(code: str, **changes: Any) -> dict[str, Any]:  # noqa: ANN401
     return {"code": code, "device_name": "iPhone da Mariana", "platform": "ios"} | changes
 
 
-def test_codigo_de_pareamento_vira_o_token_do_aparelho(
+def test_pairing_code_becomes_the_device_token(
     client: TestClient, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     account = make_user()
@@ -149,7 +149,7 @@ def test_codigo_de_pareamento_vira_o_token_do_aparelho(
     assert code["display"] == f"{code['code'][:3]}-{code['code'][3:]}"
     assert (code["status"], code["token_id"]) == ("pending", None)
     assert code["pair_url"] == f"https://testserver/parear?codigo={code['code']}"
-    # Só o HMAC fica no banco.
+    # Only the HMAC is stored in the database.
     stored = _sql(services, "SELECT code_hmac FROM pairing_codes WHERE id = :id", id=code["id"])
     assert code["code"] not in stored[0][0]
 
@@ -164,19 +164,19 @@ def test_codigo_de_pareamento_vira_o_token_do_aparelho(
     state = session.get(f"/api/v1/devices/pairing-codes/{code['id']}").json()
     assert (state["status"], state["token_id"]) == ("used", token["id"])
     assert "code" not in state
-    # Uso único.
+    # Single use.
     again = client.post("/api/v1/devices/pair", json=_pair(code["code"]))
     assert (again.status_code, again.json()["code"]) == (401, "invalid_pairing_code")
 
 
-def test_codigo_vencido_novo_ou_de_outra_conta(
+def test_code_expired_superseded_or_from_another_account(
     client: TestClient, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     alice, bob = make_user(), make_user()
     session = as_user(alice)
     first = session.post("/api/v1/devices/pairing-codes").json()
     second = session.post("/api/v1/devices/pairing-codes").json()
-    # O código novo vence o anterior.
+    # The new code expires the previous one.
     assert session.get(f"/api/v1/devices/pairing-codes/{first['id']}").json()["status"] == "expired"
     _sql(services, "UPDATE pairing_codes SET expires_at = now() - interval '1 second' WHERE id = :id", id=second["id"])
     assert session.get(f"/api/v1/devices/pairing-codes/{second['id']}").json()["status"] == "expired"
@@ -184,12 +184,12 @@ def test_codigo_vencido_novo_ou_de_outra_conta(
     for code in (first["code"], second["code"], "ZZZZZZ"):
         response = client.post("/api/v1/devices/pair", json=_pair(code))
         assert (response.status_code, response.json()["code"]) == (401, "invalid_pairing_code")
-    # O código é da conta: outra conta não o vê.
+    # The code belongs to the account: another account does not see it.
     assert as_user(bob).get(f"/api/v1/devices/pairing-codes/{first['id']}").status_code == 404
-    # Só sessão.
+    # Session only.
     pat = session.pat("recordings:read")
     assert pat.post("/api/v1/devices/pairing-codes").json()["code"] == "session_required"
-    # O cron apaga os vencidos sem uso há mais de um dia; o vencido de agora fica.
+    # The cron deletes codes expired and unused for over a day; the one expired just now stays.
     _sql(services, "UPDATE pairing_codes SET expires_at = now() - interval '2 days' WHERE id = :id", id=first["id"])
     assert run(services.sql(purge_pairing_codes)) >= 1
     left = _sql(services, "SELECT id FROM pairing_codes WHERE id IN (:a, :b)", a=first["id"], b=second["id"])
@@ -204,16 +204,16 @@ def _sql(services: Services, sql: str, **params: Any) -> Any:  # noqa: ANN401
     return run(services.sql(go))
 
 
-def test_worker_importa_sozinho():
-    """O worker sobe com `arq eclume_server.worker.WorkerSettings`, sem a API carregada antes."""
+def test_worker_imports_on_its_own():
+    """The worker starts with `arq eclume_server.worker.WorkerSettings`, without the API loaded first."""
     result = subprocess.run(
         [sys.executable, "-c", "import eclume_server.worker"], capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
 
 
-def test_migration_017_da_summaries_read_aos_dispositivos_ja_emitidos(services: Services):
-    del services  # só pela checagem dos serviços de teste
+def test_migration_017_grants_summaries_read_to_already_issued_devices(services: Services):
+    del services  # only for the test services check
     database = f"eclume_mig017_{secrets.token_hex(4)}"
     target = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
     user = uuid4()
@@ -253,8 +253,8 @@ INSERT INTO api_tokens (user_id, name, token_hash, prefix, scopes, kind, platfor
     ]
 
 
-def test_migration_018_da_transcripts_read_aos_dispositivos_ja_emitidos(services: Services):
-    del services  # só pela checagem dos serviços de teste
+def test_migration_018_grants_transcripts_read_to_already_issued_devices(services: Services):
+    del services  # only for the test services check
     database = f"eclume_mig018_{secrets.token_hex(4)}"
     target = DATABASE_URL.rsplit("/", 1)[0] + f"/{database}"
     user = uuid4()

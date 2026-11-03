@@ -1,4 +1,4 @@
-"""Processamento automático depois da transcrição: campos, tipo de agenda e resumo pelo tipo."""
+"""Automatic processing after transcription: fields, agenda type and the summary by type."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ CLIENT = {"name": "Cliente", "kind": "choice", "options": ["Serra Azul", "Vale V
 
 @pytest.fixture
 def user(admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]) -> Api:
-    """Um usuário numa plataforma com um provider para todas as finalidades."""
+    """A user on a platform with one provider for every purpose."""
     assert admin.post("/api/v1/admin/agent-providers", json=CLAUDE).status_code == 201
     return as_user(make_user())
 
@@ -48,7 +48,7 @@ def _values(api: Api, recording_id: str) -> dict[str, dict[str, Any]]:
 
 
 async def _detail(conn: Any, recording_id: str, step: str) -> dict[str, Any]:  # noqa: ANN401
-    """A `detail` da etapa na maior revisão (a API mostra só o motivo e o erro)."""
+    """The step's `detail` at the highest revision (the API shows only the reason and the error)."""
     query = text(
         "SELECT detail FROM pipeline_steps WHERE recording_id = :r AND step = :s ORDER BY revision DESC LIMIT 1"
     )
@@ -59,7 +59,7 @@ def _step(recording: dict[str, Any], name: str) -> dict[str, Any]:
     return next(step for step in recording["pipeline"] if step["step"] == name)
 
 
-def test_campos_preenchidos_pelo_agente(user: Api, services: Services):
+def test_fields_filled_by_the_agent(user: Api, services: Services):
     user.post("/api/v1/fields", json=CLIENT)
     user.post("/api/v1/fields", json={"name": "Pendências", "kind": "list", "instructions": "O que ficou para depois."})
     user.post("/api/v1/fields", json={"name": "Manual", "kind": "text", "auto_fill": False})
@@ -84,13 +84,13 @@ def test_campos_preenchidos_pelo_agente(user: Api, services: Services):
     assert "- contrato — Contratos e renovações." in prompt
     assert "use só tags desta lista" in prompt
 
-    # O tipo detectado (o primeiro, pela resposta padrão) aplica o padrão de título e as tags dele.
+    # The detected type (the first, by the default reply) applies its title pattern and its tags.
     assert recording["title"] == "Reunião de equipe · Revisão do contrato de manutenção"
-    # Tags fixas: "Contrato" é a cadastrada "contrato"; "manutenção" não está no cadastro e sai.
+    # Fixed tags: "Contrato" is the registered "contrato"; "manutenção" is not in the catalog and is dropped.
     assert recording["tags"] == ["contrato", "interno", "planejamento"]
     values = _values(user, recording["id"])
     assert (values["titulo"]["origin"], values["tags"]["origin"]) == ("auto", "auto")
-    # Escolha fora das opções vira "nada encontrado"; da lista, só os textos.
+    # A choice outside the options becomes "nothing found"; from the list, only the texts.
     assert (values["cliente"]["value"], values["cliente"]["origin"]) == (None, "auto")
     assert values["pendencias"]["value"] == ["enviar proposta"]
     assert (values["manual"]["value"], values["manual"]["origin"]) == (None, None)
@@ -98,25 +98,25 @@ def test_campos_preenchidos_pelo_agente(user: Api, services: Services):
     assert (fields_step["state"], fields_step["error"]) == ("done", None)
 
 
-def test_o_que_o_usuario_escreveu_nao_e_sobrescrito(user: Api, services: Services):
+def test_what_the_user_wrote_is_not_overwritten(user: Api, services: Services):
     user.patch("/api/v1/me/tag-assignment", json={"mode": "auto"})
     reply = json.dumps({"titulo": "Outro título", "tags": ["automática"]})
     agents = FakeAgents(replies={"fields": [reply]})
     recording = _process(user, services, agents, title="Kickoff com a Serra Azul")
     assert recording["title"] == "Kickoff com a Serra Azul"
     assert recording["tags"] == ["automática", "interno", "planejamento"]
-    # O título `edited` nem vai ao agente.
+    # The `edited` title does not even go to the agent.
     assert "- titulo" not in agents.of("fields")[0][2]
 
 
-def test_tag_automatica_tem_o_teto_das_tags_padrao(user: Api, services: Services):
+def test_automatic_tag_has_the_default_tags_ceiling(user: Api, services: Services):
     user.patch("/api/v1/me/tag-assignment", json={"mode": "auto", "new_limit": 2})
     reply = json.dumps({"tags": ["t" * 100, "curta"]})
     recording = _process(user, services, FakeAgents(replies={"fields": [reply]}))
     assert recording["tags"][:2] == ["t" * 64, "curta"]
 
 
-def test_etapa_pulada_sem_provider_ou_sem_campos(
+def test_step_skipped_without_provider_or_without_fields(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services, admin: Api
 ):
     api = as_user(make_user())
@@ -132,7 +132,7 @@ def test_etapa_pulada_sem_provider_ou_sem_campos(
     assert agents.of("fields") == []
 
 
-def test_json_invalido_retenta_e_falha_sem_parar_a_cadeia(user: Api, services: Services):
+def test_invalid_json_retries_and_fails_without_stopping_the_chain(user: Api, services: Services):
     agents = FakeAgents(replies={"fields": ["não é JSON", '{"titulo": "Segunda tentativa"}']})
     recording = _process(user, services, agents)
     assert recording["title"] == "Reunião de equipe · Segunda tentativa"
@@ -150,11 +150,11 @@ def test_json_invalido_retenta_e_falha_sem_parar_a_cadeia(user: Api, services: S
     recording = _process(user, services, agents)
     assert _step(recording, "fields")["error"]["code"] == "provider_auth"
     assert len(agents.of("fields")) == 1
-    # A cadeia seguiu: o tipo e o resumo saíram mesmo com os campos falhos.
+    # The chain went on: the type and the summary came out even with the fields failed.
     assert (_step(recording, "agenda_type")["state"], _step(recording, "summary")["state"]) == ("done", "done")
 
 
-def test_retranscricao_recalcula_o_automatico_e_mantem_o_aceito(user: Api, services: Services):
+def test_retranscription_recomputes_the_automatic_and_keeps_the_accepted(user: Api, services: Services):
     field = user.post("/api/v1/fields", json=CLIENT).json()
     for name in ("a", "b"):
         user.post("/api/v1/tags", json={"name": name})
@@ -175,14 +175,14 @@ def test_retranscricao_recalcula_o_automatico_e_mantem_o_aceito(user: Api, servi
     assert "- cliente" not in agents.of("fields")[0][2]
 
 
-# --- tipo de agenda e resumo pelo tipo --------------------------------------------------------------
+# --- agenda type and the summary by type ------------------------------------------------------------
 
 
 def _types(api: Api) -> dict[str, dict[str, Any]]:
     return {item["name"]: item for item in api.get("/api/v1/agenda-types").json()["items"]}
 
 
-def test_deteccao_aplica_o_tipo_e_o_resumo_segue_as_instrucoes_dele(user: Api, services: Services):
+def test_detection_applies_the_type_and_the_summary_follows_its_instructions(user: Api, services: Services):
     types = _types(user)
     user.patch(
         f"/api/v1/agenda-types/{types['Conversa com cliente']['id']}",
@@ -206,7 +206,7 @@ def test_deteccao_aplica_o_tipo_e_o_resumo_segue_as_instrucoes_dele(user: Api, s
     }
     assert recording["title"] == "Serra Azul · Proposta de manutenção · 18/09/2026"
     assert recording["tags"] == ["proposta", "cliente"]
-    # O título com o padrão continua automático.
+    # The title with the pattern stays automatic.
     values = _values(user, recording["id"])
     assert (values["titulo"]["value"], values["titulo"]["origin"]) == (recording["title"], "auto")
 
@@ -219,7 +219,7 @@ def test_deteccao_aplica_o_tipo_e_o_resumo_segue_as_instrucoes_dele(user: Api, s
     assert {step["state"] for step in recording["pipeline"]} == {"done"}
 
 
-def test_tipo_do_usuario_nao_e_trocado_e_sem_outros_tipos_fica_o_padrao(user: Api, services: Services):
+def test_user_type_is_not_replaced_and_without_other_types_the_default_stays(user: Api, services: Services):
     agents = FakeAgents()
     recording = upload_file(user, audio_bytes(2200))
     one_on_one = _types(user)["1:1"]
@@ -239,18 +239,18 @@ def test_tipo_do_usuario_nao_e_trocado_e_sem_outros_tipos_fica_o_padrao(user: Ap
     body = _process(user, services, agents)
     assert _step(body, "agenda_type")["reason"] == "no_types"
     assert agents.of("agenda_detection") == []
-    # Sem outros tipos, a gravação fica com o tipo padrão e tem resumo pelas instruções dele.
+    # Without other types, the recording keeps the default type and gets a summary by its instructions.
     assert body["agenda_type"]["name"] == "Geral"
     assert _step(body, "summary")["state"] == "done"
     assert "## Próximos passos" in agents.of("summaries")[-1][2]
 
 
-def test_tipo_fora_da_lista_retenta(user: Api, services: Services):
+def test_type_outside_the_list_retries(user: Api, services: Services):
     agents = FakeAgents(replies={"agenda_detection": ['{"tipo": "T9"}', '{"tipo": "T2", "confianca": 0.8}']})
     recording = _process(user, services, agents)
     assert recording["agenda_type"]["name"] == "1:1"
     assert len(agents.of("agenda_detection")) == 2
-    # O tipo padrão não concorre: a lista do agente tem só os outros.
+    # The default type does not compete: the agent's list holds only the others.
     assert "Geral" not in agents.of("agenda_detection")[0][2]
 
 
@@ -261,19 +261,19 @@ def test_tipo_fora_da_lista_retenta(user: Api, services: Services):
         ('{"tipo": "T2", "confianca": 0.4, "motivo": "talvez 1:1"}', "1:1"),
     ],
 )
-def test_nenhum_tipo_ou_pouca_confianca_fica_o_padrao(user: Api, services: Services, reply: str, candidate: str | None):
+def test_no_type_or_low_confidence_keeps_the_default(user: Api, services: Services, reply: str, candidate: str | None):
     agents = FakeAgents(replies={"agenda_detection": [reply]})
     recording = _process(user, services, agents)
     assert recording["agenda_type"] == {"id": _types(user)["Geral"]["id"], "name": "Geral", "origin": "auto"}
     assert _step(recording, "agenda_type")["state"] == "done"
     detail = run(services.sql(lambda conn: _detail(conn, recording["id"], "agenda_type")))
     assert (detail["fallback"], detail["candidate_name"]) == (True, candidate)
-    # O resumo sai pelas instruções do tipo padrão, e o título pelo padrão dele (`{assunto}`).
+    # The summary follows the default type's instructions, and the title its pattern (`{assunto}`).
     assert _step(recording, "summary")["state"] == "done"
     assert "## Próximos passos" in agents.of("summaries")[-1][2]
 
 
-def test_detecao_falha_fica_o_padrao(user: Api, services: Services):
+def test_failed_detection_keeps_the_default(user: Api, services: Services):
     down = ProviderError(codes.PROVIDER_AUTH, "Not logged in")
     recording = _process(user, services, FakeAgents(failures={"agenda_detection": [down]}))
     assert _step(recording, "agenda_type")["state"] == "failed"
@@ -281,7 +281,7 @@ def test_detecao_falha_fica_o_padrao(user: Api, services: Services):
     assert _step(recording, "summary")["state"] == "done"
 
 
-def test_o_assunto_do_titulo_segue_a_regra_do_tipo(user: Api, services: Services):
+def test_the_title_subject_follows_the_type_rule(user: Api, services: Services):
     types = _types(user)
     team = types["Reunião de equipe"]
     user.patch(f"/api/v1/agenda-types/{team['id']}", json={"title_instructions": "O projeto discutido, em 3 palavras."})
@@ -290,7 +290,7 @@ def test_o_assunto_do_titulo_segue_a_regra_do_tipo(user: Api, services: Services
     assert recording["title"] == "Reunião de equipe · Projeto Aurora"
     fields_prompt = agents.of("fields")[0][2]
     assert "O projeto discutido, em 3 palavras." in fields_prompt
-    # Sem regra própria, vale a do tipo padrão.
+    # Without its own rule, the default type's applies.
     user.patch(f"/api/v1/agenda-types/{types['Geral']['id']}", json={"title_instructions": "Regra do Geral."})
     user.patch(f"/api/v1/agenda-types/{team['id']}", json={"title_instructions": ""})
     agents = FakeAgents()
@@ -298,7 +298,7 @@ def test_o_assunto_do_titulo_segue_a_regra_do_tipo(user: Api, services: Services
     assert "Regra do Geral." in agents.of("fields")[0][2]
 
 
-def test_trocar_o_tipo_a_mao_gera_um_resumo_novo(user: Api, services: Services):
+def test_changing_the_type_by_hand_generates_a_new_summary(user: Api, services: Services):
     agents = FakeAgents(replies={"fields": ['{"titulo": "Planejamento do trimestre"}']})
     recording = _process(user, services, agents)
     assert recording["title"] == "Reunião de equipe · Planejamento do trimestre"
@@ -318,8 +318,8 @@ def test_trocar_o_tipo_a_mao_gera_um_resumo_novo(user: Api, services: Services):
     assert _step(user.get(f"/api/v1/recordings/{recording['id']}").json(), "summary")["state"] == "done"
 
 
-def test_reaplicar_o_padrao_nao_aninha_o_titulo(user: Api, services: Services):
-    # Sem título automático, o assunto é o título de antes do primeiro padrão (o nome do arquivo).
+def test_reapplying_the_pattern_does_not_nest_the_title(user: Api, services: Services):
+    # Without an automatic title, the subject is the title from before the first pattern (the file name).
     title_field = next(item for item in user.get("/api/v1/fields").json()["items"] if item["builtin"] == "title")
     user.patch(f"/api/v1/fields/{title_field['id']}", json={"auto_fill": False})
     types = _types(user)
@@ -335,11 +335,11 @@ def test_reaplicar_o_padrao_nao_aninha_o_titulo(user: Api, services: Services):
     run_cpu(services.settings)
 
 
-def test_o_mesmo_tipo_de_novo_nao_duplica_o_resumo_automatico(user: Api, services: Services):
+def test_the_same_type_again_does_not_duplicate_the_automatic_summary(user: Api, services: Services):
     recording = _process(user, services, FakeAgents())
     detected = recording["agenda_type"]
     path = f"/api/v1/recordings/{recording['id']}"
-    # Confirmar o tipo detectado (vira `edited`) não gera outro resumo pelo mesmo tipo.
+    # Confirming the detected type (it becomes `edited`) does not generate another summary for the same type.
     same = user.patch(path, json={"agenda_type_id": detected["id"]}).json()
     assert same["agenda_type"]["origin"] == "edited"
     client = _types(user)["Conversa com cliente"]
@@ -350,7 +350,7 @@ def test_o_mesmo_tipo_de_novo_nao_duplica_o_resumo_automatico(user: Api, service
     assert sorted(s["agenda_type"]["name"] for s in summaries) == ["Conversa com cliente", "Reunião de equipe"]
 
 
-def test_falha_inesperada_fora_do_agente_marca_a_etapa_e_segue(
+def test_unexpected_failure_outside_the_agent_marks_the_step_and_moves_on(
     user: Api, services: Services, monkeypatch: pytest.MonkeyPatch
 ):
     def boom(*_args: object, **_kwargs: object) -> None:
@@ -362,14 +362,14 @@ def test_falha_inesperada_fora_do_agente_marca_a_etapa_e_segue(
     for name in ("fields", "agenda_type"):
         step = _step(recording, name)
         assert (step["state"], step["error"]["code"]) == ("failed", "internal_error"), name
-    # A cadeia chegou ao resumo: sem tipo aplicado, ele sai pulado.
+    # The chain reached the summary: with no type applied, it comes out skipped.
     assert (_step(recording, "summary")["state"], _step(recording, "summary")["reason"]) == (
         "skipped",
         "no_agenda_type",
     )
 
 
-def test_resumo_automatico_apagado_antes_de_gerar_fecha_a_etapa(user: Api, services: Services):
+def test_automatic_summary_deleted_before_generation_closes_the_step(user: Api, services: Services):
     recording = _process(user, services, FakeAgents())
     client = _types(user)["Conversa com cliente"]
     path = f"/api/v1/recordings/{recording['id']}"
@@ -382,14 +382,14 @@ def test_resumo_automatico_apagado_antes_de_gerar_fecha_a_etapa(user: Api, servi
     assert (step["state"], step["reason"]) == ("skipped", "summary_deleted")
 
 
-def test_colecoes_automaticas_pela_regra_com_participantes(user: Api, services: Services):
+def test_automatic_collections_by_the_rule_with_participants(user: Api, services: Services):
     rule = "Reuniões em que participa alguém da empresa Agro Sul."
     agro = user.post("/api/v1/collections", json={"name": "Agro Sul", "instructions": rule, "auto_assign": True}).json()
     manual = user.post("/api/v1/collections", json={"name": "Manual", "instructions": "Nunca.", "auto_assign": False})
     empty = user.post("/api/v1/collections", json={"name": "Sem regra", "auto_assign": True}).json()
     kept = user.post("/api/v1/collections", json={"name": "Do envio"}).json()
 
-    # Sem participantes ainda: o agente vê as coleções automáticas com regra e escolhe a primeira.
+    # No participants yet: the agent sees the automatic collections with a rule and picks the first.
     agents = FakeAgents(replies={"fields": ['{"colecoes": ["C1", "C9", "x"]}']})
     recording = _process(user, services, agents, collection_ids=[kept["id"]])
     prompt = agents.of("fields")[0][2]
@@ -402,8 +402,8 @@ def test_colecoes_automaticas_pela_regra_com_participantes(user: Api, services: 
     assert manual.status_code == 201
     assert empty["auto_assign"] is True
 
-    # Com um participante ligado, a retranscrição leva os dados dele ao prompt; a escolha nova troca
-    # as automáticas e mantém a do envio.
+    # With a linked participant, retranscription carries their data into the prompt; the new choice
+    # replaces the automatic ones and keeps the one from the upload.
     person = user.post(
         "/api/v1/people",
         json={"name": "Bruna Reis", "company": "Agro Sul", "department": "Compras", "tags": ["cliente"]},
@@ -420,7 +420,7 @@ def test_colecoes_automaticas_pela_regra_com_participantes(user: Api, services: 
     body = user.get(f"/api/v1/recordings/{recording['id']}").json()
     assert body["collection_ids"] == [kept["id"]]
 
-    # O usuário mexeu: o agente não toca mais, e as coleções nem vão ao prompt.
+    # The user changed them: the agent no longer touches them, and the collections do not even go to the prompt.
     user.patch(f"/api/v1/recordings/{recording['id']}", json={"collection_ids": [agro["id"]]})
     user.post(f"/api/v1/recordings/{recording['id']}/retranscribe")
     run_gpu(services.settings)
@@ -430,7 +430,7 @@ def test_colecoes_automaticas_pela_regra_com_participantes(user: Api, services: 
     assert (body["collection_ids"], body["collections_origin"]) == ([agro["id"]], "edited")
 
 
-def test_so_colecoes_automaticas_tambem_chamam_o_agente(user: Api, services: Services):
+def test_only_automatic_collections_also_call_the_agent(user: Api, services: Services):
     for item in user.get("/api/v1/fields").json()["items"]:
         user.patch(f"/api/v1/fields/{item['id']}", json={"auto_fill": False})
     coll = user.post("/api/v1/collections", json={"name": "Tudo", "instructions": "Todas.", "auto_assign": True})
@@ -441,7 +441,7 @@ def test_so_colecoes_automaticas_tambem_chamam_o_agente(user: Api, services: Ser
     assert "## Campos" not in agents.of("fields")[0][2]
 
 
-def test_tags_fixas_casam_variacoes_e_descartam_as_novas(user: Api, services: Services):
+def test_fixed_tags_match_variations_and_drop_the_new_ones(user: Api, services: Services):
     user.post("/api/v1/tags", json={"name": "reunião de equipe"})
     reply = json.dumps({"tags": ["Reuniões de Equipe", "inventada"]})
     recording = _process(user, services, FakeAgents(replies={"fields": [reply]}))
@@ -450,7 +450,7 @@ def test_tags_fixas_casam_variacoes_e_descartam_as_novas(user: Api, services: Se
     assert "inventada" not in names
 
 
-def test_tags_autogerenciadas_respeitam_o_limite_e_o_teto(
+def test_self_managed_tags_respect_the_limit_and_the_ceiling(
     user: Api, services: Services, monkeypatch: pytest.MonkeyPatch
 ):
     assert user.patch("/api/v1/me/tag-assignment", json={"mode": "auto"}).json()["new_limit"] == 1
@@ -462,7 +462,7 @@ def test_tags_autogerenciadas_respeitam_o_limite_e_o_teto(
     assert (created["nova um"], created["interno"]) == ("auto", "user")
     assert "nova dois" not in created
 
-    # Cadastro no teto: o agente não cria mais.
+    # Catalog at the ceiling: the agent creates no more.
     monkeypatch.setattr(fields_module, "MAX_CATALOG", len(created))
     agents = FakeAgents(replies={"fields": [json.dumps({"tags": ["outra nova"]})]})
     recording = _process(user, services, agents)

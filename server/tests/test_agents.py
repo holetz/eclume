@@ -1,4 +1,4 @@
-"""Providers de agente e chunking, sem rede nem serviços: transportes falsos e um `claude` falso."""
+"""Agent providers and chunking, with no network or services: fake transports and a fake `claude`."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ FakeClaude = "Callable[..., tuple[ClaudeCliProvider, Path]]"
 @pytest.fixture
 def fake_claude(tmp_path: Path) -> Callable[..., tuple[ClaudeCliProvider, Path]]:
     if sys.platform == "win32":
-        pytest.skip("o provider claude-cli só roda no contêiner Linux do server")
+        pytest.skip("the claude-cli provider only runs in the server's Linux container")
     script = tmp_path / "claude"
     script.write_text(FAKE_CLAUDE.format(python=sys.executable))
     script.chmod(0o755)
@@ -108,7 +108,7 @@ def fake_claude(tmp_path: Path) -> Callable[..., tuple[ClaudeCliProvider, Path]]
     return make
 
 
-def test_claude_cli_roda_sem_ferramentas_e_com_o_prompt_no_stdin(fake_claude: FakeClaude):
+def test_claude_cli_runs_without_tools_and_with_the_prompt_on_stdin(fake_claude: FakeClaude):
     provider, record = fake_claude()
     completion = run(provider.complete("sistema", "a transcrição"))
     assert completion == Completion(text="# Ata\n\n- decidido", model="claude-sonnet-5")
@@ -120,11 +120,11 @@ def test_claude_cli_roda_sem_ferramentas_e_com_o_prompt_no_stdin(fake_claude: Fa
     assert argv[argv.index("--system-prompt") + 1] == "sistema"
     assert "--no-session-persistence" in argv
     assert "--strict-mcp-config" in argv
-    # O agente roda num diretório vazio, sem CLAUDE.md de projeto nenhum.
+    # The agent runs in an empty directory, with no project CLAUDE.md at all.
     assert "eclume-claude-" in seen["cwd"]
 
 
-def test_claude_cli_cancelado_mata_o_processo(fake_claude: FakeClaude):
+def test_claude_cli_cancelled_kills_the_process(fake_claude: FakeClaude):
     provider, record = fake_claude("slow")
 
     async def go() -> int:
@@ -137,7 +137,7 @@ def test_claude_cli_cancelado_mata_o_processo(fake_claude: FakeClaude):
             except (OSError, ValueError):
                 await asyncio.sleep(0.02)
         assert pid is not None
-        # O timeout do arq (ou a parada do worker) cancela a task do job.
+        # The arq timeout (or the worker stopping) cancels the job's task.
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
@@ -148,7 +148,7 @@ def test_claude_cli_cancelado_mata_o_processo(fake_claude: FakeClaude):
         os.kill(pid, 0)
 
 
-def test_claude_cli_sem_credencial_nem_chama_a_cli(fake_claude: FakeClaude, tmp_path: Path):
+def test_claude_cli_without_a_credential_never_calls_the_cli(fake_claude: FakeClaude, tmp_path: Path):
     provider, record = fake_claude()
     provider.env["HOME"] = str(tmp_path / "vazio")
     error = error_of(provider.complete("s", "p"))
@@ -157,7 +157,7 @@ def test_claude_cli_sem_credencial_nem_chama_a_cli(fake_claude: FakeClaude, tmp_
     assert not record.exists()
 
 
-def test_claude_cli_aceita_o_token_de_longa_duracao_sem_arquivo(fake_claude: FakeClaude, tmp_path: Path):
+def test_claude_cli_accepts_the_long_lived_token_without_a_file(fake_claude: FakeClaude, tmp_path: Path):
     provider, record = fake_claude()
     provider.env["HOME"] = str(tmp_path / "vazio")
     provider.env["CLAUDE_CODE_OAUTH_TOKEN"] = "sk-ant-oat01-teste"
@@ -165,7 +165,7 @@ def test_claude_cli_aceita_o_token_de_longa_duracao_sem_arquivo(fake_claude: Fak
     assert record.exists()
 
 
-def test_claude_cli_entrega_o_segredo_do_provider_pela_variavel_certa():
+def test_claude_cli_passes_the_provider_secret_through_the_right_variable():
     def env_of(api_key: str) -> dict[str, str]:
         config = ProviderConfig(kind="claude-cli", model="sonnet", api_key=api_key)
         return ClaudeCliProvider(config, env={"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-do-ambiente"}).env
@@ -174,12 +174,12 @@ def test_claude_cli_entrega_o_segredo_do_provider_pela_variavel_certa():
     assert token["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-do-painel"
     assert "ANTHROPIC_API_KEY" not in token
 
-    chave = env_of("sk-ant-api03-do-painel")
-    assert chave["ANTHROPIC_API_KEY"] == "sk-ant-api03-do-painel"
-    assert "CLAUDE_CODE_OAUTH_TOKEN" not in chave
+    key = env_of("sk-ant-api03-do-painel")
+    assert key["ANTHROPIC_API_KEY"] == "sk-ant-api03-do-painel"
+    assert "CLAUDE_CODE_OAUTH_TOKEN" not in key
 
 
-def test_claude_cli_classifica_as_falhas(fake_claude: FakeClaude):
+def test_claude_cli_classifies_the_failures(fake_claude: FakeClaude):
     auth, _ = fake_claude("auth")
     error = error_of(auth.complete("s", "p"))
     assert error.code == codes.PROVIDER_AUTH
@@ -196,13 +196,13 @@ def test_claude_cli_classifica_as_falhas(fake_claude: FakeClaude):
     assert error.retryable
 
 
-def test_claude_cli_binario_inexistente():
+def test_claude_cli_missing_binary():
     config = ProviderConfig(kind="claude-cli", model="sonnet")
     provider = ClaudeCliProvider(config, claude_bin="/nao/existe/claude", env={"ANTHROPIC_API_KEY": "sk-x"})
     assert error_of(provider.complete("s", "p")).code == codes.PROVIDER_NOT_CONFIGURED
 
 
-def test_claude_command_repassa_o_effort():
+def test_claude_command_passes_the_effort():
     config = ProviderConfig(kind="claude-cli", model="opus", options={"effort": "low"})
     cmd = claude_command("claude", config, "s")
     assert cmd[cmd.index("--effort") + 1] == "low"
@@ -224,7 +224,7 @@ def _openai(handler: Callable[[httpx.Request], httpx.Response], **options: Any) 
     return OpenAICompatibleProvider(config, transport=httpx.MockTransport(handler))
 
 
-def test_openai_compativel_monta_a_conversa():
+def test_openai_compatible_builds_the_conversation():
     seen: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -253,13 +253,13 @@ def test_openai_compativel_monta_a_conversa():
         (503, codes.PROVIDER_UNAVAILABLE, True),
     ],
 )
-def test_openai_compativel_erros_http(status: int, code: str, retryable: bool):  # noqa: FBT001
+def test_openai_compatible_http_errors(status: int, code: str, retryable: bool):  # noqa: FBT001
     provider = _openai(lambda _: httpx.Response(status, json={"error": {"message": "x"}}))
     error = error_of(provider.complete("s", "p"))
     assert (error.code, error.retryable) == (code, retryable)
 
 
-def test_openai_compativel_timeout_e_rede():
+def test_openai_compatible_timeout_and_network():
     def timeout(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("lento", request=request)
 
@@ -285,7 +285,7 @@ def _ollama(idle: bool, calls: list[dict[str, Any]]) -> OllamaProvider:  # noqa:
     return OllamaProvider(config, gpu_idle=gpu_idle, transport=httpx.MockTransport(handler))
 
 
-def test_ollama_espera_a_fila_da_gpu_esvaziar():
+def test_ollama_waits_for_the_gpu_queue_to_empty():
     calls: list[dict[str, Any]] = []
     error = error_of(_ollama(idle=False, calls=calls).complete("s", "p"))
     assert error.code == codes.GPU_BUSY
@@ -293,7 +293,7 @@ def test_ollama_espera_a_fila_da_gpu_esvaziar():
     assert calls == []
 
 
-def test_ollama_nao_fica_residente():
+def test_ollama_does_not_stay_resident():
     calls: list[dict[str, Any]] = []
     completion = run(_ollama(idle=True, calls=calls).complete("s", "p"))
     assert completion.text == "resumo"
@@ -304,7 +304,7 @@ def test_ollama_nao_fica_residente():
     assert body["options"]["num_ctx"] == 8192
 
 
-def test_fabrica_exige_a_fila_para_o_ollama():
+def test_factory_requires_the_queue_for_ollama():
     config = ProviderConfig(kind="ollama", model="m", base_url="http://x")
     with pytest.raises(ProviderError):
         build_provider(config)
@@ -362,7 +362,7 @@ def _anthropic(
     return AnthropicProvider(config, http_client=client)
 
 
-def test_anthropic_em_streaming():
+def test_anthropic_streaming():
     seen: dict[str, Any] = {}
 
     def handler(request: httpx2.Request) -> httpx2.Response:
@@ -378,7 +378,7 @@ def test_anthropic_em_streaming():
     assert "temperature" not in seen["body"]
 
 
-def test_anthropic_marca_o_contexto_para_o_cache_de_prompt():
+def test_anthropic_marks_the_context_for_the_prompt_cache():
     bodies: list[dict[str, Any]] = []
 
     def handler(request: httpx2.Request) -> httpx2.Response:
@@ -395,7 +395,7 @@ def test_anthropic_marca_o_contexto_para_o_cache_de_prompt():
     assert bodies[1]["messages"][0]["content"] == "tarefa"
 
 
-def test_anthropic_recusa_e_erros():
+def test_anthropic_refusal_and_errors():
     refused = _anthropic(
         lambda _: httpx2.Response(200, text=_sse("", "refusal"), headers={"content-type": "text/event-stream"})
     )
@@ -414,21 +414,21 @@ def test_anthropic_recusa_e_erros():
     assert error_of(_anthropic(bad_key, api_key=None).complete("s", "p")).code == codes.PROVIDER_NOT_CONFIGURED
 
 
-# --- prompt e chunking ----------------------------------------------------------------------------
+# --- prompt and chunking --------------------------------------------------------------------------
 
 
 class FakeProvider:
-    """Provider que registra as chamadas e devolve um texto curto."""
+    """Provider that records the calls and returns a short text."""
 
     def __init__(self, context_window: int) -> None:
-        """Janela pequena força o map-reduce."""
+        """A small window forces map-reduce."""
         self.config = ProviderConfig(
             kind="openai-compatible", model="fake", options={"context_window": context_window, "max_tokens": 200}
         )
         self.calls: list[tuple[str, str]] = []
 
     async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
-        """Registra a chamada."""
+        """Records the call."""
         self.calls.append((system, with_context(context, prompt)))
         return Completion(text=f"notas {len(self.calls)}", model="fake")
 
@@ -443,7 +443,7 @@ def _transcript(lines: int) -> TranscriptText:
     )
 
 
-def test_transcricao_vira_linhas_com_tempo_e_nome():
+def test_transcript_becomes_lines_with_time_and_name():
     transcript = render_transcript(
         title="T",
         recorded_at="2026-09-18",
@@ -454,7 +454,7 @@ def test_transcricao_vira_linhas_com_tempo_e_nome():
     assert "Participantes: Mariana" in transcript.header
 
 
-def test_notas_dos_marcadores_entram_na_ordem_do_tempo_achatadas():
+def test_marker_notes_enter_in_time_order_flattened():
     transcript = render_transcript(
         title="T",
         recorded_at="2026-09-18",
@@ -471,7 +471,7 @@ def test_notas_dos_marcadores_entram_na_ordem_do_tempo_achatadas():
     assert "Nota do marcador" in SHARED_SYSTEM
 
 
-def test_transcricao_curta_em_uma_chamada():
+def test_short_transcript_in_one_call():
     provider = FakeProvider(context_window=100_000)
     completion = run(summarize(provider, _transcript(10), "Faça uma ata."))
     assert completion.text == "notas 1"
@@ -485,56 +485,56 @@ def test_transcricao_curta_em_uma_chamada():
     assert "[00:00:07] Mariana" in prompt
 
 
-def test_transcricao_longa_por_map_reduce():
+def test_long_transcript_by_map_reduce():
     provider = FakeProvider(context_window=3_000)
     transcript = _transcript(200)
     assert estimate_tokens(transcript.text()) > 3_000
     run(summarize(provider, transcript, "Faça uma ata."))
     maps = [call for call in provider.calls if call[0] == MAP_SYSTEM]
     assert len(maps) >= 3
-    # O reduce final aplica o template sobre as notas, em ordem.
+    # The final reduce applies the template over the notes, in order.
     system, prompt = provider.calls[-1]
     assert system == SHARED_SYSTEM
     assert "Faça uma ata." in prompt
     assert prompt.index("### Parte 1 ") < prompt.index("### Parte 2 ")
-    # Nenhuma chamada passou do orçamento de entrada.
+    # No call exceeded the input budget.
     assert all(estimate_tokens(prompt) < 3_000 for _, prompt in provider.calls)
 
 
-def test_janela_pequena_demais_e_erro_explicito():
+def test_too_small_window_is_an_explicit_error():
     provider = FakeProvider(context_window=600)
     assert error_of(summarize(provider, _transcript(5), "x" * 3000)).code == codes.CONTEXT_TOO_LONG
 
 
-def test_secoes_respeitam_o_orcamento():
-    lines = ["a" * 30] * 10  # 10 tokens + 1 cada
+def test_sections_respect_the_budget():
+    lines = ["a" * 30] * 10  # 10 tokens + 1 each
     assert split_sections(lines, 33) == [(0, 3), (3, 6), (6, 9), (9, 10)]
     assert split_sections(["a" * 300], 10) == [(0, 1)]
 
 
-# --- extração de campos ---------------------------------------------------------------------------
+# --- field extraction -----------------------------------------------------------------------------
 
-CLIENTE = FieldSpec(key="cliente", kind="choice", instructions="A empresa.", options=("Serra Azul", "Vale Verde"))
-TITULO = FieldSpec(key="titulo", kind="text", instructions="Um título curto.")
-PENDENCIAS = FieldSpec(key="pendencias", kind="list", instructions="O que ficou para depois.")
+CLIENT = FieldSpec(key="cliente", kind="choice", instructions="A empresa.", options=("Serra Azul", "Vale Verde"))
+TITLE = FieldSpec(key="titulo", kind="text", instructions="Um título curto.")
+PENDING = FieldSpec(key="pendencias", kind="list", instructions="O que ficou para depois.")
 TAGS = FieldSpec(key="tags", kind="list", instructions="De 1 a 5 tags.", max_item=64)
 
 
 class ScriptedProvider(FakeProvider):
-    """Responde, em ordem, os textos dados."""
+    """Replies with the given texts, in order."""
 
     def __init__(self, context_window: int, replies: list[str]) -> None:
-        """Janela e respostas."""
+        """Window and replies."""
         super().__init__(context_window)
         self.replies = replies
 
     async def complete(self, system: str, prompt: str, *, context: str = "") -> Completion:
-        """Registra e responde o próximo texto."""
+        """Records the call and replies with the next text."""
         self.calls.append((system, with_context(context, prompt)))
         return Completion(text=self.replies.pop(0), model="fake")
 
 
-def test_resposta_json_com_ou_sem_cerca():
+def test_json_reply_with_or_without_a_fence():
     assert parse_object('```json\n{"titulo": "A"}\n```') == {"titulo": "A"}
     assert parse_object('Aqui está: {"titulo": null}') == {"titulo": None}
     for text in ("sem json", "[1, 2]", '{"titulo": '):
@@ -543,28 +543,28 @@ def test_resposta_json_com_ou_sem_cerca():
         assert (info.value.code, info.value.retryable) == (codes.PROVIDER_BAD_OUTPUT, True)
 
 
-def test_valores_seguem_o_tipo_do_campo():
-    assert clean(CLIENTE, "Serra Azul") == "Serra Azul"
-    assert clean(CLIENTE, "Outra") is None
-    assert clean(TITULO, "  " + "x" * 400) == "x" * 300
-    assert clean(TITULO, ["lista"]) is None
-    assert clean(PENDENCIAS, ["a", "a", " b ", 3, ""] + [f"i{n}" for n in range(20)]) == [
+def test_values_follow_the_field_kind():
+    assert clean(CLIENT, "Serra Azul") == "Serra Azul"
+    assert clean(CLIENT, "Outra") is None
+    assert clean(TITLE, "  " + "x" * 400) == "x" * 300
+    assert clean(TITLE, ["lista"]) is None
+    assert clean(PENDING, ["a", "a", " b ", 3, ""] + [f"i{n}" for n in range(20)]) == [
         "a",
         "b",
         *[f"i{n}" for n in range(8)],
     ]
-    assert clean(PENDENCIAS, []) is None
+    assert clean(PENDING, []) is None
 
 
-def test_mescla_das_secoes():
-    assert merge(CLIENTE, [None, "Vale Verde", "Serra Azul", "Serra Azul"]) == "Serra Azul"
-    # Empate: o primeiro que apareceu.
-    assert merge(TITULO, ["B", "A", "A", "B"]) == "B"
-    assert merge(PENDENCIAS, [["a"], None, ["b", "a"]]) == ["a", "b"]
-    assert merge(TITULO, [None, None]) is None
+def test_merge_of_the_sections():
+    assert merge(CLIENT, [None, "Vale Verde", "Serra Azul", "Serra Azul"]) == "Serra Azul"
+    # Tie: the first one that appeared.
+    assert merge(TITLE, ["B", "A", "A", "B"]) == "B"
+    assert merge(PENDING, [["a"], None, ["b", "a"]]) == ["a", "b"]
+    assert merge(TITLE, [None, None]) is None
 
 
-def test_campos_e_resumo_compartilham_o_system_e_o_bloco_da_transcricao():
+def test_fields_and_summary_share_the_system_and_the_transcript_block():
     seen: list[tuple[str, str, str]] = []
 
     class Spy(FakeProvider):
@@ -574,7 +574,7 @@ def test_campos_e_resumo_compartilham_o_system_e_o_bloco_da_transcricao():
 
     provider = Spy(context_window=100_000)
     transcript = _transcript(10)
-    run(extract_fields(provider, [TITULO], None, transcript))
+    run(extract_fields(provider, [TITLE], None, transcript))
     run(summarize(provider, transcript, "Faça uma ata."))
     (fields_call, summary_call) = seen
     assert fields_call[0] == summary_call[0] == SHARED_SYSTEM
@@ -583,10 +583,10 @@ def test_campos_e_resumo_compartilham_o_system_e_o_bloco_da_transcricao():
     assert "<transcricao>" not in fields_call[1]
 
 
-def test_extracao_curta_numa_chamada_e_longa_por_secoes():
+def test_short_extraction_in_one_call_and_long_by_sections():
     provider = ScriptedProvider(100_000, ['{"titulo": "Kickoff", "cliente": "Serra Azul", "pendencias": ["a"]}'])
     guide = TagGuide(tags=(("interno", "Reunião só da equipe."),))
-    fields = [TITULO, CLIENTE, PENDENCIAS, TAGS]
+    fields = [TITLE, CLIENT, PENDING, TAGS]
     values, completion = run(extract_fields(provider, fields, guide, _transcript(10)))
     assert values == {"titulo": "Kickoff", "cliente": "Serra Azul", "pendencias": ["a"], "tags": None}
     assert completion.model == "fake"
@@ -602,7 +602,7 @@ def test_extracao_curta_numa_chamada_e_longa_por_secoes():
         '{"cliente": "Serra Azul", "pendencias": ["b"]}'
     ] * 20
     provider = ScriptedProvider(3_000, replies)
-    values, _ = run(extract_fields(provider, [CLIENTE, PENDENCIAS], None, transcript))
+    values, _ = run(extract_fields(provider, [CLIENT, PENDING], None, transcript))
     assert len(provider.calls) >= 3
     assert all(estimate_tokens(prompt) < 3_000 for _, prompt in provider.calls)
     assert values == {"cliente": "Serra Azul", "pendencias": ["a", "b"]}
@@ -616,7 +616,7 @@ def _key_set_at(services: Services, provider_id: str) -> datetime | None:
     return run_sync(services.sql(read))
 
 
-def test_key_set_at_muda_so_quando_a_chave_muda(admin: Api, services: Services):
+def test_key_set_at_changes_only_when_the_key_changes(admin: Api, services: Services):
     created = admin.post(
         "/api/v1/admin/agent-providers",
         json={"name": "Claude", "kind": "claude-cli", "model": "sonnet", "api_key": "sk-ant-oat01-x"},

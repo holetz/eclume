@@ -1,4 +1,4 @@
-"""`GET /privacy`: o destino de cada dado, classificado pelo servidor (holetz/eclume#116)."""
+"""`GET /privacy`: where each piece of data goes, classified by the server (holetz/eclume#116)."""
 
 from __future__ import annotations
 
@@ -38,17 +38,17 @@ URL = "/api/v1/privacy"
         (None, ("external", None)),
     ],
 )
-def test_classifica_o_endereco_sem_dns(url: str | None, expected: tuple[str, str | None]):
+def test_classifies_the_address_without_dns(url: str | None, expected: tuple[str, str | None]):
     assert classify_url(url) == expected
 
 
-def test_anthropic_e_claude_cli_sempre_fora():
+def test_anthropic_and_claude_cli_always_external():
     assert classify_provider("anthropic", None) == ("external", "Anthropic")
     assert classify_provider("claude-cli", "http://localhost") == ("external", "Anthropic")
     assert classify_provider("ollama", "http://ollama:11434") == ("server", None)
 
 
-def test_engine_local_no_servidor_e_remota_pelo_endereco():
+def test_local_engine_on_the_server_and_remote_by_address():
     assert classify_asr({"engine": "whisperx-local"}) == ("server", None)
     assert classify_asr({"engine": "cpu"}) == ("server", None)
     remote = {"engine": "openai-compatible", "endpoint_url": "https://asr.example.com/v1"}
@@ -62,7 +62,7 @@ def _by_purpose(client: TestClient) -> dict[str, dict]:
     return {item["purpose"]: item for item in response.json()["destinations"]}
 
 
-def test_padrao_tudo_no_servidor_e_agentes_desligados(admin: Api, client: TestClient):
+def test_default_everything_on_the_server_and_agents_disabled(admin: Api, client: TestClient):
     del admin
     destinations = _by_purpose(client)
     assert list(destinations) == ["transcription", "summaries", "fields", "chat", "agenda_detection"]
@@ -70,7 +70,7 @@ def test_padrao_tudo_no_servidor_e_agentes_desligados(admin: Api, client: TestCl
     assert {item["location"] for purpose, item in destinations.items() if purpose != "transcription"} == {"disabled"}
 
 
-def test_destinos_sem_endereco_chave_modelo_nem_nome(admin: Api, client: TestClient):
+def test_destinations_without_address_key_model_or_name(admin: Api, client: TestClient):
     admin.post(
         "/api/v1/admin/agent-providers",
         json={

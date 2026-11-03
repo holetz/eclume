@@ -1,4 +1,4 @@
-"""Arquivos do Agente: a extração do texto dos anexos, os limites e os arquivos gerados."""
+"""Agent files: text extraction from attachments, the limits and the generated files."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from eclume_server.agent_files import (
 
 
 def _pdf(text: str) -> bytes:
-    """Um PDF mínimo de uma página com `text` em Helvetica (ASCII)."""
+    """A minimal one-page PDF with `text` in Helvetica (ASCII)."""
     stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode()
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
@@ -59,31 +59,31 @@ def _docx(*paragraphs: str) -> bytes:
     return buffer.getvalue()
 
 
-def test_texto_em_utf8_e_latin1():
+def test_text_in_utf8_and_latin1():
     assert extract_text("notas.txt", "Ação combinada".encode()).text == "Ação combinada"
     assert extract_text("notas.TXT", "Ação combinada".encode("latin-1")).text == "Ação combinada"
     assert extract_text("bom.md", "﻿# Título\r\nlinha".encode()).text == "# Título\nlinha"
 
 
-def test_csv_vira_texto_com_o_tipo():
+def test_csv_becomes_text_with_the_type():
     extracted = extract_text("vendas.csv", b"nome,valor\nA,1\n")
     assert extracted.text == "nome,valor\nA,1"
     assert extracted.media_type.startswith("text/csv")
 
 
-def test_pdf_extrai_o_texto_da_pagina():
+def test_pdf_extracts_the_page_text():
     extracted = extract_text("ata.pdf", _pdf("Prazo combinado: sexta"))
     assert "Prazo combinado: sexta" in extracted.text
     assert extracted.media_type == "application/pdf"
 
 
-def test_docx_extrai_paragrafos_e_tabelas():
+def test_docx_extracts_paragraphs_and_tables():
     text = extract_text("proposta.docx", _docx("Primeiro parágrafo", "Segundo")).text
     assert "Primeiro parágrafo\nSegundo" in text
     assert "Cliente | Acme" in text
 
 
-def test_texto_longo_e_cortado_no_teto():
+def test_long_text_is_cut_at_the_ceiling():
     extracted = extract_text("grande.txt", b"a" * (MAX_TEXT_CHARS + 10))
     assert len(extracted.text) == MAX_TEXT_CHARS
     assert extracted.truncated
@@ -100,12 +100,12 @@ def test_texto_longo_e_cortado_no_teto():
         ("binario.txt", b"\x00\x01\x02"),
     ],
 )
-def test_recusa_tipo_fora_da_lista_ou_conteudo_que_nao_bate(name: str, data: bytes):
+def test_refuses_unlisted_type_or_mismatched_content(name: str, data: bytes):
     with pytest.raises(FileRejectedError):
         extract_text(name, data)
 
 
-def test_docx_sem_documento_e_recusado():
+def test_docx_without_a_document_is_refused():
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         archive.writestr("outro.xml", "<x/>")
@@ -113,7 +113,7 @@ def test_docx_sem_documento_e_recusado():
         extract_text("vazio.docx", buffer.getvalue())
 
 
-def test_nomes_sem_caminho_e_com_a_extensao_do_formato():
+def test_names_without_a_path_and_with_the_format_extension():
     assert clean_name("../../etc/passwd") == "passwd"
     assert clean_name("") == "arquivo"
     assert output_name("relatório.md", "md") == "relatório.md"
@@ -121,7 +121,7 @@ def test_nomes_sem_caminho_e_com_a_extensao_do_formato():
     assert output_name("a/b:c", "txt") == "b-c.txt"
 
 
-def test_gera_markdown_csv_e_docx():
+def test_generates_markdown_csv_and_docx():
     md = render_output("resumo", "md", "# Semana\n- item")
     assert (md.name, md.data) == ("resumo.md", b"# Semana\n- item")
     csv = render_output("dados", "csv", "a,b\n1,2")
@@ -131,11 +131,11 @@ def test_gera_markdown_csv_e_docx():
     assert [p.text for p in doc.paragraphs if p.text] == ["Título", "Texto forte.", "um", "dois"]
 
 
-def test_formato_fora_da_lista_e_recusado():
+def test_unlisted_format_is_refused():
     with pytest.raises(ValueError, match="xlsx"):
         render_output("x", "xlsx", "a")
 
 
-def test_chave_do_arquivo_fica_sob_o_dono():
+def test_file_key_stays_under_the_owner():
     owner, session, file = (UUID(int=1), UUID(int=2), UUID(int=3))
     assert file_key(owner, session, file) == f"users/{owner}/agent/{session}/{file}"

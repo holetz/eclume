@@ -1,4 +1,4 @@
-"""`/admin/settings`: leitura, merge por bloco, validação e a configuração chegando ao `transcribe`."""
+"""`/admin/settings`: reading, per-block merge, validation and the settings reaching `transcribe`."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ PREPROCESSING = {
 }
 
 
-def test_so_a_sessao_de_admin(admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
+def test_admin_session_only(admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]):
     user = as_user(make_user())
     assert user.get(URL).status_code == 401
     assert user.patch(URL, json={"asr": {"model": "large-v3"}}).status_code == 401
@@ -36,7 +36,7 @@ def test_so_a_sessao_de_admin(admin: Api, as_user: Callable[[Account], Api], mak
     assert admin.get(URL).status_code == 200
 
 
-def test_leitura_e_merge_por_bloco(admin: Api):
+def test_read_and_per_block_merge(admin: Api):
     initial = admin.get(URL)
     assert initial.status_code == 200
     body = initial.json()
@@ -59,13 +59,13 @@ def test_leitura_e_merge_por_bloco(admin: Api):
     assert result["asr"] == {**body["asr"], "model": "large-v3", "compute_type": "int8", "batch_size": 2}
     assert result["diarization"]["min_speakers"] == 2
     assert result["diarization"]["enabled"] is True
-    # O pré-processamento é mesclado por etapa: o resto de cada etapa fica.
+    # Preprocessing is merged per step: the rest of each step stays.
     assert result["preprocessing"] == {
         **PREPROCESSING,
         "denoise": {**PREPROCESSING["denoise"], "method": "afftdn"},
         "split_channels": {"enabled": True},
     }
-    # Quem mudou é a conta de admin, não um usuário.
+    # The one who changed it is the admin account, not a user.
     me = admin.get("/api/v1/admin/me").json()
     assert result["updated_by"] == {"id": me["id"], "name": me["name"]}
     assert admin.get(URL).json() == result
@@ -94,7 +94,7 @@ def test_leitura_e_merge_por_bloco(admin: Api):
         ({"diarization": {"max_speakers": 10**30}}, None),
         ({"diarization": {"min_speakers": True}}, None),
         ({"diarization": {"max_speakers": False}}, None),
-        # O resumo automático segue o tipo de agenda e o provider de `summaries`: o bloco saiu.
+        # Automatic summarization follows the agenda type and the `summaries` provider: the block is gone.
         ({"summarization": {"auto_summarize": True}}, None),
         ({"preprocessing": {"denoise": {"method": "spleeter"}}}, None),
         ({"preprocessing": {"denoise": {"strength": 1.2}}}, None),
@@ -110,7 +110,7 @@ def test_leitura_e_merge_por_bloco(admin: Api):
         ({"voice_identification": {"consent_term_text": "Autorizo."}}, None),
     ],
 )
-def test_validacao(admin: Api, body: dict[str, Any], field: str | None):
+def test_validation(admin: Api, body: dict[str, Any], field: str | None):
     response = admin.patch(URL, json=body)
     assert response.status_code == 422, response.text
     assert response.json()["code"] == "validation_failed"
@@ -141,7 +141,7 @@ def _numeric_paths(model: type[BaseModel], prefix: tuple[str, ...] = ()) -> list
 NUMERIC_PATHS = _numeric_paths(AdminSettingsPatch)
 
 
-def test_todo_campo_numerico_foi_achado():
+def test_every_numeric_field_was_found():
     assert len(NUMERIC_PATHS) >= 15
     assert ("asr", "batch_size") in NUMERIC_PATHS
     assert ("preprocessing", "loudnorm", "lra") in NUMERIC_PATHS
@@ -149,7 +149,7 @@ def test_todo_campo_numerico_foi_achado():
 
 @pytest.mark.parametrize("path", NUMERIC_PATHS, ids=[".".join(p) for p in NUMERIC_PATHS])
 @pytest.mark.parametrize("value", [True, False])
-def test_booleano_em_campo_numerico_e_recusado(admin: Api, path: tuple[str, ...], value: object):
+def test_boolean_in_numeric_field_is_refused(admin: Api, path: tuple[str, ...], value: object):
     before = admin.get(URL).json()
     body: Any = value
     for key in reversed(path):
@@ -161,7 +161,7 @@ def test_booleano_em_campo_numerico_e_recusado(admin: Api, path: tuple[str, ...]
     assert admin.get(URL).json() == before
 
 
-def test_proximo_transcribe_sai_com_a_configuracao_nova(
+def test_next_transcribe_goes_out_with_the_new_settings(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     member = as_user(make_user())
@@ -182,7 +182,7 @@ def test_proximo_transcribe_sai_com_a_configuracao_nova(
     assert "hf_token_encrypted" not in options
     run_cpu(services.settings)
 
-    # A retranscrição também lê a configuração do momento.
+    # Retranscription also reads the settings of the moment.
     admin.patch(URL, json={"asr": {"model": "medium"}})
     assert member.post(f"/api/v1/recordings/{recording['id']}/retranscribe").status_code == 202
     ((_, _, options),) = run_gpu(services.settings)
@@ -190,7 +190,7 @@ def test_proximo_transcribe_sai_com_a_configuracao_nova(
     run_cpu(services.settings)
 
 
-def test_idioma_automatico_vai_nulo_ao_transcribe(
+def test_automatic_language_goes_null_to_transcribe(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     assert admin.patch(URL, json={"asr": {"default_language": "auto"}}).json()["asr"]["default_language"] == "auto"
@@ -198,16 +198,16 @@ def test_idioma_automatico_vai_nulo_ao_transcribe(
     upload_file(member, audio_bytes(1500), title="Idioma a detectar")
     ((_, _, options),) = run_gpu(services.settings)
     assert options["language"] is None
-    # Um `transcribe` por conta na GPU: o próximo entra depois da ingestão deste.
+    # One `transcribe` per account on the GPU: the next one enters after this one's ingestion.
     run_cpu(services.settings)
-    # O idioma da gravação, quando dito, vence o automático.
+    # The recording's language, when given, wins over the automatic one.
     upload_file(member, audio_bytes(1600), title="Em inglês", language="en")
     ((_, _, options),) = run_gpu(services.settings)
     assert options["language"] == "en"
     run_cpu(services.settings)
 
 
-def test_identificacao_por_voz_exige_a_separacao(admin: Api):
+def test_voice_identification_requires_diarization(admin: Api):
     refused = admin.patch(URL, json={"voice_identification": {"enabled": True}, "diarization": {"enabled": False}})
     assert refused.status_code == 422
     assert refused.json()["errors"][0]["field"] == "voice_identification.enabled"
@@ -217,8 +217,8 @@ def test_identificacao_por_voz_exige_a_separacao(admin: Api):
     assert admin.patch(URL, json={"diarization": {"enabled": False}}).status_code == 200
 
 
-def test_estado_antigo_sem_separacao_nao_trava_outro_bloco(admin: Api, services: Services):
-    # Um estado de antes da regra: voz ligada com a separação desligada.
+def test_legacy_state_without_diarization_does_not_lock_another_block(admin: Api, services: Services):
+    # A state from before the rule: voice on with diarization off.
     async def legacy(conn: Any) -> None:  # noqa: ANN401
         await conn.execute(
             text(
@@ -231,11 +231,11 @@ def test_estado_antigo_sem_separacao_nao_trava_outro_bloco(admin: Api, services:
     run(services.sql(legacy))
     assert admin.patch(URL, json={"asr": {"batch_size": 8}}).status_code == 200
     assert admin.patch(URL, json={"preprocessing": {"denoise": {"strength": 0.4}}}).status_code == 200
-    # Tocar a separação ainda exige a regra.
+    # Touching diarization still requires the rule.
     assert admin.patch(URL, json={"diarization": {"min_speakers": 2}}).status_code == 422
 
 
-def test_cotas_padrao_mescladas_campo_a_campo(
+def test_default_quotas_merged_field_by_field(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     quotas = admin.get(URL).json()["quotas"]
@@ -249,7 +249,7 @@ def test_cotas_padrao_mescladas_campo_a_campo(
     patched = admin.patch(URL, json={"quotas": {"open_uploads": 1, "agent_requests_24h": None}})
     assert patched.status_code == 200, patched.text
     assert patched.json()["quotas"] == quotas | {"open_uploads": 1, "agent_requests_24h": None}
-    # A conta sem sobreposição segue o padrão novo.
+    # An account without an override follows the new default.
     effective = as_user(make_user()).get("/api/v1/me/usage").json()["quotas"]
     assert (effective["open_uploads"], effective["agent_requests_24h"]) == (1, None)
     assert admin.patch(URL, json={"quotas": {"open_uploads": -1}}).status_code == 422

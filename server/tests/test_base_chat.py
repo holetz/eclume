@@ -1,4 +1,4 @@
-"""Chat sobre a base: perguntar, esperar a resposta com as fontes, o isolamento entre contas e os limites."""
+"""Chat over the base: ask, wait for the answer with its sources, isolation between accounts and the limits."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def _ask(api: Api, message: str = "O que foi combinado?", history: list[dict[str
     return api.post("/api/v1/base-chat", json={"message": message, "history": history or []})
 
 
-def test_pergunta_consulta_os_resumos_e_devolve_as_fontes(user: Api, services: Services):
+def test_question_queries_the_summaries_and_returns_the_sources(user: Api, services: Services):
     recording = _recording(user, services, "Alinhamento da turma")
     rid = recording["id"]
     agents = FakeAgents(
@@ -50,7 +50,7 @@ def test_pergunta_consulta_os_resumos_e_devolve_as_fontes(user: Api, services: S
             "base_chat": [
                 _json(action="search_summaries", query="gerado"),
                 _json(action="read_summary", recording_id=rid),
-                # Um id que nunca apareceu nas consultas não vira fonte.
+                # An id that never showed up in the queries does not become a source.
                 _json(action="reply", message="Foi **combinado** o resumo.", sources=[rid, "não é id", UNSEEN]),
             ]
         }
@@ -70,7 +70,7 @@ def test_pergunta_consulta_os_resumos_e_devolve_as_fontes(user: Api, services: S
     assert "gerado por" in prompts[2]
 
 
-def test_a_busca_da_transcricao_devolve_o_momento_e_o_locutor(user: Api, services: Services):
+def test_transcript_search_returns_the_moment_and_the_speaker(user: Api, services: Services):
     recording = _recording(user, services, "Alinhamento")
     segment = contract_transcript()["segments"][0]
     word = max(segment["text"].split(), key=len).strip(".,;:!?")
@@ -93,7 +93,7 @@ def test_a_busca_da_transcricao_devolve_o_momento_e_o_locutor(user: Api, service
     assert [source["recording_id"] for source in done["sources"]] == [recording["id"]]
 
 
-def test_outra_conta_nao_ve_a_pergunta_nem_as_gravacoes(
+def test_another_account_sees_neither_the_question_nor_the_recordings(
     user: Api, services: Services, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     recording = _recording(user, services, "Confidencial")
@@ -118,7 +118,7 @@ def test_outra_conta_nao_ve_a_pergunta_nem_as_gravacoes(
     assert "Confidencial" not in prompts[2]
 
 
-def test_sem_provider_falha_com_motivo(
+def test_without_provider_fails_with_a_reason(
     admin: Api, as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -129,7 +129,7 @@ def test_sem_provider_falha_com_motivo(
     assert (failed["status"], failed["error"]["code"]) == ("failed", "no_provider")
 
 
-def test_validacao_escopo_e_limite_por_conta(
+def test_validation_scope_and_per_account_limit(
     user: Api, services: Services, as_user: Callable[[Account], Api], make_user: Callable[..., Account]
 ):
     assert user.post("/api/v1/base-chat", json={"message": ""}).status_code == 422
@@ -140,22 +140,22 @@ def test_validacao_escopo_e_limite_por_conta(
     assert _ask(user).status_code == 202
     third = _ask(user)
     assert (third.status_code, third.json()["code"]) == (429, "rate_limited")
-    # O limite é por conta.
+    # The limit is per account.
     assert _ask(as_user(make_user())).status_code == 202
-    # Terminados, liberam a vez.
+    # Once finished, they free the slot.
     run_cpu(services.settings)
     assert _ask(user).status_code == 202
     assert user.get("/api/v1/base-chat/01928f3a-1c00-7a00-8000-000000000e09").status_code == 404
 
 
-def test_pat_sem_transcripts_read_so_consulta_resumos(user: Api, services: Services):
+def test_pat_without_transcripts_read_only_queries_summaries(user: Api, services: Services):
     pat = user.pat("summaries:read")
-    # Esvazia a fila: perguntas deixadas por outros testes consumiriam as respostas do roteiro.
+    # Drain the queue: questions left by other tests would consume the scripted replies.
     run_cpu(services.settings)
     agents = FakeAgents(
         replies={
             "base_chat": [
-                # A ação de transcrição não vale para esta credencial: recebe o pedido de correção.
+                # The transcript action is not valid for this credential: it gets the correction request.
                 _json(action="search_transcripts", query="orçamento"),
                 _json(action="reply", message="Só pelos resumos.", sources=[]),
             ]
@@ -173,7 +173,7 @@ def test_pat_sem_transcripts_read_so_consulta_resumos(user: Api, services: Servi
     assert correction(transcripts=False) in calls[1][2]
 
 
-def test_pergunta_conta_na_cota_de_pedidos_ao_agente(user: Api, services: Services):
+def test_question_counts_against_the_agent_request_quota(user: Api, services: Services):
     override_quotas(services, user, {"agent_requests_24h": 1})
     assert _ask(user).status_code == 202
     run_cpu(services.settings)

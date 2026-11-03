@@ -1,4 +1,4 @@
-"""Raiz própria com restrição de nome: perfil, recusa de sobrescrever e a prova dentro/fora."""
+"""Own root with name constraints: profile, refusal to overwrite and the inside/outside proof."""
 
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ def _load(path: Path) -> x509.Certificate:
     return x509.load_pem_x509_certificate(path.read_bytes())
 
 
-def test_perfil_da_raiz(tmp_path: Path):
-    root = generate(tmp_path, "192.168.15.199", ["holetz-pc.local"])
+def test_root_profile(tmp_path: Path):
+    root = generate(tmp_path, "192.168.15.199", ["workstation.local"])
 
     assert isinstance(root.public_key(), ec.EllipticCurvePublicKey)
     assert root.public_key().curve.name == "secp256r1"
@@ -37,7 +37,7 @@ def test_perfil_da_raiz(tmp_path: Path):
     assert constraints.critical
     assert constraints.value.permitted_subtrees == [
         x509.IPAddress(ipaddress.ip_network("192.168.15.199/32")),
-        x509.DNSName("holetz-pc.local"),
+        x509.DNSName("workstation.local"),
         x509.RFC822Name("eclume.invalid"),
     ]
     assert constraints.value.excluded_subtrees is None
@@ -49,7 +49,7 @@ def test_perfil_da_raiz(tmp_path: Path):
     assert _load(tmp_path / "raiz.crt") == root
 
 
-def test_sem_nome_dns_restringe_dns_ao_dominio_inutil():
+def test_without_dns_name_restricts_dns_to_the_unusable_domain():
     assert permitted_names("10.0.0.5", []) == [
         x509.IPAddress(ipaddress.ip_network("10.0.0.5/32")),
         x509.DNSName("eclume.invalid"),
@@ -57,17 +57,17 @@ def test_sem_nome_dns_restringe_dns_ao_dominio_inutil():
     ]
 
 
-def test_sem_ip_recusa():
+def test_without_ip_refuses():
     with pytest.raises(CaError, match="IP permitido"):
-        permitted_names("holetz-pc.local", [])
+        permitted_names("workstation.local", [])
 
 
-def test_nomes_por_virgula_ou_espaco():
-    assert split_names(" holetz-pc.local, 10.0.0.6  eclume.lan ") == ["holetz-pc.local", "10.0.0.6", "eclume.lan"]
+def test_names_by_comma_or_space():
+    assert split_names(" workstation.local, 10.0.0.6  eclume.lan ") == ["workstation.local", "10.0.0.6", "eclume.lan"]
     assert split_names(None) == []
 
 
-def test_recusa_sobrescrever(tmp_path: Path):
+def test_refuses_to_overwrite(tmp_path: Path):
     generate(tmp_path, "192.168.15.199", [])
     before = (tmp_path / "raiz.crt").read_bytes()
     with pytest.raises(CaError, match="não é sobrescrita"):
@@ -75,7 +75,7 @@ def test_recusa_sobrescrever(tmp_path: Path):
     assert (tmp_path / "raiz.crt").read_bytes() == before
 
 
-def test_prova_aceita_dentro_e_recusa_fora(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+def test_proof_accepts_inside_and_rejects_outside(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     assert cli.main(["ca", "gerar", "--prova", str(tmp_path)]) == 0
     assert "sha256 " in capsys.readouterr().out
 
@@ -88,14 +88,14 @@ def test_prova_aceita_dentro_e_recusa_fora(tmp_path: Path, capsys: pytest.Captur
         assert b"PRIVATE KEY" in (tmp_path / f"{stem}.key").read_bytes()
 
 
-def test_prova_pode_ser_refeita(tmp_path: Path):
+def test_proof_can_be_redone(tmp_path: Path):
     assert cli.main(["ca", "gerar", "--prova", str(tmp_path)]) == 0
     assert cli.main(["ca", "gerar", "--prova", str(tmp_path)]) == 0
 
 
-def test_cli_gerar_e_recusa(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+def test_cli_generate_and_refuse(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     folder = tmp_path / "secrets" / "ca"
-    args = ["ca", "gerar", "--pasta", str(folder), "--host", "192.168.15.199", "--nomes", "holetz-pc.local"]
+    args = ["ca", "gerar", "--pasta", str(folder), "--host", "192.168.15.199", "--nomes", "workstation.local"]
     assert cli.main(args) == 0
     assert capsys.readouterr().out.startswith("sha256 ")
     assert cli.main(args) == 2

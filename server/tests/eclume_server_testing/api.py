@@ -1,4 +1,4 @@
-"""Cliente de teste por usuário e fábricas de contas."""
+"""Per-user test client and account factories."""
 
 from __future__ import annotations
 
@@ -27,21 +27,21 @@ _MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 
 @dataclass
 class Api:
-    """Requisições como um usuário: por sessão (cookies + CSRF) ou por PAT.
+    """Requests as a user: by session (cookies + CSRF) or by PAT.
 
-    O `TestClient` é um só na sessão de testes; cada `Api` manda as próprias credenciais e limpa o
-    cookie jar compartilhado antes de cada requisição.
+    The `TestClient` is a single one in the test session; each `Api` sends its own credentials and
+    clears the shared cookie jar before each request.
     """
 
     client: TestClient
     cookies: dict[str, str] | None = None
     token: str | None = None
     send_csrf: bool = True
-    # A sessão de admin ecoa o próprio cookie de CSRF (`eclume_admin_csrf`).
+    # The admin session echoes its own CSRF cookie (`eclume_admin_csrf`).
     csrf_cookie: str = "eclume_csrf"
 
     def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:  # noqa: ANN401
-        """Requisição com as credenciais deste usuário."""
+        """Request with this user's credentials."""
         headers = dict(kwargs.pop("headers", None) or {})
         if self.token:
             headers.setdefault("Authorization", f"Bearer {self.token}")
@@ -68,7 +68,7 @@ class Api:
         return self.request("DELETE", url, **kwargs)
 
     def pat(self, *scopes: str, name: str = "teste") -> Api:
-        """Cria um PAT com os escopos (por esta sessão) e devolve um `Api` que o usa."""
+        """Creates a PAT with the scopes (through this session) and returns an `Api` that uses it."""
         response = self.post("/api/v1/tokens", json={"name": name, "scopes": list(scopes)})
         assert response.status_code == 201, response.text
         return Api(self.client, token=response.json()["secret"])
@@ -76,7 +76,7 @@ class Api:
 
 @dataclass
 class Account:
-    """Conta de usuário (ou de admin) criada para um teste."""
+    """User (or admin) account created for a test."""
 
     user_id: UUID
     email: str
@@ -84,7 +84,7 @@ class Account:
 
 
 def login(client: TestClient, email: str, password: str = PASSWORD) -> Api:
-    """Abre sessão e devolve o `Api` com os cookies dela."""
+    """Opens a session and returns the `Api` with its cookies."""
     client.cookies.clear()
     response = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     assert response.status_code == 204, response.text
@@ -94,7 +94,7 @@ def login(client: TestClient, email: str, password: str = PASSWORD) -> Api:
 
 
 def admin_login(client: TestClient, email: str, password: str = PASSWORD) -> Api:
-    """Abre a sessão de admin e devolve o `Api` com os cookies dela."""
+    """Opens the admin session and returns the `Api` with its cookies."""
     client.cookies.clear()
     response = client.post("/api/v1/admin/auth/login", json={"email": email, "password": password})
     assert response.status_code == 204, response.text
@@ -104,7 +104,7 @@ def admin_login(client: TestClient, email: str, password: str = PASSWORD) -> Api
 
 
 def new_user(services: Services, *, name: str | None = None, notice_version: str | None = NOTICE_VERSION) -> Account:
-    """Conta de usuário nova, com a senha `PASSWORD` e o aviso aceito (`notice_version=None`: sem aceite)."""
+    """New user account, with the password `PASSWORD` and the notice accepted (`notice_version=None`: not accepted)."""
     handle = secrets.token_hex(4)
     email = f"user-{handle}@exemplo.com.br"
     name = name or f"Usuário {handle}"
@@ -119,7 +119,7 @@ def new_user(services: Services, *, name: str | None = None, notice_version: str
 
 
 def new_admin(services: Services) -> Account:
-    """Conta de admin nova, com a senha `PASSWORD`."""
+    """New admin account, with the password `PASSWORD`."""
     handle = secrets.token_hex(4)
     email = f"admin-{handle}@exemplo.com.br"
     name = f"Admin {handle}"
@@ -131,7 +131,7 @@ def new_admin(services: Services) -> Account:
 
 
 def agenda_types(services: Services, user_id: UUID) -> list[dict[str, Any]]:
-    """Tipos de agenda da conta, na ordem da lista, lidos pelo papel de conexão."""
+    """Agenda types of the account, in list order, read by the connection role."""
     c = t.agenda_types.c
     query = select(t.agenda_types).where(c.owner_id == user_id).order_by(c.position, c.created_at, c.id)
 
@@ -142,13 +142,13 @@ def agenda_types(services: Services, user_id: UUID) -> list[dict[str, Any]]:
 
 
 def audio_bytes(size: int, seed: str = "") -> bytes:
-    """Conteúdo determinístico e único por `seed` (o hash muda com ele)."""
+    """Deterministic content, unique per `seed` (the hash changes with it)."""
     block = hashlib.sha256(f"eclume-audio-{seed}-{secrets.token_hex(8)}".encode()).digest()
     return (block * (size // len(block) + 1))[:size]
 
 
 def put_parts(api: Api, upload: dict[str, Any], data: bytes, *, only: set[int] | None = None) -> list[dict[str, Any]]:
-    """Sobe as partes pelas URLs recebidas e devolve `[{part_number, etag}]`."""
+    """Uploads the parts through the received URLs and returns `[{part_number, etag}]`."""
     size = upload["part_size"]
     sent = []
     for part in upload["parts"]:
@@ -163,7 +163,7 @@ def put_parts(api: Api, upload: dict[str, Any], data: bytes, *, only: set[int] |
 
 
 def upload_file(api: Api, data: bytes, **fields: Any) -> dict[str, Any]:  # noqa: ANN401
-    """Fluxo inteiro (create → partes → complete); devolve a gravação."""
+    """Whole flow (create → parts → complete); returns the recording."""
     body = {
         "filename": "reuniao.opus",
         "content_type": "audio/ogg; codecs=opus",
@@ -181,7 +181,7 @@ def upload_file(api: Api, data: bytes, **fields: Any) -> dict[str, Any]:  # noqa
 
 
 def override_quotas(services: Services, api: Api, quotas: dict[str, Any] | None) -> None:
-    """Sobrepõe as cotas da conta do `api` (`users.quotas`; `None` volta ao padrão)."""
+    """Overrides the quotas of the `api` account (`users.quotas`; `None` returns to the default)."""
     user_id = api.get("/api/v1/me").json()["user"]["id"]
 
     async def write(conn: Any) -> None:  # noqa: ANN401

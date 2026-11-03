@@ -1,4 +1,4 @@
-"""Anúncio mDNS `_eclume._tcp`: o registro, o TXT e a atualização quando a CA muda. Sem rede."""
+"""mDNS announcement `_eclume._tcp`: the registration, the TXT and the update when the CA changes. No network."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from eclume_server.config import Settings
 from eclume_server.contract import CONTRACT_VERSION
 from eclume_server.discovery import SERVICE_TYPE, Announcer, DiscoveryError, describe, endpoint, service_info
 
-CA = Path(__file__).parent / "fixtures" / "ca-teste.pem"
+CA = Path(__file__).parent / "fixtures" / "ca-test.pem"
 CA_SHA256 = "b127358a576a7cd0e4d76b63271e80a7d168a412e635e10855fcde3f83a4dd20"
 
 
@@ -23,7 +23,7 @@ def _settings(**values: Any) -> Settings:  # noqa: ANN401
     return Settings(**{"public_url": "https://192.168.15.199:8443/", "server_name": "eclume"} | values)
 
 
-def test_registro_usa_o_endereco_publico_e_o_txt_da_ca():
+def test_registration_uses_the_public_address_and_the_ca_txt():
     info = service_info(_settings(), CA_SHA256)
     assert info.type == SERVICE_TYPE == "_eclume._tcp.local."
     assert info.name == "eclume._eclume._tcp.local."
@@ -40,7 +40,7 @@ def test_registro_usa_o_endereco_publico_e_o_txt_da_ca():
     assert describe(service_info(_settings(server_name="sala-2"), None))["ca_sha256"] is None
 
 
-def test_endereco_publico_obrigatorio_e_porta_padrao(monkeypatch: pytest.MonkeyPatch):
+def test_public_address_required_and_default_port(monkeypatch: pytest.MonkeyPatch):
     with pytest.raises(DiscoveryError):
         endpoint(_settings(public_url=None))
     assert endpoint(_settings(public_url="https://10.0.0.5")) == ("https://10.0.0.5", "10.0.0.5", 443)
@@ -49,10 +49,10 @@ def test_endereco_publico_obrigatorio_e_porta_padrao(monkeypatch: pytest.MonkeyP
 
 
 class FakeZeroconf:
-    """O `AsyncZeroconf` sem rede: guarda o que foi anunciado."""
+    """The `AsyncZeroconf` without network: it keeps what was announced."""
 
     def __init__(self) -> None:
-        """Sem chamadas ainda."""
+        """No calls yet."""
         self.calls: list[tuple[str, dict[str, str]]] = []
 
     async def _record(self, action: str, info: Any) -> asyncio.Future[None]:  # noqa: ANN401
@@ -71,7 +71,7 @@ class FakeZeroconf:
         return await self._record("unregister", info)
 
 
-def test_anuncio_atualiza_o_txt_quando_a_ca_e_publicada(tmp_path: Path):
+def test_announcement_updates_the_txt_when_the_ca_is_published(tmp_path: Path):
     ca = tmp_path / "eclume-root.crt"
     zeroconf = FakeZeroconf()
     announcer = Announcer(_settings(ca_file=str(ca)), zeroconf)  # type: ignore[arg-type]

@@ -1,4 +1,4 @@
-"""Por que a gravação espera: `Job.queue` com motivo, posição, estimativa e processador."""
+"""Why the recording waits: `Job.queue` with reason, position, estimate and processor."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def _redis(services: Services, fn: Callable[[Any], Any]) -> Any:  # noqa: ANN401
 
 @pytest.fixture(autouse=True)
 def _clean(services: Services) -> Iterator[None]:
-    """Começa com `eclume:gpu` vazia e sem heartbeat; termina drenando a fila."""
+    """Start with `eclume:gpu` empty and no heartbeat; end by draining the queue."""
 
     async def empty(pool: Any) -> None:  # noqa: ANN401
         for job_id in await pool.zrange(GPU_QUEUE, 0, -1):
@@ -66,14 +66,14 @@ def _queue(api: Api, recording: dict[str, Any]) -> dict[str, Any] | None:
     return api.get(f"/api/v1/recordings/{recording['id']}").json()["job"]["queue"]
 
 
-def test_motivo_posicao_e_processador(
+def test_reason_position_and_processor(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     ana, bruno = as_user(make_user()), as_user(make_user())
     first, second = _upload(ana, "ana-1", duration_ms=240_000), _upload(ana, "ana-2")
     other = _upload(bruno, "bruno", duration_ms=60_000)
 
-    # Sem heartbeat nem último visto: fora do ar, sem "desde" e sem estimativa.
+    # No heartbeat and no last seen: offline, with no "since" and no estimate.
     offline = {"online": False, "offline_since": None}
     assert _queue(ana, first) == {
         "reason": "processor_queue",
@@ -87,31 +87,31 @@ def test_motivo_posicao_e_processador(
     held = _queue(ana, second)
     assert (held["reason"], held["account_ahead"], held["ahead"]) == ("account_turn", 1, None)
 
-    # No ar e com ritmo conhecido: o início estimado soma o que vem antes.
+    # Online and with a known pace: the estimated start adds up what comes before.
     _redis(services, lambda pool: pool.hset(GPU_HEALTH_KEY, mapping={"updated_at": "x", "busy": "0"}))
     _redis(services, lambda pool: pool.set(PACE_KEY, json.dumps([0.5, 120_000])))
     before = datetime.now(UTC)
     waiting = _queue(bruno, other)
     assert waiting["processor"] == {"online": True, "offline_since": None}
     estimated = datetime.fromisoformat(waiting["estimated_start_at"])
-    # Os 4 min de áudio da ana, a meio minuto de processamento por minuto: 2 min.
+    # Ana's 4 min of audio, at half a minute of processing per minute: 2 min.
     assert before + timedelta(seconds=100) <= estimated <= before + timedelta(seconds=140)
     assert datetime.fromisoformat(_queue(ana, first)["estimated_start_at"]) <= before + timedelta(seconds=5)
 
-    # Heartbeat expirado: o "desde" é o último visto, e a estimativa some.
+    # Heartbeat expired: the "since" is the last seen, and the estimate disappears.
     _redis(services, lambda pool: pool.delete(GPU_HEALTH_KEY))
     _redis(services, lambda pool: pool.set(GPU_LAST_SEEN_KEY, "2026-10-01T14:02:00Z"))
     waiting = _queue(bruno, other)
     assert waiting["processor"] == {"online": False, "offline_since": "2026-10-01T14:02:00Z"}
     assert waiting["estimated_start_at"] is None
 
-    # Fora de `queued`, sem `queue`.
+    # Outside `queued`, no `queue`.
     run_gpu(services.settings)
     run_cpu(services.settings)
     assert _queue(ana, first) is None
 
 
-def test_janela_de_minutos_diz_quando_libera(
+def test_minutes_window_tells_when_it_frees_up(
     as_user: Callable[[Account], Api], make_user: Callable[..., Account], services: Services
 ):
     api = as_user(make_user())
@@ -133,6 +133,6 @@ def test_janela_de_minutos_diz_quando_libera(
     assert datetime.fromisoformat(queue["resumes_at"]) == run(services.sql(dispatched)) + timedelta(hours=24)
     assert queue["account_ahead"] is None
 
-    # Dentro da cota, não há janela a esperar.
+    # Within the quota, there is no window to wait for.
     owner = api.get("/api/v1/me").json()["user"]["id"]
     assert run(services.sql(lambda conn: _resumes_at(conn, owner, 4))) is None

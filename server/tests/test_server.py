@@ -14,12 +14,12 @@ if TYPE_CHECKING:
     from eclume_server_testing.harness import Services
 
 
-def test_pacote_importa_e_enxerga_a_interface_de_engine():
-    # As três partes Python são a linha "produto" e andam juntas (deploy/versao.py).
+def test_package_imports_and_sees_the_engine_interface():
+    # The three Python parts are the "product" line and move together (deploy/versao.py).
     assert eclume_server.__version__ == eclume_engines.__version__
 
 
-def test_migrations_aplicadas_forcam_rls_e_sao_idempotentes(services: Services):
+def test_applied_migrations_force_rls_and_are_idempotent(services: Services):
     async def check(conn):  # noqa: ANN001, ANN202
         versions = (await conn.execute(text("SELECT version FROM schema_migrations ORDER BY 1"))).scalars().all()
         forced = (
@@ -41,7 +41,7 @@ def test_migrations_aplicadas_forcam_rls_e_sao_idempotentes(services: Services):
 
     versions, forced, role = run(services.sql(check))
     assert versions == [path.stem for path in migration_files()]
-    # Toda tabela de conteúdo e de conta de usuário está sob RLS forçada; as da plataforma, não.
+    # Every content and user-account table is under forced RLS; the platform ones are not.
     content = {"recordings", "transcripts", "segments", "uploads", "api_tokens", "people", "summaries", "users"}
     assert content <= set(forced)
     assert not {"platform_settings", "platform_secrets", "agent_providers", "admins", "sessions"} & set(forced)
