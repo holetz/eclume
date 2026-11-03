@@ -9,15 +9,15 @@
 # or, from the dev machine:
 #   ssh holetz@192.168.15.199 'bash -s -- desktop-v0.1.0' < deploy/publish-desktop.sh
 #
-# Variables (names kept from before the English rename): DESTINO (destination, default
-# /srv/eclume/downloads), REPO (holetz/eclume), MANTER (versions kept, 3), FORCAR=1 to point
-# latest.json at a version older than the current one.
+# Variables: DEST (default /srv/eclume/downloads), REPO (holetz/eclume), KEEP (versions kept, 3),
+# FORCE=1 to point latest.json at a version older than the current one. The deprecated pt-BR names (DESTINO, MANTER,
+# FORCAR) still work as a fallback.
 set -euo pipefail
 
-DEST="${DESTINO:-/srv/eclume/downloads}"
+DEST="${DEST:-${DESTINO:-/srv/eclume/downloads}}"
 REPO="${REPO:-holetz/eclume}"
-KEEP="${MANTER:-3}"
-FORCE="${FORCAR:-0}"
+KEEP="${KEEP:-${MANTER:-3}}"
+FORCE="${FORCE:-${FORCAR:-0}}"
 
 tag="${1:-}"
 if [ -z "$tag" ]; then
@@ -65,7 +65,7 @@ if [ -z "$current" ] || [ "$newest" = "$version" ] || [ "$FORCE" = 1 ]; then
   current="$version"
   echo "latest.json points at $version"
 else
-  echo "latest.json stays at $current (newer than $version); use FORCAR=1 to swap"
+  echo "latest.json stays at $current (newer than $version); use FORCE=1 to swap"
 fi
 
 # Keeps the $KEEP most recent versions, and never the one latest.json points at.

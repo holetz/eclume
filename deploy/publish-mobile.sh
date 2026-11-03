@@ -10,18 +10,18 @@
 # or, from the dev machine:
 #   ssh holetz@192.168.15.199 'bash -s -- mobile-v0.1.0' < deploy/publish-mobile.sh
 #
-# Variables (names kept from before the English rename): DESTINO (destination, default
-# /srv/eclume/downloads), REPO (holetz/eclume), MANTER (versions kept, 3), FORCAR=1 to point
-# movel.json at a version older than the current one, TROCAR_CERTIFICADO="<reason>" to accept a
+# Variables: DEST (default /srv/eclume/downloads), REPO (holetz/eclume), KEEP (versions kept, 3),
+# FORCE=1 to point movel.json at a version older than the current one, SWAP_CERTIFICATE="<reason>" to accept a
 # signing certificate different from the published one (Android does not install an APK of another
-# key over the app: only on a declared swap, like #17's).
+# key over the app: only on a declared swap, like #17's). The deprecated pt-BR names (DESTINO,
+# MANTER, FORCAR, TROCAR_CERTIFICADO) still work as a fallback.
 set -euo pipefail
 
-DEST="${DESTINO:-/srv/eclume/downloads}"
+DEST="${DEST:-${DESTINO:-/srv/eclume/downloads}}"
 REPO="${REPO:-holetz/eclume}"
-KEEP="${MANTER:-3}"
-FORCE="${FORCAR:-0}"
-SWAP_CERT="${TROCAR_CERTIFICADO:-}"
+KEEP="${KEEP:-${MANTER:-3}}"
+FORCE="${FORCE:-${FORCAR:-0}}"
+SWAP_CERT="${SWAP_CERTIFICATE:-${TROCAR_CERTIFICADO:-}}"
 MOBILE="$DEST/movel"
 
 tag="${1:-}"
@@ -56,7 +56,7 @@ if [ -f "$DEST/movel.json" ]; then
   if [ "$previous" != "$new" ]; then
     if [ -z "$SWAP_CERT" ]; then
       echo "the certificate of $tag ($new) differs from the published one ($previous): installed apps will not update." >&2
-      echo "A key swap only when declared: TROCAR_CERTIFICADO=\"<reason>\"." >&2
+      echo "A key swap only when declared: SWAP_CERTIFICATE=\"<reason>\"." >&2
       exit 1
     fi
     echo "CERTIFICATE SWAP declared ($previous → $new): $SWAP_CERT"
@@ -87,7 +87,7 @@ if [ -z "$current" ] || [ "$newest" = "$version" ] || [ "$FORCE" = 1 ]; then
   current="$version"
   echo "movel.json points at $version"
 else
-  echo "movel.json stays at $current (newer than $version); use FORCAR=1 to swap"
+  echo "movel.json stays at $current (newer than $version); use FORCE=1 to swap"
 fi
 
 # Keeps the $KEEP most recent versions, and never the one movel.json points at.
