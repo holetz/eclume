@@ -484,7 +484,7 @@ restore_script="$(tree_script restore-backup.sh restaurar-backup.sh)"
 install_script "$restore_script" "$([[ "$restore_script" == restore-backup.sh ]] && echo restaurar-backup.sh || echo restore-backup.sh)"
 install_script staging.sh staging.sh
 # The rehearsal subcommand that the tree's staging.sh speaks.
-if grep -q '^ *rehearse)' "$TREE/deploy/staging.sh"; then rehearse=rehearse; else rehearse=ensaio; fi
+if grep -qE '^ *rehearse[|)]' "$TREE/deploy/staging.sh"; then rehearse=rehearse; else rehearse=ensaio; fi
 # Local restic repository (backup.sh): password generated on the host the first time. The copy of the
 # password and the off-host destination (secrets/restic-fora.env) belong to the owner: docs/project/deploy-producao.md.
 restic_image="$(sed -n 's/^RESTIC_IMAGE="${RESTIC_IMAGE:-\(.*\)}"$/\1/p' "$TREE/deploy/backup.sh")"
