@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Cria a primeira conta de admin do painel no stack de produção, uma vez só.
+# Creates the panel's first admin account on the production stack, only once.
 #
-#   bash deploy/bootstrap-admin.sh --context NOME --email E [--name NOME]
+#   bash deploy/bootstrap-admin.sh --context NAME --email E [--name NAME]
 #
-# O contexto (ou $ECLUME_DOCKER_CONTEXT) e o e-mail (ou $ECLUME_ADMIN_EMAIL) não têm padrão.
+# The context (or $ECLUME_DOCKER_CONTEXT) and the e-mail (or $ECLUME_ADMIN_EMAIL) have no default.
 #
-# A senha é gerada NO HOST, em <ECLUME_DATA_DIR>/secrets/admin-password (600), e passa ao
-# `eclume-server admin create --password-stdin` por um pipe: nunca é gravada na estação.
-# Com alguma conta de admin já no banco (a migration 008 cria as dos admins antigos), não faz
-# nada. As contas de usuário nascem pelo cadastro. Runbook: docs/project/deploy-producao.md.
+# The password is generated ON THE HOST, in <ECLUME_DATA_DIR>/secrets/admin-password (600), and goes
+# to `eclume-server admin create --password-stdin` through a pipe: it is never written on the workstation.
+# With an admin account already in the database (migration 008 creates the old admins' ones), it does
+# nothing. User accounts are born through signup. Runbook: docs/project/deploy-producao.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -22,11 +22,11 @@ while [[ $# -gt 0 ]]; do
     --email) EMAIL="${2:?}"; shift 2 ;;
     --name) NAME="${2:?}"; shift 2 ;;
     --help|-h) sed -n '2,11p' "$0"; exit 0 ;;
-    *) echo "Flag desconhecida: $1" >&2; exit 2 ;;
+    *) echo "Unknown flag: $1 (see --help)" >&2; exit 2 ;;
   esac
 done
-[[ -n "$CONTEXT" ]] || { echo "Falta o contexto Docker do host: --context NOME ou ECLUME_DOCKER_CONTEXT." >&2; exit 2; }
-[[ -n "$EMAIL" ]] || { echo "Falta o e-mail do admin: --email E ou ECLUME_ADMIN_EMAIL." >&2; exit 2; }
+[[ -n "$CONTEXT" ]] || { echo "Missing the host Docker context: --context NAME or ECLUME_DOCKER_CONTEXT." >&2; exit 2; }
+[[ -n "$EMAIL" ]] || { echo "Missing the admin e-mail: --email E or ECLUME_ADMIN_EMAIL." >&2; exit 2; }
 
 export DOCKER_CONTEXT="$CONTEXT"
 unset DOCKER_HOST
@@ -34,13 +34,13 @@ endpoint="$(docker context inspect "$CONTEXT" --format '{{.Endpoints.docker.Host
 SSH="${ECLUME_SSH:-${endpoint#ssh://}}"
 host() { ssh -o BatchMode=yes "$SSH" "$@"; }
 ENV_FILE=deploy/.env.prod
-[[ -f "$ENV_FILE" ]] || { echo "Falta $ENV_FILE (rode deploy/deploy.sh antes)." >&2; exit 2; }
+[[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE (run deploy/deploy.sh first)." >&2; exit 2; }
 DATA_DIR="$(sed -n 's/^ECLUME_DATA_DIR=//p' "$ENV_FILE" | tail -n 1)"
 COMPOSE=(docker compose -p eclume -f deploy/docker-compose.prod.yml --env-file "$ENV_FILE")
 
 admins="$("${COMPOSE[@]}" exec -T postgres psql -U eclume -d eclume -qAtc 'select count(*) from admins')"
 if [[ "$admins" != 0 ]]; then
-  echo "O banco já tem $admins conta(s) de admin: bootstrap dispensado." >&2
+  echo "The database already has $admins admin account(s): bootstrap skipped." >&2
   exit 0
 fi
 
@@ -49,4 +49,4 @@ host "umask 077; [ -s '$password_file' ] || openssl rand -base64 24 | tr '+/' '-
 host "cat '$password_file'" \
   | "${COMPOSE[@]}" run --rm -T --no-deps migrate \
       eclume-server admin create --email "$EMAIL" --name "$NAME" --password-stdin
-echo "Admin $EMAIL criado; a senha está em $SSH:$password_file (600)." >&2
+echo "Admin $EMAIL created; the password is in $SSH:$password_file (600)." >&2

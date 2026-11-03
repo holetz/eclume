@@ -1,17 +1,17 @@
 # syntax=docker/dockerfile:1.9
-# Imagem da borda do eclume (`eclume-edge`): o Caddy 2.11 com o build Vite do SPA (web/) em /srv/web
-# e as regras dele em /etc/caddy/spa.caddy (deploy/web.Caddyfile). O Caddyfile de cada compose
-# (`configs.content`: TLS, /api, /media, /mcp, /downloads) monta por cima de /etc/caddy/Caddyfile e
-# inclui as regras do SPA com `import` (docs/project/deploy-producao.md). Sozinha, a imagem serve o
-# SPA na porta 80, sem TLS.
+# eclume's edge image (`eclume-edge`): Caddy 2.11 with the Vite build of the SPA (web/) in /srv/web
+# and its rules in /etc/caddy/spa.caddy (deploy/web.Caddyfile). Each compose's Caddyfile
+# (`configs.content`: TLS, /api, /media, /mcp, /downloads) mounts over /etc/caddy/Caddyfile and
+# includes the SPA rules with `import` (docs/project/deploy-producao.md). On its own, the image serves
+# the SPA on port 80, without TLS.
 #
-# Build a partir da RAIZ do repositório (contexto filtrado por deploy/web.Dockerfile.dockerignore):
+# Build from the repository ROOT (context filtered by deploy/web.Dockerfile.dockerignore):
 #   docker compose -f deploy/docker-compose.prod.yml build caddy
 
 FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS build
-# O `tsc -b` do build também checa os testes, que importam contracts/fixtures por caminho relativo,
-# e o build gera a referência da API (/referencia-api.html) do contracts/openapi-v1.bundled.yaml:
-# a árvore web/ + contracts/ é reproduzida como no repositório.
+# The build's `tsc -b` also checks the tests, which import contracts/fixtures by relative path, and
+# the build generates the API reference (/referencia-api.html) from contracts/openapi-v1.bundled.yaml:
+# the web/ + contracts/ tree is reproduced as in the repository.
 WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund

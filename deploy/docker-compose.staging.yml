@@ -1,13 +1,13 @@
-# Staging efêmero para o ensaio de restauração e as provas (projeto `eclume-staging`), no host GPU:
+# Ephemeral staging for the restore rehearsal and the proofs (project `eclume-staging`), on the GPU host:
 #
-#   <ECLUME_DATA_DIR>/bin/staging.sh ensaio|subir|derrubar
+#   <ECLUME_DATA_DIR>/bin/staging.sh rehearse|up|down
 #
-# O mesmo desenho do `docker-compose.e2e.yml`, sobre o código do `main` (o staging.sh baixa o
-# tarball e roda o compose dele): Caddy só em 127.0.0.1:18444, worker de transcrição com
-# `ECLUME_ENGINE=cpu` na imagem `eclume-worker-gpu:prod` e `cpus` limitado (não disputa a GPU nem
-# a CPU da produção), sem `mdns` (anunciaria um segundo servidor na LAN) e dados que o `down -v`
-# apaga. Senhas próprias; só `ECLUME_ENCRYPTION_KEY` vem do `env.prod` restaurado, para que os
-# segredos cifrados no banco do backup (token do Claude, token do HF) só abram com a chave do backup.
+# The same design as `docker-compose.e2e.yml`, on the `main` code (staging.sh downloads the tarball
+# and runs its compose): Caddy only on 127.0.0.1:18444, transcription worker with `ECLUME_ENGINE=cpu`
+# on the `eclume-worker-gpu:prod` image and limited `cpus` (it competes for neither production's GPU
+# nor CPU), no `mdns` (it would announce a second server on the LAN) and data that `down -v` deletes.
+# Own passwords; only `ECLUME_ENCRYPTION_KEY` comes from the restored `env.prod`, so the secrets
+# encrypted in the backup database (Claude token, HF token) only open with the backup's key.
 name: eclume-staging
 
 x-server-env: &server-env
@@ -18,10 +18,10 @@ x-server-env: &server-env
   ECLUME_S3_SECRET_KEY: eclume-staging-secret
   ECLUME_S3_BUCKET: eclume
   ECLUME_SECRET_KEY: eclume-staging-secret-key
-  ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?vem do env.prod restaurado}
+  ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?comes from the restored env.prod}
   ECLUME_PUBLIC_URL: https://127.0.0.1:18444
   ECLUME_COOKIE_SECURE: "true"
-  # As provas entram e criam contas muitas vezes por minuto do mesmo IP.
+  # The proofs log in and create accounts many times a minute from the same IP.
   ECLUME_CREDENTIAL_ATTEMPTS_PER_MINUTE: "10000"
 
 x-server-image: &server-image
@@ -29,13 +29,13 @@ x-server-image: &server-image
   build:
     context: ..
     dockerfile: deploy/server.Dockerfile
-    # O resumo do staging roda pelo `claude -p`, que só entra na imagem com ECLUME_CLAUDE_CLI=1 (#129).
+    # The staging summary runs through `claude -p`, which only goes into the image with ECLUME_CLAUDE_CLI=1 (#129).
     args: {ECLUME_CLAUDE_CLI: "1"}
     labels: {org.eclume.image: "server-staging"}
 
 services:
-  # A borda com o SPA embutido, como na produção (deploy/web.Dockerfile); o staging.sh reaproveita a
-  # `eclume-edge:<sha>` que o deploy reteve.
+  # The edge with the embedded SPA, as in production (deploy/web.Dockerfile); staging.sh reuses the
+  # `eclume-edge:<sha>` the deploy kept.
   caddy:
     image: eclume-edge:staging
     build:
@@ -50,14 +50,14 @@ services:
       - source: caddyfile
         target: /etc/caddy/Caddyfile
     volumes:
-      # Os manifestos publicados da produção, só leitura (o smoke pede /downloads/latest.json).
+      # Production's published manifests, read-only (the smoke asks for /downloads/latest.json).
       - ${ECLUME_DATA_DIR:-/srv/eclume}/downloads:/srv/downloads:ro
 
   server:
     <<: *server-image
     environment:
       <<: *server-env
-      # A CA deste Caddy (staging.sh a copia depois da subida): a impressão digital do /server.
+      # This Caddy's CA (staging.sh copies it after starting): the /server fingerprint.
       ECLUME_CA_FILE: /srv/staging-ca/ca.crt
     volumes:
       - ${ECLUME_STAGING_CA_DIR:-./staging-ca}:/srv/staging-ca:ro
@@ -71,13 +71,13 @@ services:
       timeout: 5s
       retries: 20
 
-  # O worker CPU único, como na produção: as filas eclume:default e eclume:agents.
+  # The single CPU worker, as in production: the eclume:default and eclume:agents queues.
   worker-cpu:
     <<: *server-image
     command: ["eclume-server", "worker"]
     environment:
       <<: *server-env
-      # Sem provider no banco restaurado, o resumo sai do `claude -p` com o token do env.prod.
+      # Without a provider in the restored database, the summary comes from `claude -p` with the env.prod token.
       CLAUDE_CODE_OAUTH_TOKEN: ${ECLUME_CLAUDE_OAUTH_TOKEN:-}
     depends_on:
       postgres: {condition: service_healthy}
@@ -95,14 +95,14 @@ services:
       ECLUME_S3_SECRET_KEY: eclume-staging-secret
       ECLUME_S3_BUCKET: eclume
       ECLUME_SECRET_KEY: eclume-staging-secret-key
-      ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?vem do env.prod restaurado}
+      ECLUME_ENCRYPTION_KEY: ${ECLUME_ENCRYPTION_KEY:?comes from the restored env.prod}
       PYTHONPATH: /src/engines:/src/worker
     cpus: ${ECLUME_STAGING_CPUS:-1.5}
     depends_on:
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
     volumes:
-      # Os modelos da produção (como no gpu-test): o `small` da engine CPU não baixa a cada noite.
+      # Production's models (as in gpu-test): the CPU engine's `small` is not downloaded every night.
       - ${ECLUME_DATA_DIR:-/srv/eclume}/models:/models
       - ../engines/src:/src/engines:ro
       - ../worker-gpu/src:/src/worker:ro
@@ -134,7 +134,7 @@ services:
     command: ["server", "/data"]
     environment:
       MINIO_ROOT_USER: eclume
-      # Multipart incompleto dura mais que os 7 dias de upload_ttl_days (duração Go: sem `d`).
+      # An incomplete multipart lives longer than the 7 days of upload_ttl_days (Go duration: no `d`).
       MINIO_API_STALE_UPLOADS_EXPIRY: 192h
       MINIO_ROOT_PASSWORD: eclume-staging-secret
     volumes:
@@ -145,7 +145,7 @@ services:
       timeout: 3s
       retries: 30
 
-  # --- one-shots (perfil tools) ---
+  # --- one-shots (tools profile) ---
 
   minio-init:
     profiles: [tools]
@@ -154,7 +154,7 @@ services:
       minio: {condition: service_healthy}
     entrypoint: ["sh", "-c", "mc alias set local http://minio:9000 eclume eclume-staging-secret >/dev/null && mc mb --ignore-existing local/eclume"]
 
-  # O migrador (superusuário) aplica o schema e liga o LOGIN de eclume_server, como na produção.
+  # The migrator (superuser) applies the schema and enables eclume_server's LOGIN, as in production.
   migrate:
     <<: *server-image
     profiles: [tools]
@@ -191,12 +191,12 @@ configs:
             hide .*
           }
         }
-        # O SPA (deploy/web.Caddyfile na imagem), depois das rotas acima.
+        # The SPA (deploy/web.Caddyfile in the image), after the routes above.
         import /etc/caddy/spa.caddy
       }
 
 
 volumes:
-  # Banco e bucket restaurados: em disco (o bucket não cabe em tmpfs), apagados no `down -v`.
+  # Restored database and bucket: on disk (the bucket does not fit in tmpfs), deleted on `down -v`.
   pg:
   minio:

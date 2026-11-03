@@ -1,13 +1,13 @@
-# Worker GPU com Redis e MinIO efêmeros, para desenvolvimento e teste de integração no host GPU.
-# Não é o compose de produção (spec holetz/eclume#14). Portas só em 127.0.0.1 do host: o Docker
-# publica por fora do ufw.
+# GPU worker with ephemeral Redis and MinIO, for development and integration testing on the GPU host.
+# Not the production compose (spec holetz/eclume#14). Ports only on the host's 127.0.0.1: Docker
+# publishes around ufw.
 #
 #   docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml up -d --build --wait
 #   docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml down -v
 #
-# Modelos em /srv/eclume/models (persistente, compartilhado com a produção) e o token do Hugging
-# Face em /srv/eclume/secrets/hf_token (montado em /run/secrets). Sem token, o worker transcreve
-# sem diarização.
+# Models in /srv/eclume/models (persistent, shared with production) and the Hugging Face token in
+# /srv/eclume/secrets/hf_token (mounted at /run/secrets). Without a token, the worker transcribes
+# without diarization.
 name: eclume-gpu-test
 
 x-s3: &s3
@@ -28,12 +28,12 @@ services:
       retries: 10
 
   minio:
-    # A MinIO parou de publicar imagens (Docker Hub e quay); pgsty/minio é o build comunitário do mesmo servidor.
+    # MinIO stopped publishing images (Docker Hub and quay); pgsty/minio is the community build of the same server.
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     command: server /data
     environment:
       MINIO_ROOT_USER: ${ECLUME_MINIO_USER:-eclume}
-      # Multipart incompleto dura mais que os 7 dias de upload_ttl_days (duração Go: sem `d`).
+      # An incomplete multipart lives longer than the 7 days of upload_ttl_days (Go duration: no `d`).
       MINIO_API_STALE_UPLOADS_EXPIRY: 192h
       MINIO_ROOT_PASSWORD: ${ECLUME_MINIO_PASSWORD:-eclume-dev-secret}
     ports:
@@ -45,7 +45,7 @@ services:
       retries: 10
 
   minio-init:
-    # O mc vem na mesma imagem do servidor.
+    # mc ships in the same image as the server.
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     depends_on:
       minio:

@@ -1,7 +1,7 @@
-# Serviços efêmeros para a suíte do server (server/tests): Postgres com pgvector, Redis e MinIO.
-# Rode sempre com um projeto próprio, para não colidir com o dev nem com o lumea no host:
+# Ephemeral services for the server suite (server/tests): Postgres with pgvector, Redis and MinIO.
+# Always run it with its own project, so it collides neither with dev nor with lumea on the host:
 #   docker compose -p eclume-test -f deploy/docker-compose.test.yml up -d --wait
-# Dados em tmpfs (somem no `down`) e portas só em 127.0.0.1, fora das portas do dev.
+# Data in tmpfs (gone on `down`) and ports only on 127.0.0.1, away from the dev ports.
 name: eclume-test
 
 services:
@@ -32,12 +32,12 @@ services:
       retries: 30
 
   minio:
-    # A MinIO parou de publicar imagens (Docker Hub e quay); pgsty/minio é o build comunitário do mesmo servidor.
+    # MinIO stopped publishing images (Docker Hub and quay); pgsty/minio is the community build of the same server.
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     command: server /data
     environment:
       MINIO_ROOT_USER: eclume
-      # Multipart incompleto dura mais que os 7 dias de upload_ttl_days (duração Go: sem `d`).
+      # An incomplete multipart lives longer than the 7 days of upload_ttl_days (Go duration: no `d`).
       MINIO_API_STALE_UPLOADS_EXPIRY: 192h
       MINIO_ROOT_PASSWORD: eclume-test-secret
     ports:

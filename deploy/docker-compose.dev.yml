@@ -1,6 +1,6 @@
-# Serviços de apoio do eclume para desenvolvimento local.
-# Toda porta é publicada só em 127.0.0.1: o Docker publica por fora do ufw, então
-# um bind em 0.0.0.0 exporia o banco na rede. Credenciais são de dev (deploy/.env.example).
+# eclume's support services for local development.
+# Every port is published only on 127.0.0.1: Docker publishes around ufw, so a bind on
+# 0.0.0.0 would expose the database to the network. Credentials are dev ones (deploy/.env.example).
 name: eclume-dev
 
 services:
@@ -31,12 +31,12 @@ services:
       retries: 10
 
   minio:
-    # A MinIO parou de publicar imagens (Docker Hub e quay); pgsty/minio é o build comunitário do mesmo servidor.
+    # MinIO stopped publishing images (Docker Hub and quay); pgsty/minio is the community build of the same server.
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${ECLUME_MINIO_USER:-eclume}
-      # Multipart incompleto dura mais que os 7 dias de upload_ttl_days (duração Go: sem `d`).
+      # An incomplete multipart lives longer than the 7 days of upload_ttl_days (Go duration: no `d`).
       MINIO_API_STALE_UPLOADS_EXPIRY: 192h
       MINIO_ROOT_PASSWORD: ${ECLUME_MINIO_PASSWORD:-eclume-dev-secret}
     ports:
