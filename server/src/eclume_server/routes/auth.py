@@ -34,6 +34,7 @@ from eclume_server.contract import CONTRACT_VERSION
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
 from eclume_server.health import readiness
+from eclume_server.locale import parse_accept_language
 from eclume_server.problems import ApiProblemError, conflict, forbidden, invalid_field, unauthorized
 from eclume_server.quotas import usage
 from eclume_server.ratelimit import (
@@ -168,7 +169,8 @@ async def signup(
             )
         except EmailTakenError as exc:
             raise conflict("Já existe uma conta com este e-mail.", code="email_taken") from exc
-        await conn.execute(update(t.users).where(t.users.c.id == user_id).values(last_login_at=now))
+        locale = parse_accept_language(request.headers.get("accept-language"))
+        await conn.execute(update(t.users).where(t.users.c.id == user_id).values(last_login_at=now, locale=locale))
         response = await _open_session(conn, ctx, user_id, now)
     await signup_created(ctx, ip)
     return response

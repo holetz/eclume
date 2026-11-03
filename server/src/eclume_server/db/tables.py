@@ -63,6 +63,8 @@ users = Table(
     Column("audio_retention_days", Integer),
     # 030_marcacao_dos_locutores
     Column("require_speaker_naming", Boolean, server_default=FetchedValue()),
+    # 035_account_locale
+    Column("locale", Text),
 )
 
 sessions = Table(
