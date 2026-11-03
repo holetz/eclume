@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+"""cq — the shim Claude Code finds on PATH.
+
+Claude Code appends `<pluginRoot>/bin` to PATH for every enabled plugin, whether or not the
+directory exists. This file is what makes a bare `cq` — the form every command body writes —
+resolve at all. The real entry point is `assets/bin/cq`, where it has to stay: it is cited by
+absolute path from the command surface and from the golden fixtures.
+
+WHY THIS RE-EXECUTES INSTEAD OF IMPORTING
+-----------------------------------------
+`assets/bin/cq` reaches its own `quenching` package through the `sys.path[0]` Python builds from
+the *script's* directory, and that package sits beside it in `assets/bin/`. Under `runpy` — or any
+other in-process form — `sys.path[0]` would be this file's directory, `bin/`, and `import
+quenching` would fail. `os.execv` reproduces the exact invocation the whole surface already makes,
+`python3 assets/bin/cq ...`, so there is no behaviour to keep in sync. Replacing the process also
+hands the shell cq's own exit code — the 0 ok / 1 findings / 2 refusal contract every command body
+branches on — without this file touching it.
+
+WHY THE ROOT COMES FROM `__file__`
+----------------------------------
+`${CLAUDE_PLUGIN_ROOT}` is expanded into a command body's text when the body is loaded; in a shell
+it is empty, so an executable that read it to find itself would resolve to `/assets/bin/cq`. No
+executable in this plugin may depend on it to locate the plugin.
+"""
+
+import os
+import sys
+
+PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+REAL = os.path.join(PLUGIN_ROOT, "assets", "bin", "cq")
+
+os.execv(sys.executable, [sys.executable, REAL, *sys.argv[1:]])

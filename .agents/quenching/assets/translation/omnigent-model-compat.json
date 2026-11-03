@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "source": "forge spikes/h1/REPORT.md (2026-10-24; forge specs 2, 14, 16)",
+  "harness": "OpenCode 1.19.4 with the quenching-opencode port; not an Omnigent-hosted run",
+  "grader": "Opus 5.5 in H1; the default grader of scripts/run_evals.py is Flash 1017",
+  "models": [
+    "opus-5-5",
+    "sonnet-5-5",
+    "haiku-5-5",
+    "deepseek-v4-1-flash-1017"
+  ],
+  "cases_per_command": 3,
+  "cases_total": 9,
+  "agent_cost_usd_total": {
+    "opus-5-5": 1.1727,
+    "sonnet-5-5": 0.7816,
+    "haiku-5-5": 0.0359,
+    "deepseek-v4-1-flash-1017": 0.1856
+  },
+  "ceiling_left_usd": 3.65,
+  "cells": {
+    "quenching-git-commit": {
+      "opus-5-5": {
+        "approved": 3,
+        "cases": 3,
+        "pass_rate": 100
+      },
+      "deepseek-v4-1-flash-1017": {
+        "approved": 3,
+        "cases": 3,
+        "pass_rate": 100
+      },
+      "sonnet-5-5": {
+        "approved": 3,
+        "cases": 3,
+        "pass_rate": 100
+      },
+      "haiku-5-5": {
+        "approved": 3,
+        "cases": 3,
+        "pass_rate": 100
+      }
+    },
+    "quenching-knowledge-define": {
+      "opus-5-5": {
+        "approved": 3,
+        "cases": 3,
+        "pass_rate": 100
+      },
+      "deepseek-v4-1-flash-1017": {
+        "approved": 3,
+        "cases": 3,
+        "pass_rate": 100
+      },
+      "sonnet-5-5": {
+        "approved": 3,
+        "cases": 3,
+        "pass_rate": 100
+      },
+      "haiku-5-5": {
+        "approved": 2,
+        "cases": 3,
+        "pass_rate": 80
+      }
+    },
+    "quenching-specs-create": {
+      "opus-5-5": {
+        "approved": 3,
+        "cases": 3,
+        "pass_rate": 100
+      },
+      "deepseek-v4-1-flash-1017": {
+        "approved": 3,
+        "cases": 3,
+        "pass_rate": 100
+      },
+      "sonnet-5-5": {
+        "approved": 2,
+        "cases": 3,
+        "pass_rate": 80
+      },
+      "haiku-5-5": {
+        "approved": 2,
+        "cases": 3,
+        "pass_rate": 80
+      }
+    }
+  }
+}
