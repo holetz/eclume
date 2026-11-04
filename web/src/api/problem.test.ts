@@ -30,6 +30,12 @@ afterEach(() => setLocale('pt-BR'))
 describe('problem codes', () => {
   const codes = contractCodes()
 
+  // Runs first in the file, before any test loads en: production only loads the active locale.
+  it('reads a known code with only the active locale loaded', () => {
+    expect(i18n.hasResourceBundle('en', 'errors')).toBe(false)
+    expect(errorMessage(problemOf('not_found', 404))).toBe('Não encontrado. Pode ter sido excluído.')
+  })
+
   it('reads the whole enum from the contract', () => {
     expect(codes.length).toBeGreaterThan(30)
     expect(codes).toContain('unauthorized')

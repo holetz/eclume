@@ -57,7 +57,9 @@ function quotaMessage(problem: Problem): string {
 }
 
 function isKnownCode(code: string): code is ProblemCode {
-  return Object.hasOwn(i18n.getResourceBundle('en', 'errors').code, code)
+  // The active locale's bundle: only that locale is loaded, and every locale has every code.
+  const codes = (i18n.getResourceBundle(activeLocale(), 'errors') as { code?: object } | undefined)?.code
+  return codes !== undefined && Object.hasOwn(codes, code)
 }
 
 /** The code an unknown problem stands for, read by its HTTP status as the contract asks. */
