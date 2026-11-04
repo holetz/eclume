@@ -1,14 +1,15 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Link, MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell, type ShellUser } from './AppShell'
-import { featuredItem, isItemActive, NAV_ITEMS, navGroups } from './nav'
+import { featuredItem, groupLabel, isItemActive, itemLabel, NAV_ITEMS, navGroups, type NavGroupEntry } from './nav'
 import { NotFoundPage } from './NotFoundPage'
 import { PageHead } from './PageHead'
 import { mockFetch } from '../test/http'
 import { createQueryClient } from './queryClient'
+import { setLocale } from '../i18n'
 
 // The real queue, with "sending" controlled by the test (real converting and uploading is in ImportDialog.test).
 const importState = vi.hoisted(() => ({ sending: false }))
@@ -40,8 +41,8 @@ function renderShell(user = member, onLogout = vi.fn(), at = '/tokens') {
 }
 
 describe('navigation', () => {
-  const titles = (entries: { group: string }[]) => entries.map((entry) => entry.group)
-  const labels = (entries: { items: { label: string }[] }[]) => entries.flatMap((entry) => entry.items.map((i) => i.label))
+  const titles = (entries: NavGroupEntry[]) => entries.map((entry) => groupLabel(entry.group))
+  const labels = (entries: NavGroupEntry[]) => entries.flatMap((entry) => entry.items.map(itemLabel))
 
   it('groups into Agente, Gravações, Organizar (data) and Regras, and the rest in the header menus', () => {
     const { main, header: more } = navGroups()
@@ -50,7 +51,7 @@ describe('navigation', () => {
     // In NAV_ITEMS order: the owning specs enable their items without changing the order. The featured
     // item belongs to no group: the sidebar draws it before them.
     const enabled = (section: string) =>
-      NAV_ITEMS.filter((i) => i.enabled && !i.featured && i.section === section).map((i) => i.label)
+      NAV_ITEMS.filter((i) => i.enabled && !i.featured && i.section === section).map(itemLabel)
     expect(labels(main)).toEqual(enabled('main'))
     // Import is the library's modal; the collection sits in Organizar.
     expect(labels(main)).toEqual([
@@ -70,7 +71,8 @@ describe('navigation', () => {
   })
 
   it('Agente is the featured item, first in the list and outside the groups, on the /agente route', () => {
-    expect(NAV_ITEMS[0]).toMatchObject({ to: '/agente', label: 'Agente', featured: true, section: 'main' })
+    expect(NAV_ITEMS[0]).toMatchObject({ id: 'agent', to: '/agente', featured: true, section: 'main' })
+    expect(itemLabel(NAV_ITEMS[0])).toBe('Agente')
     expect(featuredItem()).toBe(NAV_ITEMS[0])
     expect(labels(navGroups().main)).not.toContain('Agente')
     expect(featuredItem(NAV_ITEMS.map((item) => ({ ...item, enabled: !item.featured })))).toBeUndefined()
@@ -78,7 +80,7 @@ describe('navigation', () => {
 
   it('leaves out the disabled items and the admin panel (own account and login)', () => {
     const { main, header: more } = navGroups()
-    const off = NAV_ITEMS.map((item) => ({ ...item, enabled: item.label !== 'Campos personalizados' }))
+    const off = NAV_ITEMS.map((item) => ({ ...item, enabled: itemLabel(item) !== 'Campos personalizados' }))
     expect(labels(Object.values(navGroups(off)).flat())).not.toContain('Campos personalizados')
     expect(labels([...main, ...more])).not.toContain('Painel admin')
   })
@@ -87,7 +89,7 @@ describe('navigation', () => {
     const all = NAV_ITEMS.map((item) => ({ ...item, enabled: true }))
     const { main, header: more } = navGroups(all)
     expect(titles(more)).toEqual(['Minhas configurações', 'Ajuda'])
-    const routes = Object.fromEntries([...main, ...more].flatMap((g) => g.items.map((i) => [i.label, i.to])))
+    const routes = Object.fromEntries([...main, ...more].flatMap((g) => g.items.map((i) => [itemLabel(i), i.to])))
     expect(routes).toMatchObject({
       Tags: '/tags',
       'Processamento automático': '/config/automacao',
@@ -102,8 +104,8 @@ describe('navigation', () => {
   })
 
   it('lights Biblioteca on the recording page too', () => {
-    const library = NAV_ITEMS.find((item) => item.label === 'Biblioteca')!
-    const people = NAV_ITEMS.find((item) => item.label === 'Pessoas')!
+    const library = NAV_ITEMS.find((item) => itemLabel(item) === 'Biblioteca')!
+    const people = NAV_ITEMS.find((item) => itemLabel(item) === 'Pessoas')!
     expect(isItemActive(library, '/')).toBe(true)
     expect(isItemActive(library, '/gravacoes/01928f3a')).toBe(true)
     expect(isItemActive(library, '/busca')).toBe(false)
@@ -112,8 +114,8 @@ describe('navigation', () => {
   })
 
   it('Agente lights on a conversation, and Conversas only on the list of all of them', () => {
-    const agent = NAV_ITEMS.find((item) => item.label === 'Agente')!
-    const sessions = NAV_ITEMS.find((item) => item.label === 'Conversas')!
+    const agent = NAV_ITEMS.find((item) => itemLabel(item) === 'Agente')!
+    const sessions = NAV_ITEMS.find((item) => itemLabel(item) === 'Conversas')!
     expect(isItemActive(agent, '/agente')).toBe(true)
     expect(isItemActive(agent, '/agente/01928f3a')).toBe(true)
     expect(isItemActive(agent, '/agente/conversas')).toBe(false)
@@ -122,9 +124,9 @@ describe('navigation', () => {
   })
 
   it('Habilidades sits in the Agente group and does not light the featured item', () => {
-    const agent = NAV_ITEMS.find((item) => item.label === 'Agente')!
-    const skills = NAV_ITEMS.find((item) => item.label === 'Habilidades')!
-    expect(skills.group).toBe('Agente')
+    const agent = NAV_ITEMS.find((item) => itemLabel(item) === 'Agente')!
+    const skills = NAV_ITEMS.find((item) => itemLabel(item) === 'Habilidades')!
+    expect(skills.group && groupLabel(skills.group)).toBe('Agente')
     expect(isItemActive(skills, '/agente/habilidades')).toBe(true)
     expect(isItemActive(agent, '/agente/habilidades')).toBe(false)
   })
@@ -133,6 +135,17 @@ describe('navigation', () => {
 
 describe('AppShell', () => {
   afterEach(() => document.documentElement.removeAttribute('data-theme'))
+
+  it('follows the active locale with no remount', async () => {
+    renderShell()
+    expect(screen.getByRole('navigation', { name: 'Principal' })).toHaveTextContent('Biblioteca')
+    await act(() => setLocale('en'))
+    const nav = screen.getByRole('navigation', { name: 'Main' })
+    expect(within(nav).getByRole('link', { name: 'Library' })).toBeInTheDocument()
+    expect(within(nav).getByText('Recordings')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Log out' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+  })
 
   it('shows the groups in order', () => {
     renderShell()
@@ -146,7 +159,7 @@ describe('AppShell', () => {
     expect(titles).toEqual(['Agente', 'Gravações', 'Organizar', 'Regras'])
     expect(within(nav).queryByText('Configurações e ajuda')).not.toBeInTheDocument()
     for (const item of NAV_ITEMS.filter((i) => !i.enabled)) {
-      expect(within(nav).queryByRole('link', { name: item.label })).not.toBeInTheDocument()
+      expect(within(nav).queryByRole('link', { name: itemLabel(item) })).not.toBeInTheDocument()
     }
   })
 

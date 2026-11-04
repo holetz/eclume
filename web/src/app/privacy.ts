@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { api, type Schemas } from '../api/client'
 import { unwrap } from '../api/problem'
+import { i18n } from '../i18n'
 
 export type DataDestination = Schemas['DataDestination']
 export type PrivacyInfo = Schemas['PrivacyInfo']
@@ -17,25 +18,28 @@ export function usePrivacy(revision?: string | number) {
   })
 }
 
-export const PURPOSE_LABEL: Record<DataDestination['purpose'], string> = {
-  transcription: 'Transcrição do áudio',
-  summaries: 'Resumos',
-  fields: 'Campos',
-  chat: 'Chat',
-  agenda_detection: 'Detecção do tipo de agenda',
-}
+type Purpose = DataDestination['purpose']
+const PURPOSES: readonly Purpose[] = ['transcription', 'summaries', 'fields', 'chat', 'agenda_detection']
 
-/** The destination in words: "Neste servidor", "Na rede local", "Fora do servidor: Anthropic"… */
+/** The purpose in words, in the active locale: each read goes through the catalog. */
+export const PURPOSE_LABEL: Readonly<Record<Purpose, string>> = Object.defineProperties(
+  {} as Record<Purpose, string>,
+  Object.fromEntries(
+    PURPOSES.map((purpose) => [purpose, { enumerable: true, get: () => i18n.t(`shell:privacy.purpose.${purpose}`) }]),
+  ),
+)
+
+/** The destination in words, in the active locale ("On this server", "Outside the server: Anthropic"…). */
 export function locationLabel(destination: DataDestination): string {
   switch (destination.location) {
     case 'server':
-      return 'Neste servidor'
     case 'local_network':
-      return 'Na rede local'
     case 'disabled':
-      return 'Desligado: nada é enviado'
+      return i18n.t(`shell:privacy.location.${destination.location}`)
     default:
-      return destination.processor ? `Fora do servidor: ${destination.processor}` : 'Fora do servidor'
+      return destination.processor
+        ? i18n.t('shell:privacy.location.externalBy', { processor: destination.processor })
+        : i18n.t('shell:privacy.location.external')
   }
 }
 

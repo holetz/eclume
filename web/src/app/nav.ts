@@ -7,16 +7,21 @@
 // ("Organizar") from the rules that act on their own after each recording ("Regras"); the gear menu groups
 // the items by nature (`part`), with one label per part. The "Agente" group gathers what belongs to the
 // Agent beyond the conversation ("Conversas" and "Habilidades"), right below the featured item.
+// Groups, parts and items are ids; their text is in the `shell` catalog (`nav.group`, `nav.part`,
+// `nav.item`), read through `groupLabel`, `partLabel` and `itemLabel`.
 import { MessageSquareText, type LucideIcon } from 'lucide-react'
+import { i18n } from '../i18n'
+import type shell from '../i18n/en/shell'
 
-type NavGroup = 'Agente' | 'Gravações' | 'Organizar' | 'Regras' | 'Minhas configurações' | 'Ajuda'
+type NavGroup = keyof typeof shell.nav.group
 /** The parts of the gear menu, in the order they appear. */
-export type NavPart = 'Conta e privacidade' | 'Aparelhos' | 'Integrações' | 'Ambiente'
+export type NavPart = keyof typeof shell.nav.part
+type NavItemId = keyof typeof shell.nav.item
 type NavSection = 'main' | 'header'
 
 interface NavEntry {
+  id: NavItemId
   to: string
-  label: string
   section: NavSection
   enabled: boolean
   /** Route prefixes that also light the item (a recording belongs to the Library). */
@@ -48,35 +53,39 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // The Agent comes first in the sidebar, above the groups; /perguntas, the old name, redirects
   // (holetz/eclume#142). The pages of the Agent group live under /agente/ and do not light the featured item.
   {
+    id: 'agent',
     to: '/agente',
-    label: 'Agente',
     section: 'main',
     enabled: true,
     featured: true,
     icon: MessageSquareText,
     excludes: ['/agente/conversas', '/agente/habilidades'],
   },
-  { to: '/agente/conversas', label: 'Conversas', group: 'Agente', section: 'main', enabled: true },
-  { to: '/agente/habilidades', label: 'Habilidades', group: 'Agente', section: 'main', enabled: true },
-  { to: '/', label: 'Biblioteca', group: 'Gravações', section: 'main', enabled: true, matches: ['/gravacoes/'] },
-  { to: '/busca', label: 'Busca', group: 'Gravações', section: 'main', enabled: true },
-  { to: '/pessoas', label: 'Pessoas', group: 'Organizar', section: 'main', enabled: true },
+  { id: 'conversations', to: '/agente/conversas', group: 'agent', section: 'main', enabled: true },
+  { id: 'skills', to: '/agente/habilidades', group: 'agent', section: 'main', enabled: true },
+  { id: 'library', to: '/', group: 'recordings', section: 'main', enabled: true, matches: ['/gravacoes/'] },
+  { id: 'search', to: '/busca', group: 'recordings', section: 'main', enabled: true },
+  { id: 'people', to: '/pessoas', group: 'organize', section: 'main', enabled: true },
   // The collection coexists with the tag and sits in "Organizar" (holetz/eclume#38).
-  { to: '/colecoes', label: 'Coleções', group: 'Organizar', section: 'main', enabled: true },
+  { id: 'collections', to: '/colecoes', group: 'organize', section: 'main', enabled: true },
   // The tag registry sits next to the collections (holetz/eclume#78).
-  { to: '/tags', label: 'Tags', group: 'Organizar', section: 'main', enabled: true },
+  { id: 'tags', to: '/tags', group: 'organize', section: 'main', enabled: true },
   // Rules: what eclume does on its own after each recording, with the overview first (holetz/eclume#120).
-  { to: '/config/automacao', label: 'Processamento automático', group: 'Regras', section: 'main', enabled: true },
-  { to: '/config/agendas', label: 'Tipos de agenda', group: 'Regras', section: 'main', enabled: true },
-  { to: '/config/campos', label: 'Campos personalizados', group: 'Regras', section: 'main', enabled: true },
-  { to: '/config/conta', label: 'Conta', group: 'Minhas configurações', part: 'Conta e privacidade', section: 'header', enabled: true },
-  { to: '/app-desktop', label: 'App desktop', group: 'Minhas configurações', part: 'Aparelhos', section: 'header', enabled: true },
-  { to: '/app-movel', label: 'App móvel', group: 'Minhas configurações', part: 'Aparelhos', section: 'header', enabled: true },
-  { to: '/config/mcp', label: 'Conexão MCP', group: 'Minhas configurações', part: 'Integrações', section: 'header', enabled: true },
-  { to: '/tokens', label: 'Tokens de acesso', group: 'Minhas configurações', part: 'Integrações', section: 'header', enabled: true },
-  { to: '/config/ambiente', label: 'Ambiente', group: 'Minhas configurações', part: 'Ambiente', section: 'header', enabled: true },
-  { to: '/ajuda', label: 'Central de ajuda', group: 'Ajuda', section: 'header', enabled: true },
+  { id: 'automation', to: '/config/automacao', group: 'rules', section: 'main', enabled: true },
+  { id: 'agendaTypes', to: '/config/agendas', group: 'rules', section: 'main', enabled: true },
+  { id: 'fields', to: '/config/campos', group: 'rules', section: 'main', enabled: true },
+  { id: 'account', to: '/config/conta', group: 'settings', part: 'account', section: 'header', enabled: true },
+  { id: 'desktopApp', to: '/app-desktop', group: 'settings', part: 'devices', section: 'header', enabled: true },
+  { id: 'mobileApp', to: '/app-movel', group: 'settings', part: 'devices', section: 'header', enabled: true },
+  { id: 'mcp', to: '/config/mcp', group: 'settings', part: 'integrations', section: 'header', enabled: true },
+  { id: 'tokens', to: '/tokens', group: 'settings', part: 'integrations', section: 'header', enabled: true },
+  { id: 'environment', to: '/config/ambiente', group: 'settings', part: 'environment', section: 'header', enabled: true },
+  { id: 'helpCenter', to: '/ajuda', group: 'help', section: 'header', enabled: true },
 ]
+
+export const itemLabel = (item: Pick<NavEntry, 'id'>): string => i18n.t(`shell:nav.item.${item.id}`)
+export const groupLabel = (group: NavGroup): string => i18n.t(`shell:nav.group.${group}`)
+export const partLabel = (part: NavPart): string => i18n.t(`shell:nav.part.${part}`)
 
 export interface NavGroupEntry {
   group: NavGroup

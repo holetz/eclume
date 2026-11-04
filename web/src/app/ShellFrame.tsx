@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Menu, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { useLocation } from 'react-router'
@@ -23,6 +24,7 @@ interface ShellFrameProps {
  * lives in `--shell-header`, for the screens that stick elements to the top.
  */
 export function ShellFrame({ brand, sidebar, account, children }: ShellFrameProps) {
+  const { t } = useTranslation('shell')
   const { pathname } = useLocation()
   // From the first route change on, the new page's `PageHead` moves focus to the title.
   const [firstPath] = useState(pathname)
@@ -58,7 +60,7 @@ export function ShellFrame({ brand, sidebar, account, children }: ShellFrameProp
     <NavigatedPathContext.Provider value={navigated ? pathname : null}>
       <div className={`shell ${styles.shell}`} data-header={account ? '' : undefined}>
         <a className="skip-link" href="#conteudo">
-          Pular para o conteúdo
+          {t('frame.skipToContent')}
         </a>
         <header className={styles.topbar}>
           {brand}
@@ -72,7 +74,7 @@ export function ShellFrame({ brand, sidebar, account, children }: ShellFrameProp
             onClick={() => setMenuOpenAt(menuOpen ? null : pathname)}
           >
             {menuOpen ? <X size={16} aria-hidden /> : <Menu size={16} aria-hidden />}
-            Menu
+            {t('frame.menu')}
           </button>
         </header>
         <aside

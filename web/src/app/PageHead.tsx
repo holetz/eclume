@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { useHelp } from './help'
 import { useNavigatedPath } from './pageFocus'
@@ -18,6 +19,7 @@ interface PageHeadProps {
  * `h1`, so the screen reader announces the new page and the keyboard starts again from its top.
  */
 export function PageHead({ title, kicker, actions, hint }: PageHeadProps) {
+  const { t } = useTranslation('shell')
   usePageTitle(title)
   const help = useHelp()
   const navigatedPath = useNavigatedPath()
@@ -53,7 +55,7 @@ export function PageHead({ title, kicker, actions, hint }: PageHeadProps) {
               <span className="hint" aria-hidden="true">
                 ?
               </span>
-              Ajuda
+              {t('help.title')}
             </button>
           )}
           {actions}

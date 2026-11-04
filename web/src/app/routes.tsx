@@ -3,7 +3,7 @@ import { Navigate, type RouteObject } from 'react-router'
 import { LoginPage } from '../features/auth/LoginPage'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { NotFoundPage } from './NotFoundPage'
-import { RequireSession } from './RequireSession'
+import { PageLoading, RequireSession } from './RequireSession'
 import { RootError, RouteError } from './RouteError'
 
 // The library and the login go in the initial bundle; the other areas load on demand, each in
@@ -53,7 +53,7 @@ const RecordingPage = named(() => import('../features/transcript/RecordingPage')
 function page(Page: LazyPage): Pick<RouteObject, 'element' | 'handle'> {
   return {
     element: (
-      <Suspense fallback={<p role="status">Carregando…</p>}>
+      <Suspense fallback={<PageLoading />}>
         <Page />
       </Suspense>
     ),

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { ReactNode } from 'react'
 import { Dialog } from './Dialog'
 
@@ -12,10 +13,11 @@ interface ConfirmDialogProps {
 }
 
 /**
- * Asks for confirmation before a destructive action, in the DS `Dialog`. "Cancelar" comes first and takes
+ * Asks for confirmation before a destructive action, in the DS `Dialog`. Cancel comes first and takes
  * focus; Esc and a click on the backdrop also cancel. With `busy`, the mutation runs and the confirmation waits.
  */
 export function ConfirmDialog({ title, children, confirmLabel, onConfirm, onCancel, busy = false }: ConfirmDialogProps) {
+  const { t } = useTranslation()
   return (
     <Dialog
       title={title}
@@ -24,7 +26,7 @@ export function ConfirmDialog({ title, children, confirmLabel, onConfirm, onCanc
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={onCancel}>
-            Cancelar
+            {t('cancel')}
           </button>
           <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={busy} aria-busy={busy}>
             {confirmLabel}

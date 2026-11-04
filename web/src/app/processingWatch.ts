@@ -14,6 +14,7 @@ import { unwrap } from '../api/problem'
 import { motivo } from '../lib/vocabulario'
 import { notifyOutcomesOn } from './preferences'
 import { setTitleCount } from './usePageTitle'
+import { i18n } from '../i18n'
 
 type Recording = Schemas['Recording']
 
@@ -113,20 +114,25 @@ export function takeOutcomes(watermark: Watermark, items: Recording[]): Ended[] 
   return fresh
 }
 
-/** Title and body of the notice, the desktop's (without the "copie para compartilhar", which there has the Copiar). */
+/** Title and body of the notice, the desktop's (without its "copy to share" line, which there has the copy button). */
 export function outcomeText({ outcome, title, reason }: Ended): { title: string; body: string } {
-  const name = title.trim() || 'Gravação'
+  const t = i18n.t
+  const name = title.trim() || t('shell:outcome.recording')
   switch (outcome) {
     case 'summary_ready':
-      return { title: 'Resumo pronto', body: name }
+      return { title: t('shell:outcome.summaryReady'), body: name }
     case 'summary_failed':
-      return { title: 'O resumo falhou', body: `${name} · abra para gerar de novo` }
+      return { title: t('shell:outcome.summaryFailed'), body: t('shell:outcome.summaryFailedBody', { name }) }
     case 'no_summary':
-      return { title: 'Pronta sem resumo', body: `${name} · ${reason ? motivo(reason) : 'sem motivo informado'}` }
+      // The skip reasons are the shared vocabulary (lib/vocabulario.js), still pt-BR until #250.
+      return {
+        title: t('shell:outcome.noSummary'),
+        body: `${name} · ${reason ? motivo(reason) : t('shell:outcome.noReason')}`,
+      }
     case 'transcription_failed':
-      return { title: 'A transcrição falhou', body: `${name} · abra para ver o motivo` }
+      return { title: t('shell:outcome.transcriptionFailed'), body: t('shell:outcome.transcriptionFailedBody', { name }) }
     case 'awaiting_speakers':
-      return { title: 'Precisa de você', body: `${name} · nomeie os locutores para seguir com o resumo` }
+      return { title: t('shell:outcome.awaitingSpeakers'), body: t('shell:outcome.awaitingSpeakersBody', { name }) }
   }
 }
 

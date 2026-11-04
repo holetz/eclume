@@ -1,3 +1,4 @@
+import { Trans, useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import { lazy, Suspense, useEffect, useId, useRef } from 'react'
 import { Link } from 'react-router'
@@ -14,6 +15,7 @@ const HELP_CENTER = NAV_ITEMS.find((item) => item.to === '/ajuda')
  * center. A link in the drawer navigates and keeps it open, as in the DS.
  */
 export function HelpDrawer({ pageKey, onClose }: { pageKey: HelpPageKey | null; onClose: () => void }) {
+  const { t } = useTranslation(['shell', 'common'])
   const titleId = useId()
   const closeButton = useRef<HTMLButtonElement>(null)
 
@@ -22,12 +24,12 @@ export function HelpDrawer({ pageKey, onClose }: { pageKey: HelpPageKey | null; 
   return (
     <aside className="help-drawer" role="dialog" aria-modal="false" aria-labelledby={titleId}>
       <div className="help-drawer-head">
-        <h2 id={titleId}>Ajuda</h2>
+        <h2 id={titleId}>{t('help.title')}</h2>
         <button
           ref={closeButton}
           type="button"
           className="btn btn-ghost btn-icon"
-          aria-label="Fechar a ajuda"
+          aria-label={t('help.close')}
           onClick={onClose}
         >
           <X size={16} aria-hidden />
@@ -36,16 +38,16 @@ export function HelpDrawer({ pageKey, onClose }: { pageKey: HelpPageKey | null; 
       <Suspense
         fallback={
           <div className="help-drawer-body">
-            <p role="status">Carregando…</p>
+            <p role="status">{t('common:loading')}</p>
           </div>
         }
       >
         <HelpDrawerBody pageKey={pageKey} />
       </Suspense>
       <div className="help-drawer-foot">
-        {HELP_CENTER?.enabled && <Link to={HELP_CENTER.to}>Abrir a central de ajuda</Link>}
+        {HELP_CENTER?.enabled && <Link to={HELP_CENTER.to}>{t('help.openCenter')}</Link>}
         <span className="text-muted">
-          Pressione <kbd className="kbd">?</kbd> a qualquer momento
+          <Trans t={t} i18nKey="help.shortcut" components={{ key: <kbd className="kbd" /> }} />
         </span>
       </div>
     </aside>

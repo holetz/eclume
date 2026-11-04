@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
@@ -7,6 +8,12 @@ import { enterAccount } from './accountScope'
 import { AppShell } from './AppShell'
 import styles from './RequireSession.module.css'
 import { ME_KEY, useLogout, useMe } from './session'
+
+/** The `Suspense` fallback of an on-demand page. */
+export function PageLoading() {
+  const { t } = useTranslation()
+  return <p role="status">{t('loading')}</p>
+}
 
 export function PageStatus({ children }: { children: ReactNode }) {
   return (
@@ -21,6 +28,7 @@ export function PageStatus({ children }: { children: ReactNode }) {
  * force not yet accepted, asks for acceptance before the shell.
  */
 export function RequireSession() {
+  const { t } = useTranslation()
   const me = useMe()
   const location = useLocation()
   const logout = useLogout()
@@ -32,7 +40,7 @@ export function RequireSession() {
     if (userId) enterAccount(queryClient, userId, ME_KEY)
   }, [queryClient, userId])
 
-  if (me.isPending) return <PageStatus>Carregando…</PageStatus>
+  if (me.isPending) return <PageStatus>{t('loading')}</PageStatus>
   // A refetch that fails with the session already loaded does not bring the shell down: React Query keeps the
   // data, and the failure becomes the connection banner. The error screen only shows with no session at all in cache.
   if (me.isError && !me.data) {
@@ -40,7 +48,7 @@ export function RequireSession() {
       <PageStatus>
         <p>{errorMessage(me.error)}</p>
         <button type="button" className="btn btn-secondary" onClick={() => me.refetch()}>
-          Tentar de novo
+          {t('retry')}
         </button>
       </PageStatus>
     )

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -33,6 +34,7 @@ function focusables(root: HTMLElement): HTMLElement[] {
  * click, locks page scrolling and, on unmount, returns focus to whoever opened it.
  */
 export function Dialog({ title, onClose, message, children, actions, size, kicker, plain = false }: DialogProps) {
+  const { t } = useTranslation()
   const ref = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -114,7 +116,7 @@ export function Dialog({ title, onClose, message, children, actions, size, kicke
               ref={closeRef}
               type="button"
               className="btn btn-ghost btn-icon"
-              aria-label="Fechar"
+              aria-label={t('close')}
               onClick={() => onClose()}
             >
               <X size={16} aria-hidden />

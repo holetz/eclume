@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
 
@@ -12,6 +13,7 @@ interface HelpHintProps {
 
 /** The Design System inline hint: the "?" `.hint` that opens a `.popover` with the link to the article. */
 export function HelpHint({ subject, title, article, children }: HelpHintProps) {
+  const { t } = useTranslation('shell')
   const [open, setOpen] = useState(false)
   const wrapper = useRef<HTMLSpanElement>(null)
   const button = useRef<HTMLButtonElement>(null)
@@ -46,7 +48,7 @@ export function HelpHint({ subject, title, article, children }: HelpHintProps) {
         ref={button}
         type="button"
         className="hint"
-        aria-label={`Sobre ${subject}`}
+        aria-label={t('help.about', { subject })}
         aria-expanded={open}
         aria-controls={open ? popoverId : undefined}
         onClick={() => {
@@ -60,7 +62,7 @@ export function HelpHint({ subject, title, article, children }: HelpHintProps) {
         <span id={popoverId} className="popover" role="dialog" aria-label={title}>
           <span className="popover-title">{title}</span>
           <span>{children}</span>
-          <Link to={`/ajuda/${article}`}>Ler o artigo →</Link>
+          <Link to={`/ajuda/${article}`}>{t('help.readArticle')}</Link>
         </span>
       )}
     </span>
