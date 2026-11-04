@@ -1,7 +1,7 @@
-//! Mic pelo dispositivo de entrada escolhido (ou o padrão), via `cpal`.
+//! Mic through the selected input device (or the default), via `cpal`.
 //!
-//! O `cpal::Stream` não é `Send` em todas as plataformas, então ele vive numa thread própria,
-//! que o mantém tocando até a fonte ser descartada.
+//! `cpal::Stream` is not `Send` on every platform, so it lives on its own thread,
+//! which keeps it running until the source is dropped.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
@@ -17,14 +17,14 @@ use crate::{AudioSource, SourceState};
 
 const INIT_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Os microfones que o sistema oferece agora: o nome do padrão e os nomes de todos.
+/// The microphones currently available: the default name and all device names.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct InputDevices {
     pub default: Option<String>,
     pub names: Vec<String>,
 }
 
-/// Lista os dispositivos de entrada pelo nome que a aba Áudio mostra e a config guarda.
+/// Lists input devices by the name shown in the Audio tab and stored in config.
 pub fn list_input_devices() -> Result<InputDevices> {
     let host = cpal::default_host();
     let default = host.default_input_device().and_then(|d| device_name(&d));
@@ -41,32 +41,33 @@ fn device_name(device: &cpal::Device) -> Option<String> {
     device.description().ok().map(|d| d.name().to_string())
 }
 
-/// Com que frequência o seguidor confere qual microfone deveria estar em uso.
+/// How often the follower checks which microphone should be in use.
 const FOLLOW_INTERVAL: Duration = Duration::from_secs(2);
-/// Leituras seguidas iguais e diferentes do microfone em uso antes de trocar.
+/// Consecutive identical readings differing from the active microphone before switching.
 const FOLLOW_CONFIRMATIONS: u8 = 2;
 
-/// O mic, como [`AudioSource`]. Se reconecta sozinho ([`Reconnecting`]): o dispositivo que cai
-/// (headset Bluetooth trocando de perfil, USB tirado) é reaberto, com silêncio no meio. Cada
-/// tentativa resolve a escolha de novo: o microfone pelo nome, senão o padrão. Um seguidor
-/// confere a cada 2 s qual deveria estar em uso (o padrão do SO, ou o escolhido que reapareceu)
-/// e pede a troca depois de duas leituras seguidas.
+/// The mic as an [`AudioSource`]. Reconnects automatically ([`Reconnecting`]): a disconnected
+/// device
+/// (Bluetooth headset changing profiles, USB unplugged) is reopened, with silence in between. Each
+/// attempt resolves the choice again: microphone by name, otherwise the default. A follower
+/// checks every 2 s which should be in use (the OS default, or the selected device reappearing)
+/// and requests a switch after two consecutive readings.
 pub struct MicSource {
     source: Reconnecting,
-    /// O microfone pedido sumiu e a captura caiu no padrão, na abertura.
+    /// The requested microphone was missing and capture fell back to the default on opening.
     fell_back: bool,
-    /// Desliga o seguidor quando a fonte é descartada.
+    /// Stops the follower when the source is dropped.
     following: Arc<AtomicBool>,
 }
 
 impl MicSource {
-    /// Abre o dispositivo de entrada padrão e começa a capturar.
+    /// Opens the default input device and starts capturing.
     pub fn open() -> Result<Self> {
         Self::open_named(None)
     }
 
-    /// Abre o microfone de nome `name` e começa a capturar. Se ele sumiu (um headset
-    /// desconectado), cai no padrão com um aviso no log e em [`MicSource::fell_back`].
+    /// Opens the microphone named `name` and starts capturing. If missing (a disconnected
+    /// headset), falls back to the default with a log warning and [`MicSource::fell_back`].
     pub fn open_named(name: Option<&str>) -> Result<Self> {
         let wanted = name.map(str::to_string);
         let in_use: Arc<Mutex<Option<String>>> = Arc::default();
@@ -95,7 +96,7 @@ impl MicSource {
         })
     }
 
-    /// O microfone pedido não estava lá e a captura usa o padrão.
+    /// The requested microphone was missing and capture uses the default.
     pub fn fell_back(&self) -> bool {
         self.fell_back
     }
@@ -125,8 +126,8 @@ impl AudioSource for MicSource {
     }
 }
 
-/// O microfone que deveria estar em uso: o escolhido, se está entre os do sistema; senão o
-/// padrão.
+/// The microphone that should be in use: the selected one if available in the system; otherwise
+/// the default.
 fn desired(wanted: Option<&str>, devices: &InputDevices) -> Option<String> {
     match wanted {
         Some(name) if devices.names.iter().any(|n| n == name) => Some(name.to_string()),
@@ -134,9 +135,9 @@ fn desired(wanted: Option<&str>, devices: &InputDevices) -> Option<String> {
     }
 }
 
-/// Pede a troca quando o microfone que deveria estar em uso difere do em uso por
-/// [`FOLLOW_CONFIRMATIONS`] leituras seguidas, o critério do `EndpointFollower` do áudio do
-/// sistema no Windows.
+/// Requests a switch when the desired microphone differs from the active one for
+/// [`FOLLOW_CONFIRMATIONS`] consecutive readings, matching the `EndpointFollower` criterion for
+/// system audio on Windows.
 #[derive(Default)]
 struct Follower {
     pending: Option<(String, u8)>,
@@ -179,18 +180,18 @@ fn spawn_follower(
                 };
                 let current = in_use.lock().ok().and_then(|n| n.clone());
                 if follower.observe(desired(wanted.as_deref(), &devices), current.as_deref()) {
-                    log::info!("o microfone em uso ({current:?}) vai trocar");
+                    log::info!("the active microphone ({current:?}) will switch");
                     switch.store(true, Ordering::Release);
                 }
             }
         });
     if let Err(err) = spawned {
-        log::warn!("falha ao criar o seguidor do microfone: {err}");
+        log::warn!("failed to create microphone follower: {err}");
     }
 }
 
-/// Abre o microfone numa thread própria (o `cpal::Stream` não é `Send` em todas as plataformas)
-/// e devolve o anel, o nome do dispositivo aberto e se caiu no padrão.
+/// Opens the microphone on its own thread (`cpal::Stream` is not `Send` on every platform)
+/// and returns the ring buffer, the opened device's name and whether it fell back to the default.
 fn open_ring(name: Option<&str>) -> Result<(RingSource, Option<String>, bool)> {
     let name = name.map(str::to_string);
     let (init_tx, init_rx) = mpsc::channel::<Result<(u32, Option<String>, bool)>>();
@@ -211,7 +212,7 @@ fn open_ring(name: Option<&str>) -> Result<(RingSource, Option<String>, bool)> {
             let rate = source.sample_rate();
             let _ = ring_tx.send(source);
             let _ = init_tx.send(Ok((rate, used, fell_back)));
-            // Mantém o stream vivo até o descarte da fonte.
+            // Keeps the stream alive until the source is dropped.
             let _ = stop_rx.recv();
             drop(stream);
         })
@@ -226,7 +227,7 @@ fn open_ring(name: Option<&str>) -> Result<(RingSource, Option<String>, bool)> {
                     let _ = stop_tx.send(());
                     let _ = crate::join_with_deadline(thread, crate::STOP_DEADLINE);
                 });
-            log::info!("mic {used:?} aberto a {rate} Hz");
+            log::info!("mic {used:?} opened at {rate} Hz");
             Ok((ring, used, fell_back))
         }
         Ok(Err(err)) => {
@@ -234,7 +235,7 @@ fn open_ring(name: Option<&str>) -> Result<(RingSource, Option<String>, bool)> {
             Err(err)
         }
         Err(_) => {
-            // Sem join: a thread ainda está presa no driver; o sinal de parada fica na fila.
+            // No join: the thread is still stuck in the driver; the stop signal stays queued.
             let _ = stop_tx.send(());
             Err(anyhow!("tempo esgotado ao abrir o mic"))
         }
@@ -251,7 +252,7 @@ fn start_input(name: Option<&str>) -> Result<(cpal::Stream, RingSource, Option<S
     let fell_back = name.is_some() && named.is_none();
     if fell_back {
         log::warn!(
-            "microfone {:?} não encontrado; usando o padrão",
+            "microphone {:?} not found; using the default",
             name.unwrap_or_default()
         );
     }
@@ -307,7 +308,7 @@ where
             writer.push_interleaved(frames, channels, |i| f32::from_sample_(data[i]));
         },
         move |err| {
-            log::error!("erro no stream do mic: {err}");
+            log::error!("mic stream error: {err}");
             closer.close();
         },
         None,
@@ -326,19 +327,19 @@ mod tests {
     }
 
     #[test]
-    fn seguidor_troca_depois_de_duas_leituras_seguidas() {
+    fn follower_switches_after_two_consecutive_readings() {
         let mut follower = Follower::default();
         let now = devices("Headset", &["Headset", "Interno"]);
         assert!(!follower.observe(desired(None, &now), Some("Interno")));
         assert!(follower.observe(desired(None, &now), Some("Interno")));
-        // Uma leitura avulsa diferente não troca.
+        // A single differing reading does not trigger a switch.
         assert!(!follower.observe(desired(None, &now), Some("Interno")));
         assert!(!follower.observe(Some("Interno".into()), Some("Interno")));
         assert!(!follower.observe(desired(None, &now), Some("Interno")));
     }
 
     #[test]
-    fn seguidor_volta_ao_escolhido_quando_ele_reaparece() {
+    fn follower_returns_to_selected_device_when_it_reappears() {
         let mut follower = Follower::default();
         let without = devices("Interno", &["Interno"]);
         assert_eq!(desired(Some("USB"), &without).as_deref(), Some("Interno"));

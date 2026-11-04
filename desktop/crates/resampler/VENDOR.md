@@ -1,19 +1,19 @@
-# resampler (vendorizado do Anarlog)
+# resampler (vendored from Anarlog)
 
-- Origem: <https://github.com/fastrepl/anarlog>, `crates/resampler`
-- Commit fixado: `bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43`
-- Licença: MIT — `Copyright (c) 2023-present Fastrepl, Inc.` (texto integral em `LICENSE`)
+- Source: <https://github.com/fastrepl/anarlog>, `crates/resampler`
+- Pinned commit: `bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43`
+- License: MIT — `Copyright (c) 2023-present Fastrepl, Inc.` (full text in `LICENSE`)
 
-## O que foi trazido
+## What was included
 
-- `src/driver.rs` — sem alterações além do cabeçalho de origem.
-- `src/lib.rs` — reexportações e `Error` originais, sem o módulo `async_source`.
+- `src/driver.rs` — unchanged except for the source header.
+- `src/lib.rs` — original re-exports and `Error`, without the `async_source` module.
 
-## O que ficou de fora
+## What was left out
 
-- A feature `async-source` e o diretório `src/async_source/`: dependem de
-  `anlg-audio-interface`, `dasp`, `pin-project` e `futures-util` do workspace do Anarlog.
-- `benches/` e as dev-dependencies ligadas a dados de teste do Anarlog (`anlg-data`).
+- The `async-source` feature and `src/async_source/` directory: depend on
+  `anlg-audio-interface`, `dasp`, `pin-project` and `futures-util` from the Anarlog workspace.
+- `benches/` and dev-dependencies tied to Anarlog test data (`anlg-data`).
 
-Para atualizar: repita a cópia a partir de um commit novo, registre o SHA aqui e rode
+To update: repeat the copy from a newer commit, record the SHA here and run
 `cargo test -p resampler`.

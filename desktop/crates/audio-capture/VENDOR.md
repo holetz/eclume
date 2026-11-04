@@ -1,20 +1,20 @@
-# eclume-audio-capture — o que vem do Anarlog
+# eclume-audio-capture — what comes from Anarlog
 
-- Origem: <https://github.com/fastrepl/anarlog>, `crates/audio-actual`
-- Commit fixado: `bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43`
-- Licença: MIT — `Copyright (c) 2023-present Fastrepl, Inc.` (texto integral em `LICENSE`)
+- Source: <https://github.com/fastrepl/anarlog>, `crates/audio-actual`
+- Pinned commit: `bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43`
+- License: MIT — `Copyright (c) 2023-present Fastrepl, Inc.` (full text in `LICENSE`)
 
-Este crate **não é uma cópia** do `audio-actual`: é uma adaptação. O grafo original puxa `aec`
-(modelos ONNX de ~65 MB), `audio-sync`, `audio-device`, `rodio` e streams assíncronas, que o
-eclume não usa. Foi mantida a lógica de dispositivo de cada plataforma e trocada a interface.
+This crate **is not a copy** of `audio-actual`: it is an adaptation. The original dependency graph
+pulls in `aec` (~65 MB ONNX models), `audio-sync`, `audio-device`, `rodio` and async streams, which
+eclume does not use. Each platform's device logic was kept and the interface replaced.
 
-| Arquivo aqui | Origem | O que mudou |
+| File here | Source | What changed |
 |---|---|---|
-| `src/system/linux.rs` | `src/speaker/linux.rs` | PipeWire seguindo o sink em uso, com fallback Pulse monitor, igual ao original; o anel assíncrono (`RingbufAsyncReader` + `AtomicWaker`) virou o `RingWriter` deste crate; downmix por média em vez de só o primeiro canal; `tracing` → `log`. Próprio do eclume: listagem dos sinks (`list_output_devices`, id = nome do nó) e captura do monitor de um sink escolhido (`target.object` no PipeWire, `<sink>.monitor` no Pulse), que cai no sink em uso se o escolhido sumiu. |
-| `src/system/windows.rs` | `src/speaker/windows.rs` | WASAPI loopback seguindo o endpoint em uso, igual ao original; mesma troca de anel, downmix e log. Próprio do eclume: listagem dos endpoints ativos (id do endpoint) e loopback fixo num endpoint escolhido, sem seguir trocas; se ele sumiu, segue o em uso. |
-| `src/system/macos.rs` | `src/speaker/macos.rs` | Core Audio process tap + aggregate device, igual ao original; mesma troca de anel e log. O tap global segue a saída em uso: a lista de saídas vem vazia e uma saída escolhida é ignorada com aviso. |
-| `src/ring.rs` | `src/rt_ring.rs` (ideia) | Reescrito: um anel `ringbuf` com produtor no callback de áudio e leitura bloqueante com prazo. |
-| `src/mic.rs` | — | Próprio do eclume: `cpal` direto no dispositivo de entrada padrão (o `mic.rs` original acopla AEC e o joiner). |
+| `src/system/linux.rs` | `src/speaker/linux.rs` | PipeWire following the active sink, with Pulse monitor fallback, as in the original; the async ring buffer (`RingbufAsyncReader` + `AtomicWaker`) became this crate's `RingWriter`; downmix by averaging instead of using only the first channel; `tracing` → `log`. Added by eclume: sink listing (`list_output_devices`, id = node name) and capture of a selected sink's monitor (`target.object` in PipeWire, `<sink>.monitor` in Pulse), falling back to the active sink if the selected one is missing. |
+| `src/system/windows.rs` | `src/speaker/windows.rs` | WASAPI loopback following the active endpoint, as in the original; same ring buffer, downmix and log changes. Added by eclume: listing active endpoints (endpoint id) and fixed loopback on a selected endpoint, without following switches; if it is missing, follows the active one. |
+| `src/system/macos.rs` | `src/speaker/macos.rs` | Core Audio process tap + aggregate device, as in the original; same ring buffer and log changes. The global tap follows the active output: the output list is empty and a selected output is ignored with a warning. |
+| `src/ring.rs` | `src/rt_ring.rs` (idea) | Rewritten: a `ringbuf` ring buffer with a producer in the audio callback and blocking reads with a timeout. |
+| `src/mic.rs` | — | Written by eclume: `cpal` directly on the default input device (the original `mic.rs` couples AEC and the joiner). |
 
-Os arquivos adaptados levam no topo a linha de origem. Para atualizar, compare o arquivo de origem
-num commit novo com o daqui, porte as correções e registre o SHA novo nesta página.
+Adapted files carry the source line at the top. To update, compare the source file at a newer commit
+with the local one, port the fixes and record the new SHA on this page.

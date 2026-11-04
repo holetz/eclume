@@ -1,6 +1,6 @@
-//! Gravação automática: das políticas por app e dos eventos de reunião para as ações que o app
-//! executa (iniciar, parar, perguntar). Pura; quem executa as ações e mostra a indicação visível
-//! é o app.
+//! Automatic recording: from per-app policies and meeting events to actions the app
+//! executes (start, stop, ask). Pure; the app executes the actions and shows the visible
+//! indicator.
 
 use std::collections::BTreeMap;
 
@@ -9,21 +9,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::classify::AppKey;
 
-/// O que fazer quando uma reunião começa num app.
+/// What to do when a meeting starts in an app.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Policy {
-    /// Gravar sem perguntar (com a indicação na bandeja e uma notificação).
+    /// Record without asking (with a tray indicator and a notification).
     Auto,
-    /// Perguntar ao usuário, por notificação, bandeja e janela.
+    /// Ask the user through notification, tray and window.
     #[default]
     Ask,
-    /// Não fazer nada.
+    /// Do nothing.
     Ignore,
 }
 
-/// Política de quem não tem uma configurada: perguntar, menos para `outro` (ditado, gravador de
-/// voz, jogos), que é ignorado.
+/// Policy when none is configured: ask, except for `outro` (dictation, voice recorder,
+/// games), which is ignored.
 pub fn default_policy(app: AppKey) -> Policy {
     match app {
         AppKey::Outro => Policy::Ignore,
@@ -31,12 +31,12 @@ pub fn default_policy(app: AppKey) -> Policy {
     }
 }
 
-/// A seção `detection` da config do app.
+/// The `detection` section of the app config.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DetectionConfig {
     #[serde(default = "enabled_by_default")]
     pub enabled: bool,
-    /// Só as políticas que o usuário mudou; o resto vem de [`default_policy`].
+    /// Only policies the user changed; the rest comes from [`default_policy`].
     #[serde(default)]
     pub policies: BTreeMap<AppKey, Policy>,
 }
@@ -63,29 +63,29 @@ impl DetectionConfig {
     }
 }
 
-/// A gravação em curso, do ponto de vista da detecção.
+/// The ongoing recording from detection's point of view.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Recording {
     Idle,
-    /// Iniciada pelo usuário: a detecção nunca a para.
+    /// Started by the user: detection never stops it.
     Manual,
-    /// Iniciada pela detecção: para quando a reunião termina.
+    /// Started by detection: stops when the meeting ends.
     Auto,
 }
 
-/// O que o app deve fazer.
+/// What the app should do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     None,
     Start(AppKey),
     Stop,
-    /// Perguntar se grava a reunião deste app.
+    /// Ask whether to record this app's meeting.
     Ask(AppKey),
-    /// Tirar a pergunta pendente da tela.
+    /// Remove the pending question from the screen.
     Dismiss,
 }
 
-/// A máquina de gravação automática.
+/// The automatic recording state machine.
 #[derive(Clone, Debug, Default)]
 pub struct AutoRecorder {
     meeting: Option<AppKey>,
@@ -93,18 +93,18 @@ pub struct AutoRecorder {
 }
 
 impl AutoRecorder {
-    /// A reunião em curso, se houver.
+    /// The ongoing meeting, if any.
     pub fn meeting(&self) -> Option<AppKey> {
         self.meeting
     }
 
-    /// A pergunta esperando resposta, se houver.
+    /// The question awaiting an answer, if any.
     pub fn pending_ask(&self) -> Option<AppKey> {
         self.asking
     }
 
-    /// Um evento do detector. Uma reunião só dispara uma vez: o detector não repete `Started`
-    /// antes do `Ended`, então parar à mão ou responder "Ignorar" vale até ela acabar.
+    /// A detector event. A meeting triggers only once: the detector never repeats `Started`
+    /// before `Ended`, so stopping manually or answering "Ignore" lasts until it ends.
     pub fn on_event(
         &mut self,
         event: &MeetingEvent,
@@ -142,7 +142,7 @@ impl AutoRecorder {
         }
     }
 
-    /// A resposta do usuário à pergunta pendente: `true` grava, `false` ignora esta reunião.
+    /// The user's answer to the pending question: `true` records, `false` ignores this meeting.
     pub fn answer(&mut self, record: bool, recording: Recording) -> Action {
         match self.asking.take() {
             Some(app) if record && recording == Recording::Idle => Action::Start(app),
@@ -151,7 +151,7 @@ impl AutoRecorder {
         }
     }
 
-    /// O usuário iniciou uma gravação à mão: a pergunta pendente perde o sentido.
+    /// The user started a recording manually: the pending question no longer applies.
     pub fn on_manual_start(&mut self) -> Action {
         if self.asking.take().is_some() {
             Action::Dismiss
@@ -160,8 +160,9 @@ impl AutoRecorder {
         }
     }
 
-    /// A config mudou: desligar a detecção, ou a política do app perguntado deixar de ser
-    /// `ask`, tira a pergunta pendente.
+    /// Config changed: disabling detection, or changing the policy of the app being asked about
+    /// from
+    /// `ask`, removes the pending question.
     pub fn on_config_change(&mut self, config: &DetectionConfig) -> Action {
         match self.asking {
             Some(app) if !config.enabled || config.policy(app) != Policy::Ask => {
@@ -189,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn politicas_padrao() {
+    fn default_policies() {
         let config = DetectionConfig::default();
         assert!(config.enabled);
         assert_eq!(config.policy(AppKey::Teams), Policy::Ask);
@@ -200,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn auto_grava_e_para_no_fim_da_reuniao() {
+    fn auto_records_and_stops_at_meeting_end() {
         let config = config(&[(AppKey::Zoom, Policy::Auto)]);
         let mut auto = AutoRecorder::default();
         assert_eq!(
@@ -216,7 +217,7 @@ mod tests {
     }
 
     #[test]
-    fn chamada_do_whatsapp_tem_politica_propria() {
+    fn whatsapp_call_has_its_own_policy() {
         let mut auto = AutoRecorder::default();
         assert_eq!(
             auto.on_event(
@@ -243,7 +244,7 @@ mod tests {
     }
 
     #[test]
-    fn gravacao_manual_nunca_e_parada_nem_substituida() {
+    fn manual_recording_is_never_stopped_or_replaced() {
         let config = config(&[(AppKey::Teams, Policy::Auto)]);
         let mut auto = AutoRecorder::default();
         assert_eq!(
@@ -257,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn perguntar_espera_a_resposta() {
+    fn asking_waits_for_answer() {
         let config = DetectionConfig::default();
         let mut auto = AutoRecorder::default();
         assert_eq!(
@@ -271,7 +272,7 @@ mod tests {
         );
         assert_eq!(auto.pending_ask(), None);
         assert_eq!(auto.answer(true, Recording::Idle), Action::None);
-        // Gravação aceita pela pergunta é automática: para no fim.
+        // A recording accepted through the question is automatic: stops at the end.
         assert_eq!(
             auto.on_event(&MeetingEvent::Ended, &config, Recording::Auto),
             Action::Stop
@@ -279,7 +280,7 @@ mod tests {
     }
 
     #[test]
-    fn ignorar_a_pergunta_vale_ate_o_fim_da_reuniao() {
+    fn ignoring_question_lasts_until_meeting_end() {
         let config = DetectionConfig::default();
         let mut auto = AutoRecorder::default();
         auto.on_event(&started("teams"), &config, Recording::Idle);
@@ -292,7 +293,7 @@ mod tests {
     }
 
     #[test]
-    fn pergunta_some_quando_a_reuniao_acaba_ou_o_usuario_grava_a_mao() {
+    fn question_disappears_when_meeting_ends_or_user_records_manually() {
         let config = DetectionConfig::default();
         let mut auto = AutoRecorder::default();
         auto.on_event(&started("zoom"), &config, Recording::Idle);
@@ -304,14 +305,14 @@ mod tests {
         auto.on_event(&started("zoom"), &config, Recording::Idle);
         assert_eq!(auto.on_manual_start(), Action::Dismiss);
         assert_eq!(auto.on_manual_start(), Action::None);
-        // Resposta atrasada com gravação já em curso não inicia outra.
+        // A late answer when recording is already in progress does not start another.
         auto.on_event(&MeetingEvent::Ended, &config, Recording::Manual);
         auto.on_event(&started("zoom"), &config, Recording::Idle);
         assert_eq!(auto.answer(true, Recording::Manual), Action::Dismiss);
     }
 
     #[test]
-    fn ignorar_e_deteccao_desligada_nao_fazem_nada() {
+    fn ignore_and_disabled_detection_do_nothing() {
         let mut auto = AutoRecorder::default();
         let ignore = config(&[(AppKey::Slack, Policy::Ignore)]);
         assert_eq!(
@@ -326,7 +327,7 @@ mod tests {
             auto.on_event(&started("teams"), &off, Recording::Idle),
             Action::None
         );
-        // App desconhecido cai em `outro`, ignorado por padrão.
+        // An unknown app falls back to `outro`, ignored by default.
         assert_eq!(
             auto.on_event(
                 &started("skype"),
@@ -338,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn mudar_a_config_tira_a_pergunta_pendente() {
+    fn config_change_removes_pending_question() {
         let mut auto = AutoRecorder::default();
         auto.on_event(
             &started("teams"),
@@ -355,7 +356,7 @@ mod tests {
     }
 
     #[test]
-    fn config_le_json_parcial_e_grava_chaves_legiveis() {
+    fn config_reads_partial_json_and_writes_readable_keys() {
         let config: DetectionConfig =
             serde_json::from_str(r#"{"policies": {"teams": "auto", "outro": "ask"}}"#).unwrap();
         assert!(config.enabled);

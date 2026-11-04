@@ -1,7 +1,7 @@
 // fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:crates/detect/src/list/linux.rs
-//! Quem usa o mic no Linux: os source-outputs do Pulse (ou do PipeWire pela camada Pulse) que
-//! estão ativos e não leem o monitor de uma saída — ler o monitor é captura do áudio do sistema,
-//! não uso do mic.
+//! Mic users on Linux: Pulse source-outputs (or PipeWire through the Pulse layer) that
+//! are active and do not read an output monitor — reading a monitor captures system audio,
+//! rather than using the mic.
 
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -18,7 +18,7 @@ use crate::classify::{AudioClient, Snapshot};
 const TIMEOUT: Duration = Duration::from_secs(2);
 const IDLE_WAIT: Duration = Duration::from_millis(10);
 
-/// Um source-output ativo e a fonte que ele lê.
+/// An active source-output and the source it reads.
 struct Output {
     client: AudioClient,
     source: u32,

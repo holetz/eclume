@@ -1,8 +1,8 @@
-//! Quem usa o mic no Windows: o `ConsentStore` do Capability Access Manager (o mesmo registro
-//! que acende o ícone de microfone na bandeja) marca `LastUsedTimeStop = 0` enquanto um app está
-//! com o mic aberto. Apps empacotados ficam em subchaves com o nome do pacote
-//! (`MSTeams_8wekyb3d8bbwe`); os demais, em `NonPackaged`, com o caminho do executável e `#` no
-//! lugar de `\`.
+//! Mic users on Windows: the Capability Access Manager's `ConsentStore` (the same registry
+//! that lights up the tray microphone icon) marks `LastUsedTimeStop = 0` while an app
+//! has the mic open. Packaged apps live in subkeys named after the package
+//! (`MSTeams_8wekyb3d8bbwe`); others in `NonPackaged`, with the executable path and `#`
+//! in place of `\`.
 
 use anyhow::{Context as _, Result};
 use windows_sys::core::BOOL;
@@ -49,14 +49,14 @@ pub(super) fn snapshot() -> Result<Snapshot> {
     })
 }
 
-/// Em uso: começou e ainda não parou.
+/// In use: started and not yet stopped.
 fn in_use(key: &RegKey) -> bool {
     let started = key.get_value::<u64, _>("LastUsedTimeStart").unwrap_or(0);
     let stopped = key.get_value::<u64, _>("LastUsedTimeStop").ok();
     started > 0 && stopped == Some(0)
 }
 
-/// `C:#Program Files#Zoom#bin#Zoom.exe` → id com o caminho, nome `Zoom`.
+/// `C:#Program Files#Zoom#bin#Zoom.exe` → id with the path, name `Zoom`.
 fn non_packaged(key_name: &str) -> AudioClient {
     let path = key_name.replace('#', "\\");
     let file = path.rsplit('\\').next().unwrap_or(&path);
@@ -70,8 +70,8 @@ fn non_packaged(key_name: &str) -> AudioClient {
 
 fn window_titles() -> Vec<String> {
     let mut titles: Vec<String> = Vec::new();
-    // SAFETY: o callback só roda durante o `EnumWindows`, enquanto `titles` está vivo, e é o
-    // único a acessá-lo pelo ponteiro.
+    // SAFETY: the callback only runs during `EnumWindows`, while `titles` is alive, and is the
+    // only code accessing it through the pointer.
     unsafe {
         EnumWindows(
             Some(collect_title),
@@ -82,9 +82,9 @@ fn window_titles() -> Vec<String> {
 }
 
 unsafe extern "system" fn collect_title(hwnd: HWND, lparam: LPARAM) -> BOOL {
-    // SAFETY: `lparam` é o `&mut Vec<String>` passado por `window_titles`.
+    // SAFETY: `lparam` is the `&mut Vec<String>` passed by `window_titles`.
     let titles = unsafe { &mut *(lparam as *mut Vec<String>) };
-    // SAFETY: `hwnd` vem do `EnumWindows` e o buffer tem o tamanho informado.
+    // SAFETY: `hwnd` comes from `EnumWindows` and the buffer has the specified size.
     unsafe {
         if IsWindowVisible(hwnd) != 0 {
             let mut buffer = [0_u16; 512];

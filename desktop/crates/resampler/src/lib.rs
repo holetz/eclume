@@ -1,6 +1,7 @@
-// Vendorizado de fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:crates/resampler/src/lib.rs,
-// sem a feature `async-source` (que depende de crates internos do workspace do Anarlog).
-// Licença MIT; ver LICENSE e VENDOR.md neste crate.
+// Vendored from fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:
+// crates/resampler/src/lib.rs,
+// without the `async-source` feature (which depends on internal Anarlog workspace crates).
+// MIT license; see LICENSE and VENDOR.md in this crate.
 
 mod driver;
 
@@ -22,9 +23,9 @@ pub enum Error {
 mod tests {
     use super::*;
 
-    // Teste do eclume (não vem do Anarlog): 48 kHz → 16 kHz preserva a duração.
+    // eclume test (not from Anarlog): 48 kHz → 16 kHz preserves duration.
     #[test]
-    fn reamostra_48k_para_16k_com_a_duracao_certa() {
+    fn resamples_48k_to_16k_with_correct_duration() {
         let block = 480;
         let resampler = Async::<f32>::new_poly(
             16_000.0 / 48_000.0,
@@ -48,8 +49,8 @@ mod tests {
 
         let out = driver.take_all_output().unwrap();
         let diff = (out.len() as i64 - 16_000).abs();
-        assert!(diff <= 480, "saída com {} amostras", out.len());
+        assert!(diff <= 480, "output with {} samples", out.len());
         let peak = out.iter().fold(0.0f32, |m, s| m.max(s.abs()));
-        assert!(peak > 0.4 && peak < 0.6, "pico {peak}");
+        assert!(peak > 0.4 && peak < 0.6, "peak {peak}");
     }
 }
