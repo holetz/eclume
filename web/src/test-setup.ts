@@ -4,6 +4,11 @@ import { afterEach, vi } from 'vitest'
 import { i18n } from './i18n'
 
 // Unit tests run in pt-BR so the existing pt-BR assertions hold; a test that needs en switches explicitly.
+// The browser language is pt-BR too, so `LocaleSync` keeps pt-BR for a session with no account locale.
+if (typeof navigator !== 'undefined') {
+  Object.defineProperty(navigator, 'languages', { configurable: true, get: () => ['pt-BR'] })
+  Object.defineProperty(navigator, 'language', { configurable: true, get: () => 'pt-BR' })
+}
 void i18n.changeLanguage('pt-BR')
 if (typeof document !== 'undefined') document.documentElement.lang = 'pt-BR'
 
