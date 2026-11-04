@@ -1,4 +1,5 @@
 import { Link, useSearchParams } from 'react-router'
+import { Trans, useTranslation } from 'react-i18next'
 import { usePageTitle } from '../../app/usePageTitle'
 import { AuthLayout } from '../auth/AuthLayout'
 import styles from './Connect.module.css'
@@ -14,21 +15,27 @@ function formatCode(code: string): string {
  * to do. Public and with no API call; the code is only valid inside the app.
  */
 export function PairPage() {
-  usePageTitle('Parear o celular')
+  const { t } = useTranslation('connect')
+  usePageTitle(t('pair.title'))
   const [params] = useSearchParams()
   const code = params.get('codigo')
 
   return (
     <AuthLayout>
       <div className={styles.pair}>
-        <h2>Parear o celular</h2>
-        <p>Este código é para o app eclume. Abra o app no celular e toque em Ler um código.</p>
+        <h2>{t('pair.title')}</h2>
+        <p>{t('pair.text')}</p>
         {code && (
           <p>
-            Código: <strong className="mono">{formatCode(code)}</strong>
+            <Trans
+              t={t}
+              i18nKey="pair.code"
+              values={{ code: formatCode(code) }}
+              components={{ code: <strong className="mono" /> }}
+            />
           </p>
         )}
-        <Link to="/entrar">Entrar no eclume</Link>
+        <Link to="/entrar">{t('pair.login')}</Link>
       </div>
     </AuthLayout>
   )
