@@ -42,7 +42,7 @@ def test_claude_cli_summarizes_the_fixture_transcript():
     model = os.environ.get("ECLUME_TEST_CLAUDE_MODEL", "sonnet")
     provider = ClaudeCliProvider(ProviderConfig(kind="claude-cli", model=model), claude_bin="claude")
     started = time.monotonic()
-    completion = asyncio.run(summarize(provider, transcript, ATA))
+    completion = asyncio.run(summarize(provider, transcript, ATA, locale="pt-BR"))
     elapsed = time.monotonic() - started
     print(f"\nmodel: {completion.model} · {elapsed:.1f} s\n\n{completion.text}\n")  # noqa: T201 — real test record
     assert completion.model.startswith("claude-")
@@ -85,7 +85,7 @@ def _chat(request: str) -> tuple[ChatResult, float]:
     model = os.environ.get("ECLUME_TEST_CLAUDE_MODEL", "sonnet")
     provider = ClaudeCliProvider(ProviderConfig(kind="claude-cli", model=model), claude_bin="claude")
     started = time.monotonic()
-    result = asyncio.run(run_chat(provider, ChatContext(header, SUMMARY, [], request), FixtureTools()))
+    result = asyncio.run(run_chat(provider, ChatContext(header, SUMMARY, [], request, locale="pt-BR"), FixtureTools()))
     elapsed = time.monotonic() - started
     print(f"\n{elapsed:.1f} s · reads: {result.reads}\n{result.message}\n\n{result.summary_md}\n")  # noqa: T201
     return result, elapsed

@@ -32,7 +32,12 @@ DETAIL_ARG = {
     "ApiProblemError": 2,
 }
 # Codes built at run time, with every value they can take.
-DYNAMIC = {"f\"action_{row['status']}\"": {"action_expired", "action_cancelled"}}
+# Keyed by `ast.unparse`, whose quoting differs across Python versions (3.12+ keeps inner quotes).
+_ACTION_STATUS = {"action_expired", "action_cancelled"}
+DYNAMIC = {
+    "f\"action_{row['status']}\"": _ACTION_STATUS,
+    "f'action_{row['status']}'": _ACTION_STATUS,
+}
 # Codes the exception handlers emit for errors raised by the framework.
 FRAMEWORK = {"not_found", "method_not_allowed", "error", "validation_failed", "internal_error", "conflict"}
 PORTUGUESE = re.compile(r"[ãâáàçéêíóôõú]", re.IGNORECASE)
