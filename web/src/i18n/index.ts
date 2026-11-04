@@ -4,6 +4,8 @@ import enAccount from './en/account'
 import enCommon from './en/common'
 import enAuth from './en/auth'
 import enConnect from './en/connect'
+import enDesktop from './en/desktop'
+import enEnvironment from './en/environment'
 import enErrors from './en/errors'
 import enShared from './en/shared'
 import enShell from './en/shell'
@@ -12,6 +14,8 @@ import ptAccount from './pt-BR/account'
 import ptCommon from './pt-BR/common'
 import ptAuth from './pt-BR/auth'
 import ptConnect from './pt-BR/connect'
+import ptDesktop from './pt-BR/desktop'
+import ptEnvironment from './pt-BR/environment'
 import ptErrors from './pt-BR/errors'
 import ptShared from './pt-BR/shared'
 import ptShell from './pt-BR/shell'
@@ -20,8 +24,8 @@ import { browserLocale, DEFAULT_LOCALE, LOCALES, normalize, type Locale } from '
 
 // Add later namespaces as one line each in both locale registries.
 export const resources = {
-  en: { common: enCommon, errors: enErrors, shell: enShell, shared: enShared, auth: enAuth, account: enAccount, connect: enConnect, tokens: enTokens },
-  'pt-BR': { common: ptCommon, errors: ptErrors, shell: ptShell, shared: ptShared, auth: ptAuth, account: ptAccount, connect: ptConnect, tokens: ptTokens },
+  en: { common: enCommon, errors: enErrors, shell: enShell, shared: enShared, auth: enAuth, account: enAccount, connect: enConnect, tokens: enTokens, environment: enEnvironment, desktop: enDesktop },
+  'pt-BR': { common: ptCommon, errors: ptErrors, shell: ptShell, shared: ptShared, auth: ptAuth, account: ptAccount, connect: ptConnect, tokens: ptTokens, environment: ptEnvironment, desktop: ptDesktop },
 } as const
 export const defaultNS = 'common'
 

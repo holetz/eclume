@@ -1,14 +1,16 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { setLocale } from '../../i18n'
 import { fixtures } from '../../test/fixtures'
 import { mockFetch } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
 
 beforeAll(() => preloadRoute('/config/ambiente'))
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals()
+  await setLocale('pt-BR')
   for (const name of ['data-theme', 'data-density', 'data-motion']) document.documentElement.removeAttribute(name)
 })
 
@@ -19,6 +21,18 @@ async function openEnvironment() {
 }
 
 describe('Ambiente screen', () => {
+  it('reads in English when the account chose English', async () => {
+    const me = fixtures.me()
+    mockFetch({ 'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }) })
+    renderApp('/config/ambiente')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Environment' })).toBeInTheDocument()
+    const theme = screen.getByRole('radiogroup', { name: 'Theme' })
+    expect(within(theme).getByRole('radio', { name: 'Dark' })).toBeInTheDocument()
+    expect(screen.getByText(/The default is 08:00 to 18:00\./)).toBeInTheDocument()
+    expect(screen.getByText('mouse wheel')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Restore the defaults' })).toBeInTheDocument()
+  })
+
   it('changes theme, density and motion, applies them at once and stores them in this browser', async () => {
     await openEnvironment()
     const user = userEvent.setup()
