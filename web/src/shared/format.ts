@@ -1,8 +1,10 @@
-// pt-BR labels and formats with no domain owner, used by more than one feature: recording state and
-// step, dates, times, durations, sizes and the audio clock. Unknown enum values (the contract only
-// grows) show up raw, without breaking the screen.
+// Labels and formats with no domain owner, used by more than one feature: recording state and step,
+// dates, times, durations, sizes and the audio clock, in the active locale (the `shared` catalog and
+// `Intl`). The tones still come from lib/vocabulario.js, whose pt-BR labels are the desktop's and the
+// phone's. Unknown enum values (the contract only grows) show up raw, without breaking the screen.
 import type { Schemas } from '../api/client'
-import { ESTADOS_APARELHO, ESTADOS_SERVIDOR, ETAPAS, type Tom } from '../lib/vocabulario.js'
+import { activeLocale, i18n } from '../i18n'
+import { ESTADOS_SERVIDOR, type Tom } from '../lib/vocabulario.js'
 
 type Recording = Schemas['Recording']
 type Job = Schemas['Job']
@@ -11,9 +13,14 @@ type Tone = Tom
 
 type Step = Schemas['PipelineStep']['step']
 
-const STEP_BUSY: Partial<Record<string, string>> = Object.fromEntries(
-  ETAPAS.map((item) => [item.etapa, item.andamento]),
-)
+const BUSY_STEPS = ['received', 'preprocessing', 'transcription', 'speakers', 'agenda_type', 'fields', 'summary'] as const
+
+/** The step in progress as a word ("Transcribing"), or the raw step for an unknown one. */
+function stepBusy(step: string): string {
+  return (BUSY_STEPS as readonly string[]).includes(step)
+    ? i18n.t(`shared:busy.${step as (typeof BUSY_STEPS)[number]}`)
+    : step
+}
 
 const AFTER_TRANSCRIPTION: readonly Step[] = ['fields', 'agenda_type', 'summary']
 
@@ -27,16 +34,16 @@ interface RecordingState {
 
 /**
  * The current step as a word, or `null` when nothing is moving: the active step, the upload or the
- * job, or the next pending step after transcription. "Na fila" is only the wait for transcription.
+ * job, or the next pending step after transcription. "Queued" is only the wait for transcription.
  */
 function busyLabel(status: Recording['status'], steps: Schemas['PipelineStep'][]): string | null {
   const active = steps.find((item) => item.state === 'active')
-  if (active) return STEP_BUSY[active.step] ?? active.step
-  if (status === 'uploading') return ESTADOS_APARELHO.uploading.rotulo
-  if (status === 'queued') return ESTADOS_SERVIDOR.na_fila.rotulo
-  if (status === 'processing') return STEP_BUSY.transcription ?? 'transcription'
+  if (active) return stepBusy(active.step)
+  if (status === 'uploading') return i18n.t('shared:state.uploading')
+  if (status === 'queued') return i18n.t('shared:state.queued')
+  if (status === 'processing') return stepBusy('transcription')
   const pending = steps.find((item) => item.state === 'pending' && AFTER_TRANSCRIPTION.includes(item.step))
-  return pending ? (STEP_BUSY[pending.step] ?? pending.step) : null
+  return pending ? stepBusy(pending.step) : null
 }
 
 /**
@@ -49,34 +56,25 @@ export function recordingState(recording: Pick<Recording, 'status' | 'pipeline'>
   const steps = recording.pipeline ?? []
   const failed = (step: Step) => steps.some((item) => item.step === step && item.state === 'failed')
   if (recording.status === 'failed' && steps.some((item) => item.reason === 'cancelled')) {
-    const { rotulo, tom } = ESTADOS_SERVIDOR.cancelada
-    return { state: 'failed', label: rotulo, tone: tom, noSummary: false }
+    return { state: 'failed', label: i18n.t('shared:state.cancelled'), tone: ESTADOS_SERVIDOR.cancelada.tom, noSummary: false }
   }
   if (recording.status === 'failed' || failed('transcription') || failed('preprocessing')) {
-    const { rotulo, tom } = ESTADOS_SERVIDOR.falhou
-    return { state: 'failed', label: rotulo, tone: tom, noSummary: false }
+    return { state: 'failed', label: i18n.t('shared:state.failed'), tone: ESTADOS_SERVIDOR.falhou.tom, noSummary: false }
   }
   if (steps.some((item) => item.step === 'speakers' && item.state === 'waiting')) {
-    const { rotulo, tom } = ESTADOS_SERVIDOR.aguardando_locutores
-    return { state: 'waiting', label: rotulo, tone: tom, noSummary: false }
+    const tone = ESTADOS_SERVIDOR.aguardando_locutores.tom
+    return { state: 'waiting', label: i18n.t('shared:state.awaitingSpeakers'), tone, noSummary: false }
   }
   const label = busyLabel(recording.status, steps)
   if (label) return { state: 'busy', label, tone: ESTADOS_SERVIDOR.em_andamento.tom, noSummary: false }
-  const { rotulo, tom } = ESTADOS_SERVIDOR.pronta
-  return { state: 'ready', label: rotulo, tone: tom, noSummary: failed('summary') }
+  return { state: 'ready', label: i18n.t('shared:state.ready'), tone: ESTADOS_SERVIDOR.pronta.tom, noSummary: failed('summary') }
 }
 
-const STAGES: Record<string, string> = {
-  asr: 'Reconhecendo a fala',
-  alignment: 'Alinhando palavras',
-  diarization: 'Separando locutores',
-  embeddings: 'Calculando impressões de voz',
-  finalizing: 'Finalizando',
-}
+const STAGES = ['asr', 'alignment', 'diarization', 'embeddings', 'finalizing'] as const
 
 export function stageLabel(stage: Job['stage'] | string): string | null {
   if (!stage) return null
-  return STAGES[stage] ?? stage
+  return (STAGES as readonly string[]).includes(stage) ? i18n.t(`shared:stage.${stage as (typeof STAGES)[number]}`) : stage
 }
 
 /** "45 s", "2 min 46 s", "1 h 05 min". */
@@ -91,15 +89,29 @@ export function formatDuration(ms: number | null | undefined): string {
   return `${seconds} s`
 }
 
-const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium', timeStyle: 'short' })
-const dateOnly = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' })
+const formats = new Map<string, Intl.DateTimeFormat | Intl.NumberFormat>()
+
+/** One `Intl` formatter per locale and options, so a locale switch formats with the new one. */
+function cached<T extends Intl.DateTimeFormat | Intl.NumberFormat>(kind: string, make: (locale: string) => T): T {
+  const locale = activeLocale()
+  const key = `${locale}|${kind}`
+  let format = formats.get(key)
+  if (!format) {
+    format = make(locale)
+    formats.set(key, format)
+  }
+  return format as T
+}
+
+const dateFormat = (kind: string, options: Intl.DateTimeFormatOptions) =>
+  cached(kind, (locale) => new Intl.DateTimeFormat(locale, options))
 
 export function formatDateTime(iso: string): string {
-  return dateTime.format(new Date(iso))
+  return dateFormat('dateTime', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso))
 }
 
 export function formatDate(iso: string): string {
-  return dateOnly.format(new Date(iso))
+  return dateFormat('date', { dateStyle: 'medium' }).format(new Date(iso))
 }
 
 /** "11,1 MB". */
@@ -112,7 +124,8 @@ export function formatBytes(bytes: number): string {
     value /= 1024
     unit++
   }
-  return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${units[unit]}`
+  const number = cached('bytes', (locale) => new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }))
+  return `${number.format(value)} ${units[unit]}`
 }
 
 /**
@@ -123,7 +136,7 @@ export function shortRef(id: string): string {
   return id.replace(/[^0-9a-zA-Z]/g, '').slice(0, 8)
 }
 
-const WEEKDAYS_SHORT = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
+/** The library's pt-BR month names, for its pt-BR period phrases (translated with the library, #250). */
 export const MONTHS = [
   'janeiro',
   'fevereiro',
@@ -144,13 +157,15 @@ export function weekdayIndex(day: Date): number {
   return (day.getDay() + 6) % 7
 }
 
+/** "sáb", "Sat": the short weekday in the active locale, without the abbreviation dot. */
 export function weekdayShort(day: Date): string {
-  return WEEKDAYS_SHORT[weekdayIndex(day)]
+  return dateFormat('weekday', { weekday: 'short' }).format(day).replace(/\.$/, '')
 }
 
-/** "sáb 26 set". */
+/** "sáb 26 set", "Sat 26 Sep". */
 export function shortDayLabel(day: Date): string {
-  return `${weekdayShort(day)} ${day.getDate()} ${MONTHS[day.getMonth()].slice(0, 3)}`
+  const month = dateFormat('month', { month: 'short' }).format(day).replace(/\.$/, '')
+  return `${weekdayShort(day)} ${day.getDate()} ${month}`
 }
 
 /** "09:05". */
@@ -159,7 +174,7 @@ export function timeLabel(date: Date): string {
 }
 
 export function markersLabel(count: number): string {
-  return count === 1 ? '1 marcador' : `${count} marcadores`
+  return i18n.t('shared:markers', { count })
 }
 
 /** "02:46" or, with `withHours`, "0:02:46". */

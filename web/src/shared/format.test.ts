@@ -1,7 +1,18 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { Schemas } from '../api/client'
 import { fixtures } from '../test/fixtures'
-import { formatBytes, formatDuration, recordingState, shortRef } from './format'
+import { setLocale } from '../i18n'
+import { languageLabel } from '../lib/languages'
+import {
+  formatBytes,
+  formatDate,
+  formatDuration,
+  markersLabel,
+  recordingState,
+  shortDayLabel,
+  shortRef,
+  weekdayShort,
+} from './format'
 
 type Step = Schemas['PipelineStep']
 
@@ -94,5 +105,26 @@ describe('shortRef', () => {
     expect(shortRef('01928f3a-1c00-7a00-8000-000000000101')).toBe('01928f3a')
     expect(shortRef('a-b-c')).toBe('abc')
     expect(shortRef('')).toBe('')
+  })
+})
+
+describe('in the active locale', () => {
+  afterEach(() => setLocale('pt-BR'))
+
+  it('formats labels, dates, sizes and language names in English after a switch', async () => {
+    const day = new Date(2026, 8, 26, 9, 5)
+    expect(weekdayShort(day)).toBe('sáb')
+    expect(markersLabel(2)).toBe('2 marcadores')
+    expect(languageLabel('auto')).toBe('Detectar automaticamente')
+    await setLocale('en')
+    expect(weekdayShort(day)).toBe('Sat')
+    expect(shortDayLabel(day)).toBe('Sat 26 Sep')
+    expect(markersLabel(1)).toBe('1 marker')
+    expect(markersLabel(2)).toBe('2 markers')
+    expect(formatBytes(11.1 * 1024 * 1024)).toBe('11.1 MB')
+    expect(formatDate(day.toISOString())).toBe('Sep 26, 2026')
+    expect(recordingState(fixtures.recordingTranscribed()).label).toBe('Ready')
+    expect(languageLabel('auto')).toBe('Detect automatically')
+    expect(languageLabel('pt-BR')).toBe('Portuguese')
   })
 })
