@@ -1,4 +1,4 @@
-"""Pagination cursors: anything malformed becomes 422 `cursor inválido`, never 500."""
+"""Pagination cursors: anything malformed becomes 422 `invalid cursor`, never 500."""
 
 from __future__ import annotations
 

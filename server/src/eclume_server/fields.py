@@ -29,6 +29,7 @@ from eclume_server.agents.extraction import (
 )
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx
+from eclume_server.locale import job_locale
 from eclume_server.pagination import iso
 from eclume_server.pipeline import GONE, STALE, current_revision, get_step, set_step
 from eclume_server.problems import invalid_field, not_found
@@ -125,9 +126,9 @@ def check_options(kind: str, options: list[str]) -> list[str]:
     """Options without repeats; choice requires at least one, and the other types have no options."""
     unique = list(dict.fromkeys(options))
     if kind == "choice" and not unique:
-        raise invalid_field("options", "um campo de escolha precisa de ao menos uma opção")
+        raise invalid_field("options", "a choice field needs at least one option")
     if kind != "choice" and unique:
-        raise invalid_field("options", "só campos de escolha têm opções")
+        raise invalid_field("options", "only choice fields have options")
     return unique
 
 
@@ -135,7 +136,7 @@ async def get_field(conn: AsyncConnection, field_id: UUID) -> Row:
     """The transaction user's field (RLS only shows theirs), or 404."""
     row = (await conn.execute(select(t.fields).where(t.fields.c.id == field_id))).mappings().first()
     if row is None:
-        raise not_found("Campo inexistente ou sem acesso.")
+        raise not_found("Field does not exist or is not accessible.")
     return row
 
 
@@ -147,23 +148,23 @@ def validate_value(field: Row, value: Any) -> Any:  # noqa: ANN401 — o formato
     kind = field["kind"]
     if value is None:
         if field["builtin"] == "title":
-            raise invalid_field("value", "o título não pode ficar vazio")
+            raise invalid_field("value", "the title cannot be empty")
         return [] if field["builtin"] == "tags" else None
     if kind == "list":
         if not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value):
-            raise invalid_field("value", "uma lista de textos não vazios")
+            raise invalid_field("value", "a list of non-empty texts")
         items = list(dict.fromkeys(item.strip() for item in value))
         limit = MAX_TAG if field["builtin"] == "tags" else MAX_TEXT
         if len(items) > MAX_VALUE_ITEMS or any(len(item) > limit for item in items):
-            raise invalid_field("value", f"até {MAX_VALUE_ITEMS} itens de até {limit} caracteres")
+            raise invalid_field("value", f"up to {MAX_VALUE_ITEMS} items of up to {limit} characters")
         return items
     if not isinstance(value, str) or not value.strip():
-        raise invalid_field("value", "um texto não vazio")
+        raise invalid_field("value", "a non-empty text")
     value = value.strip()
     if len(value) > MAX_TEXT:
-        raise invalid_field("value", f"até {MAX_TEXT} caracteres")
+        raise invalid_field("value", f"up to {MAX_TEXT} characters")
     if kind == "choice" and value not in field["options"]:
-        raise invalid_field("value", "precisa ser uma das opções do campo")
+        raise invalid_field("value", "must be one of the field's options")
     return value
 
 
@@ -428,6 +429,7 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
         transcript = await transcript_text(conn, transcript_id)
         tags, catalog_names = await tag_guide(conn, recording["owner_id"])
         rule = await title_rule(conn, recording)
+        locale = await job_locale(conn, recording["owner_id"])
         started = step["started_at"] if step is not None and step["started_at"] else None
         detail = dict(step["detail"]) if step is not None else {}
         await set_step(conn, recording, revision, "fields", "active", detail=detail, started_at=started)
@@ -435,7 +437,9 @@ async def run_fill_fields(ctx: dict[str, Any], recording_id: UUID, revision: int
         ctx,
         AgentStep(recording, revision, "fields", started, detail),
         (provider_row, platform_key),
-        lambda provider: extract(provider, [spec(row, rule) for row in fields], tags, transcript, context),
+        lambda provider: extract(
+            provider, [spec(row, rule) for row in fields], tags, transcript, context, locale=locale
+        ),
     )
     if isinstance(outcome, str):
         async with system_tx(engine) as conn:
@@ -495,11 +499,11 @@ async def field_filters(conn: AsyncConnection, raw: list[str]) -> list[ColumnEle
     for item in raw:
         match = re.fullmatch(FIELD_FILTER, item)
         if match is None:
-            raise invalid_field("field", "use <field_id>:<valor>")
+            raise invalid_field("field", "use <field_id>:<value>")
         try:
             field_id = UUID(match.group(1))
         except ValueError as exc:
-            raise invalid_field("field", "field_id inválido") from exc
+            raise invalid_field("field", "invalid field_id") from exc
         wanted.setdefault(field_id, []).append(match.group(2))
     builtins = dict(
         (await conn.execute(select(t.fields.c.id, t.fields.c.builtin).where(t.fields.c.id.in_(wanted)))).all()

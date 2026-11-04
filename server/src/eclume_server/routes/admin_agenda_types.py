@@ -31,8 +31,8 @@ from eclume_server.problems import conflict, invalid_field, not_found
 
 router = APIRouter(prefix="/admin")
 Ctx = Annotated[AppContext, Depends(get_ctx)]
-NAME_TAKEN = "Já existe um tipo de agenda padrão com esse nome."
-MISSING = "Tipo de agenda padrão inexistente."
+NAME_TAKEN = "A default agenda type with this name already exists."
+MISSING = "Default agenda type does not exist."
 
 
 @router.get("/default-agenda-types")

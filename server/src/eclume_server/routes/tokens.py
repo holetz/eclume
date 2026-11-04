@@ -80,11 +80,11 @@ async def list_tokens(
 async def create_token(body: TokenCreate, principal: SessionUser, ctx: Ctx) -> dict[str, Any]:
     """Create a PAT; the secret comes back only in this response."""
     if len(set(body.scopes)) != len(body.scopes):
-        raise invalid_field("scopes", "escopos repetidos")
+        raise invalid_field("scopes", "repeated scopes")
     if body.expires_at is not None and body.expires_at.tzinfo is None:
-        raise invalid_field("expires_at", "informe o fuso (RFC 3339)")
+        raise invalid_field("expires_at", "include the time zone (RFC 3339)")
     if body.expires_at is not None and body.expires_at <= datetime.now(UTC):
-        raise invalid_field("expires_at", "deve estar no futuro")
+        raise invalid_field("expires_at", "must be in the future")
     secret, prefix = new_pat()
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = (
@@ -114,7 +114,7 @@ async def revoke_token(token_id: UUID, principal: SessionUser, ctx: Ctx) -> Resp
     async with user_tx(ctx.engine, principal.user_id) as conn:
         found = (await conn.execute(select(t.api_tokens.c.id).where(t.api_tokens.c.id == token_id))).first()
         if found is None:
-            raise not_found("PAT inexistente ou sem acesso.")
+            raise not_found("PAT does not exist or is not accessible.")
         await conn.execute(
             update(t.api_tokens)
             .where(t.api_tokens.c.id == token_id, t.api_tokens.c.revoked_at.is_(None))

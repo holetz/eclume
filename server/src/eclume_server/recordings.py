@@ -154,7 +154,7 @@ async def get_visible(conn: AsyncConnection, recording_id: UUID) -> Any:  # noqa
     """The transaction user's recording (RLS only shows theirs), or 404."""
     row = (await conn.execute(recording_select().where(t.recordings.c.id == recording_id))).mappings().first()
     if row is None:
-        raise not_found("Gravação inexistente ou sem acesso.")
+        raise not_found("Recording does not exist or is not accessible.")
     return row
 
 
@@ -170,7 +170,7 @@ async def lock_recording(conn: AsyncConnection, recording_id: UUID) -> Any:  # n
         await conn.execute(select(t.recordings.c.id).where(t.recordings.c.id == recording_id).with_for_update())
     ).scalar()
     if locked is None:
-        raise not_found("Gravação inexistente ou sem acesso.")
+        raise not_found("Recording does not exist or is not accessible.")
     return await get_visible(conn, recording_id)
 
 
@@ -216,7 +216,7 @@ async def cancel_transcription(ctx: AppContext, user_id: UUID, recording_id: UUI
         row = await lock_recording(conn, recording_id)
         revision = await cancel_open_job(conn, row, progress)
         if revision is None:
-            raise conflict("Não há transcrição em andamento para cancelar.")
+            raise conflict("There is no transcription in progress to cancel.")
     await ctx.queue.request_cancel([(recording_id, revision)])
     async with user_tx(ctx.engine, user_id) as conn:
         return await get_visible(conn, recording_id)
@@ -311,7 +311,7 @@ async def start_next_revision(
     `recording` carries `id`, `owner_id`, `job_revision` and `audio_deleted_at` (the `recording_select` row).
     """
     if recording["audio_deleted_at"] is not None:
-        raise conflict("O áudio desta gravação foi apagado pela política de retenção.", "audio_deleted")
+        raise conflict("The audio of this recording was deleted by the retention policy.", "audio_deleted")
     transcript_revision = (
         await conn.execute(select(t.transcripts.c.revision).where(t.transcripts.c.recording_id == recording["id"]))
     ).scalar()

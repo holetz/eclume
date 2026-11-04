@@ -50,10 +50,10 @@ async def list_secrets(ctx: Ctx) -> dict[str, Any]:
 async def put_secret(secret_name: str, body: SecretPut, admin: Admin, ctx: Ctx) -> Response:
     """Save (or replace) the secret, encrypted."""
     if secret_name not in KNOWN_SECRETS:
-        raise invalid_field("secret_name", f"segredo desconhecido; use {', '.join(KNOWN_SECRETS)}")
+        raise invalid_field("secret_name", f"unknown secret; use {', '.join(KNOWN_SECRETS)}")
     value = body.value.strip()
     if not value:
-        raise invalid_field("value", "não pode ser vazio")
+        raise invalid_field("value", "cannot be empty")
     values = {
         "value_encrypted": encrypt(ctx.settings, value),
         "updated_at": func.now(),
@@ -74,5 +74,5 @@ async def delete_secret(secret_name: str, ctx: Ctx) -> Response:
     async with system_tx(ctx.engine) as conn:
         result = await conn.execute(delete(t.platform_secrets).where(t.platform_secrets.c.name == secret_name))
     if result.rowcount == 0:
-        raise not_found("Segredo não definido.")
+        raise not_found("Secret not set.")
     return Response(status_code=204)

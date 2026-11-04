@@ -51,7 +51,7 @@ def test_admin_create_creates_the_account_that_signs_in_to_the_panel(
 
     # A repeated e-mail and a short password exit with code 2.
     assert _run(monkeypatch, "uma-senha-bem-longa", "create", "--email", email.upper(), "--name", "X") == 2
-    assert "já cadastrado" in capsys.readouterr().err
+    assert "already registered" in capsys.readouterr().err
     other = f"admin-{secrets.token_hex(4)}@example.com"
     assert _run(monkeypatch, "curta", "create", "--email", other, "--name", "X") == 2
 
@@ -73,7 +73,7 @@ def test_admin_set_password_changes_the_password_and_ends_the_sessions(
     assert admin_login(client, email, "senha-nova-e-bem-longa").get("/api/v1/admin/me").status_code == 200
 
     assert _run(monkeypatch, "senha-nova-e-bem-longa", "set-password", "--email", "ninguem@exemplo.com.br") == 2
-    assert "inexistente" in capsys.readouterr().err
+    assert "does not exist" in capsys.readouterr().err
 
 
 def _as_owner(services: Services, statement: str, **params: object) -> None:

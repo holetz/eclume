@@ -24,6 +24,9 @@ v1) has its own line and each entry cites it.
 - Audio retention: each account can choose how many days the server keeps the audio of its
   recordings, the admin can set a ceiling, and a daily job deletes the audio past the window while
   the transcript, summary and chat stay (contract 2.29.0, #179).
+- Account locale: each account has a product locale (`en`, the default, or `pt-BR`), read and
+  changed at `/me/locale`; summaries, field values, the adjustment chat and the Agent answer in the
+  owner's locale (contract 2.30.0, #248).
 
 ### Fixed
 
@@ -33,6 +36,9 @@ v1) has its own line and each entry cites it.
 
 ### Changed
 
+- API errors are localized by their `code`: `title` and `detail` are now English, and the contract
+  lists every code in `ProblemCode`. The agent prompts are English, with the output language taken
+  from the account locale (contract 2.30.0, #248).
 - Hosting scripts, flags and pillars in English: `deploy/pillars.sh` (pillar `audit`),
   `restore-backup.sh`, `watchdog.sh`, `publish-desktop.sh`, `publish-mobile.sh`,
   `release-mobile.sh`, and flags such as `deploy.sh --rollback`/`--no-gpu`/`--generate-env` and
@@ -74,6 +80,8 @@ v1) has its own line and each entry cites it.
 - **Migrations**, none destructive: `030_marcacao_dos_locutores` (swaps the step `CHECK`s),
   `031_agente_conversas`, `032_agente_habilidades_e_acoes` and `034_audio_retention` (adds the
   account and platform retention settings and makes `recordings.audio_key` nullable).
+- **Migration** `035_account_locale`, not destructive: adds `users.locale` and sets every existing
+  account to `pt-BR`; accounts created afterwards take the browser's language (#248).
 
 ## [0.2.0] - 2026-10-03
 

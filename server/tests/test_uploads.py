@@ -337,7 +337,7 @@ def test_upload_scope_and_owner(as_user: Callable[[Account], Api], make_user: Ca
     assert denied.status_code == 403
     assert denied.json() | {"detail": None} == {
         "type": "https://eclume.dev/problems/insufficient-scope",
-        "title": "Escopo insuficiente",
+        "title": "Insufficient scope",
         "status": 403,
         "code": "insufficient_scope",
         "detail": None,

@@ -23,6 +23,7 @@ from eclume_server.routes import (
     devices,
     exports,
     fields,
+    locale,
     markers,
     people,
     previews,
@@ -82,6 +83,7 @@ def include_routes(app: FastAPI) -> None:
         search,
         voice,
         transcription,
+        locale,
         audio_retention,
         speaker_naming,
     ):

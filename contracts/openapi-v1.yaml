@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: eclume API
-  version: 2.29.1
+  version: 2.30.0
   summary: Contract v1 of the eclume API, the institutional transcription service.
   description: |
     Source of truth between the eclume server and its clients: the web frontend, the desktop
@@ -517,6 +517,77 @@ paths:
               examples:
                 conta:
                   $ref: "#/components/examples/TranscriptionPreference"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/me/locale:
+    get:
+      tags: [auth]
+      operationId: getAccountLocale
+      summary: Read the account's product locale
+      description: >-
+        Since 2.30.0. The account's product locale (`null` when it never chose one), the locale in
+        force for this request (`effective`: the account's, else the first supported
+        `Accept-Language`, else `default`), the default and the supported locales. Summaries and
+        agent answers are generated in the owner's locale (`en` when `null`). Separate from the
+        transcription language (`/me/transcription`). Any valid credential, with no scope.
+      security:
+        - sessionCookie: []
+        - pat: []
+      parameters:
+        - name: Accept-Language
+          in: header
+          required: false
+          description: The client's languages; used for `effective` when the account has no locale.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current locale.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountLocale"
+              examples:
+                conta:
+                  $ref: "#/components/examples/AccountLocale"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      tags: [auth]
+      operationId: updateAccountLocale
+      summary: Change the account's product locale
+      description: >-
+        Since 2.30.0. `locale` is `en`, `pt-BR` or `null` (drop the choice: requests fall back to
+        `Accept-Language`, jobs to `en`). It applies to what is generated from now on; summaries
+        already generated do not change. Session only.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountLocalePatch"
+            examples:
+              portugues:
+                $ref: "#/components/examples/AccountLocalePatchRequest"
+      responses:
+        "200":
+          description: Resulting locale.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountLocale"
+              examples:
+                conta:
+                  $ref: "#/components/examples/AccountLocale"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -5285,6 +5356,68 @@ components:
             $ref: "#/components/schemas/Problem"
 
   schemas:
+    ProblemCode:
+      description: |
+        Since 2.30.0. Every `code` an eclume server emits on a `Problem`, with the version it
+        appeared in. An open enum: new codes are added additively, and a client treats an unknown
+        code by its HTTP `status`. `title` and `detail` are English; clients localize by `code`.
+        - `unauthorized`, `insufficient_scope`, `forbidden`, `not_found`, `validation_failed`,
+          `conflict`, `hash_mismatch`, `upload_expired`, `rate_limited` (1.0.0)
+        - `session_required` (1.4.0): a PAT on a session-only operation
+        - `email_taken`, `signup_closed` (2.0.0)
+        - `summary_changed`, `summary_missing`, `transcript_missing`, `chat_busy` (2.2.0)
+        - `invalid_pairing_code`, `notice_required` (2.3.0)
+        - `payload_too_large`, `upload_completing`, `internal_error` (2.14.0)
+        - `quota_exceeded` (2.15.0)
+        - `invalid_reset_link` (2.18.0)
+        - `unsupported_media_type` (2.23.0)
+        - `audio_deleted` (2.29.0)
+        - catalogued in 2.30.0, already emitted before: `method_not_allowed` (an HTTP method the
+          route does not accept), `error` (any other HTTP error with no specific code),
+          `tag_exists`, `skill_exists`, `builtin_field` (title and tags cannot be deleted),
+          `fallback_agenda_type` (the fallback agenda type cannot be deleted), `not_auto` (the
+          field has no automatic value to accept), `too_many_files` (the Agent conversation's
+          attachment limit), `action_not_proposed`, `action_expired`, `action_cancelled` (an Agent
+          action that is no longer `proposed`)
+      type: string
+      enum:
+        - unauthorized
+        - insufficient_scope
+        - forbidden
+        - session_required
+        - notice_required
+        - not_found
+        - method_not_allowed
+        - validation_failed
+        - conflict
+        - hash_mismatch
+        - upload_expired
+        - upload_completing
+        - rate_limited
+        - email_taken
+        - signup_closed
+        - summary_changed
+        - summary_missing
+        - transcript_missing
+        - chat_busy
+        - invalid_pairing_code
+        - invalid_reset_link
+        - payload_too_large
+        - unsupported_media_type
+        - internal_error
+        - quota_exceeded
+        - audio_deleted
+        - tag_exists
+        - skill_exists
+        - builtin_field
+        - fallback_agenda_type
+        - not_auto
+        - too_many_files
+        - action_not_proposed
+        - action_expired
+        - action_cancelled
+        - error
+
     Problem:
       description: RFC 9457 error. The client decides by `code`, never by `title`.
       type: object
@@ -5303,18 +5436,10 @@ components:
           type: string
         code:
           description: |
-            Stable code. v1 values: `unauthorized`, `insufficient_scope`, `forbidden`,
-            `not_found`, `validation_failed`, `conflict`, `hash_mismatch`, `upload_expired`,
-            `rate_limited`; since 1.4.0, `session_required` (a PAT on a session-only operation);
-            since 2.0.0, `email_taken` (signup with an existing e-mail) and `signup_closed`;
-            since 2.2.0, `summary_changed` (the summary changed since the opened version),
-            `summary_missing`, `transcript_missing` and `chat_busy` (an adjustment request is already
-            open); since 2.3.0, `invalid_pairing_code` (pairing code nonexistent,
-            expired or used) and `notice_required` (session of an account that has not yet accepted the notice in
-            force); since 2.14.0, `payload_too_large`, `upload_completing` and `internal_error`;
-            since 2.15.0, `quota_exceeded` (the account's quota exceeded); since 2.18.0,
-            `invalid_reset_link` (password reset link nonexistent, expired or used).
-            New codes are added additively.
+            Stable machine code, the key clients localize the error by: `title` and `detail` are
+            English and informative only. Since 2.30.0, the full catalog of values is the
+            `ProblemCode` schema; new codes are added additively, and clients tolerate an unknown
+            one (fall back to `status`).
           type: string
         limit:
           description: >-
@@ -5550,6 +5675,13 @@ components:
         notice_accepted_at:
           type: [string, "null"]
           format: date-time
+        locale:
+          description: >-
+            Since 2.30.0. The account's product locale (`GET`/`PATCH /api/v1/me/locale`), or `null`
+            when it never chose one.
+          oneOf:
+            - $ref: "#/components/schemas/Locale"
+            - type: "null"
 
     AdminUser:
       description: >-
@@ -5590,6 +5722,11 @@ components:
         notice_accepted_at:
           type: [string, "null"]
           format: date-time
+        locale:
+          description: Since 2.30.0. The account's product locale, or `null` when it never chose one.
+          oneOf:
+            - $ref: "#/components/schemas/Locale"
+            - type: "null"
         recording_count:
           type: integer
           minimum: 0
@@ -5847,6 +5984,43 @@ components:
           description: Language (BCP 47), `auto` or `null` to return to the server default.
           type: [string, "null"]
           pattern: "^(auto|[a-z]{2,3}(-[A-Z]{2})?)$"
+
+    AccountLocale:
+      description: >-
+        Since 2.30.0. The account's product locale, the one in force for the request, the default
+        and the supported locales.
+      type: object
+      required: [locale, effective, default, supported]
+      properties:
+        locale:
+          description: The account's choice, or `null` when it never chose one.
+          oneOf:
+            - $ref: "#/components/schemas/Locale"
+            - type: "null"
+        effective:
+          $ref: "#/components/schemas/Locale"
+        default:
+          $ref: "#/components/schemas/Locale"
+        supported:
+          type: array
+          items:
+            $ref: "#/components/schemas/Locale"
+
+    AccountLocalePatch:
+      type: object
+      additionalProperties: false
+      required: [locale]
+      properties:
+        locale:
+          description: The new locale, or `null` to drop the choice.
+          oneOf:
+            - $ref: "#/components/schemas/Locale"
+            - type: "null"
+
+    Locale:
+      description: Since 2.30.0. A product locale (`en` is the default). New locales are added additively.
+      type: string
+      enum: [en, pt-BR]
 
     AudioRetention:
       description: >-
@@ -9576,6 +9750,12 @@ components:
     TranscriptionPreferencePatchRequest:
       summary: Transcribe in English by default
       externalValue: ./fixtures/transcription-preference-patch-request.json
+    AccountLocale:
+      summary: Account in Brazilian Portuguese
+      externalValue: ./fixtures/account-locale.json
+    AccountLocalePatchRequest:
+      summary: Switch the account to Brazilian Portuguese
+      externalValue: ./fixtures/account-locale-patch-request.json
     AudioRetention:
       summary: Thirty days chosen, ceiling of ninety
       externalValue: ./fixtures/audio-retention.json

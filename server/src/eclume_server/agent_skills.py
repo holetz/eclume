@@ -31,7 +31,7 @@ MAX_NAME = 40
 MAX_DESCRIPTION = 300
 MAX_INSTRUCTIONS = 8000
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{1,39}$")
-SKILL_TAKEN = "Já existe uma habilidade com esse nome."
+SKILL_TAKEN = "A skill with this name already exists."
 # `/name` at the start of the message picks the skill; the rest is the question.
 _PREFIX = re.compile(r"^/([a-z0-9][a-z0-9-]{1,39})(?:\s+|$)", re.IGNORECASE)
 
@@ -56,7 +56,7 @@ def check_name(value: str) -> str:
     """The normalized name (no slash, lowercase) or 422."""
     name = skill_name(value) or ""
     if not NAME.match(name):
-        raise invalid_field("name", "de 2 a 40 letras minúsculas, números e hífens, começando por letra ou número")
+        raise invalid_field("name", "2 to 40 lowercase letters, digits and hyphens, starting with a letter or digit")
     return name
 
 
@@ -68,23 +68,23 @@ def check_tools(value: list[str] | None) -> list[str] | None:
     wanted = list(dict.fromkeys(item.strip() for item in value))
     unknown = [item for item in wanted if item not in known]
     if unknown:
-        raise invalid_field("allowed_tools", f"ferramenta desconhecida: {', '.join(unknown)}")
+        raise invalid_field("allowed_tools", f"unknown tool: {', '.join(unknown)}")
     return wanted
 
 
 def _text(field: str, value: str, limit: int) -> str:
     text = value.strip()
     if not text:
-        raise invalid_field(field, "não pode ser vazio")
+        raise invalid_field(field, "cannot be empty")
     if len(text) > limit:
-        raise invalid_field(field, f"até {limit} caracteres")
+        raise invalid_field(field, f"up to {limit} characters")
     return text
 
 
 async def _get(conn: AsyncConnection, skill_id: UUID) -> Row:
     row = (await conn.execute(select(t.agent_skills).where(K.id == skill_id))).mappings().first()
     if row is None:
-        raise not_found("Habilidade inexistente ou sem acesso.")
+        raise not_found("Skill does not exist or is not accessible.")
     return row
 
 
@@ -103,7 +103,7 @@ async def create_skill(conn: AsyncConnection, owner_id: UUID, values: dict[str, 
     """Registers the skill; a repeated name 409, above `MAX_SKILLS` 422."""
     count = (await conn.execute(select(func.count()).select_from(t.agent_skills))).scalar_one()
     if count >= MAX_SKILLS:
-        raise invalid_field("name", f"até {MAX_SKILLS} habilidades por conta")
+        raise invalid_field("name", f"up to {MAX_SKILLS} skills per account")
     row = {
         "owner_id": owner_id,
         "name": check_name(values["name"]),
@@ -136,7 +136,7 @@ async def update_skill(conn: AsyncConnection, skill_id: UUID, values: dict[str, 
     if "enabled" in values:
         changes["enabled"] = bool(values["enabled"])
     if not changes:
-        raise invalid_field("body", "informe ao menos um campo")
+        raise invalid_field("body", "send at least one field")
     try:
         async with conn.begin_nested():
             row = (

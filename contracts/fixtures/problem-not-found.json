@@ -1,7 +1,7 @@
 {
   "type": "https://eclume.dev/problems/not-found",
-  "title": "Não encontrado",
+  "title": "Not found",
   "status": 404,
   "code": "not_found",
-  "detail": "Transcrição inexistente ou sem acesso."
+  "detail": "Transcript does not exist or is not accessible."
 }

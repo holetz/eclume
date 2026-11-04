@@ -31,7 +31,7 @@ async def check_transcribed(conn: AsyncConnection, recording_ids: list[UUID], fi
     wanted = set(recording_ids)
     query = select(t.transcripts.c.recording_id).where(t.transcripts.c.recording_id.in_(wanted))
     if wanted - set((await conn.execute(query)).scalars()):
-        raise invalid_field(field, "gravação inexistente ou ainda sem transcrição")
+        raise invalid_field(field, "recording does not exist or has no transcript yet")
 
 
 @router.get("/previews/{preview_id}")
@@ -39,5 +39,5 @@ async def read_preview(preview_id: UUID, principal: Reader, ctx: Ctx) -> dict[st
     """The preview's state; the client polls until `done` or `failed`."""
     preview = await get_preview(ctx.queue.pool, preview_id, principal.user_id)
     if preview is None:
-        raise not_found("Pré-visualização inexistente, expirada ou de outra conta.")
+        raise not_found("Preview does not exist, expired or belongs to another account.")
     return preview

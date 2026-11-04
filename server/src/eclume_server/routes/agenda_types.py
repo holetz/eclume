@@ -45,7 +45,7 @@ Reader = Annotated[Principal, Depends(requires("summaries:read"))]
 # The list also serves the device credential (only `recordings:*`), which picks the type when stopping.
 ListReader = Annotated[Principal, Depends(requires_any("summaries:read", "recordings:read"))]
 Writer = Annotated[Principal, Depends(requires("summaries:write"))]
-NAME_TAKEN = "Já existe um tipo de agenda com esse nome."
+NAME_TAKEN = "An agenda type with this name already exists."
 
 
 @router.get("/agenda-types")
@@ -156,7 +156,7 @@ async def delete_agenda_type(agenda_type_id: UUID, principal: Writer, ctx: Ctx) 
         agenda_type = await get_agenda_type(conn, agenda_type_id)
         if agenda_type["is_fallback"]:
             raise conflict(
-                "O tipo padrão é usado quando nenhum outro se encaixa e não pode ser excluído.", "fallback_agenda_type"
+                "The fallback type is used when no other fits and cannot be deleted.", "fallback_agenda_type"
             )
         reserve = await fallback_type(conn, principal.user_id)
         if reserve is not None:

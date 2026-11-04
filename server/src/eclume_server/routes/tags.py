@@ -36,7 +36,7 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 Reader = Annotated[Principal, Depends(requires("recordings:read"))]
 Writer = Annotated[Principal, Depends(requires("recordings:write"))]
 Member = Annotated[Principal, Depends(requires(session_only=True))]
-TAG_TAKEN = "Já existe uma tag com esse nome. Para juntar as duas, use Mesclar."
+TAG_TAKEN = "A tag with this name already exists. To join the two, use Merge."
 
 _count = (
     select(func.count())
@@ -99,7 +99,7 @@ def tag_json(row: Row) -> dict[str, Any]:
 async def _get(conn: AsyncConnection, tag_id: UUID) -> Row:
     row = (await conn.execute(select(t.tags, _count).where(t.tags.c.id == tag_id))).mappings().first()
     if row is None:
-        raise not_found("Tag inexistente ou sem acesso.")
+        raise not_found("Tag does not exist or is not accessible.")
     return row
 
 
@@ -120,7 +120,7 @@ async def create_tag(body: TagCreate, principal: Writer, ctx: Ctx) -> dict[str, 
     """Registers a tag; the same name (ignoring accents and case) is 409."""
     name = body.name.strip()
     if not name:
-        raise invalid_field("name", "não pode ser vazio")
+        raise invalid_field("name", "cannot be empty")
     try:
         async with user_tx(ctx.engine, principal.user_id) as conn:
             tag_id = (
@@ -140,12 +140,12 @@ async def update_tag(tag_id: UUID, body: TagPatch, principal: Writer, ctx: Ctx) 
     """Renames (in recordings and types too) or describes the tag; a name already in use is 409."""
     values = body.model_dump(exclude_unset=True)
     if not values:
-        raise invalid_field("body", "informe ao menos um campo")
+        raise invalid_field("body", "send at least one field")
     if any(value is None for value in values.values()):
-        raise invalid_field("body", "os campos não aceitam null")
+        raise invalid_field("body", "the fields do not accept null")
     values = {key: value.strip() for key, value in values.items()}
     if values.get("name") == "":
-        raise invalid_field("name", "não pode ser vazio")
+        raise invalid_field("name", "cannot be empty")
     try:
         async with user_tx(ctx.engine, principal.user_id) as conn:
             current = await _get(conn, tag_id)
@@ -163,12 +163,12 @@ async def update_tag(tag_id: UUID, body: TagPatch, principal: Writer, ctx: Ctx) 
 async def merge_tag(tag_id: UUID, body: TagMerge, principal: Writer, ctx: Ctx) -> dict[str, Any]:
     """Merges the tag into another: wherever it was, `into` stays (without repeating), and it leaves the registry."""
     if body.into == tag_id:
-        raise invalid_field("into", "escolha outra tag")
+        raise invalid_field("into", "choose another tag")
     async with user_tx(ctx.engine, principal.user_id) as conn:
         source = await _get(conn, tag_id)
         target = (await conn.execute(select(t.tags).where(t.tags.c.id == body.into))).mappings().first()
         if target is None:
-            raise invalid_field("into", "tag inexistente")
+            raise invalid_field("into", "tag does not exist")
         await replace_everywhere(conn, source["name"], target["name"])
         await conn.execute(delete(t.tags).where(t.tags.c.id == tag_id))
         return tag_json(await _get(conn, body.into))
@@ -217,9 +217,9 @@ async def patch_tag_assignment(body: TagAssignmentPatch, principal: Member, ctx:
     """Changes the configuration; it applies to the next transcriptions."""
     values = body.model_dump(exclude_unset=True)
     if not values:
-        raise invalid_field("body", "informe ao menos um campo")
+        raise invalid_field("body", "send at least one field")
     if any(value is None for value in values.values()):
-        raise invalid_field("body", "os campos não aceitam null")
+        raise invalid_field("body", "the fields do not accept null")
     async with user_tx(ctx.engine, principal.user_id) as conn:
         field = (await builtin_fields(conn, principal.user_id))["tags"]
         own = {key: values[key] for key in ("auto_fill", "instructions") if key in values}

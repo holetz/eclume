@@ -41,6 +41,7 @@ from eclume_server.agents.agent_tools import InputFile, ProposedAction, Skill, s
 from eclume_server.base_chat import BaseTools, ChatError, chat_provider
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
+from eclume_server.locale import job_locale
 from eclume_server.pagination import decode_cursor, encode_cursor, iso
 from eclume_server.problems import (
     conflict,
@@ -144,7 +145,7 @@ async def _session(conn: AsyncConnection, session_id: UUID, *, lock: bool = Fals
         stmt = stmt.with_for_update()
     row = (await conn.execute(stmt)).mappings().first()
     if row is None:
-        raise not_found("Conversa inexistente ou de outra conta.")
+        raise not_found("Conversation does not exist or belongs to another account.")
     return row
 
 
@@ -236,7 +237,7 @@ async def read_message(conn: AsyncConnection, session_id: UUID, message_id: UUID
         .first()
     )
     if row is None:
-        raise not_found("Mensagem inexistente ou de outra conta.")
+        raise not_found("Message does not exist or belongs to another account.")
     files = (
         (await conn.execute(select(*_FILE_COLUMNS).where(F.message_id == message_id).order_by(F.created_at, F.id)))
         .mappings()
@@ -291,7 +292,9 @@ async def add_input_file(
         )
     ).scalar_one()
     if count >= MAX_INPUTS_PER_SESSION:
-        raise conflict(f"A conversa já tem {MAX_INPUTS_PER_SESSION} anexos; comece uma nova.", "too_many_files")
+        raise conflict(
+            f"The conversation already has {MAX_INPUTS_PER_SESSION} attachments; start a new one.", "too_many_files"
+        )
     filename = prepared.name
     if prepared.rejection is not None:
         raise unsupported_media_type(str(prepared.rejection)) from prepared.rejection
@@ -330,9 +333,9 @@ async def delete_input_file(conn: AsyncConnection, session_id: UUID, file_id: UU
     stmt = select(F.message_id, F.direction).where(and_(F.id == file_id, F.session_id == session_id))
     row = (await conn.execute(stmt)).mappings().first()
     if row is None or row["direction"] != "input":
-        raise not_found("Anexo inexistente ou de outra conta.")
+        raise not_found("Attachment does not exist or belongs to another account.")
     if row["message_id"] is not None:
-        raise conflict("O anexo já foi enviado com uma pergunta e fica no histórico.")
+        raise conflict("The attachment was already sent with a question and stays in the history.")
     await conn.execute(delete(t.agent_files).where(F.id == file_id))
 
 
@@ -344,7 +347,7 @@ async def file_for_download(conn: AsyncConnection, file_id: UUID) -> Row:
         .first()
     )
     if row is None:
-        raise not_found("Arquivo inexistente ou de outra conta.")
+        raise not_found("File does not exist or belongs to another account.")
     return row
 
 
@@ -368,11 +371,11 @@ async def _chosen_skill(conn: AsyncConnection, message: str, skill: str | None) 
         return None, message
     skill_row = await enabled_skill(conn, chosen)
     if skill_row is None:
-        raise invalid_field("skill", f"habilidade /{chosen} inexistente ou desligada")
+        raise invalid_field("skill", f"skill /{chosen} does not exist or is turned off")
     if prefixed is not None:
         message = rest
     if not message.strip():
-        raise invalid_field("message", "escreva o pedido depois do nome da habilidade")
+        raise invalid_field("message", "write the request after the skill name")
     return skill_row, message
 
 
@@ -380,7 +383,7 @@ async def _pending_attachments(conn: AsyncConnection, session_id: UUID, attachme
     """The requested attachments, deduplicated; 422 above the ceiling or on an attachment not pending in this conversation."""
     wanted = list(dict.fromkeys(attachments))
     if len(wanted) > MAX_INPUTS_PER_MESSAGE:
-        raise invalid_field("attachments", f"até {MAX_INPUTS_PER_MESSAGE} anexos por pergunta")
+        raise invalid_field("attachments", f"up to {MAX_INPUTS_PER_MESSAGE} attachments per question")
     if not wanted:
         return wanted
     found = (
@@ -400,7 +403,9 @@ async def _pending_attachments(conn: AsyncConnection, session_id: UUID, attachme
         .all()
     )
     if len(found) != len(wanted):
-        raise invalid_field("attachments", "anexo inexistente, de outra conversa ou já enviado")
+        raise invalid_field(
+            "attachments", "attachment does not exist, belongs to another conversation or was already sent"
+        )
     return wanted
 
 
@@ -424,9 +429,9 @@ async def send_message(  # noqa: PLR0913 — the conversation, the owner, the qu
     await expire_stale(conn)
     open_rows = (await conn.execute(select(M.session_id).where(and_(M.role == "assistant", M.status.in_(OPEN))))).all()
     if any(row.session_id == session_id for row in open_rows):
-        raise conflict("Esta conversa já tem uma resposta em andamento; espere ela terminar.")
+        raise conflict("This conversation already has an answer in progress; wait for it to finish.")
     if len(open_rows) >= MAX_OPEN:
-        raise rate_limited(f"Já há {MAX_OPEN} perguntas em andamento; espere uma terminar.")
+        raise rate_limited(f"There are already {MAX_OPEN} questions in progress; wait for one to finish.")
     wanted = await _pending_attachments(conn, session_id, attachments)
     text = message.strip()
     question = (
@@ -535,8 +540,14 @@ class SessionEnv:
         return await Planner(self.engine, self.owner_id).plan(tool, params, limit)
 
 
-async def _context(
-    conn: AsyncConnection, session_id: UUID, answer: Row, *, transcripts: bool, scopes: frozenset[str]
+async def _context(  # noqa: PLR0913 — the session, the answer, the credential and the locale
+    conn: AsyncConnection,
+    session_id: UUID,
+    answer: Row,
+    *,
+    transcripts: bool,
+    scopes: frozenset[str],
+    locale: str,
 ) -> AgentContext:
     rows = (
         await conn.execute(
@@ -571,6 +582,7 @@ async def _context(
         scopes=scopes,
         skill=skill,
         skills=await skill_briefs(conn),
+        locale=locale,
     )
 
 
@@ -580,8 +592,10 @@ async def _answer(
     engine: AsyncEngine = ctx["engine"]
     storage: Storage = ctx["storage"]
     session_id = answer["session_id"]
+    async with system_tx(engine) as conn:
+        locale = await job_locale(conn, owner_id)
     async with user_tx(engine, owner_id) as conn:
-        context = await _context(conn, session_id, answer, transcripts=transcripts, scopes=scopes)
+        context = await _context(conn, session_id, answer, transcripts=transcripts, scopes=scopes, locale=locale)
     provider = await chat_provider(ctx)
     result = await run_agent(provider, context, SessionEnv(engine, owner_id, session_id))
     rendered = [await asyncio.to_thread(render_output, item.name, item.format, item.content) for item in result.files]

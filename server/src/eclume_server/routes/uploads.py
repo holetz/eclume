@@ -186,12 +186,12 @@ async def _get_upload(conn: AsyncConnection, upload_id: UUID, *, lock: bool = Fa
         query = query.with_for_update()
     row = (await conn.execute(query)).mappings().first()
     if row is None:
-        raise not_found("Upload inexistente ou sem acesso.")
+        raise not_found("Upload does not exist or is not accessible.")
     return row
 
 
 def _expired() -> Exception:
-    return conflict("O upload expirou; comece outro.", code="upload_expired")
+    return conflict("The upload expired; start another one.", code="upload_expired")
 
 
 async def _expire(ctx: AppContext, upload_id: UUID) -> None:
@@ -209,7 +209,7 @@ def _require_open(row: Row) -> None:
     if status == "expired":
         raise _expired()
     if status != "in_progress":
-        raise conflict(f"O upload está {status}.")
+        raise conflict(f"The upload is {status}.")
 
 
 @router.post("/uploads", status_code=201)
@@ -220,9 +220,9 @@ async def create_upload(
     part_size = ctx.settings.upload_part_size
     part_count = math.ceil(body.size_bytes / part_size)
     if part_count > MAX_PARTS:
-        raise invalid_field("size_bytes", f"arquivo maior que {MAX_PARTS} partes de {part_size} bytes")
+        raise invalid_field("size_bytes", f"file larger than {MAX_PARTS} parts of {part_size} bytes")
     if body.recorded_at is None and body.recorded_at_source not in {None, "upload"}:
-        raise invalid_field("recorded_at_source", "sem recorded_at, a data é a do envio (upload)")
+        raise invalid_field("recorded_at_source", "without recorded_at, the date is the upload's")
     now = _now()
     expires_at = now + timedelta(days=ctx.settings.upload_ttl_days)
     request_fields = body.model_dump(mode="json", exclude={"filename", "content_type", "size_bytes", "sha256"})
@@ -240,7 +240,7 @@ async def create_upload(
         async with user_tx(ctx.engine, principal.user_id) as conn:
             await check_collections(conn, body.collection_ids)
             if body.agenda_type_id is not None and await _agenda_type(conn, body.agenda_type_id) is None:
-                raise invalid_field("agenda_type_id", "tipo de agenda inexistente ou sem acesso")
+                raise invalid_field("agenda_type_id", "agenda type does not exist or is not accessible")
             duplicate = (
                 await conn.execute(
                     select(t.recordings.c.id).where(
@@ -323,7 +323,7 @@ async def create_upload(
                 .one()
             )
     except IntegrityError as exc:
-        raise conflict("Outro upload deste arquivo começou ao mesmo tempo; tente de novo.") from exc
+        raise conflict("Another upload of this file started at the same time; try again.") from exc
     pending = range(1, min(part_count, FIRST_PART_URLS) + 1)
     return upload_json(row, [], [_part_url(ctx, request, row, n) for n in pending])
 
@@ -358,13 +358,13 @@ async def create_part_urls(
 ) -> dict[str, Any]:
     """Fresh URLs for the requested parts (including to replace expired URLs)."""
     if len(set(body.part_numbers)) != len(body.part_numbers):
-        raise invalid_field("part_numbers", "números repetidos")
+        raise invalid_field("part_numbers", "repeated numbers")
     async with user_tx(ctx.engine, principal.user_id) as conn:
         row = await _get_upload(conn, upload_id)
     _require_open(row)
     beyond = [n for n in body.part_numbers if n > row["part_count"]]
     if beyond:
-        raise invalid_field("part_numbers", f"o upload tem {row['part_count']} partes")
+        raise invalid_field("part_numbers", f"the upload has {row['part_count']} parts")
     return {"parts": [_part_url(ctx, request, row, n) for n in body.part_numbers]}
 
 
@@ -383,21 +383,21 @@ async def put_part(
         or not sig
         or not signature_matches(ctx.settings.secret_key, sig, "part", upload_id, part_number, expires)
     ):
-        raise unauthorized("URL de parte inválida: use a `url` recebida do upload.")
+        raise unauthorized("Invalid part URL: use the `url` received from the upload.")
     if expires < time.time():
-        raise forbidden("URL de parte expirada: peça outra em part-urls.")
+        raise forbidden("Expired part URL: ask for another one at part-urls.")
     async with system_tx(ctx.engine) as conn:
         row = await _get_upload(conn, upload_id)
     _require_open(row)
     if part_number > row["part_count"]:
-        raise conflict(f"O upload tem {row['part_count']} partes.")
+        raise conflict(f"The upload has {row['part_count']} parts.")
     expected = _part_size(row, part_number)
     declared = request.headers.get("content-length")
     if declared is not None and declared.isdigit() and int(declared) != expected:
-        raise conflict(f"A parte {part_number} deve ter {expected} bytes.")
+        raise conflict(f"Part {part_number} must have {expected} bytes.")
     data = await _read_part(request, expected)
     if len(data) != expected:
-        raise conflict(f"A parte {part_number} deve ter {expected} bytes.")
+        raise conflict(f"Part {part_number} must have {expected} bytes.")
     try:
         etag = await ctx.storage.upload_part(row["audio_key"], row["s3_upload_id"], part_number, data)
     except MultipartGoneError:
@@ -430,7 +430,7 @@ async def _completing(ctx: AppContext, upload_id: UUID) -> AsyncIterator[None]:
         raise ApiProblemError(
             409,
             "upload_completing",
-            "Outro pedido está concluindo este upload; tente de novo em instantes.",
+            "Another request is completing this upload; try again in a moment.",
             headers={"Retry-After": str(COMPLETING_RETRY_S)},
         )
 
@@ -512,7 +512,7 @@ async def _parts_or_assembled(ctx: AppContext, row: Row, body: UploadComplete) -
 async def _check_parts(ctx: AppContext, row: Row, body: UploadComplete) -> None:
     numbers = [part.part_number for part in body.parts]
     if sorted(numbers) != list(range(1, row["part_count"] + 1)):
-        raise invalid_field("parts", f"informe cada uma das {row['part_count']} partes uma vez")
+        raise invalid_field("parts", f"send each of the {row['part_count']} parts once")
     stored = {
         part.part_number: part.etag for part in await ctx.storage.list_parts(row["audio_key"], row["s3_upload_id"])
     }

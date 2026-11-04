@@ -26,6 +26,7 @@ from eclume_server.agents.prompting import hms
 from eclume_server.crypto import SecretDecryptError
 from eclume_server.db import tables as t
 from eclume_server.db.session import system_tx, user_tx
+from eclume_server.locale import job_locale
 from eclume_server.problems import rate_limited
 from eclume_server.queue import AGENT_QUEUE
 from eclume_server.quotas import refunding, take_agent_request
@@ -112,7 +113,7 @@ async def create_chat(  # noqa: PLR0913 — the request, the credential and the 
     `agent_quota` (403 `quota_exceeded`).
     """
     if await _open_count(redis, owner_id) >= MAX_OPEN:
-        raise rate_limited(f"Já há {MAX_OPEN} perguntas em andamento; espere uma terminar.")
+        raise rate_limited(f"There are already {MAX_OPEN} questions in progress; wait for one to finish.")
     async with refunding(redis, owner_id) as charge:
         charge.token = await take_agent_request(redis, owner_id, agent_quota)
         chat_id = uuid4()
@@ -268,9 +269,11 @@ async def chat_provider(ctx: dict[str, Any]) -> Provider:
 
 async def _answer(ctx: dict[str, Any], owner_id: UUID, request: dict[str, Any]) -> dict[str, Any]:
     provider = await chat_provider(ctx)
+    async with system_tx(ctx["engine"]) as conn:
+        locale = await job_locale(conn, owner_id)
     history = [(item["role"], item["content"]) for item in request.get("history", [])]
     context = BaseChatContext(
-        history=history, question=request["message"], transcripts=request.get("transcripts", True)
+        history=history, question=request["message"], transcripts=request.get("transcripts", True), locale=locale
     )
     result = await run_base_chat(provider, context, BaseTools(ctx["engine"], owner_id))
     return {

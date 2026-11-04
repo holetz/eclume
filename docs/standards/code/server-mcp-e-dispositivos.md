@@ -49,7 +49,7 @@ routes in [contract v1](../api/contrato-v1.md).
 
 ## Tools
 
-Names in English (the MCP clients' convention); descriptions, errors and `instructions` in pt-BR. They receive
+Names in English (the MCP clients' convention); descriptions, scope errors and `instructions` in pt-BR (API problem details are English). They receive
 `recording_id` as a UUID in text and return structured JSON (`structuredContent`, with the text
 mirrored). They call the domain functions (`recordings.list_library`, `recordings.delete_recording_of`,
 `search.search`, `summaries`, `summary_chat.open_request`, `fields`, `transcripts`), never the
@@ -68,9 +68,10 @@ route handlers; whatever lived only in the handler moves down to the domain modu
 | `delete_recording(recording_id)` | the API deletion (`recordings.delete_recording_of`) | `recordings:delete` | destructive |
 
 - **Errors.** A missing scope, a recording that does not exist or belongs to another account, and validation come back as a
-  tool error (`isError: true`), with the message in pt-BR ("Falta o escopo recordings:delete
-  neste token."). The API problems (404, 409, 422) become a tool error through
-  `as_tool_error()`.
+  tool error (`isError: true`). The missing-scope message is still pt-BR ("Falta o escopo
+  recordings:delete neste token."). The API problems (404, 409, 422) become a tool error through
+  `as_tool_error()`, carrying the problem's English `detail` since contract 2.30.0
+  ([i18n.md](i18n.md)).
 - **Listing.** `tools/list` shows every tool to any token (it is static in the
   `MCPServer`); the refusal names the scope, and the assistant explains to the user what is missing.
 - **Shared operations** (holetz/eclume#145). The writes the Agent also makes live in

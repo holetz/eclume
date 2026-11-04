@@ -16,26 +16,47 @@ logger = logging.getLogger(__name__)
 PROBLEM_JSON = "application/problem+json"
 _TYPE_BASE = "https://eclume.dev/problems/"
 
-_TITLES = {
-    "unauthorized": "Credencial ausente ou inválida",
-    "insufficient_scope": "Escopo insuficiente",
-    "forbidden": "Sem permissão",
-    "not_found": "Não encontrado",
-    "validation_failed": "Requisição inválida",
-    "conflict": "Conflito com o estado atual",
-    "rate_limited": "Muitas requisições",
-    "upload_expired": "Upload expirado",
-    "email_taken": "E-mail já cadastrado",
-    "signup_closed": "Cadastro fechado",
-    "notice_required": "Aviso não aceito",
-    "invalid_pairing_code": "Código de pareamento inválido",
-    "invalid_reset_link": "Link de redefinição inválido",
-    "method_not_allowed": "Método não permitido",
-    "payload_too_large": "Corpo grande demais",
-    "unsupported_media_type": "Tipo de arquivo não aceito",
-    "upload_completing": "Upload sendo concluído",
-    "quota_exceeded": "Cota excedida",
-    "internal_error": "Erro interno",
+# The server's catalog of problem codes, each with its English title. Clients localize by `code`;
+# `title` and `detail` are English and informative only. The contract's `ProblemCode` enum lists
+# the same set (server/tests/test_problem_codes.py keeps them equal). Rules in
+# docs/standards/code/i18n.md.
+CODES: dict[str, str] = {
+    "unauthorized": "Missing or invalid credential",
+    "insufficient_scope": "Insufficient scope",
+    "forbidden": "Forbidden",
+    "session_required": "Browser session required",
+    "notice_required": "Notice not accepted",
+    "not_found": "Not found",
+    "method_not_allowed": "Method not allowed",
+    "validation_failed": "Invalid request",
+    "conflict": "Conflict with the current state",
+    "hash_mismatch": "File hash mismatch",
+    "upload_expired": "Upload expired",
+    "upload_completing": "Upload being completed",
+    "rate_limited": "Too many requests",
+    "email_taken": "E-mail already registered",
+    "signup_closed": "Signup closed",
+    "summary_changed": "Summary changed",
+    "summary_missing": "Summary missing",
+    "transcript_missing": "Transcript missing",
+    "chat_busy": "Adjustment already in progress",
+    "invalid_pairing_code": "Invalid pairing code",
+    "invalid_reset_link": "Invalid reset link",
+    "payload_too_large": "Payload too large",
+    "unsupported_media_type": "Unsupported media type",
+    "internal_error": "Internal error",
+    "quota_exceeded": "Quota exceeded",
+    "audio_deleted": "Audio deleted",
+    "tag_exists": "Tag already exists",
+    "skill_exists": "Skill already exists",
+    "builtin_field": "Built-in field",
+    "fallback_agenda_type": "Fallback agenda type",
+    "not_auto": "No automatic value",
+    "too_many_files": "Too many files",
+    "action_not_proposed": "Action not proposed",
+    "action_expired": "Action expired",
+    "action_cancelled": "Action cancelled",
+    "error": "HTTP error",
 }
 
 
@@ -63,7 +84,7 @@ class ApiProblemError(Exception):
         """RFC 9457 body."""
         body: dict[str, Any] = {
             "type": _TYPE_BASE + self.code.replace("_", "-"),
-            "title": _TITLES.get(self.code, self.code),
+            "title": CODES.get(self.code, self.code),
             "status": self.status_code,
             "code": self.code,
         }
@@ -80,7 +101,7 @@ class ApiProblemError(Exception):
 
 
 def unauthorized(
-    detail: str = "Envie o cookie de sessão ou o header Authorization: Bearer eclp_...",
+    detail: str = "Send the session cookie or the header Authorization: Bearer eclp_...",
 ) -> ApiProblemError:
     """401 — no credential, or an invalid, expired or revoked credential."""
     return ApiProblemError(401, "unauthorized", detail, headers={"WWW-Authenticate": 'Bearer realm="eclume"'})
@@ -93,25 +114,25 @@ def forbidden(detail: str) -> ApiProblemError:
 
 def session_required() -> ApiProblemError:
     """403 — a PAT on an operation that accepts only a browser session."""
-    return ApiProblemError(403, "session_required", "Esta operação aceita só sessão do navegador, não PAT.")
+    return ApiProblemError(403, "session_required", "This operation accepts only a browser session, not a PAT.")
 
 
 def notice_required() -> ApiProblemError:
     """403 — session of an account that has not yet accepted the notice in force."""
-    return ApiProblemError(403, "notice_required", "Aceite o aviso em vigor em POST /api/v1/me/notice.")
+    return ApiProblemError(403, "notice_required", "Accept the notice in force at POST /api/v1/me/notice.")
 
 
 def insufficient_scope(missing: list[str], *, any_of: bool = False) -> ApiProblemError:
     """403 — the PAT lacks the scopes the operation requires (`any_of`: one of them would do)."""
     detail = (
-        f"Este PAT precisa de um destes escopos: {', '.join(missing)}."
+        f"This PAT needs one of these scopes: {', '.join(missing)}."
         if any_of
-        else f"Este PAT não tem o escopo {', '.join(missing)}."
+        else f"This PAT lacks the scope {', '.join(missing)}."
     )
     return ApiProblemError(403, "insufficient_scope", detail, extra={"required_scopes": missing})
 
 
-def not_found(detail: str = "Recurso inexistente ou sem acesso.") -> ApiProblemError:
+def not_found(detail: str = "Resource does not exist or is not accessible.") -> ApiProblemError:
     """404 — does not exist or is not visible (eclume does not tell them apart)."""
     return ApiProblemError(404, "not_found", detail)
 
@@ -140,7 +161,7 @@ def rate_limited(detail: str, retry_after: int | None = None) -> ApiProblemError
 def payload_too_large(limit: int) -> ApiProblemError:
     """413 — the body exceeded the route's ceiling."""
     return ApiProblemError(
-        413, "payload_too_large", f"O corpo passou do limite de {limit} bytes desta rota.", extra={"limit": limit}
+        413, "payload_too_large", f"The body exceeded this route's limit of {limit} bytes.", extra={"limit": limit}
     )
 
 
@@ -151,7 +172,7 @@ def unsupported_media_type(detail: str) -> ApiProblemError:
 
 def internal_error() -> ApiProblemError:
     """500 — unexpected server failure; the detail stays only in the log."""
-    return ApiProblemError(500, "internal_error", "Erro inesperado no servidor; tente de novo.")
+    return ApiProblemError(500, "internal_error", "Unexpected server error; try again.")
 
 
 def _field(loc: tuple[Any, ...]) -> str:

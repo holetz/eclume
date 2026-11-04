@@ -1,7 +1,7 @@
 {
   "type": "https://eclume.dev/problems/unauthorized",
-  "title": "Credencial ausente ou inválida",
+  "title": "Missing or invalid credential",
   "status": 401,
   "code": "unauthorized",
-  "detail": "Envie o cookie de sessão ou o header Authorization: Bearer eclp_..."
+  "detail": "Send the session cookie or the header Authorization: Bearer eclp_..."
 }

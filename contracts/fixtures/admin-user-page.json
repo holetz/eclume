@@ -9,6 +9,7 @@
       "last_login_at": "2026-09-18T13:55:02Z",
       "notice_version": null,
       "notice_accepted_at": null,
+      "locale": null,
       "recording_count": 37,
       "quotas": {
         "storage_bytes": 21474836480,
@@ -30,6 +31,7 @@
       "last_login_at": "2026-09-17T19:03:10Z",
       "notice_version": "1",
       "notice_accepted_at": "2026-09-28T12:00:00Z",
+      "locale": "en",
       "recording_count": 12,
       "quotas": null,
       "usage": {

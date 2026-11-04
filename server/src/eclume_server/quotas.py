@@ -40,7 +40,7 @@ def quota_exceeded(quota: str, limit: int, used: int) -> ApiProblemError:
     return ApiProblemError(
         403,
         "quota_exceeded",
-        f"A cota {quota} da conta é {limit} e o uso chegaria a {used}.",
+        f"The account's {quota} quota is {limit} and usage would reach {used}.",
         extra={"quota": quota, "limit": limit, "used": used},
     )
 
@@ -221,4 +221,4 @@ async def check_open_summaries(conn: AsyncConnection, owner_id: UUID) -> None:
         await conn.execute(select(func.count()).where(s.owner_id == owner_id, s.status.in_(("queued", "running"))))
     ).scalar_one()
     if count >= MAX_OPEN_SUMMARIES:
-        raise rate_limited(f"Já há {MAX_OPEN_SUMMARIES} resumos em andamento; espere um terminar.")
+        raise rate_limited(f"There are already {MAX_OPEN_SUMMARIES} summaries in progress; wait for one to finish.")

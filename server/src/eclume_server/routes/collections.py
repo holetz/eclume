@@ -87,7 +87,7 @@ def collection_json(row: Row) -> dict[str, Any]:
 async def _get(conn: AsyncConnection, collection_id: UUID) -> Row:
     row = (await conn.execute(_select().where(t.collections.c.id == collection_id))).mappings().first()
     if row is None:
-        raise not_found("Coleção inexistente ou sem acesso.")
+        raise not_found("Collection does not exist or is not accessible.")
     return row
 
 
@@ -124,10 +124,10 @@ async def update_collection(collection_id: UUID, body: CollectionPatch, principa
     """Rename or describe the collection."""
     values = body.model_dump(exclude_unset=True)
     if not values:
-        raise invalid_field("body", "informe ao menos um campo")
+        raise invalid_field("body", "send at least one field")
     for field in ("name", "instructions", "auto_assign"):
         if field in values and values[field] is None:
-            raise invalid_field(field, "não pode ser nulo")
+            raise invalid_field(field, "cannot be null")
     async with user_tx(ctx.engine, principal.user_id) as conn:
         await _get(conn, collection_id)
         await conn.execute(
@@ -154,7 +154,7 @@ async def delete_collection(collection_id: UUID, principal: Writer, ctx: Ctx) ->
     async with user_tx(ctx.engine, principal.user_id) as conn:
         result = await conn.execute(delete(t.collections).where(t.collections.c.id == collection_id))
         if result.rowcount == 0:
-            raise not_found("Coleção inexistente ou sem acesso.")
+            raise not_found("Collection does not exist or is not accessible.")
         await conn.execute(
             update(t.recordings)
             .where(r.collection_ids.contains([collection_id]))
@@ -173,7 +173,7 @@ async def merge_collection(collection_id: UUID, body: CollectionMerge, principal
     The receiving collection keeps its own name, description and rule.
     """
     if body.into == collection_id:
-        raise invalid_field("into", "escolha outra coleção")
+        raise invalid_field("into", "choose another collection")
     r = t.recordings.c
     now = datetime.now(UTC)
     async with user_tx(ctx.engine, principal.user_id) as conn:
@@ -181,7 +181,7 @@ async def merge_collection(collection_id: UUID, body: CollectionMerge, principal
         try:
             await _get(conn, body.into)
         except ApiProblemError as exc:
-            raise invalid_field("into", "coleção inexistente") from exc
+            raise invalid_field("into", "collection does not exist") from exc
         without = func.array_remove(r.collection_ids, collection_id, type_=r.collection_ids.type)
         moved = (
             (

@@ -114,16 +114,16 @@ async def update_field(field_id: UUID, body: FieldPatch, principal: Writer, ctx:
     """Edits the field; changing the type discards the values already filled (the format changes)."""
     values = body.model_dump(exclude_unset=True)
     if not values:
-        raise invalid_field("body", "informe ao menos um campo")
+        raise invalid_field("body", "send at least one field")
     for name in _NOT_NULL:
         if name in values and values[name] is None:
-            raise invalid_field(name, "não pode ser nulo")
+            raise invalid_field(name, "cannot be null")
     async with user_tx(ctx.engine, principal.user_id) as conn:
         current = await get_field(conn, field_id)
         kind = values.get("kind", current["kind"])
         kind_changed = kind != current["kind"]
         if kind_changed and current["builtin"]:
-            raise invalid_field("kind", "um campo embutido não muda de tipo")
+            raise invalid_field("kind", "a built-in field does not change type")
         if "options" in values or kind_changed:
             options = values.get("options", current["options"] if kind == "choice" else [])
             values["options"] = check_options(kind, options)
@@ -150,7 +150,7 @@ async def delete_field(field_id: UUID, principal: Writer, ctx: Ctx) -> Response:
     async with user_tx(ctx.engine, principal.user_id) as conn:
         current = await get_field(conn, field_id)
         if current["builtin"]:
-            raise conflict("Título e tags são campos embutidos e não podem ser excluídos.", "builtin_field")
+            raise conflict("Title and tags are built-in fields and cannot be deleted.", "builtin_field")
         await conn.execute(delete(t.fields).where(t.fields.c.id == field_id))
     return Response(status_code=204)
 
@@ -169,7 +169,7 @@ class FieldValuePut(BaseModel):
 async def _recording(conn: AsyncConnection, recording_id: UUID) -> Row:
     row = (await conn.execute(select(t.recordings).where(t.recordings.c.id == recording_id))).mappings().first()
     if row is None:
-        raise not_found("Gravação inexistente ou sem acesso.")
+        raise not_found("Recording does not exist or is not accessible.")
     return row
 
 
@@ -220,5 +220,5 @@ async def accept_recording_field(recording_id: UUID, field_id: UUID, principal: 
         await _recording(conn, recording_id)
         await get_field(conn, field_id)
         if not await _accept(conn, recording_id, field_id):
-            raise conflict("O campo não tem valor automático a aceitar.", "not_auto")
+            raise conflict("The field has no automatic value to accept.", "not_auto")
         return await _values(conn, recording_id)

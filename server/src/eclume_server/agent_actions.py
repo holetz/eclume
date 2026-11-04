@@ -268,7 +268,7 @@ async def _action(conn: AsyncConnection, action_id: UUID, *, lock: bool = False)
         stmt = stmt.with_for_update()
     row = (await conn.execute(stmt)).mappings().first()
     if row is None:
-        raise not_found("Ação inexistente ou sem acesso.")
+        raise not_found("Action does not exist or is not accessible.")
     return row
 
 
@@ -302,9 +302,7 @@ async def confirm_action(conn: AsyncConnection, principal: Principal, action_id:
     if principal.method == "pat" and scope not in principal.scopes:
         raise insufficient_scope([scope])
     if row["status"] in {"expired", "cancelled"}:
-        raise conflict(
-            "Esta proposta venceu ou foi descartada; peça de novo ao Agente.", code=f"action_{row['status']}"
-        )
+        raise conflict("This proposal expired or was discarded; ask the Agent again.", code=f"action_{row['status']}")
     if row["status"] != "proposed":
         return action_json(row), False
     updated = (
@@ -333,7 +331,7 @@ async def cancel_action(conn: AsyncConnection, action_id: UUID) -> dict[str, Any
     if row["status"] == "cancelled":
         return action_json(row)
     if row["status"] != "proposed":
-        raise conflict("Só uma proposta ainda não confirmada pode ser descartada.", code="action_not_proposed")
+        raise conflict("Only a proposal not yet confirmed can be discarded.", code="action_not_proposed")
     updated = (
         (
             await conn.execute(

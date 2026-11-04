@@ -1,9 +1,9 @@
 {
   "type": "https://eclume.dev/problems/insufficient-scope",
-  "title": "Escopo insuficiente",
+  "title": "Insufficient scope",
   "status": 403,
   "code": "insufficient_scope",
-  "detail": "Este PAT não tem o escopo transcripts:read.",
+  "detail": "This PAT lacks the scope transcripts:read.",
   "required_scopes": [
     "transcripts:read"
   ]

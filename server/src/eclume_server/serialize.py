@@ -25,6 +25,7 @@ def user_json(row: Row) -> dict[str, Any]:
         "last_login_at": iso(row["last_login_at"]),
         "notice_version": row["notice_version"],
         "notice_accepted_at": iso(row["notice_accepted_at"]),
+        "locale": row["locale"],
     }
 
 
