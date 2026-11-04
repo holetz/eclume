@@ -38,3 +38,6 @@ web/playwright-report/
 deploy/.env.prod
 deploy/.deploy.lock
 deploy/.deploy.lock.d/
+
+# quenching runtime state (Codex run logs, session scratch); not source
+.quenching/
