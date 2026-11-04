@@ -19,6 +19,7 @@ import { Switch } from '../../shared/Switch'
 import { useUpdateVoiceAssignment, useVoiceAssignment, type VoiceAssignment } from '../people/queries'
 import styles from './Account.module.css'
 import { AudioRetentionCard } from './AudioRetentionCard'
+import { LocaleSection } from './LocaleSection'
 
 // The signup rule: the server refuses a shorter password (422 on `new_password`).
 const MIN_PASSWORD = 12
@@ -48,6 +49,8 @@ export function AccountPage() {
           <dd className="mono">{user.email}</dd>
         </dl>
       )}
+
+      <LocaleSection />
 
       <TranscriptionSection />
 

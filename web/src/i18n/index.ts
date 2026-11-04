@@ -1,13 +1,15 @@
 import { createInstance } from 'i18next'
 import { initReactI18next } from 'react-i18next'
+import enAccount from './en/account'
 import enCommon from './en/common'
+import ptAccount from './pt-BR/account'
 import ptCommon from './pt-BR/common'
 import { browserLocale, DEFAULT_LOCALE, LOCALES, normalize, type Locale } from './locale'
 
 // Add later namespaces as one line each in both locale registries.
 export const resources = {
-  en: { common: enCommon },
-  'pt-BR': { common: ptCommon },
+  en: { common: enCommon, account: enAccount },
+  'pt-BR': { common: ptCommon, account: ptAccount },
 } as const
 export const defaultNS = 'common'
 
