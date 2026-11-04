@@ -1,13 +1,17 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { setLocale } from '../../i18n'
 import { fixtures } from '../../test/fixtures'
 import { empty, mockFetch, problem } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
 
 beforeAll(() => preloadRoute('/config/conta'))
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(async () => {
+  vi.unstubAllGlobals()
+  await setLocale('pt-BR')
+})
 
 const NEW = 'uma-senha-nova-bem-longa'
 
@@ -20,6 +24,17 @@ const base = {
 }
 
 describe('account', () => {
+  it('reads in English when the account chose English', async () => {
+    const me = fixtures.me()
+    mockFetch({ ...base, 'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }) })
+    renderApp('/config/conta')
+    expect(await screen.findByRole('heading', { name: 'Privacy and data' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Change the password' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete my account' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('Language of the recordings')).toBeInTheDocument()
+    expect(screen.getByText(/Voiceprints of this account: /)).toBeInTheDocument()
+  })
+
   it('chooses the transcription language, with the server default named', async () => {
     const http = mockFetch({
       ...base,

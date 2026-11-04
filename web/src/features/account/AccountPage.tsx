@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
+import { Trans, useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
 import { ApiError, errorMessage, unwrap } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
@@ -31,21 +32,22 @@ function fieldError(error: unknown, field: string): string | null {
   return errors.find((item) => item.field === field)?.message ?? null
 }
 
-/** Minhas configurações › Conta: the account data, the transcription language, privacy and data, changing the password and deleting the account. */
+/** My settings › Account: the account data, the transcription language, privacy and data, changing the password and deleting the account. */
 export function AccountPage() {
   useHelpTopic('conta')
+  const { t } = useTranslation('account')
   const me = useMe()
   const [deleting, setDeleting] = useState(false)
   const user = me.data?.user
 
   return (
     <section className={styles.page}>
-      <PageHead kicker="Minhas configurações" title="Conta" />
+      <PageHead kicker={t('page.kicker')} title={t('page.title')} />
       {user && (
         <dl className={styles.identity}>
-          <dt>Nome</dt>
+          <dt>{t('page.name')}</dt>
           <dd>{user.name}</dd>
-          <dt>E-mail</dt>
+          <dt>{t('page.email')}</dt>
           <dd className="mono">{user.email}</dd>
         </dl>
       )}
@@ -61,18 +63,16 @@ export function AccountPage() {
       <PasswordSection />
 
       <section className={`panel ${styles.danger}`} aria-labelledby="excluir-conta">
-        <h4 id="excluir-conta">Excluir a conta</h4>
+        <h4 id="excluir-conta">{t('delete.title')}</h4>
         <div className="alert alert-error">
           <p>
-            Excluir a conta apaga <strong>para sempre</strong> tudo o que é seu neste servidor: as gravações e os
-            áudios, as transcrições, os resumos e as versões deles, as pessoas e as impressões de voz, as coleções,
-            as tags, os campos, os tipos de agenda, os tokens e os aparelhos vinculados.
+            <Trans t={t} i18nKey="delete.warning" components={{ strong: <strong /> }} />
           </p>
-          <p>Não há como desfazer. Se quiser guardar algo, exporte as gravações antes.</p>
+          <p>{t('delete.noUndo')}</p>
         </div>
         <div>
           <button type="button" className="btn btn-danger" onClick={() => setDeleting(true)}>
-            Excluir minha conta
+            {t('delete.open')}
           </button>
         </div>
       </section>
@@ -84,16 +84,17 @@ export function AccountPage() {
 
 /** The language this account's recordings are transcribed in when the file does not choose another. */
 function TranscriptionSection() {
+  const { t } = useTranslation('account')
   const id = useId()
   const preference = useTranscriptionPreference()
   const update = useUpdateTranscriptionPreference()
 
   return (
     <section className={`panel ${styles.form}`} aria-labelledby={`${id}-titulo`}>
-      <h4 id={`${id}-titulo`}>Idioma da transcrição</h4>
+      <h4 id={`${id}-titulo`}>{t('transcription.title')}</h4>
       {preference.data && (
         <div className="field">
-          <label htmlFor={id}>Idioma das gravações</label>
+          <label htmlFor={id}>{t('transcription.label')}</label>
           <LanguageSelect
             id={id}
             value={update.isPending ? (update.variables ?? '') : (preference.data.language ?? '')}
@@ -102,8 +103,7 @@ function TranscriptionSection() {
             onChange={(value) => update.mutate(value === '' ? null : value)}
           />
           <span className="field-hint">
-            Vale para as próximas gravações. Cada arquivo pode pedir outro idioma ao importar, e uma gravação pode ser
-            transcrita de novo em outro idioma.
+            {t('transcription.hint')}
           </span>
         </div>
       )}
@@ -116,20 +116,19 @@ function TranscriptionSection() {
   )
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
-
 /** Where each piece of data goes, per this server's configuration, and the voice the account keeps. */
 function PrivacySection() {
+  const { t } = useTranslation('account')
   const privacy = usePrivacy()
   const voice = useVoiceAssignment()
 
   return (
     <section className={`panel ${styles.form}`} aria-labelledby="privacidade">
-      <h4 id="privacidade">Privacidade e dados</h4>
+      <h4 id="privacidade">{t('privacy.title')}</h4>
       <dl className={styles.identity}>
         <div className={styles.row}>
-          <dt>Áudio e transcrição</dt>
-          <dd>Guardados neste servidor</dd>
+          <dt>{t('privacy.audio')}</dt>
+          <dd>{t('privacy.audioKept')}</dd>
         </div>
         {privacy.data?.destinations.map((destination) => (
           <div key={destination.purpose} className={styles.row}>
@@ -144,8 +143,7 @@ function PrivacySection() {
         </p>
       )}
       <p className="text-muted">
-        Quem processa os resumos, os campos e o chat é o agente que a administração deste servidor escolheu. Fora do
-        servidor, o texto da transcrição vai para esse fornecedor; o áudio não sai.
+        {t('privacy.processors')}
       </p>
       {voice.data && <VoiceKeep assignment={voice.data} />}
     </section>
@@ -155,28 +153,24 @@ function PrivacySection() {
 function VoiceKeep({ assignment }: { assignment: VoiceAssignment }) {
   const update = useUpdateVoiceAssignment()
   const [confirming, setConfirming] = useState(false)
-  const kept = `${plural(assignment.voiceprint_people, 'pessoa', 'pessoas')} com impressão de voz, ${plural(
-    assignment.sample_count,
-    'amostra',
-    'amostras',
-  )}`
+  const { t } = useTranslation('account')
+  const samples = t('voice.samples', { count: assignment.sample_count })
 
   return (
     <>
-      <p>Impressões de voz desta conta: {kept}.</p>
+      <p>{t('voice.kept', { people: t('voice.people', { count: assignment.voiceprint_people }), samples })}</p>
       {assignment.platform_enabled && (
         <Switch
           checked={assignment.keep_samples}
           disabled={update.isPending}
           onChange={(keep) => (keep ? update.mutate({ keep_samples: true }) : setConfirming(true))}
         >
-          Guardar amostras de voz desta conta
+          {t('voice.keep')}
         </Switch>
       )}
       {!assignment.keep_samples && (
         <p className="text-muted">
-          Esta conta não guarda amostras de voz: nada de voz é calculado, comparado ou guardado nas próximas
-          gravações.
+          {t('voice.notKept')}
         </p>
       )}
       {update.isError && (
@@ -186,15 +180,13 @@ function VoiceKeep({ assignment }: { assignment: VoiceAssignment }) {
       )}
       {confirming && (
         <ConfirmDialog
-          title="Deixar de guardar amostras de voz?"
-          confirmLabel="Apagar e deixar de guardar"
+          title={t('voice.confirmTitle')}
+          confirmLabel={t('voice.confirmLabel')}
           busy={update.isPending}
           onCancel={() => setConfirming(false)}
           onConfirm={() => update.mutate({ keep_samples: false }, { onSettled: () => setConfirming(false) })}
         >
-          As {plural(assignment.sample_count, 'amostra', 'amostras')} e as impressões de voz desta conta são apagadas
-          agora, com as sugestões de pessoa pela voz. Os locutores já ligados às pessoas continuam ligados. Religar
-          depois não recupera o que saiu.
+          {t('voice.confirmText', { samples })}
         </ConfirmDialog>
       )}
     </>
@@ -202,6 +194,7 @@ function VoiceKeep({ assignment }: { assignment: VoiceAssignment }) {
 }
 
 function PasswordSection() {
+  const { t } = useTranslation('account')
   const id = useId()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
@@ -239,9 +232,9 @@ function PasswordSection() {
 
   return (
     <form className={`panel ${styles.form}`} onSubmit={submit} aria-labelledby={`${id}-titulo`}>
-      <h4 id={`${id}-titulo`}>Trocar a senha</h4>
+      <h4 id={`${id}-titulo`}>{t('password.title')}</h4>
       <div className="field">
-        <label htmlFor={`${id}-atual`}>Senha atual</label>
+        <label htmlFor={`${id}-atual`}>{t('password.current')}</label>
         <input
           id={`${id}-atual`}
           className="input"
@@ -254,12 +247,12 @@ function PasswordSection() {
         />
         {currentError && (
           <span id={`${id}-atual-erro`} className={`field-hint ${styles.error}`}>
-            A senha atual não confere.
+            {t('password.currentWrong')}
           </span>
         )}
       </div>
       <div className="field">
-        <label htmlFor={`${id}-nova`}>Nova senha</label>
+        <label htmlFor={`${id}-nova`}>{t('password.next')}</label>
         <input
           id={`${id}-nova`}
           className="input"
@@ -271,11 +264,11 @@ function PasswordSection() {
           onChange={(event) => setNext(event.target.value)}
         />
         <span id={`${id}-nova-dica`} className={tooShort || nextError ? `field-hint ${styles.error}` : 'field-hint'}>
-          {nextError ?? `Ao menos ${MIN_PASSWORD} caracteres.`}
+          {nextError ?? t('password.nextHint', { min: MIN_PASSWORD })}
         </span>
       </div>
       <div className="field">
-        <label htmlFor={`${id}-repetir`}>Repita a nova senha</label>
+        <label htmlFor={`${id}-repetir`}>{t('password.repeat')}</label>
         <input
           id={`${id}-repetir`}
           className="input"
@@ -288,14 +281,14 @@ function PasswordSection() {
         />
         {mismatch && (
           <span id={`${id}-repetir-erro`} className={`field-hint ${styles.error}`}>
-            As duas senhas não são iguais.
+            {t('password.mismatch')}
           </span>
         )}
       </div>
       <label className="check">
         <input type="checkbox" checked={revokeTokens} onChange={(event) => setRevokeTokens(event.target.checked)} />
         <span className="box" />
-        <span>Encerrar também aparelhos e tokens</span>
+        <span>{t('password.revoke')}</span>
       </label>
       {otherError && (
         <p className="alert alert-error" role="alert">
@@ -305,13 +298,13 @@ function PasswordSection() {
       {done && (
         <p className="alert alert-success" role="status">
           {done === 'all'
-            ? 'Senha trocada. As outras sessões, os aparelhos ligados e os tokens desta conta foram encerrados.'
-            : 'Senha trocada. As outras sessões abertas desta conta foram encerradas.'}
+            ? t('password.doneAll')
+            : t('password.doneSessions')}
         </p>
       )}
       <div>
         <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
-          {change.isPending ? 'Trocando…' : 'Trocar a senha'}
+          {change.isPending ? t('password.submitting') : t('password.submit')}
         </button>
       </div>
     </form>
@@ -319,6 +312,7 @@ function PasswordSection() {
 }
 
 function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation('account')
   const id = useId()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -329,7 +323,7 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
     onSuccess: () => {
       queryClient.removeQueries()
       queryClient.setQueryData(ME_KEY, null)
-      navigate('/entrar', { replace: true, state: { notice: 'Sua conta foi excluída, com todos os dados dela.' } })
+      navigate('/entrar', { replace: true, state: { notice: t('delete.done') } })
     },
   })
   const wrongPassword = fieldError(remove.error, 'password')
@@ -338,22 +332,22 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
   return (
     <Dialog
       plain
-      title="Excluir a conta?"
-      message="Tudo o que é seu neste servidor será apagado agora, sem como desfazer."
+      title={t('delete.dialogTitle')}
+      message={t('delete.dialogMessage')}
       onClose={onClose}
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Manter a conta
+            {t('delete.keep')}
           </button>
           <button type="button" className="btn btn-danger" disabled={!canDelete} onClick={() => remove.mutate()}>
-            {remove.isPending ? 'Excluindo…' : 'Excluir minha conta'}
+            {remove.isPending ? t('delete.submitting') : t('delete.submit')}
           </button>
         </>
       }
     >
       <div className="field">
-        <label htmlFor={`${id}-senha`}>Sua senha</label>
+        <label htmlFor={`${id}-senha`}>{t('delete.password')}</label>
         <input
           id={`${id}-senha`}
           className="input"
@@ -366,14 +360,14 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
         />
         {wrongPassword && (
           <span id={`${id}-senha-erro`} className={`field-hint ${styles.error}`}>
-            A senha não confere.
+            {t('delete.passwordWrong')}
           </span>
         )}
       </div>
       <label className="check">
         <input type="checkbox" checked={understood} onChange={(event) => setUnderstood(event.target.checked)} />
         <span className="box" />
-        <span>Entendo que tudo será apagado para sempre</span>
+        <span>{t('delete.understood')}</span>
       </label>
       {remove.isError && !wrongPassword && (
         <p className="alert alert-error" role="alert">

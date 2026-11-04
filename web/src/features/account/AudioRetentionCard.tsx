@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { Switch } from '../../shared/Switch'
@@ -40,6 +41,7 @@ export function AudioRetentionCard() {
 }
 
 function RetentionForm({ retention }: { retention: AudioRetention }) {
+  const { t } = useTranslation(['account', 'common'])
   const id = useId()
   const update = useUpdateAudioRetention()
   const [enabled, setEnabled] = useState(retention.days !== null)
@@ -59,17 +61,14 @@ function RetentionForm({ retention }: { retention: AudioRetention }) {
 
   return (
     <form className={`panel ${styles.form}`} aria-labelledby={`${id}-titulo`} onSubmit={submit}>
-      <h4 id={`${id}-titulo`}>Retenção do áudio</h4>
-      <p>
-        O servidor pode apagar o áudio das suas gravações depois de um tempo. A transcrição, o resumo e o chat
-        continuam; só o áudio some.
-      </p>
+      <h4 id={`${id}-titulo`}>{t('retention.title')}</h4>
+      <p>{t('retention.text')}</p>
       <Switch checked={enabled} onChange={setEnabled} disabled={update.isPending}>
-        Apagar o áudio automaticamente
+        {t('retention.toggle')}
       </Switch>
       {enabled && (
         <div className="field">
-          <label htmlFor={id}>Dias até apagar o áudio</label>
+          <label htmlFor={id}>{t('retention.days')}</label>
           <input
             id={id}
             className="input"
@@ -83,27 +82,21 @@ function RetentionForm({ retention }: { retention: AudioRetention }) {
             onChange={(e) => setValue(e.target.value)}
           />
           <span id={`${id}-dica`} className={`field-hint ${valid ? '' : styles.error}`}>
-            {valid
-              ? 'Conta a partir de quando o servidor recebeu o áudio.'
-              : `Entre ${MIN_DAYS} e ${MAX_DAYS} dias.`}
+            {valid ? t('retention.hint') : t('retention.range', { min: MIN_DAYS, max: MAX_DAYS })}
           </span>
         </div>
       )}
       {retention.max_days !== null && (
         <p className="field-hint">
-          O administrador limitou a retenção a {retention.max_days} dias.
-          {capped && ` Para a sua conta vale ${retention.effective_days} dias.`}
+          {t('retention.capped', { days: retention.max_days })}
+          {capped && t('retention.effective', { days: String(retention.effective_days) })}
         </p>
       )}
       <div className="alert alert-error">
         <p>
-          Apagar o áudio é <strong>irreversível</strong>: não dá para transcrever de novo nem ouvir a gravação, e a
-          identificação por voz não recebe amostras novas dela.
+          <Trans t={t} i18nKey="retention.irreversible" components={{ strong: <strong /> }} />
         </p>
-        <p>
-          Cópias de segurança do servidor ainda podem guardar o áudio por até 14 dias depois de apagado, até a
-          rotação delas.
-        </p>
+        <p>{t('retention.backups')}</p>
       </div>
       {update.isError && (
         <p className="alert alert-error" role="alert">
@@ -112,12 +105,12 @@ function RetentionForm({ retention }: { retention: AudioRetention }) {
       )}
       {update.isSuccess && !changed && (
         <p className="alert alert-success" role="status">
-          Retenção salva.
+          {t('retention.saved')}
         </p>
       )}
       <div>
         <button type="submit" className="btn btn-primary" disabled={!changed || (enabled && !valid) || update.isPending}>
-          Salvar
+          {t('common:save')}
         </button>
       </div>
     </form>
