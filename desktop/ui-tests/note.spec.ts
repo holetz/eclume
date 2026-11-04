@@ -1,6 +1,6 @@
-import { test, expect, chamadas as calls } from './fixtures'
+import { test, expect, calls } from './fixtures'
 
-test("ongoing voice note: status line, meter, silence and Stop note", async ({ abrir: open }) => {
+test("ongoing voice note: status line, meter, silence and Stop note", async ({ open }) => {
   const page = await open('note')
   await expect(page.locator('#line-status')).toHaveText('Gravando uma nota · para depois de 4 s de silêncio')
   await expect(page.locator('#line-status')).toHaveAttribute('data-status', 'recording')
@@ -17,11 +17,11 @@ test("ongoing voice note: status line, meter, silence and Stop note", async ({ a
   await expect(page.locator('#note')).toBeHidden()
   await expect(page.locator('#record')).toHaveText('Iniciar gravação')
   const made = await calls(page)
-  expect(made.map((c) => c.comando)).toContain('new_note')
-  expect(made.map((c) => c.comando)).not.toContain('toggle_recording')
+  expect(made.map((c) => c.command)).toContain('new_note')
+  expect(made.map((c) => c.command)).not.toContain('toggle_recording')
 })
 
-test("a voice note set to Never stop does not promise to stop automatically", async ({ abrir: open }) => {
+test("a voice note set to Never stop does not promise to stop automatically", async ({ open }) => {
   const page = await open('note')
   await page.evaluate(() => {
     const mock = (window as unknown as { __mock: { state: { status: { note_silence_s: number | null } } } }).__mock
@@ -30,7 +30,7 @@ test("a voice note set to Never stop does not promise to stop automatically", as
   await expect(page.locator('#line-status')).toHaveText('Gravando uma nota')
 })
 
-test("New note starts a voice note and shows its shortcut", async ({ abrir: open }) => {
+test("New note starts a voice note and shows its shortcut", async ({ open }) => {
   const page = await open()
   await expect(page.locator('#shortcut-note')).toHaveText('Ctrl+Alt+N')
   await expect(page.locator('#note')).toBeHidden()
@@ -39,7 +39,7 @@ test("New note starts a voice note and shows its shortcut", async ({ abrir: open
   await expect(page.locator('#line-status')).toHaveText(/^Gravando uma nota/)
 })
 
-test("a marker during recording has a count and note", async ({ abrir: open }) => {
+test("a marker during recording has a count and note", async ({ open }) => {
   const page = await open('isRecording')
   await expect(page.locator('#markers')).toBeVisible()
   await expect(page.locator('#shortcut-marker')).toHaveText('Ctrl+Alt+M')
@@ -55,15 +55,15 @@ test("a marker during recording has a count and note", async ({ abrir: open }) =
   await page.locator('#note-marker-text').fill('ação para a Ana')
   await page.locator('#note-marker-text').press('Enter')
   await expect
-    .poll(async () => (await calls(page)).filter((c) => c.comando === 'set_marker_note'))
-    .toEqual([{ comando: 'set_marker_note', args: { clientId: 'm1', note: 'ação para a Ana' } }])
+    .poll(async () => (await calls(page)).filter((c) => c.command === 'set_marker_note'))
+    .toEqual([{ command: 'set_marker_note', args: { clientId: 'm1', note: 'ação para a Ana' } }])
 
   await page.locator('#marker').click()
   await expect(page.locator('#count-markers')).toHaveText('2 marcadores')
   await expect(page.locator('#note-marker-text')).toHaveValue('')
 })
 
-test("the last marker loads its existing note", async ({ abrir: open }) => {
+test("the last marker loads its existing note", async ({ open }) => {
   const page = await open('markers')
   await expect(page.locator('#count-markers')).toHaveText('1 marcador')
   await expect(page.locator('#note-marker-label')).toHaveText('Nota do marcador em 2:05')
@@ -71,13 +71,13 @@ test("the last marker loads its existing note", async ({ abrir: open }) => {
   await expect(page.locator('#policy')).toBeHidden()
 })
 
-test("there are no markers outside a recording", async ({ abrir: open }) => {
+test("there are no markers outside a recording", async ({ open }) => {
   const page = await open()
   await expect(page.locator('#markers')).toBeHidden()
   await expect(page.locator('#policy')).toBeHidden()
 })
 
-test("automatic recording shows the app policy and allows changing it", async ({ abrir: open }) => {
+test("automatic recording shows the app policy and allows changing it", async ({ open }) => {
   const page = await open('isRecording')
   await expect(page.locator('#recording-automatic')).toBeVisible()
   await expect(page.locator('#policy')).toBeVisible()
@@ -87,7 +87,7 @@ test("automatic recording shows the app policy and allows changing it", async ({
 
   await page.locator('#policy .seg-opt', { hasText: 'Gravar' }).click()
   await expect(page.locator('#policy input[value="auto"]')).toBeChecked()
-  const saved = (await calls(page)).filter((c) => c.comando === 'save_settings')
+  const saved = (await calls(page)).filter((c) => c.command === 'save_settings')
   expect(saved).toHaveLength(1)
   const input = (saved[0].args as { input: { policies: Record<string, string>; web_url: string } }).input
   expect(input.policies.teams).toBe('auto')

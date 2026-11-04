@@ -1,7 +1,7 @@
 // Mock Tauri for desktop UI browser tests. Define `window.__TAURI__` (as exposed by
 // `withGlobalTauri`) with `core.invoke` and `event.listen`, and `window.__mock` for tests:
 // `scenario(name)` changes state, `emit(event, payload)` fires a Rust event, and
-// `chamadas` records commands for frozen fixtures; `window.__MOCK_CENARIO` sets the initial scenario.
+// `calls` records commands for frozen fixtures; `window.__MOCK_SCENARIO` sets the initial scenario.
 (() => {
   const now = Date.now();
   const MIN = 60_000;
@@ -338,10 +338,10 @@
   const listeners = new Map();
   const mock = {
     state: base(),
-    chamadas: [],
+    calls: [],
     scenario(name) {
       const apply = scenarios[name];
-      if (!apply) throw new Error(`cenário desconhecido: ${name}`);
+      if (!apply) throw new Error(`unknown scenario: ${name}`);
       mock.state = base();
       apply(mock.state);
       mock.emit("status-changed");
@@ -573,9 +573,9 @@
   window.__TAURI__ = {
     core: {
       async invoke(command, args) {
-        mock.chamadas.push({ comando: command, args: args ?? null });
+        mock.calls.push({ command, args: args ?? null });
         const handler = commands[command];
-        if (!handler) throw `comando sem mock: ${command}`;
+        if (!handler) throw `command without a mock: ${command}`;
         return structuredClone(handler(mock.state, args ?? {}));
       },
     },
@@ -593,6 +593,6 @@
     },
   };
 
-  const initial = scenarios[window.__MOCK_CENARIO] ? window.__MOCK_CENARIO : "ocioso";
+  const initial = scenarios[window.__MOCK_SCENARIO] ? window.__MOCK_SCENARIO : "idle";
   scenarios[initial](mock.state);
 })();

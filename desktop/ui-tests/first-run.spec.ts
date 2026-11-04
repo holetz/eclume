@@ -1,6 +1,6 @@
-import { test, expect, chamadas as calls } from './fixtures'
+import { test, expect, calls } from './fixtures'
 
-test("without an account, first run uses the installer server and signs in by password", async ({ abrir: open }) => {
+test("without an account, first run uses the installer server and signs in by password", async ({ open }) => {
   const page = await open('firstRun')
   const view = page.locator('[data-view="first-run"]')
   await expect(view).toBeVisible()
@@ -31,16 +31,16 @@ test("without an account, first run uses the installer server and signs in by pa
 
   const made = await calls(page)
   expect(made).toContainEqual({
-    comando: 'prepare_server',
+    command: 'prepare_server',
     args: {
       url: 'https://192.168.15.199:8443',
       caSha256: '98e209f5457514b7b12ec349d22b3b0d93c03c3f10e52350ea5f9e0b3d97792f',
     },
   })
-  expect(made).toContainEqual({ comando: 'sign_in', args: { email: 'ana@exemplo.com.br', password: 'segredo' } })
+  expect(made).toContainEqual({ command: 'sign_in', args: { email: 'ana@exemplo.com.br', password: 'segredo' } })
 })
 
-test("a server announced on the network requires checking its fingerprint before sign-in", async ({ abrir: open }) => {
+test("a server announced on the network requires checking its fingerprint before sign-in", async ({ open }) => {
   const page = await open('firstRun')
   await page.locator('#first-run-servers .choice').nth(1).click()
   const trust = page.locator('#first-run-trust')
@@ -53,12 +53,12 @@ test("a server announced on the network requires checking its fingerprint before
   await expect(trust).toBeHidden()
   await expect(page.locator('#first-run-sign-in')).toBeEnabled()
   expect(await calls(page)).toContainEqual({
-    comando: 'confirm_server',
+    command: 'confirm_server',
     args: { url: 'https://10.0.0.2', caSha256: '98e209f5457514b7b12ec349d22b3b0d93c03c3f10e52350ea5f9e0b3d97792f' },
   })
 })
 
-test("Advanced: typed address and pairing code", async ({ abrir: open }) => {
+test("Advanced: typed address and pairing code", async ({ open }) => {
   const page = await open('noServer')
   await expect(page.locator('#first-run-searching')).toHaveText('Nenhum servidor na rede. Digite o endereço em Avançado.')
   await expect(page.locator('#first-run-advanced')).toHaveAttribute('open', '')
@@ -87,20 +87,20 @@ test("Advanced: typed address and pairing code", async ({ abrir: open }) => {
   await expect(page.locator('#account-server')).toHaveText('eclume em eclume.local')
 
   const made = await calls(page)
-  expect(made).toContainEqual({ comando: 'prepare_server', args: { url: 'https://eclume.local:8443', caSha256: null } })
-  expect(made).toContainEqual({ comando: 'pair', args: { code: 'k7q-4mx' } })
+  expect(made).toContainEqual({ command: 'prepare_server', args: { url: 'https://eclume.local:8443', caSha256: null } })
+  expect(made).toContainEqual({ command: 'pair', args: { code: 'k7q-4mx' } })
 })
 
-test("Create one on the web opens sign-up on the selected server", async ({ abrir: open }) => {
+test("Create one on the web opens sign-up on the selected server", async ({ open }) => {
   const page = await open('firstRun')
   await expect(page.locator('#first-run-sign-in')).toBeEnabled()
   await page.locator('#first-run-signup').click()
   await expect
-    .poll(async () => (await calls(page)).find((c) => c.comando === 'open_signup')?.args)
+    .poll(async () => (await calls(page)).find((c) => c.command === 'open_signup')?.args)
     .toEqual({ url: 'https://192.168.15.199:8443' })
 })
 
-test("a changed CA returns to first run with a notice and disables window keys", async ({ abrir: open }) => {
+test("a changed CA returns to first run with a notice and disables window keys", async ({ open }) => {
   const page = await open('caChanged')
   await expect(page.locator('[data-view="first-run"]')).toBeVisible()
   await expect(page.locator('#first-run-notice')).toHaveText('O certificado do servidor mudou')

@@ -1,6 +1,6 @@
-import { test, expect, chamadas as calls } from './fixtures'
+import { test, expect, calls } from './fixtures'
 
-test("the help icon opens the DS menu with the version", async ({ abrir: open }) => {
+test("the help icon opens the DS menu with the version", async ({ open }) => {
   const page = await open()
   await expect(page.locator('#menu-help')).toBeHidden()
   await page.locator('#open-help').click()
@@ -24,24 +24,24 @@ test("the help icon opens the DS menu with the version", async ({ abrir: open })
   await expect(page.locator('#menu-help')).toBeHidden()
 })
 
-test("menu items open server help and the log folder", async ({ abrir: open }) => {
+test("menu items open server help and the log folder", async ({ open }) => {
   const page = await open()
   for (const id of ['#help-first-steps', '#help-permissions', '#help-folder', '#help-center', '#help-problem']) {
     await page.locator('#open-help').click()
     await page.locator(id).click()
     await expect(page.locator('#menu-help')).toBeHidden()
   }
-  const made = (await calls(page)).filter((c) => c.comando === 'open_help' || c.comando === 'open_log_dir')
+  const made = (await calls(page)).filter((c) => c.command === 'open_help' || c.command === 'open_log_dir')
   expect(made).toEqual([
-    { comando: 'open_help', args: { article: 'primeira-gravacao' } },
-    { comando: 'open_help', args: { article: 'permissoes-de-microfone' } },
-    { comando: 'open_help', args: { article: 'pasta-sincronizada' } },
-    { comando: 'open_help', args: { article: null } },
-    { comando: 'open_log_dir', args: null },
+    { command: 'open_help', args: { article: 'primeira-gravacao' } },
+    { command: 'open_help', args: { article: 'permissoes-de-microfone' } },
+    { command: 'open_help', args: { article: 'pasta-sincronizada' } },
+    { command: 'open_help', args: { article: null } },
+    { command: 'open_log_dir', args: null },
   ])
 })
 
-test("Keyboard shortcuts via menu and Ctrl+/: global settings and window shortcuts", async ({ abrir: open }) => {
+test("Keyboard shortcuts via menu and Ctrl+/: global settings and window shortcuts", async ({ open }) => {
   const page = await open()
   await page.locator('#open-help').click()
   await page.locator('#help-shortcuts').click()
@@ -60,7 +60,7 @@ test("Keyboard shortcuts via menu and Ctrl+/: global settings and window shortcu
   await expect(page.locator('[data-panel="audio"]')).toBeVisible()
 })
 
-test("Ctrl+, opens settings and Ctrl+O opens import from any view", async ({ abrir: open }) => {
+test("Ctrl+, opens settings and Ctrl+O opens import from any view", async ({ open }) => {
   const page = await open()
   await page.keyboard.press('Control+/')
   await page.keyboard.press('Control+,')

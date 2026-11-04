@@ -1,4 +1,4 @@
-import { test, expect, chamadas as calls } from './fixtures'
+import { test, expect, calls } from './fixtures'
 import type { Page } from '@playwright/test'
 
 type MockState = {
@@ -22,7 +22,7 @@ async function setCount(page: Page, value) {
   await expect(page.locator('[data-view="home"]')).toBeVisible()
 }
 
-test("the Recent panel sits at the top with the last 5 recordings, state, progress and alerts", async ({ abrir: open }) => {
+test("the Recent panel sits at the top with the last 5 recordings, state, progress and alerts", async ({ open }) => {
   const page = await open('recent')
   const panel = page.locator('#recent')
   await expect(panel).toBeVisible()
@@ -57,7 +57,7 @@ test("the Recent panel sits at the top with the last 5 recordings, state, progre
   await expect(row(page, 'srv-r').locator('svg')).toHaveCount(1)
 })
 
-test("awaiting speakers (speakers stage in waiting) is an alert linking to the web", async ({ abrir: open }) => {
+test("awaiting speakers (speakers stage in waiting) is an alert linking to the web", async ({ open }) => {
   const page = await open('recent')
   const unknown = row(page, 'srv-l')
   await expect(unknown).toHaveClass(/recent-alert/)
@@ -67,22 +67,22 @@ test("awaiting speakers (speakers stage in waiting) is an alert linking to the w
   await expect(unknown.locator('.recent-detail')).toContainText('resolva no web')
   await unknown.getByRole('button', { name: 'Abrir no web' }).click()
   await expect.poll(async () => (await state(page)).openedRecording).toBe('srv-l')
-  expect(await calls(page)).toContainEqual({ comando: 'open_recording', args: { recordingId: 'srv-l' } })
+  expect(await calls(page)).toContainEqual({ command: 'open_recording', args: { recordingId: 'srv-l' } })
 })
 
-test("Copy summary puts Markdown on the clipboard via Tauri and confirms in the row", async ({ abrir: open }) => {
+test("Copy summary puts Markdown on the clipboard via Tauri and confirms in the row", async ({ open }) => {
   const page = await open('recent')
   const ready = row(page, 'srv-r')
   await ready.getByRole('button', { name: 'Copiar resumo' }).click()
   await expect(ready.getByRole('button', { name: 'Copiado' })).toBeVisible()
   await expect(ready.getByRole('status')).toHaveText('Resumo copiado em Markdown.')
-  expect(await calls(page)).toContainEqual({ comando: 'copy_summary', args: { recordingId: 'srv-r' } })
+  expect(await calls(page)).toContainEqual({ command: 'copy_summary', args: { recordingId: 'srv-r' } })
   expect((await state(page)).clipboard).toBe('# Comitê de crédito\n\n- Aprovado o limite da cooperativa')
   // Feedback disappears after a few seconds.
   await expect(ready.getByRole('button', { name: 'Copiar resumo' })).toBeVisible({ timeout: 5_000 })
 })
 
-test("a failed Copy summary shows the error in the row and copies nothing", async ({ abrir: open }) => {
+test("a failed Copy summary shows the error in the row and copies nothing", async ({ open }) => {
   const page = await open('recent')
   await page.evaluate(() => {
     ;(window as unknown as { __mock: { state: MockState } }).__mock.state.summaries = {}
@@ -94,13 +94,13 @@ test("a failed Copy summary shows the error in the row and copies nothing", asyn
   expect((await state(page)).clipboard).toBeNull()
 })
 
-test("Try now requests another upload", async ({ abrir: open }) => {
+test("Try now requests another upload", async ({ open }) => {
   const page = await open('recent')
   await row(page, 'local:f1').getByRole('button', { name: 'Tentar agora' }).click()
-  await expect.poll(async () => (await calls(page)).some((c) => c.comando === 'sync_now')).toBe(true)
+  await expect.poll(async () => (await calls(page)).some((c) => c.command === 'sync_now')).toBe(true)
 })
 
-test("the count comes from settings and Hide hides the panel", async ({ abrir: open }) => {
+test("the count comes from settings and Hide hides the panel", async ({ open }) => {
   const page = await open('recent')
   await setCount(page, '10')
   await expect(page.locator('#recent-list li')).toHaveCount(7)
@@ -117,7 +117,7 @@ test("the count comes from settings and Hide hides the panel", async ({ abrir: o
   await expect(page.locator('#recent')).toBeHidden()
 })
 
-test("with no recordings, the panel says so and shows no alert", async ({ abrir: open }) => {
+test("with no recordings, the panel says so and shows no alert", async ({ open }) => {
   const page = await open()
   await expect(page.locator('#recent')).toBeVisible()
   await expect(page.locator('#recent-list li')).toHaveCount(0)
@@ -125,16 +125,16 @@ test("with no recordings, the panel says so and shows no alert", async ({ abrir:
   await expect(page.locator('#recent-alert')).toBeHidden()
 })
 
-test("home requests a recent refresh when opened", async ({ abrir: open }) => {
+test("home requests a recent refresh when opened", async ({ open }) => {
   const page = await open('recent')
-  await expect.poll(async () => (await calls(page)).some((c) => c.comando === 'recent_refresh')).toBe(true)
+  await expect.poll(async () => (await calls(page)).some((c) => c.command === 'recent_refresh')).toBe(true)
 })
 
 for (const [width, height] of [
   [520, 600],
   [380, 420],
 ]) {
-  test(`o painel cabe em ${width} × ${height} sem rolagem horizontal`, async ({ abrir: open }) => {
+  test(`o painel cabe em ${width} × ${height} sem rolagem horizontal`, async ({ open }) => {
     const page = await open('recent')
     await page.setViewportSize({ width: width, height: height })
     await expect(page.locator('#recent-list li')).toHaveCount(5)

@@ -1,14 +1,14 @@
 // Visual checks: each view at both window sizes (520 × 600, the default, and 380 × 420, the
 // smallest useful size) and both themes. Check app fonts, no external requests, no
 // horizontal scrolling, square DS corners and the record button in --color-rec; save screenshots
-// under capturas/<view>-<size>-<theme>.png for review.
+// under captures/<view>-<size>-<theme>.png for review.
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
 import { test, expect } from './fixtures'
 
-const SCREENSHOTS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'capturas')
+const SCREENSHOTS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'captures')
 
 const SIZES = [
   { name: '520x600', width: 520, height: 600 },
@@ -16,8 +16,8 @@ const SIZES = [
 ]
 
 const THEMES = [
-  { name: 'claro', scheme: 'light' },
-  { name: 'escuro', scheme: 'dark' },
+  { name: 'light', scheme: 'light' },
+  { name: 'dark', scheme: 'dark' },
 ] as const
 
 type View = { name: string; scenario: string; ready: string; go?: (page: Page) => Promise<void> }
@@ -27,14 +27,14 @@ const tab = (name) => async (page: Page) => {
   await page.locator(`[data-tab="${name}"]`).click()
 }
 
-const VIEWS= [
+const VIEWS = [
   { name: 'home', scenario: 'queue', ready: '#queue li' },
-  { name: 'gravando', scenario: 'markers', ready: '#count-markers' },
-  { name: 'nota', scenario: 'note', ready: '#note-silence' },
-  { name: 'atualizado', scenario: 'updated', ready: '#updated' },
+  { name: 'recording', scenario: 'markers', ready: '#count-markers' },
+  { name: 'note', scenario: 'note', ready: '#note-silence' },
+  { name: 'updated', scenario: 'updated', ready: '#updated' },
   { name: 'first-run', scenario: 'firstRun', ready: '#first-run-servers .choice' },
   {
-    name: 'primeira-execucao-conferir',
+    name: 'first-run-check',
     scenario: 'firstRun',
     ready: '#first-run-trust',
     go: async (page) => page.locator('#first-run-servers .choice').nth(1).click(),
@@ -48,12 +48,12 @@ const VIEWS= [
       await page.locator('#import-choose').click()
     },
   },
-  { name: 'config-geral', scenario: 'idle', ready: '#theme .seg-opt', go: tab('general') },
-  { name: 'config-reunioes', scenario: 'idle', ready: '#apps .list-row', go: tab('meetings') },
-  { name: 'config-audio', scenario: 'idle', ready: '#shortcuts .list-row', go: tab('audio') },
-  { name: 'config-armazenamento', scenario: 'idle', ready: '#space-used:not(:empty)', go: tab('storage') },
-  { name: 'config-pasta', scenario: 'idle', ready: '#folder-rules li', go: tab('folder') },
-  { name: 'config-servidor', scenario: 'idle', ready: '#server-account:not(:empty)', go: tab('server') },
+  { name: 'settings-general', scenario: 'idle', ready: '#theme .seg-opt', go: tab('general') },
+  { name: 'settings-meetings', scenario: 'idle', ready: '#apps .list-row', go: tab('meetings') },
+  { name: 'settings-audio', scenario: 'idle', ready: '#shortcuts .list-row', go: tab('audio') },
+  { name: 'settings-storage', scenario: 'idle', ready: '#space-used:not(:empty)', go: tab('storage') },
+  { name: 'settings-folder', scenario: 'idle', ready: '#folder-rules li', go: tab('folder') },
+  { name: 'settings-server', scenario: 'idle', ready: '#server-account:not(:empty)', go: tab('server') },
   {
     name: 'shortcuts',
     scenario: 'idle',
@@ -73,10 +73,10 @@ const SQUARE = '.btn, .input, .alert, .choice, .badge, .code-block, .seg, .seg-o
 
 for (const view of VIEWS) {
   for (const size of SIZES) {
-    for (const tema of THEMES) {
-      test(`${view.name} · ${size.name} · ${tema.name}`, async ({ abrir: open, externas: externalRequests, page }) => {
+    for (const theme of THEMES) {
+      test(`${view.name} · ${size.name} · ${theme.name}`, async ({ open, externalRequests, page }) => {
         await page.setViewportSize({ width: size.width, height: size.height })
-        await page.emulateMedia({ colorScheme: tema.scheme })
+        await page.emulateMedia({ colorScheme: theme.scheme })
         await open(view.scenario)
         // First run skips home: it is already the ready view.
         if (view.scenario !== 'firstRun') {
@@ -84,7 +84,7 @@ for (const view of VIEWS) {
         }
         await view.go?.(page)
         await expect(page.locator(view.ready).first()).toBeVisible()
-        await expect(page.locator('html')).toHaveAttribute('data-theme', tema.scheme)
+        await expect(page.locator('html')).toHaveAttribute('data-theme', theme.scheme)
 
         const measurement = await page.evaluate(async (square) => {
           await document.fonts.ready
@@ -119,14 +119,14 @@ for (const view of VIEWS) {
           expect(measurement.record.color).toBe(measurement.record.expected)
         }
         await mkdir(SCREENSHOTS, { recursive: true })
-        await page.screenshot({ path: path.join(SCREENSHOTS, `${view.name}-${size.name}-${tema.name}.png`), fullPage: true })
+        await page.screenshot({ path: path.join(SCREENSHOTS, `${view.name}-${size.name}-${theme.name}.png`), fullPage: true })
         expect(externalRequests).toEqual([])
       })
     }
   }
 }
 
-test("the chosen theme overrides the system and follows it again under System", async ({ abrir: open, page }) => {
+test("the chosen theme overrides the system and follows it again under System", async ({ open, page }) => {
   await page.emulateMedia({ colorScheme: 'light' })
   await open()
   await page.locator('#open-settings').click()

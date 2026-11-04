@@ -1,6 +1,6 @@
-import { test, expect, chamadas as calls } from './fixtures'
+import { test, expect, calls } from './fixtures'
 
-test("home loads with app fonts and no external requests", async ({ abrir: open, externas: externalRequests }) => {
+test("home loads with app fonts and no external requests", async ({ open, externalRequests }) => {
   const page = await open()
   await expect(page.locator('[data-view="home"]')).toBeVisible()
   await expect(page.locator('[data-view="home"] .brand')).toHaveText('eclume')
@@ -15,7 +15,7 @@ test("home loads with app fonts and no external requests", async ({ abrir: open,
   expect(externalRequests).toEqual([])
 })
 
-test("the theme follows the system", async ({ abrir: open }) => {
+test("the theme follows the system", async ({ open }) => {
   const page = await open()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
   await page.emulateMedia({ colorScheme: 'dark' })
@@ -24,7 +24,7 @@ test("the theme follows the system", async ({ abrir: open }) => {
   expect(fundo).toBe('rgb(30, 28, 25)')
 })
 
-test("idle: status, record, queue and account", async ({ abrir: open }) => {
+test("idle: status, record, queue and account", async ({ open }) => {
   const page = await open()
   await expect(page.locator('#line-status')).toHaveText('Ocioso, atento a reuniões')
   await expect(page.locator('#record')).toHaveAttribute('aria-pressed', 'false')
@@ -40,7 +40,7 @@ test("idle: status, record, queue and account", async ({ abrir: open }) => {
   await expect(page.locator('#account-action')).toHaveText('Sair')
 })
 
-test("recording toggles the button and status line", async ({ abrir: open }) => {
+test("recording toggles the button and status line", async ({ open }) => {
   const page = await open()
   await page.locator('#record').click()
   await expect(page.locator('#record')).toHaveAttribute('aria-pressed', 'true')
@@ -49,23 +49,23 @@ test("recording toggles the button and status line", async ({ abrir: open }) => 
   await expect(page.locator('#line-status')).toHaveText(/^Gravando · 0:0\d$/)
 })
 
-test("automatic recording shows the app and elapsed time", async ({ abrir: open }) => {
+test("automatic recording shows the app and elapsed time", async ({ open }) => {
   const page = await open('isRecording')
   await expect(page.locator('#line-status')).toHaveText(/^Gravando Microsoft Teams · 12:0\d$/)
   await expect(page.locator('#queue li').first().locator('.badge')).toHaveText('Gravando')
 })
 
-test("meeting prompt offers Record and Not now", async ({ abrir: open }) => {
+test("meeting prompt offers Record and Not now", async ({ open }) => {
   const page = await open('prompt')
   await expect(page.locator('#prompt')).toBeVisible()
   await expect(page.locator('#prompt .alert-warning')).toContainText('Zoom está usando o microfone. Gravar?')
   await page.locator('#prompt-now-no').click()
   await expect(page.locator('#prompt')).toBeHidden()
   const made = await calls(page)
-  expect(made).toContainEqual({ comando: 'answer_meeting', args: { record: false } })
+  expect(made).toContainEqual({ command: 'answer_meeting', args: { record: false } })
 })
 
-test("the queue shows vocabulary badges, voice note, import and visible error", async ({ abrir: open }) => {
+test("the queue shows vocabulary badges, voice note, import and visible error", async ({ open }) => {
   const page = await open('queue')
   const rows = page.locator('#queue li')
   await expect(rows.locator('.badge')).toHaveText(['Enviando', 'Enviada', 'Falhou o envio', 'Aguardando envio'])
@@ -77,7 +77,7 @@ test("the queue shows vocabulary badges, voice note, import and visible error", 
   await expect(page.locator('#queue-summary')).toHaveText('1 de 4 enviadas')
 })
 
-test("the queue shows the title given on stopping, otherwise the server title", async ({ abrir: open }) => {
+test("the queue shows the title given on stopping, otherwise the server title", async ({ open }) => {
   const page = await open('titles')
   const rows = page.locator('#queue li')
   await expect(rows.nth(0)).toContainText('Alinhamento semanal · 54 min')
@@ -85,7 +85,7 @@ test("the queue shows the title given on stopping, otherwise the server title", 
   await expect(rows.nth(2)).toContainText('· 22 min')
 })
 
-test("an uploaded recording with queued server transcription explains its wait", async ({ abrir: open }) => {
+test("an uploaded recording with queued server transcription explains its wait", async ({ open }) => {
   const page = await open('wait')
   const rows = page.locator('#queue li')
   await expect(rows.nth(0).locator('.queue-wait')).toHaveText('Atrás de 2 gravações suas que chegaram antes.')
@@ -95,21 +95,21 @@ test("an uploaded recording with queued server transcription explains its wait",
   await expect(rows.nth(2).locator('.queue-wait')).toHaveCount(0)
 })
 
-test("empty queue with the upload notice", async ({ abrir: open }) => {
+test("empty queue with the upload notice", async ({ open }) => {
   const page = await open('empty')
   await expect(page.locator('#line-status')).toHaveText('Tudo enviado')
   await expect(page.locator('#queue-empty')).toBeVisible()
   await expect(page.locator('#notice')).toContainText('o servidor respondeu 503')
 })
 
-test("account sign-out clears the credential and returns to first run", async ({ abrir: open }) => {
+test("account sign-out clears the credential and returns to first run", async ({ open }) => {
   const page = await open()
   await page.locator('#account-action').click()
   await expect(page.locator('[data-view="first-run"]')).toBeVisible()
-  expect((await calls(page)).map((c) => c.comando)).toContain('sign_out')
+  expect((await calls(page)).map((c) => c.command)).toContain('sign_out')
 })
 
-test("a command error appears and clears on the next successful command", async ({ abrir: open }) => {
+test("a command error appears and clears on the next successful command", async ({ open }) => {
   const page = await open('isRecording')
   await page.locator('#new-note').click()
   await expect(page.locator('#notice.alert-error')).toContainText('Já há uma gravação em andamento')
@@ -117,7 +117,7 @@ test("a command error appears and clears on the next successful command", async 
   await expect(page.locator('#notice')).toBeHidden()
 })
 
-test("after an update: Updated to X with notes until dismissed", async ({ abrir: open }) => {
+test("after an update: Updated to X with notes until dismissed", async ({ open }) => {
   const page = await open('updated')
   const notice = page.locator('#updated')
   await expect(notice).toBeVisible()
@@ -126,10 +126,10 @@ test("after an update: Updated to X with notes until dismissed", async ({ abrir:
   await expect(page.locator('#updated-notes')).toHaveText('Nova nota, Importar arquivo e entrar com e-mail e senha')
   await page.locator('#updated-close').click()
   await expect(notice).toBeHidden()
-  expect((await calls(page)).map((c) => c.comando)).toContain('dismiss_update_notice')
+  expect((await calls(page)).map((c) => c.command)).toContain('dismiss_update_notice')
 })
 
-test("no update means no notice", async ({ abrir: open }) => {
+test("no update means no notice", async ({ open }) => {
   const page = await open()
   await expect(page.locator('#line-status')).not.toHaveText('Carregando…')
   await expect(page.locator('#updated')).toBeHidden()

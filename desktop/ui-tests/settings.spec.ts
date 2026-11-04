@@ -1,4 +1,4 @@
-import { test, expect, chamadas as calls } from './fixtures'
+import { test, expect, calls } from './fixtures'
 import type { Page } from '@playwright/test'
 
 type Input = Record<string, unknown> & { policies: Record<string, string> }
@@ -7,7 +7,7 @@ async function lastInput(page: Page): Promise<Input> {
   return page.evaluate(() => (window as unknown as { __mock: { state: { lastInput: Input } } }).__mock.state.lastInput)
 }
 
-test("Ctrl+, opens General with Appearance, Startup and Notifications; Meetings only has detection", async ({ abrir: open }) => {
+test("Ctrl+, opens General with Appearance, Startup and Notifications; Meetings only has detection", async ({ open }) => {
   const page = await open()
   await page.keyboard.press('Control+,')
   await expect(page.locator('[data-view="settings"]')).toBeVisible()
@@ -20,7 +20,7 @@ test("Ctrl+, opens General with Appearance, Startup and Notifications; Meetings 
   await expect(page.locator('[data-panel="meetings"] #theme, [data-panel="meetings"] #notify-summary')).toHaveCount(0)
 })
 
-test("Meetings has all 8 apps, DS subtitles and each app’s policy", async ({ abrir: open }) => {
+test("Meetings has all 8 apps, DS subtitles and each app’s policy", async ({ open }) => {
   const page = await open()
   await page.keyboard.press('Control+,')
   await page.locator('[data-tab="meetings"]').click()
@@ -45,7 +45,7 @@ test("Meetings has all 8 apps, DS subtitles and each app’s policy", async ({ a
   await expect(rows.first().locator('.seg-opt')).toHaveText(['Gravar', 'Confirmar', 'Ignorar'])
 })
 
-test("General: processing completion notifications start enabled and save immediately", async ({ abrir: open }) => {
+test("General: processing completion notifications start enabled and save immediately", async ({ open }) => {
   const page = await open()
   await page.locator('#open-settings').click()
   await expect(page.locator('#notify-summary')).toBeChecked()
@@ -54,7 +54,7 @@ test("General: processing completion notifications start enabled and save immedi
   expect((await lastInput(page)).notify_summary).toBe(false)
 })
 
-test("General: recent recordings in the window default to 5 and save immediately", async ({ abrir: open }) => {
+test("General: recent recordings in the window default to 5 and save immediately", async ({ open }) => {
   const page = await open()
   await page.locator('#open-settings').click()
   await expect(page.locator('label[for="recent-count"]')).toHaveText('Gravações recentes na janela')
@@ -65,7 +65,7 @@ test("General: recent recordings in the window default to 5 and save immediately
 })
 
 test("General: tray recent recordings default to 1, separate from the window, and save immediately", async ({
-  abrir: open,
+  open,
 }) => {
   const page = await open()
   await page.locator('#open-settings').click()
@@ -83,7 +83,7 @@ test("General: tray recent recordings default to 1, separate from the window, an
   await expect.poll(async () => (await lastInput(page)).tray_recent_count).toBe(0)
 })
 
-test("General: autostart starts enabled and saves immediately", async ({ abrir: open }) => {
+test("General: autostart starts enabled and saves immediately", async ({ open }) => {
   const page = await open()
   await page.locator('#open-settings').click()
   await expect(page.locator('#start-with-the-system')).toBeChecked()
@@ -92,7 +92,7 @@ test("General: autostart starts enabled and saves immediately", async ({ abrir: 
   expect((await lastInput(page)).autostart).toBe(false)
 })
 
-test("policy changes, disabling detection and restoring defaults save immediately", async ({ abrir: open }) => {
+test("policy changes, disabling detection and restoring defaults save immediately", async ({ open }) => {
   const page = await open()
   await page.locator('#open-settings').click()
   await page.locator('[data-tab="meetings"]').click()
@@ -120,7 +120,7 @@ test("policy changes, disabling detection and restoring defaults save immediatel
   })
 })
 
-test("Storage: three retention choices, local folder, space and retry", async ({ abrir: open }) => {
+test("Storage: three retention choices, local folder, space and retry", async ({ open }) => {
   const page = await open()
   await page.locator('#open-settings').click()
   await page.locator('[data-tab="storage"]').click()
@@ -150,12 +150,12 @@ test("Storage: three retention choices, local folder, space and retry", async ({
   await page.locator('#show-folder').click()
   await page.locator('#retry').click()
   await expect(page.locator('#config-notice')).toContainText('As falhas vão ser enviadas de novo.')
-  const commands = (await calls(page)).map((c) => c.comando)
+  const commands = (await calls(page)).map((c) => c.command)
   expect(commands).toContain('open_data_dir')
   expect(commands).toContain('sync_now')
 })
 
-test("Server: account sign-out, address, extra CA dialog and connection test", async ({ abrir: open }) => {
+test("Server: account sign-out, address, extra CA dialog and connection test", async ({ open }) => {
   const page = await open()
   await page.locator('#open-settings').click()
   await page.locator('[data-tab="server"]').click()
@@ -189,10 +189,10 @@ test("Server: account sign-out, address, extra CA dialog and connection test", a
 
   await page.locator('#server-sign-out').click()
   await expect(page.locator('[data-view="first-run"]')).toBeVisible()
-  expect((await calls(page)).map((c) => c.comando)).toContain('sign_out')
+  expect((await calls(page)).map((c) => c.command)).toContain('sign_out')
 })
 
-test("Server with a legacy PAT: stays connected and offers email and password sign-in", async ({ abrir: open }) => {
+test("Server with a legacy PAT: stays connected and offers email and password sign-in", async ({ open }) => {
   const page = await open('pat')
   await expect(page.locator('#account-name')).toHaveText('Conectado com um token pessoal')
   await page.locator('#account-action').click()
@@ -206,7 +206,7 @@ test("Server with a legacy PAT: stays connected and offers email and password si
   await expect(page.locator('[data-view="home"]')).toBeVisible()
 })
 
-test("Audio: microphone by name, system output and silence stop save immediately", async ({ abrir: open }) => {
+test("Audio: microphone by name, system output and silence stop save immediately", async ({ open }) => {
   const page = await open()
   await page.locator('#open-settings').click()
   await page.locator('[data-tab="audio"]').click()
@@ -256,7 +256,7 @@ test("Audio: microphone by name, system output and silence stop save immediately
   await expect.poll(async () => (await lastInput(page)).language).toBe('')
 })
 
-test("Audio: None disables each source’s test, and both sources set to None are rejected", async ({ abrir: open }) => {
+test("Audio: None disables each source’s test, and both sources set to None are rejected", async ({ open }) => {
   const page = await open()
   await page.locator('#open-settings').click()
   await page.locator('[data-tab="audio"]').click()
@@ -280,7 +280,7 @@ test("Audio: None disables each source’s test, and both sources set to None ar
   await expect(page.locator('#test-system')).toBeEnabled()
 })
 
-test("Audio: microphone test shows the meter, changes to Stop and resets at the end", async ({ abrir: open }) => {
+test("Audio: microphone test shows the meter, changes to Stop and resets at the end", async ({ open }) => {
   const page = await open()
   await page.locator('#open-settings').click()
   await page.locator('[data-tab="audio"]').click()
@@ -291,12 +291,12 @@ test("Audio: microphone test shows the meter, changes to Stop and resets at the 
   await expect(page.locator('#meter-test i:not([data-quiet])')).toHaveCount(6)
   await expect(page.locator('#test-mic')).toHaveText('Fale para testar')
   await expect(page.locator('#meter-test i[data-quiet]')).toHaveCount(16)
-  expect((await calls(page)).filter((c) => c.comando === 'source_test')).toEqual([
-    { comando: 'source_test', args: { source: 'mic' } },
+  expect((await calls(page)).filter((c) => c.command === 'source_test')).toEqual([
+    { command: 'source_test', args: { source: 'mic' } },
   ])
 })
 
-test("Audio: Stop ends the system test early", async ({ abrir: open }) => {
+test("Audio: Stop ends the system test early", async ({ open }) => {
   const page = await open()
   await page.locator('#open-settings').click()
   await page.locator('[data-tab="audio"]').click()
@@ -306,14 +306,14 @@ test("Audio: Stop ends the system test early", async ({ abrir: open }) => {
   await page.locator('#test-system').click()
   await expect(page.locator('#test-system')).toHaveText('Toque algo para testar')
   await expect(page.locator('#meter-test i[data-quiet]')).toHaveCount(16)
-  const tests = (await calls(page)).filter((c) => ['source_test', 'source_test_stop'].includes(c.comando))
+  const tests = (await calls(page)).filter((c) => ['source_test', 'source_test_stop'].includes(c.command))
   expect(tests).toEqual([
-    { comando: 'source_test', args: { source: 'system' } },
-    { comando: 'source_test_stop', args: null },
+    { command: 'source_test', args: { source: 'system' } },
+    { command: 'source_test_stop', args: null },
   ])
 })
 
-test("Audio on Wayland without a portal: create and remove GNOME shortcuts", async ({ abrir: open }) => {
+test("Audio on Wayland without a portal: create and remove GNOME shortcuts", async ({ open }) => {
   const page = await open('wayland')
   await page.locator('#open-settings').click()
   await page.locator('[data-tab="audio"]').click()
@@ -328,8 +328,8 @@ test("Audio on Wayland without a portal: create and remove GNOME shortcuts", asy
   await expect(page.locator('#config-notice')).toContainText('Atalhos criados no GNOME.')
   await expect(rows.locator('.list-row-sub')).toHaveText(Array(3).fill('Funciona com o eclume em segundo plano'))
   await expect(page.locator('#shortcuts-mode')).toHaveText('Nesta sessão (Wayland), os atalhos são do GNOME e chamam o eclume.')
-  expect((await calls(page)).filter((c) => c.comando === 'system_shortcuts')).toEqual([
-    { comando: 'system_shortcuts', args: { install: true } },
+  expect((await calls(page)).filter((c) => c.command === 'system_shortcuts')).toEqual([
+    { command: 'system_shortcuts', args: { install: true } },
   ])
 
   await page.locator('#shortcuts-gnome', { hasText: 'Remover atalhos do GNOME' }).click()
@@ -337,7 +337,7 @@ test("Audio on Wayland without a portal: create and remove GNOME shortcuts", asy
   await expect(page.locator('#shortcuts-gnome')).toHaveText('Criar atalhos no GNOME')
 })
 
-test("Audio: shortcut registration status and replacement with the next combination", async ({ abrir: open }) => {
+test("Audio: shortcut registration status and replacement with the next combination", async ({ open }) => {
   const page = await open('shortcutInUse')
   await page.locator('#open-settings').click()
   await page.locator('[data-tab="audio"]').click()
@@ -368,7 +368,7 @@ test("Audio: shortcut registration status and replacement with the next combinat
   expect(input.shortcuts).toEqual({ record: 'Ctrl+Alt+R', note: 'Ctrl+Alt+N', marker: 'Ctrl+Alt+J' })
 })
 
-test("Sync: starts disabled, chooses a folder, enables and explains collections, Obsidian and agents", async ({ abrir: open }) => {
+test("Sync: starts disabled, chooses a folder, enables and explains collections, Obsidian and agents", async ({ open }) => {
   const page = await open()
   await page.locator('#open-settings').click()
   await page.locator('[data-tab="folder"]').click()
@@ -410,7 +410,7 @@ test("Sync: starts disabled, chooses a folder, enables and explains collections,
   expect((await lastInput(page)).mirror_transcripts).toBe(false)
 })
 
-test("Sync: Sync now requests a cycle and displays its result; help opens the article", async ({ abrir: open }) => {
+test("Sync: Sync now requests a cycle and displays its result; help opens the article", async ({ open }) => {
   const page = await open()
   await page.locator('#open-settings').click()
   await page.locator('[data-tab="folder"]').click()
@@ -420,9 +420,9 @@ test("Sync: Sync now requests a cycle and displays its result; help opens the ar
   await expect(page.locator('#folder-estado')).toContainText('12 gravações lidas no último ciclo')
   await expect(page.locator('#folder-estado')).toHaveAttribute('data-status', 'synced')
   await page.locator('#folder-help').click()
-  const made = (await calls(page)).filter((c) => c.comando === 'mirror_sync_now' || c.comando === 'open_help')
+  const made = (await calls(page)).filter((c) => c.command === 'mirror_sync_now' || c.command === 'open_help')
   expect(made).toEqual([
-    { comando: 'mirror_sync_now', args: null },
-    { comando: 'open_help', args: { article: 'pasta-sincronizada' } },
+    { command: 'mirror_sync_now', args: null },
+    { command: 'open_help', args: { article: 'pasta-sincronizada' } },
   ])
 })

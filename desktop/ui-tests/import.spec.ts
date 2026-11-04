@@ -1,4 +1,4 @@
-import { test, expect, chamadas as calls } from './fixtures'
+import { test, expect, calls } from './fixtures'
 import type { Page } from '@playwright/test'
 
 type Mock = {
@@ -16,11 +16,11 @@ async function request(page: Page) {
   return page.evaluate(() => (window as unknown as { __mock: Mock }).__mock.state.importing.request)
 }
 
-test("Import file opens the system picker and shows the name, duration and date read from the file", async ({ abrir: open }) => {
+test("Import file opens the system picker and shows the name, duration and date read from the file", async ({ open }) => {
   const page = await open()
   await page.locator('#import').click()
   await expect(page.locator('[data-view="import"]')).toBeVisible()
-  expect((await calls(page)).map((c) => c.comando)).toContain('pick_import_file')
+  expect((await calls(page)).map((c) => c.command)).toContain('pick_import_file')
   await expect(page.locator('[data-view="home"]')).toBeHidden()
   await expect(page.locator('#import-name')).toHaveText('kickoff-guion.m4a · 47:12')
   await expect(page.locator('#import-date')).toHaveValue('2026-09-19T14:02')
@@ -34,7 +34,7 @@ test("Import file opens the system picker and shows the name, duration and date 
   expect(done.recordedAt).toBe(new Date(2026, 8, 19, 14, 2).getTime())
 })
 
-test("a dropped file opens import; a changed date is sent as user", async ({ abrir: open }) => {
+test("a dropped file opens import; a changed date is sent as user", async ({ open }) => {
   const page = await open()
   await adjust(page, { hold: true })
   await page.evaluate(() => (window as unknown as { __mock: Mock }).__mock.emit('import-dropped', '/home/ana/gravador.wav'))
@@ -53,10 +53,10 @@ test("a dropped file opens import; a changed date is sent as user", async ({ abr
 
   await page.locator('#import-cancel').click()
   await expect(page.locator('[data-view="home"]')).toBeVisible()
-  expect((await calls(page)).map((c) => c.comando)).toContain('cancel_import')
+  expect((await calls(page)).map((c) => c.command)).toContain('cancel_import')
 })
 
-test("a file without audio and a conversion failure appear as errors", async ({ abrir: open }) => {
+test("a file without audio and a conversion failure appear as errors", async ({ open }) => {
   const page = await open()
   await page.evaluate(() => (window as unknown as { __mock: Mock }).__mock.emit('import-dropped', '/home/ana/tela.mp4'))
   await expect(page.locator('#import-error')).toContainText('tela.mp4 não tem áudio.')
@@ -71,16 +71,16 @@ test("a file without audio and a conversion failure appear as errors", async ({ 
   await expect(page.locator('#import-conversion')).toBeHidden()
 })
 
-test("cancelling the system picker stays on home", async ({ abrir: open }) => {
+test("cancelling the system picker stays on home", async ({ open }) => {
   const page = await open()
   await adjust(page, { chosen: null })
   await page.locator('#import').click()
-  await expect.poll(async () => (await calls(page)).map((c) => c.comando)).toContain('pick_import_file')
+  await expect.poll(async () => (await calls(page)).map((c) => c.command)).toContain('pick_import_file')
   await expect(page.locator('[data-view="home"]')).toBeVisible()
   await expect(page.locator('[data-view="import"]')).toBeHidden()
 })
 
-test("Ctrl+O opens import and Esc goes back", async ({ abrir: open }) => {
+test("Ctrl+O opens import and Esc goes back", async ({ open }) => {
   const page = await open()
   await page.keyboard.press('Control+o')
   await expect(page.locator('[data-view="import"]')).toBeVisible()
