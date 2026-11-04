@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { HelpHint } from '../../app/HelpHint'
@@ -8,17 +9,18 @@ import styles from './TokensPage.module.css'
 
 interface TokenFormProps {
   defaults?: { name?: string; scopes?: Scope[]; expiration?: string }
-  /** Shows the "Escopos individuais" disclosure and the ready-made combinations. */
+  /** Shows the "Individual scopes" disclosure and the ready-made combinations. */
   showIndividual?: boolean
   /** A hint beside a group, keyed by the group's `id`. */
   groupHints?: Partial<Record<string, ReactNode>>
   onCreated: (created: Schemas['TokenCreated']) => void
-  /** With it, the form gains "Cancelar" in the `.dialog-actions`. */
+  /** With it, the form gains a cancel button in the `.dialog-actions`. */
   onCancel?: () => void
 }
 
 /** Name, scopes by group and expiry of a personal token; creates it and returns the secret to the caller. */
 export function TokenForm({ defaults, showIndividual = false, groupHints, onCreated, onCancel }: TokenFormProps) {
+  const { t } = useTranslation(['tokens', 'common'])
   const queryClient = useQueryClient()
   const [name, setName] = useState(defaults?.name ?? '')
   const [scopes, setScopes] = useState<Scope[]>(defaults?.scopes ?? [])
@@ -55,25 +57,25 @@ export function TokenForm({ defaults, showIndividual = false, groupHints, onCrea
 
   const submitButton = (
     <button type="submit" className="btn btn-primary" disabled={create.isPending || !valid}>
-      {create.isPending ? 'Criando…' : 'Criar token'}
+      {create.isPending ? t('form.submitting') : t('form.submit')}
     </button>
   )
 
   return (
     <form className={styles.form} onSubmit={submit}>
       <div className="field">
-        <label htmlFor={`${id}-nome`}>Nome</label>
+        <label htmlFor={`${id}-nome`}>{t('form.name')}</label>
         <input
           id={`${id}-nome`}
           className="input"
           value={name}
           maxLength={100}
           onChange={(event) => setName(event.target.value)}
-          placeholder="Ex.: Claude Desktop"
+          placeholder={t('form.namePlaceholder')}
         />
       </div>
       <fieldset className={`field ${styles.fieldset}`}>
-        <legend className="field-label">Escopos</legend>
+        <legend className="field-label">{t('form.scopes')}</legend>
         <div className={styles.groups}>
           {SCOPE_GROUPS.map((group) => (
             <span key={group.id} className={styles.groupRow}>
@@ -92,13 +94,13 @@ export function TokenForm({ defaults, showIndividual = false, groupHints, onCrea
         </div>
         {showIndividual && (
           <details className="disclosure">
-            <summary>Escopos individuais</summary>
+            <summary>{t('form.individual')}</summary>
             <div className={styles.presets}>
               {/* Outside the summary: a button inside it would be a nested interactive control. */}
-              <HelpHint subject="os escopos individuais" title="Escopos individuais" article="criar-token">
-                Para integrações que pedem um escopo fora dos grupos, como o importador do lumea.
+              <HelpHint subject={t('form.individualSubject')} title={t('form.individual')} article="criar-token">
+                {t('form.individualHint')}
               </HelpHint>
-              <span className="field-hint">Combinações prontas:</span>
+              <span className="field-hint">{t('form.presets')}</span>
               {PRESETS.map((preset) => (
                 <button
                   key={preset.name}
@@ -133,7 +135,7 @@ export function TokenForm({ defaults, showIndividual = false, groupHints, onCrea
         )}
       </fieldset>
       <fieldset className={`field ${styles.fieldset}`}>
-        <legend className="field-label">Validade</legend>
+        <legend className="field-label">{t('form.expiry')}</legend>
         <div className="seg">
           {EXPIRATIONS.map((option) => (
             <label key={option.value} className="seg-opt">
@@ -157,7 +159,7 @@ export function TokenForm({ defaults, showIndividual = false, groupHints, onCrea
       {onCancel ? (
         <div className="dialog-actions">
           <button type="button" className="btn btn-secondary" onClick={onCancel}>
-            Cancelar
+            {t('common:cancel')}
           </button>
           {submitButton}
         </div>
