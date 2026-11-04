@@ -1,6 +1,6 @@
 /* Design System fonts served by the app itself (no CDN): Archivo 400–800 and IBM Plex Mono
    400/500, the @fontsource latin subset (covers pt-BR). The same family names the
-   --font-heading, --font-body and --font-mono tokens use. Files from sincronizar_ds.sh. */
+   --font-heading, --font-body and --font-mono tokens use. Files from sync_ds.sh. */
 @font-face {
   font-family: 'Archivo';
   font-style: normal;

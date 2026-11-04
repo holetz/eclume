@@ -25,10 +25,10 @@ the step-by-step guide for the user, in [INSTALACAO.md](INSTALACAO.md).
 | `crates/detect/` | meeting detection: per-OS mic signals (adapted from Anarlog), classification, debounce and automatic recording |
 | `crates/sync/` | sync: the v1 contract's resumable upload, login and device pairing, pinned CA, mDNS discovery and the credential in the OS keychain |
 | `crates/import/` | import: the file's duration and date (`mvhd`, tags, modification time) and conversion to Opus through `symphonia` |
-| `scripts/manifestos_release.py` | builds a release's `latest.json`, `instaladores.json` and `SHA256SUMS` |
-| `scripts/sincronizar_ds.sh` | copies the Design System's `eclume.css` and fonts into `ui/` |
+| `scripts/release_manifests.py` | builds a release's `latest.json`, `instaladores.json` and `SHA256SUMS` |
+| `scripts/sync_ds.sh` | copies the Design System's `eclume.css` and fonts into `ui/` |
 | `scripts/cdp.mjs` | `eval` and capture in the real window through WebView2's CDP |
-| `scripts/prova-windows.ps1`, `scripts/prova_nota.py` | the voice-note proof on a Windows workstation |
+| `scripts/prove-windows.ps1`, `scripts/prove_note.py` | the voice-note proof on a Windows workstation |
 
 The recording format, the voice note, the markers and the queue are in
 [docs/standards/code/desktop-gravacao.md](../docs/standards/code/desktop-gravacao.md); detection,
@@ -64,7 +64,7 @@ cargo check --manifest-path desktop/Cargo.toml --workspace
 cargo clippy --manifest-path desktop/Cargo.toml --workspace -- -D warnings
 cargo test --manifest-path desktop/Cargo.toml --workspace
 # real capture, no window: records 5 s of mic + system and prints the .ogg path
-cargo run --manifest-path desktop/Cargo.toml -p eclume-desktop --example gravar -- 5 /tmp/eclume-gravar
+cargo run --manifest-path desktop/Cargo.toml -p eclume-desktop --example record -- 5 /tmp/eclume-record
 # meeting signals, no window: prints for 10 s who uses the mic and the classification
 cargo run --manifest-path desktop/Cargo.toml -p eclume-detect --example sinais -- 10
 # sync against the contract mock (deploy/docker-compose.mock.yml on 127.0.0.1:4010)
@@ -82,7 +82,7 @@ credential, in the OS keychain. Without touching the file, `ECLUME_WEB_URL`, `EC
 `ECLUME_PAT` override the server, the API and the credential (dev and tests).
 
 The tray icons (`tray-*.png`, one per state) come from the brand through
-`uv run --with pillow python scripts/icones_bandeja.py`. The bundle's icons are generated from
+`uv run --with pillow python scripts/tray_icons.py`. The bundle's icons are generated from
 `src-tauri/icons/icon.svg`:
 
 ```bash

@@ -16,7 +16,7 @@ RUN rustup target add x86_64-pc-windows-msvc \
 # build falha em "CMAKE_MAKE_PROGRAM is not set". Camada própria para não refazer o cargo-xwin.
 RUN apt-get update && apt-get install -y --no-install-recommends ninja-build \
  && rm -rf /var/lib/apt/lists/*
-# Assinatura Authenticode no Linux (desktop/scripts/assinar-windows.sh): o `jsign` (Java) assina
+# Assinatura Authenticode no Linux (desktop/scripts/sign-windows.sh): o `jsign` (Java) assina
 # por qualquer fornecedor (serviço remoto, HSM na nuvem, token, PKCS#12), numa versão fixa com o
 # sha256 conferido; o `osslsigncode` confere assinatura e carimbo e o `7z` abre o instalador NSIS
 # para conferir os executáveis de dentro. Camada própria, para não refazer o resto.

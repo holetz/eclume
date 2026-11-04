@@ -100,8 +100,8 @@ dependency) evaluates in the window with `awaitPromise` and captures what it sho
 
 ```bash
 node desktop/scripts/cdp.mjs eval "window.__TAURI__.core.invoke('status')"
-node desktop/scripts/cdp.mjs eval "document.querySelector('[data-vista]:not([hidden])').dataset.vista"
-node desktop/scripts/cdp.mjs screenshot janela.png
+node desktop/scripts/cdp.mjs eval "document.querySelector('[data-view]:not([hidden])').dataset.view"
+node desktop/scripts/cdp.mjs screenshot window.png
 ```
 
 The expression calls the same commands as the window: `'status'`, `'recordings'`,
@@ -113,11 +113,11 @@ executable whose **name** contains "eclume": run the meeting simulator under ano
 
 ## 5. Voice-note proof
 
-`powershell -NoProfile -File desktop/scripts/prova-windows.ps1` runs the end-to-end proof on this
+`powershell -NoProfile -File desktop/scripts/prove-windows.ps1` runs the end-to-end proof on this
 station: it downloads and installs the NSIS from `/downloads`, opens the app with port 9229, captures the first
 run (with the embedded server), signs in with the test account (`ECLUME_PROOF_EMAIL` and
 `ECLUME_PROOF_PASSWORD`), records a note through the `Ctrl+Alt+N` shortcut speaking a text through the Windows
-voice on the speakers, and checks through the API (`desktop/scripts/prova_nota.py`) that the note reached the
+voice on the speakers, and checks through the API (`desktop/scripts/prove_note.py`) that the note reached the
 library with `kind=note`, `eclume-desktop/<version>` and `transcribed`. The note only stops by itself
 with voice on the microphone: with a muted microphone, it is discarded ("não ouvimos voz") and the proof stays
 pending for a person to speak. The synthesized shortcut (`keybd_event`) only reaches the app with the session
@@ -131,9 +131,9 @@ To diagnose capture (WASAPI) without MSVC on the station, build on the host for
 `x86_64-pc-windows-msvc` with `cargo xwin` and bring back the `.exe`:
 
 ```bash
-remote-run desktop 'cargo xwin build --release --target x86_64-pc-windows-msvc -p eclume-desktop --example gravar'
-scp gpu-host:build/desktop/target/x86_64-pc-windows-msvc/release/examples/gravar.exe .
-./gravar.exe 12 ./saida    # records 12 s of mic + system and prints the .ogg
+remote-run desktop 'cargo xwin build --release --target x86_64-pc-windows-msvc -p eclume-desktop --example record'
+scp gpu-host:build/desktop/target/x86_64-pc-windows-msvc/release/examples/record.exe .
+./record.exe 12 ./output   # records 12 s of mic + system and prints the .ogg
 ```
 
 A `target/` seeded from another folder on the host (`~/build/desktop`, for example) keeps the old path

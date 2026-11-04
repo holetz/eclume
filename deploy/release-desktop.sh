@@ -208,7 +208,7 @@ build() {
   local signing=() config=""
   if [[ "$sign" == sign ]]; then
     signing=(-v "$SIGNING_DIR:/run/assinatura:ro")
-    config='{"bundle":{"windows":{"signCommand":"bash /src/desktop/scripts/assinar-windows.sh %1"}}}'
+    config='{"bundle":{"windows":{"signCommand":"bash /src/desktop/scripts/sign-windows.sh %1"}}}'
   fi
   docker run "${common[@]}" "${signing[@]}" \
     -v "$SECRETS/tauri-updater.key:/run/chave/key:ro" \
@@ -238,14 +238,14 @@ if [[ "$WINDOWS" -eq 1 ]]; then
     echo "Checking the Windows installer signature…" >&2
     docker run --rm --cpu-shares 256 -u 1000:1000 -e HOME=/tmp -v "$SRC:/src:ro" -v "$NSIS:/nsis:ro" "$IMG_WINDOWS" \
       bash -c 'set -euo pipefail
-               signer=/src/desktop/scripts/assinar-windows.sh
+               signer=/src/desktop/scripts/sign-windows.sh
                setup="$(ls /nsis/*_'"$VERSION"'_*-setup.exe)"
-               bash "$signer" --verificar "$setup"
+               bash "$signer" --verify "$setup"
                dir="$(mktemp -d)"; 7z x -y -o"$dir" "$setup" >/dev/null
                for name in eclume-desktop.exe uninstall.exe; do
                  found="$(find "$dir" -iname "$name" -print -quit)"
                  [[ -n "$found" ]] || { echo "$name is not in the installer" >&2; exit 1; }
-                 bash "$signer" --verificar "$found"
+                 bash "$signer" --verify "$found"
                done'
   else
     echo "Warning: Windows installer without code signing (no $SIGNING_DIR on the host)." >&2
@@ -255,8 +255,8 @@ fi
 
 # --- manifests and publication --------------------------------------------------------------------
 host "cd '$DIST' && cp '$SRC/desktop/INSTALACAO.md' . \
-  && python3 '$SRC/desktop/scripts/manifestos_release.py' --artefatos . --versao '$VERSION' \
-       --base-url '$DOWNLOADS_URL' --notas $(printf '%q' "$NOTES") \
+  && python3 '$SRC/desktop/scripts/release_manifests.py' --artifacts . --version '$VERSION' \
+       --base-url '$DOWNLOADS_URL' --notes $(printf '%q' "$NOTES") \
   && sha256sum -c --quiet SHA256SUMS && ls -la"
 
 if [[ "$PUBLISH" -eq 0 ]]; then

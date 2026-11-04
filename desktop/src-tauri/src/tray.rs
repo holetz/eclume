@@ -541,7 +541,7 @@ impl TrayIconState {
     }
 }
 
-/// The PNGs are generated from the brand mark by `desktop/scripts/icones_bandeja.py`.
+/// The PNGs are generated from the brand mark by `desktop/scripts/tray_icons.py`.
 fn icon(state: TrayIconState) -> tauri::Result<Image<'static>> {
     Image::from_bytes(match state {
         TrayIconState::Idle => include_bytes!("../icons/tray-idle.png"),
