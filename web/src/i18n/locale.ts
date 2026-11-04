@@ -22,3 +22,27 @@ export function browserLocale(
   }
   return DEFAULT_LOCALE
 }
+
+// The locale this browser last showed, so the next visit renders in it from the first frame.
+const STORAGE_KEY = 'eclume-locale'
+
+export function rememberLocale(locale: Locale): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, locale)
+  } catch {
+    // Storage blocked: the next visit starts from the browser language.
+  }
+}
+
+function storedLocale(): Locale | null {
+  try {
+    return normalize(localStorage.getItem(STORAGE_KEY))
+  } catch {
+    return null
+  }
+}
+
+/** The locale of the first render: the one last shown here, else the browser language, else en. */
+export function startLocale(): Locale {
+  return storedLocale() ?? browserLocale()
+}

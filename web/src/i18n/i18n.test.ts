@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { activeLocale, i18n, resources, setLocale } from './index'
-import { browserLocale, normalize } from './locale'
+import en from './en'
+import { activeLocale, i18n, setLocale } from './index'
+import { browserLocale, normalize, startLocale } from './locale'
+import ptBR from './pt-BR'
+
+const resources = { en, 'pt-BR': ptBR }
 
 describe('normalize', () => {
   it.each([
@@ -65,5 +69,17 @@ describe('setLocale', () => {
     }
     expect(i18n.t('common:save')).toBe('Salvar')
     expect(document.documentElement.lang).toBe('pt-BR')
+  })
+})
+
+describe('startLocale', () => {
+  it('prefers the locale this browser last showed, then the browser language', async () => {
+    expect(startLocale()).toBe('pt-BR')
+    await setLocale('en')
+    expect(localStorage.getItem('eclume-locale')).toBe('en')
+    expect(startLocale()).toBe('en')
+    await setLocale('pt-BR')
+    localStorage.clear()
+    expect(startLocale()).toBe('pt-BR')
   })
 })

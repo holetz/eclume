@@ -3,7 +3,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { i18n, resources, setLocale } from '../i18n'
+import { i18n, setLocale } from '../i18n'
+import { LOCALES } from '../i18n/locale'
 import { ApiError, errorMessage } from './problem'
 
 /** The `ProblemCode` enum, read from the source contract (vitest runs from `web/`). */
@@ -35,8 +36,8 @@ describe('problem codes', () => {
     expect(codes).toContain('error')
   })
 
-  it.each(Object.keys(resources))('has a message for every code in %s', async (locale) => {
-    await setLocale(locale as keyof typeof resources)
+  it.each(LOCALES)('has a message for every code in %s', async (locale) => {
+    await setLocale(locale)
     const catalog = i18n.getResourceBundle(locale, 'errors').code as Record<string, string>
     expect(Object.keys(catalog).sort()).toEqual([...codes].sort())
     for (const code of codes) {

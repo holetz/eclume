@@ -1,54 +1,57 @@
+// The UI language. Only the active locale's catalogs are loaded: `startI18n` picks the locale before
+// the first render (the locale this browser last used, else the browser language, else en) and
+// loads its chunk; the other locale loads only when someone switches (`setLocale`).
 import { createInstance } from 'i18next'
 import { initReactI18next } from 'react-i18next'
-import enAccount from './en/account'
-import enCommon from './en/common'
-import enAuth from './en/auth'
-import enConnect from './en/connect'
-import enDesktop from './en/desktop'
-import enEnvironment from './en/environment'
-import enErrors from './en/errors'
-import enShared from './en/shared'
-import enShell from './en/shell'
-import enTokens from './en/tokens'
-import ptAccount from './pt-BR/account'
-import ptCommon from './pt-BR/common'
-import ptAuth from './pt-BR/auth'
-import ptConnect from './pt-BR/connect'
-import ptDesktop from './pt-BR/desktop'
-import ptEnvironment from './pt-BR/environment'
-import ptErrors from './pt-BR/errors'
-import ptShared from './pt-BR/shared'
-import ptShell from './pt-BR/shell'
-import ptTokens from './pt-BR/tokens'
-import { browserLocale, DEFAULT_LOCALE, LOCALES, normalize, type Locale } from './locale'
+import type en from './en'
+import { DEFAULT_LOCALE, LOCALES, normalize, rememberLocale, startLocale, type Locale } from './locale'
 
-// Add later namespaces as one line each in both locale registries.
-export const resources = {
-  en: { common: enCommon, errors: enErrors, shell: enShell, shared: enShared, auth: enAuth, account: enAccount, connect: enConnect, tokens: enTokens, environment: enEnvironment, desktop: enDesktop },
-  'pt-BR': { common: ptCommon, errors: ptErrors, shell: ptShell, shared: ptShared, auth: ptAuth, account: ptAccount, connect: ptConnect, tokens: ptTokens, environment: ptEnvironment, desktop: ptDesktop },
-} as const
+export type Resources = typeof en
 export const defaultNS = 'common'
+
+const loaders: Record<Locale, () => Promise<{ default: Record<string, unknown> }>> = {
+  en: () => import('./en'),
+  'pt-BR': () => import('./pt-BR'),
+}
 
 export const i18n = createInstance()
 void i18n.use(initReactI18next).init({
-  resources,
-  lng: browserLocale(),
-  fallbackLng: 'en',
+  resources: {},
+  partialBundledLanguages: true,
+  lng: DEFAULT_LOCALE,
+  // Every catalog has every key (`Catalog<typeof en>`): no fallback chunk to load.
+  fallbackLng: false,
   supportedLngs: LOCALES,
   defaultNS,
-  ns: Object.keys(resources.en),
   interpolation: { escapeValue: false },
   returnNull: false,
   initAsync: false,
 })
 
+/** Loads the locale's catalogs once; a later call is free. */
+export async function loadLocale(locale: Locale): Promise<void> {
+  if (i18n.hasResourceBundle(locale, defaultNS)) return
+  const { default: catalogs } = await loaders[locale]()
+  for (const [namespace, catalog] of Object.entries(catalogs)) {
+    i18n.addResourceBundle(locale, namespace, catalog, true, true)
+  }
+}
+
 export function activeLocale(): Locale {
   return normalize(i18n.language) ?? DEFAULT_LOCALE
 }
 
-if (typeof document !== 'undefined') document.documentElement.lang = activeLocale()
-
-export async function setLocale(locale: Locale): Promise<void> {
+/** Loads the starting locale and makes it active; the app mounts after it. */
+export async function startI18n(locale: Locale = startLocale()): Promise<void> {
+  await loadLocale(locale)
   await i18n.changeLanguage(locale)
   if (typeof document !== 'undefined') document.documentElement.lang = locale
+}
+
+/** Switches in place, with no reload, loading the locale first when this tab has not used it yet. */
+export async function setLocale(locale: Locale): Promise<void> {
+  await loadLocale(locale)
+  await i18n.changeLanguage(locale)
+  if (typeof document !== 'undefined') document.documentElement.lang = locale
+  rememberLocale(locale)
 }
