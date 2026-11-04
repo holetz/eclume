@@ -1,5 +1,5 @@
-# Workspace cargo do app desktop do eclume. Os crates ficam em `crates/`; os
-# vendorizados do Anarlog carregam `VENDOR.md` com o commit fixado e a licença MIT.
+# Cargo workspace of the eclume desktop app. The crates live in `crates/`; the ones vendored
+# from Anarlog carry `VENDOR.md` with the pinned commit and the MIT license.
 [workspace]
 resolver = "2"
 members = [
