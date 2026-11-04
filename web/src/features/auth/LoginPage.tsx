@@ -5,10 +5,12 @@ import { api } from '../../api/client'
 import { ApiError, errorMessage, unwrap } from '../../api/problem'
 import { refreshSession, safeReturnPath, useMe } from '../../app/session'
 import { usePageTitle } from '../../app/usePageTitle'
+import { useTranslation } from 'react-i18next'
 import { AuthLayout } from './AuthLayout'
 
 export function LoginPage() {
-  usePageTitle('Entrar')
+  const { t } = useTranslation('auth')
+  usePageTitle(t('login.title'))
   const [params] = useSearchParams()
   // The notice for someone arriving from another screen, such as the deleted account or the reset password.
   const notice = (useLocation().state as { notice?: string } | null)?.notice
@@ -35,7 +37,7 @@ export function LoginPage() {
     } catch (caught) {
       setError(
         caught instanceof ApiError && caught.status === 401
-          ? 'E-mail ou senha incorretos.'
+          ? t('login.wrongCredentials')
           : errorMessage(caught),
       )
       setSubmitting(false)
@@ -45,14 +47,14 @@ export function LoginPage() {
   return (
     <AuthLayout>
       <form onSubmit={submit} noValidate>
-        <h2>Entrar</h2>
+        <h2>{t('login.title')}</h2>
         {notice && (
           <p className="alert alert-success" role="status">
             {notice}
           </p>
         )}
         <div className="field">
-          <label htmlFor="login-email">E-mail</label>
+          <label htmlFor="login-email">{t('email')}</label>
           <input
             id="login-email"
             className="input"
@@ -65,7 +67,7 @@ export function LoginPage() {
           />
         </div>
         <div className="field">
-          <label htmlFor="login-password">Senha</label>
+          <label htmlFor="login-password">{t('password')}</label>
           <input
             id="login-password"
             className="input"
@@ -83,11 +85,11 @@ export function LoginPage() {
           </p>
         )}
         <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !email || !password}>
-          {submitting ? 'Entrando…' : 'Entrar'}
+          {submitting ? t('login.submitting') : t('login.submit')}
         </button>
-        <p className="text-muted auth-note">Esqueceu a senha? Peça um link a quem administra o servidor.</p>
+        <p className="text-muted auth-note">{t('login.forgot')}</p>
         <p className="text-muted auth-note">
-          Não tem conta? <Link to="/cadastro">Criar conta</Link>
+          {t('login.noAccount')} <Link to="/cadastro">{t('login.signup')}</Link>
         </p>
       </form>
     </AuthLayout>

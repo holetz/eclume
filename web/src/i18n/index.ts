@@ -2,11 +2,13 @@ import { createInstance } from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import enAccount from './en/account'
 import enCommon from './en/common'
+import enAuth from './en/auth'
 import enErrors from './en/errors'
 import enShared from './en/shared'
 import enShell from './en/shell'
 import ptAccount from './pt-BR/account'
 import ptCommon from './pt-BR/common'
+import ptAuth from './pt-BR/auth'
 import ptErrors from './pt-BR/errors'
 import ptShared from './pt-BR/shared'
 import ptShell from './pt-BR/shell'
@@ -14,8 +16,8 @@ import { browserLocale, DEFAULT_LOCALE, LOCALES, normalize, type Locale } from '
 
 // Add later namespaces as one line each in both locale registries.
 export const resources = {
-  en: { common: enCommon, errors: enErrors, shell: enShell, shared: enShared, account: enAccount },
-  'pt-BR': { common: ptCommon, errors: ptErrors, shell: ptShell, shared: ptShared, account: ptAccount },
+  en: { common: enCommon, errors: enErrors, shell: enShell, shared: enShared, auth: enAuth, account: enAccount },
+  'pt-BR': { common: ptCommon, errors: ptErrors, shell: ptShell, shared: ptShared, auth: ptAuth, account: ptAccount },
 } as const
 export const defaultNS = 'common'
 
