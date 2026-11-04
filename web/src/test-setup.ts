@@ -1,6 +1,11 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, configure } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
+import { i18n } from './i18n'
+
+// Unit tests run in pt-BR so the existing pt-BR assertions hold; a test that needs en switches explicitly.
+void i18n.changeLanguage('pt-BR')
+if (typeof document !== 'undefined') document.documentElement.lang = 'pt-BR'
 
 // Screens load through dynamic imports; with the whole suite in parallel, the first load
 // takes over 1 s on the Windows station and the `findBy` calls timed out.
@@ -17,7 +22,9 @@ if (typeof window !== 'undefined') {
 // Without `globals: true`, Testing Library does not unmount between tests on its own. The
 // conversion tests run in the node environment, with no DOM or localStorage.
 afterEach(() => {
+  void i18n.changeLanguage('pt-BR')
   if (typeof document === 'undefined') return
+  document.documentElement.lang = 'pt-BR'
   cleanup()
   localStorage.clear()
 })
