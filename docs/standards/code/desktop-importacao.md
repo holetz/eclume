@@ -2,7 +2,7 @@
 type: standard
 title: File import in the desktop app
 description: How the desktop app imports an audio or video file — the native dialog or dragging onto the window, reading the duration and the recording date (mvhd, tags, modification) confirmed by the person, the local conversion to mono Ogg/Opus 16 kHz at 32 kbps through symphonia and libopus, the fallback of copying the original and the entry into the queue with source upload.
-resource: desktop/crates/import/**, desktop/src-tauri/src/import.rs, desktop/ui/js/vistas/importar.js
+resource: desktop/crates/import/**, desktop/src-tauri/src/import.rs, desktop/ui/js/views/import.js
 tags: [code, desktop, importacao, audio, opus, symphonia]
 timestamp: 2026-09-27
 audience: both
