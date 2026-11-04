@@ -1,10 +1,10 @@
-//! Atalhos globais: gravar, nova nota e marcador, registrados no Rust pelo
-//! `tauri-plugin-global-shortcut` (a janela não tem permissão para eles).
+//! Global shortcuts: record, new voice note and marker, registered in Rust through
+//! `tauri-plugin-global-shortcut` (the window has no permission for them).
 //!
-//! No Windows e no Linux, `Ctrl+Alt`: o `Ctrl+Shift` do DS roubaria atalhos de uso diário
-//! (`Ctrl+Shift+M` é o mudo do Teams, `Ctrl+Shift+N` a janela anônima do Chrome e `Ctrl+Shift+R`
-//! o recarregar sem cache), e o AltGr do ABNT2 não usa R, N nem M. No macOS, `⌘⇧R` e `⌘⇧N` do DS
-//! e o marcador em `⌘⇧K`, porque `⌘⇧M` é o mudo do Teams no Mac.
+//! On Windows and Linux, use `Ctrl+Alt`: the DS's `Ctrl+Shift` would take everyday shortcuts
+//! (`Ctrl+Shift+M` mutes Teams, `Ctrl+Shift+N` opens Chrome incognito and `Ctrl+Shift+R`
+//! reloads without cache), and ABNT2 AltGr does not use R, N or M. On macOS, use the DS's `⌘⇧R`
+//! and `⌘⇧N`, with the marker on `⌘⇧K`, because `⌘⇧M` mutes Teams on Mac.
 
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -16,15 +16,15 @@ use tauri_plugin_global_shortcut::{GlobalShortcut, GlobalShortcutExt, Shortcut, 
 
 use crate::state::AppState;
 
-/// O que um atalho global faz.
+/// What a global shortcut does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ShortcutAction {
-    /// Inicia ou para a gravação.
+    /// Start or stop recording.
     Record,
-    /// Começa uma nota ou para a nota em curso.
+    /// Start a voice note or stop the current one.
     Note,
-    /// Marca o instante da gravação em curso.
+    /// Mark the current recording time.
     Marker,
 }
 
@@ -39,7 +39,7 @@ impl ShortcutAction {
         }
     }
 
-    /// O id estável do atalho (o do portal e o da config).
+    /// The stable shortcut id (for the portal and config).
     pub fn id(self) -> &'static str {
         match self {
             Self::Record => "record",
@@ -48,8 +48,8 @@ impl ShortcutAction {
         }
     }
 
-    /// A flag de linha de comando que faz a ação na instância aberta (`eclume-desktop --nova-nota`),
-    /// para o atalho do sistema onde o app não registra atalho global.
+    /// The CLI flag that runs the action in the open instance (`eclume-desktop --nova-nota`),
+    /// for system shortcuts where the app cannot register a global shortcut.
     pub fn cli_flag(self) -> &'static str {
         match self {
             Self::Record => "--alternar-gravacao",
@@ -59,7 +59,7 @@ impl ShortcutAction {
     }
 }
 
-/// A ação pedida na linha de comando (o primeiro argumento é o executável).
+/// The action requested on the command line (the first argument is the executable).
 pub fn action_from_args<S: AsRef<str>>(args: &[S]) -> Option<ShortcutAction> {
     args.iter().skip(1).find_map(|arg| {
         ShortcutAction::ALL
@@ -68,7 +68,7 @@ pub fn action_from_args<S: AsRef<str>>(args: &[S]) -> Option<ShortcutAction> {
     })
 }
 
-/// As combinações dos três atalhos, no formato do `global-hotkey` (`Ctrl+Alt+R`, `Cmd+Shift+N`).
+/// The three shortcut combinations, in `global-hotkey` format (`Ctrl+Alt+R`, `Cmd+Shift+N`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Shortcuts {
@@ -101,7 +101,7 @@ impl Shortcuts {
         }
     }
 
-    /// Cada atalho é uma combinação válida, com modificador, e nenhum repete outro.
+    /// Each shortcut is a valid combination with a modifier, and none duplicates another.
     pub fn validate(&self) -> Result<()> {
         let mut seen: Vec<(Shortcut, ShortcutAction)> = Vec::new();
         for action in ShortcutAction::ALL {
@@ -120,7 +120,7 @@ impl Shortcuts {
     }
 }
 
-/// Lê uma combinação. Sem modificador, o atalho tomaria uma tecla do sistema inteiro.
+/// Parse a combination. Without a modifier, the shortcut would take a key from the whole system.
 pub fn parse(text: &str) -> Result<Shortcut> {
     let shortcut = Shortcut::from_str(text.trim())
         .map_err(|err| anyhow!("combinação inválida \"{text}\": {err}"))?;
@@ -130,21 +130,21 @@ pub fn parse(text: &str) -> Result<Shortcut> {
     Ok(shortcut)
 }
 
-/// Como ficou o registro de um atalho.
+/// The result of registering a shortcut.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Registration {
     Registered,
-    /// O sistema recusou: outro app já usa a combinação.
+    /// The system refused: another app already uses the combination.
     InUse,
-    /// Sem atalhos globais nesta sessão (o plugin não subiu).
+    /// No global shortcuts in this session (the plugin did not start).
     Unavailable,
-    /// Wayland sem portal: vale o atalho criado no sistema, que chama a flag da CLI.
+    /// Wayland without a portal: use the system shortcut, which calls the CLI flag.
     System,
 }
 
 impl Registration {
-    /// O aviso da aba Áudio; `None` quando o atalho funciona.
+    /// The Audio tab notice; `None` when the shortcut works.
     pub fn label(self) -> Option<&'static str> {
         match self {
             Self::Registered => None,
@@ -155,35 +155,35 @@ impl Registration {
     }
 }
 
-/// Como os atalhos chegam ao app nesta sessão, para a aba Áudio.
+/// How shortcuts reach the app in this session, for the Audio tab.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum ShortcutMode {
-    /// X11, Windows e macOS: o `global-hotkey` ouve o teclado.
+    /// X11, Windows and macOS: `global-hotkey` listens to the keyboard.
     #[default]
     Global,
-    /// Wayland com o portal `GlobalShortcuts`.
+    /// Wayland with the `GlobalShortcuts` portal.
     Portal,
-    /// Wayland sem portal: o atalho é do sistema e chama `eclume-desktop <flag>`; no GNOME, o app
-    /// cria esses atalhos sozinho.
+    /// Wayland without a portal: the system shortcut calls `eclume-desktop <flag>`; on GNOME,
+    /// the app creates these shortcuts itself.
     System {
         gnome: bool,
         commands: Vec<ShortcutCommand>,
     },
 }
 
-/// O comando que um atalho do sistema roda para uma ação.
+/// The command a system shortcut runs for an action.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ShortcutCommand {
     pub action: ShortcutAction,
     pub command: String,
 }
 
-/// O registro de cada atalho.
+/// The registration of each shortcut.
 pub type Registrations = BTreeMap<ShortcutAction, Registration>;
 
-/// A combinação no formato da especificação "shortcuts" do XDG, que o portal pede como gatilho
-/// preferido: `Ctrl+Alt+R` vira `CTRL+ALT+r`.
+/// The combination in the XDG "shortcuts" specification format, requested by the portal as the
+/// preferred trigger: `Ctrl+Alt+R` becomes `CTRL+ALT+r`.
 pub fn xdg_trigger(text: &str) -> Option<String> {
     let mut parts: Vec<String> = Vec::new();
     for part in text.split('+').map(str::trim) {
@@ -204,7 +204,7 @@ pub fn xdg_trigger(text: &str) -> Option<String> {
     Some(parts.join("+"))
 }
 
-/// Numa sessão Wayland, o `global-hotkey` só ouve janelas X11: o atalho não vale no sistema.
+/// In a Wayland session, `global-hotkey` only hears X11 windows: the shortcut is not system-wide.
 fn wayland_session(session_type: Option<&str>, wayland_display: bool, display: bool) -> bool {
     session_type.is_some_and(|t| t.eq_ignore_ascii_case("wayland")) || (wayland_display && !display)
 }
@@ -218,16 +218,16 @@ fn is_wayland() -> bool {
         )
 }
 
-/// Liga o plugin. Uma falha (sem servidor X, por exemplo) não impede o app de abrir: os atalhos
-/// ficam indisponíveis, e o botão e a bandeja continuam valendo.
+/// Enable the plugin. A failure (no X server, for example) does not prevent the app from opening:
+/// shortcuts become unavailable, and the button and tray still work.
 pub fn init(app: &AppHandle) {
     if let Err(err) = app.plugin(tauri_plugin_global_shortcut::Builder::new().build()) {
-        log::warn!("atalhos globais indisponíveis: {err}");
+        log::warn!("global shortcuts unavailable: {err}");
     }
     register(app);
 }
 
-/// (Re)registra os atalhos da config e guarda o resultado de cada um no estado.
+/// (Re)register the config shortcuts and save each result in the state.
 pub fn register(app: &AppHandle) {
     let state = app.state::<AppState>();
     let shortcuts = match state.shortcuts() {
@@ -250,21 +250,21 @@ pub fn register(app: &AppHandle) {
     if let Err(err) = state.set_shortcuts_state(mode, registrations) {
         log::error!("{err:#}");
     }
-    // O portal responde depois (e pode pedir confirmação à pessoa); até lá vale o modo sistema.
+    // The portal responds later (and may ask the person to confirm); use system mode until then.
     #[cfg(target_os = "linux")]
     if wayland {
         portal::spawn(app.clone(), shortcuts);
     }
 }
 
-/// O modo `sistema`: cada atalho vale se o atalho do GNOME dele está criado. Com os atalhos do
-/// eclume já no GNOME, eles são regravados com as combinações e o executável de agora.
+/// System mode: each shortcut works if its GNOME shortcut exists. If eclume shortcuts are already
+/// in GNOME, rewrite them with the current combinations and executable.
 fn system_mode(shortcuts: &Shortcuts) -> (ShortcutMode, Registrations) {
     let exe = launcher();
     let gnome = gnome::available();
     if gnome && gnome::any_installed() {
         if let Err(err) = gnome::install(shortcuts, &exe) {
-            log::warn!("falha ao atualizar os atalhos do GNOME: {err:#}");
+            log::warn!("failed to update GNOME shortcuts: {err:#}");
         }
     }
     let registrations = ShortcutAction::ALL
@@ -291,7 +291,7 @@ fn system_mode(shortcuts: &Shortcuts) -> (ShortcutMode, Registrations) {
     (ShortcutMode::System { gnome, commands }, registrations)
 }
 
-/// "Criar atalhos no GNOME": grava os três atalhos do sistema com as combinações da config.
+/// Create GNOME shortcuts: save the three system shortcuts with the config combinations.
 pub fn install_system(shortcuts: &Shortcuts) -> Result<()> {
     if !gnome::available() {
         bail!("os atalhos só podem ser criados sozinhos no GNOME; use os comandos da aba");
@@ -299,12 +299,12 @@ pub fn install_system(shortcuts: &Shortcuts) -> Result<()> {
     gnome::install(shortcuts, &launcher())
 }
 
-/// Tira do GNOME os atalhos que o eclume criou.
+/// Remove the GNOME shortcuts created by eclume.
 pub fn remove_system() -> Result<()> {
     gnome::remove()
 }
 
-/// O executável que o sistema chama: o AppImage, quando é por ele que o app roda.
+/// The executable called by the system: the AppImage, when the app runs through it.
 fn launcher() -> String {
     std::env::var("APPIMAGE")
         .ok()
@@ -317,7 +317,7 @@ fn launcher() -> String {
         .unwrap_or_else(|| "eclume-desktop".into())
 }
 
-/// A linha de comando de uma ação, com o executável entre aspas quando precisa.
+/// The command line for an action, quoting the executable when needed.
 fn command_line(exe: &str, action: ShortcutAction) -> String {
     let safe = exe
         .chars()
@@ -340,7 +340,7 @@ fn all(registration: Registration) -> Registrations {
 fn register_with_plugin(app: &AppHandle, shortcuts: &Shortcuts) -> Registrations {
     let plugin = app.global_shortcut();
     if let Err(err) = plugin.unregister_all() {
-        log::warn!("falha ao soltar os atalhos anteriores: {err}");
+        log::warn!("failed to release previous shortcuts: {err}");
     }
     ShortcutAction::ALL
         .into_iter()
@@ -357,7 +357,7 @@ fn register_with_plugin(app: &AppHandle, shortcuts: &Shortcuts) -> Registrations
             }) {
                 Ok(()) => Registration::Registered,
                 Err(err) => {
-                    log::warn!("atalho {text} não registrado: {err:#}");
+                    log::warn!("shortcut {text} not registered: {err:#}");
                     Registration::InUse
                 }
             };
@@ -370,7 +370,7 @@ pub(crate) fn run(app: &AppHandle, action: ShortcutAction) {
     match action {
         ShortcutAction::Record => crate::spawn_toggle_recording(app),
         ShortcutAction::Note => {
-            // Abrir o microfone pode levar segundos: fora da thread do evento.
+            // Opening the microphone can take seconds: keep it off the event thread.
             let app = app.clone();
             std::thread::spawn(move || {
                 let _ = crate::toggle_note(&app);
@@ -380,8 +380,8 @@ pub(crate) fn run(app: &AppHandle, action: ShortcutAction) {
     }
 }
 
-/// Os atalhos personalizados do GNOME (`gsettings`), um por ação, em caminhos próprios do
-/// eclume: criar de novo só regrava, e remover não toca nos atalhos da pessoa.
+/// GNOME custom shortcuts (`gsettings`), one per action, in eclume-specific paths:
+/// creating them again only rewrites them, and removal leaves the person's shortcuts untouched.
 mod gnome {
     use std::process::Command;
 
@@ -431,7 +431,7 @@ mod gnome {
             && gsettings(&["get", LIST_SCHEMA, LIST_KEY]).is_ok()
     }
 
-    /// Uma lista de strings do GVariant (`['/a/', '/b/']` ou `@as []`).
+    /// A GVariant string list (`['/a/', '/b/']` or `@as []`).
     pub fn parse_strv(text: &str) -> Vec<String> {
         let text = text.trim().trim_start_matches("@as").trim();
         text.trim_start_matches('[')
@@ -442,7 +442,7 @@ mod gnome {
             .collect()
     }
 
-    /// Uma string no formato do GVariant, entre aspas simples.
+    /// A string in GVariant format, enclosed in single quotes.
     pub fn quote(text: &str) -> String {
         format!("'{}'", text.replace('\\', "\\\\").replace('\'', "\\'"))
     }
@@ -452,7 +452,7 @@ mod gnome {
         format!("[{}]", quoted.join(", "))
     }
 
-    /// A combinação no formato do GTK que o GNOME guarda: `Ctrl+Alt+R` vira `<Control><Alt>r`.
+    /// The combination in GTK format stored by GNOME: `Ctrl+Alt+R` becomes `<Control><Alt>r`.
     pub fn accelerator(keys: &str) -> Option<String> {
         parse(keys).ok()?;
         let mut accel = String::new();
@@ -528,8 +528,8 @@ mod gnome {
     }
 }
 
-/// Os atalhos pelo portal `org.freedesktop.portal.GlobalShortcuts`, numa sessão que vive enquanto
-/// o app escuta. Registrar de novo (a config mudou) troca a sessão.
+/// Shortcuts through the `org.freedesktop.portal.GlobalShortcuts` portal, in a session that lives
+/// while the app listens. Registering again (config changed) replaces the session.
 #[cfg(target_os = "linux")]
 mod portal {
     use std::sync::Mutex;
@@ -544,7 +544,7 @@ mod portal {
     use super::{all, run, xdg_trigger, Registration, ShortcutAction, ShortcutMode, Shortcuts};
     use crate::state::AppState;
 
-    /// Parar a escuta atual: ela fecha a sessão dela antes de a nova assumir.
+    /// Stop the current listener: it closes its session before the new one takes over.
     static STOP: Mutex<Option<oneshot::Sender<()>>> = Mutex::new(None);
 
     pub fn spawn(app: AppHandle, shortcuts: Shortcuts) {
@@ -555,7 +555,7 @@ mod portal {
         }
         tauri::async_runtime::spawn(async move {
             if let Err(err) = listen(&app, &shortcuts, stopped).await {
-                log::info!("portal de atalhos globais indisponível: {err:#}");
+                log::info!("global shortcuts portal unavailable: {err:#}");
             }
         });
     }
@@ -614,7 +614,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn atalhos_padrao_por_sistema() {
+    fn default_shortcuts_per_system() {
         let shortcuts = Shortcuts::default();
         shortcuts.validate().unwrap();
         let record = parse(&shortcuts.record).unwrap();
@@ -632,7 +632,7 @@ mod tests {
     }
 
     #[test]
-    fn atalho_invalido_sem_modificador_ou_repetido_e_recusado() {
+    fn invalid_unmodified_or_duplicate_shortcut_is_rejected() {
         assert!(parse("Ctrl+Alt+").is_err());
         assert!(parse("Ctrl+Banana").is_err());
         assert!(parse("Ctrl+R+Alt").is_err());
@@ -656,14 +656,14 @@ mod tests {
     }
 
     #[test]
-    fn atalhos_leem_config_parcial() {
+    fn shortcuts_read_partial_config() {
         let shortcuts: Shortcuts = serde_json::from_str(r#"{"note": "Ctrl+Alt+J"}"#).unwrap();
         assert_eq!(shortcuts.note, "Ctrl+Alt+J");
         assert_eq!(shortcuts.record, Shortcuts::default().record);
     }
 
     #[test]
-    fn registro_vira_aviso_da_aba_audio() {
+    fn registration_becomes_audio_tab_notice() {
         assert_eq!(Registration::Registered.label(), None);
         assert_eq!(Registration::InUse.label(), Some("Em uso por outro app"));
         assert_eq!(
@@ -677,7 +677,7 @@ mod tests {
     }
 
     #[test]
-    fn atalho_do_gnome_no_formato_do_gtk_e_do_gvariant() {
+    fn gnome_shortcut_in_gtk_and_gvariant_formats() {
         assert_eq!(
             gnome::accelerator("Ctrl+Alt+N").as_deref(),
             Some("<Control><Alt>n")
@@ -701,7 +701,7 @@ mod tests {
     }
 
     #[test]
-    fn comando_do_sistema_chama_a_flag_da_acao() {
+    fn system_command_calls_action_flag() {
         assert_eq!(
             command_line("/usr/bin/eclume-desktop", ShortcutAction::Note),
             "/usr/bin/eclume-desktop --nova-nota"
@@ -721,7 +721,7 @@ mod tests {
     }
 
     #[test]
-    fn gatilho_do_portal_segue_a_especificacao_do_xdg() {
+    fn portal_trigger_follows_xdg_specification() {
         assert_eq!(xdg_trigger("Ctrl+Alt+R").as_deref(), Some("CTRL+ALT+r"));
         assert_eq!(xdg_trigger("Cmd+Shift+K").as_deref(), Some("LOGO+SHIFT+k"));
         assert_eq!(
@@ -734,7 +734,7 @@ mod tests {
     }
 
     #[test]
-    fn flag_de_linha_de_comando_vira_acao() {
+    fn command_line_flag_becomes_action() {
         assert_eq!(
             action_from_args(&["eclume-desktop", "--nova-nota"]),
             Some(ShortcutAction::Note)
@@ -747,13 +747,13 @@ mod tests {
             action_from_args(&["eclume-desktop", "--alternar-gravacao"]),
             Some(ShortcutAction::Record)
         );
-        // O executável nunca conta, e sem flag conhecida a instância só mostra a janela.
+        // The executable never counts; without a known flag, the instance only shows the window.
         assert_eq!(action_from_args(&["--nova-nota"]), None);
         assert_eq!(action_from_args(&["eclume-desktop"]), None);
     }
 
     #[test]
-    fn sessao_wayland_nao_tem_atalho_global() {
+    fn wayland_session_has_no_global_shortcut() {
         assert!(wayland_session(Some("wayland"), true, true));
         assert!(wayland_session(None, true, false));
         assert!(!wayland_session(Some("x11"), false, true));
