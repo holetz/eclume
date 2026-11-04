@@ -1,11 +1,11 @@
-//! O conteúdo dos arquivos: o `.md` do resumo com front matter (propriedades do Obsidian) e o
-//! `.jsonl` da transcrição, uma linha por segmento.
+//! File contents: the summary `.md` with front matter (Obsidian properties) and the transcript
+//! `.jsonl`, one line per segment.
 
 use serde_json::json;
 
 use crate::{layout, MirrorItem, Transcript};
 
-/// Um texto como string YAML entre aspas duplas: `\`, `"` e quebras de linha escapados.
+/// Text as a double-quoted YAML string: `\`, `"` and line breaks are escaped.
 fn yaml_string(text: &str) -> String {
     let mut out = String::with_capacity(text.len() + 2);
     out.push('"');
@@ -24,7 +24,7 @@ fn yaml_string(text: &str) -> String {
     out
 }
 
-/// `HH:MM:SS` de milissegundos.
+/// `HH:MM:SS` from milliseconds.
 fn hms(ms: u64) -> String {
     let seconds = ms / 1000;
     format!(
@@ -35,8 +35,8 @@ fn hms(ms: u64) -> String {
     )
 }
 
-/// O resumo é de uma revisão anterior da transcrição espelhada. Sem uma das duas revisões não há
-/// como comparar, e o aviso não aparece (a mesma regra do web).
+/// The summary is from an earlier revision of the mirrored transcript. Without both revisions,
+/// comparison is impossible and no warning appears (the same rule as the web app).
 fn is_stale(item: &MirrorItem) -> bool {
     match (
         item.summary.as_ref().and_then(|s| s.transcript_revision),
@@ -47,10 +47,10 @@ fn is_stale(item: &MirrorItem) -> bool {
     }
 }
 
-/// O `.md` do resumo: front matter e o Markdown do servidor, ou `None` sem resumo.
+/// The summary `.md`: front matter and server Markdown, or `None` without a summary.
 ///
-/// A propriedade `transcript` é o nome do `.jsonl` da mesma pasta (mesmo nome-base); só entra
-/// quando a transcrição é espelhada.
+/// The `transcript` property is the `.jsonl` name in the same folder (same base name); included
+/// only when the transcript is mirrored.
 pub fn markdown(item: &MirrorItem) -> Option<String> {
     let summary = item.summary.as_ref()?;
     let mut out = String::from("---\n");
@@ -60,7 +60,7 @@ pub fn markdown(item: &MirrorItem) -> Option<String> {
         yaml_string(&item.recording_id)
     ));
     out.push_str(&format!("title: {}\n", yaml_string(&item.title)));
-    // O nome do arquivo não leva o título: `aliases` faz o Obsidian achar a nota por ele.
+    // The file name omits the title: `aliases` lets Obsidian find the note by title.
     out.push_str(&format!("aliases:\n  - {}\n", yaml_string(&item.title)));
     if let Some(recorded_at) = &item.recorded_at {
         out.push_str(&format!("recorded_at: {}\n", yaml_string(recorded_at)));
@@ -104,7 +104,7 @@ pub fn markdown(item: &MirrorItem) -> Option<String> {
         .markers
         .iter()
         .filter_map(|marker| {
-            // Uma linha por nota: a quebra de linha não pode abrir outro item nem outra seção.
+            // One line per note: a line break must not start another item or section.
             let note = marker.note.split_whitespace().collect::<Vec<_>>().join(" ");
             (!note.is_empty()).then(|| format!("- [{}] {note}\n", hms(marker.at_ms)))
         })
@@ -116,7 +116,7 @@ pub fn markdown(item: &MirrorItem) -> Option<String> {
     Some(out)
 }
 
-/// A primeira linha (`meta`) e uma linha por segmento (`segment`) da transcrição.
+/// The transcript's first line (`meta`) and one line per segment (`segment`).
 pub fn jsonl(item: &MirrorItem) -> Option<String> {
     let transcript: &Transcript = item.transcript.as_ref()?;
     let label = |speaker_id: &Option<String>| -> Option<&str> {
@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn markdown_tem_front_matter_de_propriedades_e_o_resumo_do_servidor() {
+    fn markdown_has_property_front_matter_and_server_summary() {
         let md = markdown(&item()).unwrap();
         let expected = "---\n\
 source: eclume\n\
@@ -224,10 +224,10 @@ transcript: \"2026-09-18_1100_01928f3a.jsonl\"\n\
     }
 
     #[test]
-    fn resumo_de_revisao_anterior_ganha_propriedade_e_aviso() {
-        let mut velho = item();
-        velho.summary.as_mut().unwrap().transcript_revision = Some(1);
-        let md = markdown(&velho).unwrap();
+    fn summary_from_earlier_revision_gets_property_and_warning() {
+        let mut old = item();
+        old.summary.as_mut().unwrap().transcript_revision = Some(1);
+        let md = markdown(&old).unwrap();
         assert!(md.contains("summary_version: 3\nsummary_stale: true\ntranscript:"));
         assert!(md.contains(
             "---\n\n> [!warning] Resumo de uma versão anterior da transcrição\n\
@@ -236,30 +236,30 @@ transcript: \"2026-09-18_1100_01928f3a.jsonl\"\n\
     }
 
     #[test]
-    fn revisao_igual_maior_ou_ausente_nao_avisa() {
-        for revisao in [Some(2), Some(5), None] {
-            let mut atual = item();
-            atual.summary.as_mut().unwrap().transcript_revision = revisao;
-            let md = markdown(&atual).unwrap();
-            assert!(!md.contains("summary_stale"), "{revisao:?}");
-            assert!(!md.contains("[!warning]"), "{revisao:?}");
+    fn equal_newer_or_missing_revision_has_no_warning() {
+        for revision in [Some(2), Some(5), None] {
+            let mut current = item();
+            current.summary.as_mut().unwrap().transcript_revision = revision;
+            let md = markdown(&current).unwrap();
+            assert!(!md.contains("summary_stale"), "{revision:?}");
+            assert!(!md.contains("[!warning]"), "{revision:?}");
         }
-        let mut sem_transcricao = item();
-        sem_transcricao
+        let mut without_transcript = item();
+        without_transcript
             .summary
             .as_mut()
             .unwrap()
             .transcript_revision = Some(0);
-        sem_transcricao.transcript = None;
-        assert!(!markdown(&sem_transcricao)
+        without_transcript.transcript = None;
+        assert!(!markdown(&without_transcript)
             .unwrap()
             .contains("summary_stale"));
     }
 
     #[test]
-    fn notas_dos_marcadores_viram_uma_secao_no_fim_do_markdown() {
-        let mut com = item();
-        com.markers = vec![
+    fn marker_notes_become_a_section_at_end_of_markdown() {
+        let mut noted = item();
+        noted.markers = vec![
             MirrorMarker {
                 at_ms: 65_000,
                 note: "decisão: aprovar\n## forjada".into(),
@@ -269,33 +269,33 @@ transcript: \"2026-09-18_1100_01928f3a.jsonl\"\n\
                 note: "   ".into(),
             },
         ];
-        let md = markdown(&com).unwrap();
+        let md = markdown(&noted).unwrap();
         assert!(md.ends_with(
             "- decisão\n\n## Notas dos marcadores\n\n- [00:01:05] decisão: aprovar ## forjada\n"
         ));
         assert!(!md.contains("01:02:03"));
-        // Sem nota nenhuma, a seção não existe.
-        com.markers.clear();
-        assert!(!markdown(&com).unwrap().contains("Notas dos marcadores"));
+        // Without any notes, the section does not exist.
+        noted.markers.clear();
+        assert!(!markdown(&noted).unwrap().contains("Notas dos marcadores"));
     }
 
     #[test]
-    fn sem_resumo_nao_ha_markdown_e_sem_transcricao_nao_ha_link() {
-        let mut sem_resumo = item();
-        sem_resumo.summary = None;
-        assert!(markdown(&sem_resumo).is_none());
-        let mut sem_transcricao = item();
-        sem_transcricao.transcript = None;
-        sem_transcricao.collections.clear();
-        sem_transcricao.agenda_type = None;
-        let md = markdown(&sem_transcricao).unwrap();
+    fn no_markdown_without_summary_and_no_link_without_transcript() {
+        let mut without_summary = item();
+        without_summary.summary = None;
+        assert!(markdown(&without_summary).is_none());
+        let mut without_transcript = item();
+        without_transcript.transcript = None;
+        without_transcript.collections.clear();
+        without_transcript.agenda_type = None;
+        let md = markdown(&without_transcript).unwrap();
         assert!(md.contains("collections: []\n"));
         assert!(!md.contains("transcript:"));
         assert!(!md.contains("agenda_type:"));
     }
 
     #[test]
-    fn jsonl_tem_meta_e_uma_linha_por_segmento() {
+    fn jsonl_has_meta_and_one_line_per_segment() {
         let text = jsonl(&item()).unwrap();
         let lines: Vec<serde_json::Value> = text
             .lines()
@@ -308,7 +308,7 @@ transcript: \"2026-09-18_1100_01928f3a.jsonl\"\n\
         assert_eq!(lines[1]["type"], "segment");
         assert_eq!(lines[1]["speaker"], "Mariana");
         assert_eq!(lines[1]["end_ms"], 4200);
-        // A quebra de linha do texto fica escapada: uma linha por segmento.
+        // The text's line break is escaped: one line per segment.
         assert_eq!(lines[1]["text"], "Bom dia, \"time\".\nVamos começar.");
         assert_eq!(lines[2]["speaker"], serde_json::Value::Null);
         assert!(text.ends_with('\n'));
@@ -316,9 +316,9 @@ transcript: \"2026-09-18_1100_01928f3a.jsonl\"\n\
     }
 
     #[test]
-    fn sem_transcricao_nao_ha_jsonl() {
-        let mut sem = item();
-        sem.transcript = None;
-        assert!(jsonl(&sem).is_none());
+    fn no_jsonl_without_transcript() {
+        let mut without = item();
+        without.transcript = None;
+        assert!(jsonl(&without).is_none());
     }
 }
