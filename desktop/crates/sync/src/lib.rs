@@ -1,6 +1,6 @@
-//! Sync do app desktop do eclume: sobe as gravações da fila pelo upload resumível do contrato v1,
-//! autenticado por PAT ou credencial de dispositivo guardados no chaveiro do SO, e a ligação do
-//! aparelho (login, pareamento e descritor do servidor).
+//! eclume desktop sync: uploads queued recordings through the resumable upload of contract v1,
+//! authenticated by a PAT or device credential stored in the OS keyring, and connects the device
+//! (sign-in, pairing and server descriptor).
 
 pub mod api;
 pub mod devices;

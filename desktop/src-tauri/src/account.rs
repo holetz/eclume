@@ -374,7 +374,7 @@ pub(crate) mod tests {
 
     use super::*;
 
-    pub const CA: &str = include_str!("../../crates/sync/tests/fixtures/ca-teste.pem");
+    pub const CA: &str = include_str!("../../crates/sync/tests/fixtures/test-ca.pem");
     pub const CA_SHA256: &str = "b36a35276dcebd4b810c47c567f5b240f638450ab9701d196c64e4e7c6eaa233";
     pub const URL: &str = "https://eclume.teste:8443";
     pub const SECRET: &str = "eclp_Vb3kQ8rT2wY6uI1oP4aS7dF0gH3jK9lZ5xC";

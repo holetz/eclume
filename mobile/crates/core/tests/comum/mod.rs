@@ -13,7 +13,7 @@ use eclume_sync::transport::{HttpRequest, HttpResponse, Transport};
 
 /// A CA autoassinada de teste do crate de sync e a impressão digital dela.
 pub const CA_PEM: &str =
-    include_str!("../../../../../desktop/crates/sync/tests/fixtures/ca-teste.pem");
+    include_str!("../../../../../desktop/crates/sync/tests/fixtures/test-ca.pem");
 pub const CA_SHA256: &str = "b36a35276dcebd4b810c47c567f5b240f638450ab9701d196c64e4e7c6eaa233";
 
 pub type Resposta = Result<HttpResponse>;

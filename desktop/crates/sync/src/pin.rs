@@ -1,22 +1,23 @@
-//! A CA do servidor fixada pela impressão digital (holetz/eclume#35, "Fixação da CA pelos apps").
+//! The server CA pinned by fingerprint (holetz/eclume#35, "CA pinning by the apps").
 //!
-//! O Caddy `tls internal` troca o certificado folha a cada ~12 h e não envia a raiz na cadeia, por
-//! isso o app fixa a **raiz**: baixa `<url>/downloads/eclume-root.crt` numa conexão sem
-//! verificação (só esse arquivo), confere o SHA-256 do DER do primeiro certificado com a impressão
-//! digital esperada (do instalador, do mDNS ou do QR) e grava **só esse certificado**, o único em
-//! que o `transport.rs` (`TrustMode::Pinned`) e o updater confiam, sem somá-lo às raízes do SO
-//! (holetz/eclume#102). Certificados a mais no arquivo servido nunca chegam ao disco. Sem impressão
-//! digital esperada, confia na primeira (TOFU) e a mostra à pessoa. O descritor
-//! `GET /api/v1/server`, já com verificação, confirma o que veio.
+//! Caddy `tls internal` rotates the leaf certificate every ~12 h and does not send the root in the
+//! chain, so the app pins the **root**: downloads `<url>/downloads/eclume-root.crt` over an
+//! unverified connection (only this file), checks the SHA-256 of the first certificate's DER
+//! against the expected fingerprint (from the installer, mDNS or QR) and saves **only that
+//! certificate**, the only one `transport.rs` (`TrustMode::Pinned`) and the updater trust, without
+//! adding it to the OS roots (holetz/eclume#102). Extra certificates in the served file never reach
+//! disk. Without an expected fingerprint, it trusts the first one (TOFU) and shows it to the user.
+//! The `GET /api/v1/server` descriptor, now verified, confirms what was received.
 //!
-//! Um arquivo fixado gravado antes com mais de um certificado é regravado só com o primeiro por
-//! [`trim_saved`]; o app trata o caso como possível interceptação e pede nova entrada
+//! A previously saved pinned file with multiple certificates is rewritten with only the first by
+//! [`trim_saved`]; the app treats this as possible interception and asks for sign-in again
 //! ([`CA_TRIMMED`]).
 //!
-//! Rotação anunciada (holetz/eclume#101): o descritor, lido pela conexão fixada na raiz atual,
-//! traz `ca_next_sha256`; o app baixa a próxima raiz por essa mesma conexão ([`fetch_next`]) e a
-//! guarda à parte ([`save_next`], um certificado só). Quando o servidor passa a servi-la, o app a
-//! promove a fixada ([`promote_next`]) em vez de pedir nova entrada.
+//! Announced rotation (holetz/eclume#101): the descriptor, read over the connection pinned to the
+//! current root, contains `ca_next_sha256`; the app downloads the next root over that same
+//! connection ([`fetch_next`]) and saves it separately ([`save_next`], one certificate only). When
+//! the server starts serving it, the app promotes it to pinned ([`promote_next`]) instead of asking
+//! for sign-in again.
 
 use std::path::{Path, PathBuf};
 
@@ -28,16 +29,16 @@ use crate::api::ServerInfo;
 use crate::protocol::{api_error, parse_base};
 use crate::transport::{HttpRequest, Transport};
 
-/// Onde a CA fica publicada no servidor.
+/// Where the CA is published on the server.
 pub const ROOT_PATH: &str = "/downloads/eclume-root.crt";
-/// O arquivo da CA fixada, na pasta de configuração do app.
+/// The pinned CA file in the app's config folder.
 pub const PINNED_FILE: &str = "servidor-ca.pem";
-/// Onde a próxima raiz fica publicada durante a rotação.
+/// Where the next root is published during rotation.
 pub const NEXT_PATH: &str = "/downloads/eclume-root-proxima.crt";
-/// A mensagem quando a raiz do servidor não é mais a fixada.
+/// The message when the server root is no longer the pinned one.
 pub const CA_CHANGED: &str = "O certificado do servidor mudou";
-/// A mensagem quando a CA fixada guardada tinha certificados a mais e foi regravada só com o
-/// primeiro: a primeira conexão pode ter passado por um interceptador.
+/// The message when the stored pinned CA had extra certificates and was rewritten with only the
+/// first: the first connection may have gone through an interceptor.
 pub const CA_TRIMMED: &str = "O certificado guardado deste servidor tinha um certificado a mais: \
                               a primeira conexão pode ter sido interceptada. Entre de novo e, na \
                               web, troque a senha e desvincule a entrada antiga deste aparelho.";
@@ -45,15 +46,15 @@ pub const CA_TRIMMED: &str = "O certificado guardado deste servidor tinha um cer
 const BEGIN_CERT: &[u8] = b"-----BEGIN CERTIFICATE-----";
 const END_CERT: &[u8] = b"-----END CERTIFICATE-----";
 
-/// A raiz baixada e a sua impressão digital.
+/// The downloaded root and its fingerprint.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RootCa {
     pub pem: Vec<u8>,
-    /// SHA-256 do DER, em hex minúsculo (o formato do `ca_sha256` do contrato).
+    /// SHA-256 of the DER, in lowercase hex (the contract's `ca_sha256` format).
     pub sha256: String,
 }
 
-/// SHA-256 em hex minúsculo.
+/// SHA-256 in lowercase hex.
 pub fn sha256_hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
@@ -61,7 +62,7 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// Uma impressão digital como o contrato escreve: 64 hex minúsculos. Aceita maiúsculas e `:`.
+/// A fingerprint as written by the contract: 64 lowercase hex digits. Accepts uppercase and `:`.
 pub fn normalize_fingerprint(value: &str) -> Result<String> {
     let hex: String = value
         .trim()
@@ -75,7 +76,7 @@ pub fn normalize_fingerprint(value: &str) -> Result<String> {
     Ok(hex)
 }
 
-/// O DER de cada certificado do PEM, na ordem; itens que não são certificado são ignorados.
+/// Each PEM certificate's DER, in order; non-certificate items are ignored.
 fn certificates(pem: &[u8]) -> Vec<Vec<u8>> {
     ureq::tls::parse_pem(pem)
         .filter_map(|item| match item {
@@ -85,7 +86,7 @@ fn certificates(pem: &[u8]) -> Vec<Vec<u8>> {
         .collect()
 }
 
-/// O primeiro bloco `CERTIFICATE` do texto, com o fim de linha que o encerra.
+/// The first `CERTIFICATE` block in the text, including its terminating line ending.
 fn first_block(pem: &[u8]) -> Option<&[u8]> {
     let start = find(pem, BEGIN_CERT)?;
     let end = start + find(&pem[start..], END_CERT)? + END_CERT.len();
@@ -102,8 +103,9 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
 }
 
-/// O PEM do primeiro certificado (só ele) e a sua impressão digital. O bloco é recortado do texto
-/// recebido e relido: tem de dar exatamente um certificado, o mesmo DER do primeiro do arquivo.
+/// The first certificate's PEM (only that one) and its fingerprint. The block is cut from the
+/// received text and reread: it must yield exactly one certificate, with the same DER as the first
+/// in the file.
 pub fn root_from_pem(pem: &[u8]) -> Result<RootCa> {
     let not_pem = || anyhow!("a CA do servidor não é um certificado PEM");
     let der = certificates(pem).into_iter().next().ok_or_else(not_pem)?;
@@ -117,7 +119,8 @@ pub fn root_from_pem(pem: &[u8]) -> Result<RootCa> {
     })
 }
 
-/// Baixa o certificado em `<url><path>` por `transport` e confere com `expected`, se houver.
+/// Downloads the certificate at `<url><path>` through `transport` and checks `expected`, if
+/// provided.
 fn download(
     transport: &dyn Transport,
     url: &str,
@@ -144,19 +147,20 @@ fn download(
     Ok(root)
 }
 
-/// Baixa a raiz de `url` por `insecure` (um transporte sem verificação de TLS, usado só aqui) e
-/// confere com `expected`; sem `expected`, devolve a raiz para a pessoa conferir (TOFU).
+/// Downloads the root from `url` through `insecure` (a transport without TLS verification, used
+/// only here) and checks `expected`; without `expected`, returns the root for the user to check
+/// (TOFU).
 pub fn fetch_root(insecure: &dyn Transport, url: &str, expected: Option<&str>) -> Result<RootCa> {
     download(insecure, url, ROOT_PATH, expected)
 }
 
-/// Baixa a próxima raiz por `pinned` (o transporte fixado na raiz atual, que avaliza a nova) e
-/// confere com o `ca_next_sha256` do descritor.
+/// Downloads the next root through `pinned` (the transport pinned to the current root, which
+/// vouches for the new one) and checks the descriptor's `ca_next_sha256`.
 pub fn fetch_next(pinned: &dyn Transport, url: &str, expected: &str) -> Result<RootCa> {
     download(pinned, url, NEXT_PATH, Some(expected))
 }
 
-/// Grava a raiz em `<config_dir>/servidor-ca.pem` e devolve o caminho, o `ca_path` do app.
+/// Writes the root to `<config_dir>/servidor-ca.pem` and returns the path, the app's `ca_path`.
 pub fn save(root: &RootCa, config_dir: &Path) -> Result<PathBuf> {
     std::fs::create_dir_all(config_dir)
         .with_context(|| format!("falha ao criar {}", config_dir.display()))?;
@@ -166,7 +170,7 @@ pub fn save(root: &RootCa, config_dir: &Path) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// Grava `pem` em `path` por um temporário e `rename`: quem lê nunca vê o arquivo pela metade.
+/// Writes `pem` to `path` through a temporary file and `rename`: readers never see a partial file.
 fn write_atomic(path: &Path, pem: &[u8]) -> Result<()> {
     let mut temp = path.as_os_str().to_owned();
     temp.push(".novo");
@@ -175,27 +179,28 @@ fn write_atomic(path: &Path, pem: &[u8]) -> Result<()> {
     std::fs::rename(&temp, path).with_context(|| format!("falha ao substituir {}", path.display()))
 }
 
-/// Onde a próxima raiz fica, ao lado da fixada: `servidor-ca.pem` → `servidor-ca.proxima.pem` no
-/// desktop, `ca.pem` → `ca.proxima.pem` no celular.
+/// Where the next root lives, beside the pinned one: `servidor-ca.pem` → `servidor-ca.proxima.pem`
+/// on desktop, `ca.pem` → `ca.proxima.pem` on mobile.
 pub fn next_path(pinned: &Path) -> PathBuf {
     pinned.with_extension("proxima.pem")
 }
 
-/// Grava a próxima raiz ao lado da fixada em `pinned` (um certificado só) e devolve o caminho.
+/// Writes the next root beside the pinned one at `pinned` (one certificate only) and returns its
+/// path.
 pub fn save_next(root: &RootCa, pinned: &Path) -> Result<PathBuf> {
     let path = next_path(pinned);
     write_atomic(&path, &root.pem)?;
     Ok(path)
 }
 
-/// A próxima raiz guardada ao lado da fixada em `pinned`, se houver uma legível.
+/// The next root stored beside the pinned one at `pinned`, if readable.
 pub fn saved_next(pinned: &Path) -> Option<RootCa> {
     let pem = std::fs::read(next_path(pinned)).ok()?;
     root_from_pem(&pem).ok()
 }
 
-/// Apaga a próxima raiz guardada ao lado de `pinned` (o servidor deixou de anunciá-la, ou a
-/// pessoa entrou de novo); sem arquivo, nada a fazer.
+/// Deletes the next root stored beside `pinned` (the server stopped announcing it, or the user
+/// signed in again); without a file, nothing to do.
 pub fn forget_next(pinned: &Path) -> Result<()> {
     let path = next_path(pinned);
     match std::fs::remove_file(&path) {
@@ -205,9 +210,10 @@ pub fn forget_next(pinned: &Path) -> Result<()> {
     }
 }
 
-/// Guarda a próxima raiz que `info` anuncia (`ca_next_sha256`, no descritor lido por `transport`,
-/// fixado na raiz atual em `pinned`): baixa-a pela mesma conexão, confere e grava ao lado da
-/// fixada. Sem anúncio, apaga a próxima guardada antes. Diz se gravou uma nova.
+/// Stores the next root announced by `info` (`ca_next_sha256`, in the descriptor read through
+/// `transport`, pinned to the current root at `pinned`): downloads it over the same connection,
+/// checks it and saves it beside the pinned one. Without an announcement, deletes the previously
+/// stored next root. Reports whether a new one was saved.
 pub fn learn_next(
     transport: &dyn Transport,
     url: &str,
@@ -227,16 +233,17 @@ pub fn learn_next(
     Ok(true)
 }
 
-/// Troca a fixada em `pinned` pela próxima guardada ao lado (`rename`, o arquivo inteiro de uma
-/// vez): o transporte fixado e o updater passam a confiar só nela.
+/// Replaces the pinned root at `pinned` with the next one stored beside it (`rename`, the whole
+/// file at once): the pinned transport and updater now trust only that root.
 pub fn promote_next(pinned: &Path) -> Result<()> {
     let next = next_path(pinned);
     std::fs::rename(&next, pinned)
         .with_context(|| format!("falha ao substituir {}", pinned.display()))
 }
 
-/// Regrava o arquivo fixado em `path` só com o primeiro certificado (temporário + `rename`) e
-/// devolve quantos descartou; com um certificado só, o arquivo não é tocado e devolve 0.
+/// Rewrites the pinned file at `path` with only the first certificate (temporary file + `rename`)
+/// and returns how many were discarded; with only one certificate, leaves the file untouched and
+/// returns 0.
 pub fn trim_saved(path: &Path) -> Result<usize> {
     let pem = std::fs::read(path).with_context(|| format!("falha ao ler {}", path.display()))?;
     let total = certificates(&pem).len();
@@ -248,8 +255,8 @@ pub fn trim_saved(path: &Path) -> Result<usize> {
     Ok(total - 1)
 }
 
-/// Confere, pelo descritor lido já com verificação, que o servidor anuncia a raiz fixada. Um
-/// descritor sem `ca_sha256` (raiz ainda não publicada) não contradiz nada.
+/// Checks through the already verified descriptor that the server announces the pinned root. A
+/// descriptor without `ca_sha256` (root not yet published) contradicts nothing.
 pub fn confirm(info: &ServerInfo, pinned: &str) -> Result<()> {
     match info.ca_sha256.as_deref() {
         Some(announced) if normalize_fingerprint(announced)? != pinned => bail!(CA_CHANGED),
@@ -263,7 +270,7 @@ mod tests {
     use crate::protocol::script::{json, Script};
     use crate::transport::HttpResponse;
 
-    const CA: &str = include_str!("../tests/fixtures/ca-teste.pem");
+    const CA: &str = include_str!("../tests/fixtures/test-ca.pem");
     const CA_SHA256: &str = "b36a35276dcebd4b810c47c567f5b240f638450ab9701d196c64e4e7c6eaa233";
     const OTHER_CA: &str = include_str!("../../../../server/tests/fixtures/ca-test.pem");
 
@@ -287,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn impressao_digital_do_der_do_primeiro_certificado() {
+    fn fingerprint_of_first_certificate_der() {
         let root = root_from_pem(CA.as_bytes()).unwrap();
         assert_eq!(root.sha256, CA_SHA256);
         let two = format!("{CA}{CA}");
@@ -300,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn a_raiz_e_so_o_primeiro_certificado() {
+    fn root_is_only_first_certificate() {
         let lf = CA.replace("\r\n", "\n");
         for body in [
             format!("{CA}{OTHER_CA}"),
@@ -320,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn save_grava_um_certificado_e_trim_saved_regrava_o_antigo() {
+    fn save_writes_one_certificate_and_trim_saved_rewrites_old_file() {
         let dir = std::env::temp_dir().join(format!("eclume-pin-trim-{}", std::process::id()));
         let two = format!("{CA}{OTHER_CA}");
         let root = root_from_pem(two.as_bytes()).unwrap();
@@ -337,13 +344,13 @@ mod tests {
         assert_eq!(
             std::fs::read(&path).unwrap(),
             kept,
-            "um certificado só não é tocado"
+            "a single certificate is left untouched"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn normaliza_a_impressao_digital() {
+    fn normalizes_fingerprint() {
         let colons = CA_SHA256
             .to_uppercase()
             .as_bytes()
@@ -357,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn baixa_confere_e_grava() {
+    fn downloads_checks_and_saves() {
         let script = Script::default()
             .expect("GET /downloads/eclume-root.crt", pem(CA))
             .expect("GET /downloads/eclume-root.crt", pem(CA))
@@ -384,12 +391,12 @@ mod tests {
         assert_eq!(
             crate::transport::read_pem_certs(&path).unwrap().len(),
             1,
-            "o PEM gravado serve de ca_path"
+            "the saved PEM works as ca_path"
         );
     }
 
     #[test]
-    fn proxima_raiz_conferida_guardada_e_promovida() {
+    fn next_root_checked_saved_and_promoted() {
         let dir = std::env::temp_dir().join(format!("eclume-pin-proxima-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let pinned = save(&root_from_pem(OTHER_CA.as_bytes()).unwrap(), &dir).unwrap();
@@ -421,7 +428,7 @@ mod tests {
     }
 
     #[test]
-    fn descritor_confirma_ou_acusa_a_troca() {
+    fn descriptor_confirms_or_reports_change() {
         confirm(&info(Some(CA_SHA256)), CA_SHA256).unwrap();
         confirm(&info(None), CA_SHA256).unwrap();
         let err = confirm(&info(Some(&"a".repeat(64))), CA_SHA256).unwrap_err();

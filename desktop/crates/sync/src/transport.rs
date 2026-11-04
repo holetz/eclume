@@ -1,10 +1,10 @@
-//! O transporte HTTP: uma interface mínima (o protocolo é testado sobre um roteirizado) e a
-//! implementação real em `ureq` com rustls.
+//! HTTP transport: a minimal interface (the protocol is tested with a scripted one) and the real
+//! implementation in `ureq` with rustls.
 //!
-//! TLS, pelo [`TrustMode`]: a CA fixada pelo `pin.rs` (o desktop com a CA da primeira execução e o
-//! celular) confia em exatamente um certificado, sem as raízes do SO (`Pinned`). Sem CA própria
-//! (servidor com certificado público, ou `http://` de dev) vale o verificador da plataforma; com
-//! uma CA escolhida à mão, as raízes nativas do SO mais os certificados do PEM (`PlatformPlus`).
+//! TLS, through [`TrustMode`]: the CA pinned by `pin.rs` (desktop with the first-run CA and mobile)
+//! trusts exactly one certificate, without OS roots (`Pinned`). Without a custom CA (server with a
+//! public certificate, or development `http://`), the platform verifier applies; with a manually
+//! chosen CA, the native OS roots plus PEM certificates (`PlatformPlus`).
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -12,8 +12,8 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Context, Result};
 use ureq::tls::{Certificate, PemItem, RootCerts, TlsConfig};
 
-/// A URL sem query string nem fragmento (esquema, host e caminho), para mensagens de erro e log:
-/// a query de uma URL pré-assinada carrega a assinatura.
+/// The URL without query string or fragment (scheme, host and path), for error and log messages: a
+/// presigned URL's query carries the signature.
 pub fn redact(url: &str) -> String {
     match url::Url::parse(url) {
         Ok(mut parsed) => {
@@ -26,7 +26,7 @@ pub fn redact(url: &str) -> String {
     }
 }
 
-/// Tira de um texto de erro a URL completa e a query dela.
+/// Removes the full URL and its query from error text.
 fn scrub(text: &str, url: &str) -> String {
     let mut text = text.replace(url, &redact(url));
     if let Some(query) = url.split_once('?').map(|(_, query)| query) {
@@ -37,7 +37,7 @@ fn scrub(text: &str, url: &str) -> String {
     text
 }
 
-/// Uma requisição, com o corpo já em memória.
+/// A request, with its body already in memory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HttpRequest {
     pub method: &'static str,
@@ -72,11 +72,11 @@ impl HttpRequest {
     }
 }
 
-/// Uma resposta; qualquer status HTTP chega aqui, só falha de rede vira erro.
+/// A response; any HTTP status reaches here, only network failures become errors.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct HttpResponse {
     pub status: u16,
-    /// Nomes em minúsculas.
+    /// Lowercase names.
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
 }
@@ -95,38 +95,38 @@ impl HttpResponse {
     }
 }
 
-/// Envia uma requisição. `Err` é falha de rede ou de TLS; status de erro vem em `Ok`.
+/// Sends a request. `Err` is a network or TLS failure; error statuses come in `Ok`.
 pub trait Transport: Send + Sync {
     fn send(&self, request: HttpRequest) -> Result<HttpResponse>;
 }
 
-/// Prazos do transporte real: conectar é rápido; uma parte (5 MiB ou mais) numa rede lenta não.
+/// Real transport timeouts: connecting is fast; a part (5 MiB or more) over a slow network is not.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-/// O prazo total padrão de uma requisição.
+/// The default total request timeout.
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
-/// Teto padrão do corpo de resposta lido (as respostas do upload são JSON pequenos).
+/// Default response body read limit (upload responses are small JSON).
 const MAX_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
-/// Em quem o transporte confia.
+/// What the transport trusts.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TrustMode {
-    /// As raízes do SO (o verificador da plataforma) mais todos os certificados do PEM, se houver:
-    /// o desktop com uma CA escolhida à mão, ou sem CA própria do servidor.
+    /// OS roots (the platform verifier) plus all PEM certificates, if any: desktop with a manually
+    /// chosen CA, or without a custom server CA.
     PlatformPlus(Option<PathBuf>),
-    /// Só o certificado do PEM fixado, sem as raízes do SO nem o `rustls-platform-verifier` (que
-    /// no Android exige inicialização JNI própria): o desktop com a CA da primeira execução e o
-    /// celular. Um PEM com mais de um certificado é erro, nunca confiança ampliada.
+    /// Only the pinned PEM certificate, without OS roots or `rustls-platform-verifier` (which
+    /// requires its own JNI initialization on Android): desktop with the first-run CA and mobile. A
+    /// PEM with multiple certificates is an error, never expanded trust.
     Pinned(PathBuf),
 }
 
-/// Transporte real em `ureq`.
+/// Real transport in `ureq`.
 pub struct UreqTransport {
     agent: ureq::Agent,
     max_response: u64,
 }
 
 impl UreqTransport {
-    /// `ca_path`: PEM com a CA extra a confiar (a CA interna do Caddy), além das do SO.
+    /// `ca_path`: PEM with the extra trusted CA (Caddy's internal CA), in addition to OS roots.
     pub fn new(ca_path: Option<&Path>, user_agent: &str) -> Result<Self> {
         Self::with_trust(
             &TrustMode::PlatformPlus(ca_path.map(Path::to_path_buf)),
@@ -135,7 +135,7 @@ impl UreqTransport {
         )
     }
 
-    /// Só a CA fixada em `ca_path` ([`TrustMode::Pinned`]).
+    /// Only the CA pinned at `ca_path` ([`TrustMode::Pinned`]).
     pub fn pinned(ca_path: &Path, user_agent: &str) -> Result<Self> {
         Self::with_trust(
             &TrustMode::Pinned(ca_path.to_path_buf()),
@@ -144,7 +144,7 @@ impl UreqTransport {
         )
     }
 
-    /// Com a confiança e o prazo total dados (a sonda da rede do celular usa 3 s).
+    /// With the given trust and total timeout (the phone's network probe uses 3 s).
     pub fn with_trust(trust: &TrustMode, user_agent: &str, timeout: Duration) -> Result<Self> {
         let tls = TlsConfig::builder()
             .root_certs(trusted_roots(trust)?)
@@ -152,14 +152,14 @@ impl UreqTransport {
         Ok(Self::with_tls(tls, user_agent, timeout))
     }
 
-    /// Troca o teto do corpo de resposta (o app móvel baixa o APK da atualização por aqui).
+    /// Changes the response body limit (the mobile app downloads the update APK here).
     pub fn com_limite(mut self, bytes: u64) -> Self {
         self.max_response = bytes;
         self
     }
 
-    /// Sem verificação de TLS: só para baixar a CA raiz que o `pin.rs` confere pela impressão
-    /// digital. Nunca leva credencial.
+    /// Without TLS verification: only to download the root CA that `pin.rs` checks by fingerprint.
+    /// Never carries a credential.
     pub fn insecure(user_agent: &str) -> Self {
         let tls = TlsConfig::builder().disable_verification(true).build();
         Self::with_tls(tls, user_agent, REQUEST_TIMEOUT)
@@ -180,7 +180,7 @@ impl UreqTransport {
     }
 }
 
-/// As raízes de confiança de um [`TrustMode`].
+/// The trust roots of a [`TrustMode`].
 pub fn trusted_roots(trust: &TrustMode) -> Result<RootCerts> {
     match trust {
         TrustMode::PlatformPlus(ca_path) => root_certs(ca_path.as_deref()),
@@ -188,7 +188,7 @@ pub fn trusted_roots(trust: &TrustMode) -> Result<RootCerts> {
     }
 }
 
-/// O único certificado de um PEM fixado; nenhum ou mais de um é erro que nomeia o arquivo.
+/// The sole certificate of a pinned PEM; none or multiple is an error naming the file.
 pub fn pinned_cert(path: &Path) -> Result<Certificate<'static>> {
     let mut certs = read_pem_certs(path)?;
     if certs.len() != 1 {
@@ -201,7 +201,7 @@ pub fn pinned_cert(path: &Path) -> Result<Certificate<'static>> {
     Ok(certs.remove(0))
 }
 
-/// As raízes de confiança: o verificador da plataforma, ou as nativas mais o PEM extra.
+/// Trust roots: the platform verifier, or native roots plus the extra PEM.
 pub fn root_certs(ca_path: Option<&Path>) -> Result<RootCerts> {
     let Some(path) = ca_path else {
         return Ok(RootCerts::PlatformVerifier);
@@ -209,7 +209,7 @@ pub fn root_certs(ca_path: Option<&Path>) -> Result<RootCerts> {
     let mut certs = read_pem_certs(path)?;
     let native = rustls_native_certs::load_native_certs();
     for error in &native.errors {
-        log::warn!("certificado do SO ignorado: {error}");
+        log::warn!("OS certificate ignored: {error}");
     }
     certs.extend(
         native
@@ -220,7 +220,7 @@ pub fn root_certs(ca_path: Option<&Path>) -> Result<RootCerts> {
     Ok(RootCerts::new_with_certs(&certs))
 }
 
-/// Lê todos os certificados de um PEM; um arquivo sem nenhum é erro.
+/// Reads all certificates from a PEM; a file without any is an error.
 pub fn read_pem_certs(path: &Path) -> Result<Vec<Certificate<'static>>> {
     let pem = std::fs::read(path)
         .with_context(|| format!("falha ao ler a CA extra em {}", path.display()))?;
@@ -294,8 +294,8 @@ impl Transport for UreqTransport {
 mod tests {
     use super::*;
 
-    /// CA autoassinada de teste (CN=eclume-teste), só para o parser.
-    const TEST_CA: &str = include_str!("../tests/fixtures/ca-teste.pem");
+    /// Self-signed test CA (CN=eclume-teste), only for the parser.
+    const TEST_CA: &str = include_str!("../tests/fixtures/test-ca.pem");
 
     fn temp(name: &str, content: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("eclume-sync-{}", std::process::id()));
@@ -306,7 +306,7 @@ mod tests {
     }
 
     #[test]
-    fn redact_tira_a_query_da_url_pre_assinada() {
+    fn redact_removes_presigned_url_query() {
         let url = "https://s3.local/bucket/obj?X-Amz-Signature=abc123&X-Amz-Credential=k";
         assert_eq!(redact(url), "https://s3.local/bucket/obj");
         assert_eq!(redact("sem esquema?x=1"), "sem esquema");
@@ -316,7 +316,7 @@ mod tests {
             Duration::from_secs(2),
         )
         .unwrap();
-        // Porta fechada: a conexão é recusada na hora.
+        // Closed port: the connection is refused immediately.
         let err = transport
             .send(HttpRequest::new(
                 "PUT",
@@ -329,7 +329,7 @@ mod tests {
     }
 
     #[test]
-    fn sem_ca_extra_usa_o_verificador_da_plataforma() {
+    fn without_extra_ca_uses_platform_verifier() {
         assert!(matches!(
             root_certs(None).unwrap(),
             RootCerts::PlatformVerifier
@@ -337,40 +337,40 @@ mod tests {
     }
 
     #[test]
-    fn ca_extra_entra_junto_das_raizes_do_so() {
+    fn extra_ca_joins_os_roots() {
         let path = temp("ca.pem", TEST_CA);
         assert_eq!(read_pem_certs(&path).unwrap().len(), 1);
         let RootCerts::Specific(certs) = root_certs(Some(&path)).unwrap() else {
-            panic!("esperava raízes específicas");
+            panic!("expected specific roots");
         };
         assert!(!certs.is_empty());
     }
 
     #[test]
-    fn ca_fixada_confia_so_no_pem() {
+    fn pinned_ca_trusts_only_pem() {
         let path = temp("fixada.pem", TEST_CA);
         let RootCerts::Specific(pinned) = trusted_roots(&TrustMode::Pinned(path.clone())).unwrap()
         else {
-            panic!("esperava raízes específicas");
+            panic!("expected specific roots");
         };
         assert_eq!(pinned.len(), 1);
         let RootCerts::Specific(plus) =
             trusted_roots(&TrustMode::PlatformPlus(Some(path.clone()))).unwrap()
         else {
-            panic!("esperava raízes específicas");
+            panic!("expected specific roots");
         };
         assert!(plus.len() >= pinned.len());
         assert!(UreqTransport::pinned(&path, "eclume-android/0.1.0").is_ok());
-        // Sem PEM, o modo fixado não cai nas raízes do SO: é erro.
+        // Without a PEM, pinned mode does not fall back to OS roots: it is an error.
         assert!(trusted_roots(&TrustMode::Pinned(PathBuf::from("/nao/existe.pem"))).is_err());
     }
 
     #[test]
-    fn ca_fixada_com_dois_certificados_e_erro_e_a_extra_soma_os_dois() {
+    fn pinned_ca_with_two_certificates_fails_and_extra_ca_adds_both() {
         let other = include_str!("../../../../server/tests/fixtures/ca-test.pem");
         let path = temp("duas.pem", &format!("{TEST_CA}{other}"));
         let Err(err) = trusted_roots(&TrustMode::Pinned(path.clone())) else {
-            panic!("dois certificados no modo fixado tinham de ser erro");
+            panic!("two certificates in pinned mode should fail");
         };
         let text = format!("{err:#}");
         assert!(text.contains("duas.pem"), "{text}");
@@ -379,15 +379,15 @@ mod tests {
         let RootCerts::Specific(merged) =
             trusted_roots(&TrustMode::PlatformPlus(Some(path))).unwrap()
         else {
-            panic!("esperava raízes específicas");
+            panic!("expected specific roots");
         };
         assert!(merged.len() >= 2);
     }
 
     #[test]
-    fn ca_extra_invalida_ou_ausente_e_erro_claro() {
-        let vazio = temp("vazio.pem", "não é um PEM\n");
-        let err = read_pem_certs(&vazio).unwrap_err();
+    fn invalid_or_missing_extra_ca_gives_clear_error() {
+        let empty = temp("vazio.pem", "não é um PEM\n");
+        let err = read_pem_certs(&empty).unwrap_err();
         assert!(format!("{err:#}").contains("nenhum certificado"), "{err:#}");
         let err = read_pem_certs(Path::new("/nao/existe.pem")).unwrap_err();
         assert!(
@@ -397,7 +397,7 @@ mod tests {
     }
 
     #[test]
-    fn resposta_acha_header_sem_diferenciar_caixa() {
+    fn response_finds_header_case_insensitively() {
         let response = HttpResponse {
             status: 200,
             headers: vec![("etag".into(), "\"abc\"".into())],
