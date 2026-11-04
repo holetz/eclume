@@ -1,17 +1,17 @@
-//! Uma sessão de gravação: fontes → mixer → Ogg/Opus em disco → fila.
+//! A recording session: sources → mixer → Ogg/Opus on disk → queue.
 //!
-//! O arquivo nasce como `<id>.ogg.part` e só vira `<id>.ogg` ao parar. A linha da fila nasce em
-//! `recording` e passa a `pending` no mesmo momento. Parar sempre fecha: uma falha ou pânico da
-//! thread de gravação vira `pending` com `interrupted = 1`. Se o processo morrer no meio, ou o
-//! `.part` seguir preso, [`recover_orphans`] acerta arquivo e linha depois (na abertura, por
-//! [`recover`], ou na varredura do app aberto).
+//! The file starts as `<id>.ogg.part` and only becomes `<id>.ogg` on stop. The queue row starts
+//! in `recording` and changes to `pending` at the same time. Stopping always closes: a
+//! recording thread failure or panic becomes `pending` with `interrupted = 1`. If the process
+//! dies midway, or the `.part` remains locked, [`recover_orphans`] fixes the file and row later
+//! (on startup, through [`recover`], or during a scan while the app is open).
 //!
-//! Uma sessão pausada continua lendo as fontes e descarta as amostras: o dispositivo segue aberto
-//! (reabri-lo em segundo plano esbarraria nas restrições do celular), e o tempo de áudio
-//! ([`Progress::position_ms`]) só anda gravando.
+//! A paused session keeps reading sources and discards samples: the device stays open
+//! (reopening it in the background would hit mobile restrictions), and audio time
+//! ([`Progress::position_ms`]) only advances while recording.
 //!
-//! Uma nota por voz passa as amostras mixadas pelo [`SilenceDetector`]: o laço encerra sozinho no
-//! silêncio configurado, ou quando não houve voz, e o [`Progress`] conta por quê.
+//! A voice note passes mixed samples through [`SilenceDetector`]: the loop ends automatically
+//! after the configured silence, or when there was no speech, and [`Progress`] reports why.
 
 use std::fs::File;
 use std::io::BufWriter;
@@ -29,26 +29,27 @@ use crate::queue::{now_ms, Kind, Queue, QueuedRecording, Source};
 use crate::vad::{SilenceDetector, VadEvent, METER_BARS};
 use crate::{AudioSource, SourceState};
 
-/// Quanto cada leitura de fonte espera, no máximo, por amostras.
+/// Maximum time each source read waits for samples.
 const READ_TIMEOUT: Duration = Duration::from_millis(10);
 const PART_SUFFIX: &str = ".part";
-/// Intervalo mínimo entre dois avisos de descarte no log.
+/// Minimum interval between two drop warnings in the log.
 const DROP_LOG_EVERY: Duration = Duration::from_secs(10);
-/// Tentativas de renomear o `.part` ao parar, com espera dobrando a partir de [`RENAME_WAIT`]
-/// (~3 s no total): no Windows, antivírus e indexador seguram o arquivo por instantes.
+/// Attempts to rename the `.part` on stop, with waits doubling from [`RENAME_WAIT`] (~3 s
+/// total): on Windows, antivirus and indexers briefly hold the file.
 const RENAME_ATTEMPTS: u32 = 5;
 const RENAME_WAIT: Duration = Duration::from_millis(200);
 
-/// Onde e como gravar.
+/// Where and how to record.
 #[derive(Clone, Debug)]
 pub struct RecorderConfig {
-    /// Diretório das gravações.
+    /// Recording directory.
     pub dir: PathBuf,
-    /// Taxa de bits do Opus, em bits/s.
+    /// Opus bitrate, in bits/s.
     pub bitrate: i32,
-    /// A origem gravada na fila (`desktop` ou `mobile`).
+    /// The source stored in the queue (`desktop` or `mobile`).
     pub source: Source,
-    /// Ao parar, a gravação espera título e tipo de agenda antes de subir (`details_pending`).
+    /// On stop, the recording waits for title and agenda type before upload
+    /// (`details_pending`).
     pub ask_details: bool,
 }
 
@@ -63,17 +64,17 @@ impl RecorderConfig {
     }
 }
 
-/// O que gravar.
+/// What to record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StartOptions {
     pub kind: Kind,
-    /// Numa nota, o silêncio que a encerra; `None` ("Nunca") não para sozinha. Ignorado numa
-    /// reunião.
+    /// For a voice note, the silence that ends it; `None` ("Never") does not stop
+    /// automatically. Ignored for a meeting.
     pub stop_after_silence: Option<Duration>,
 }
 
 impl StartOptions {
-    /// Uma reunião ou gravação manual: para só a pedido ou quando as fontes caem.
+    /// A meeting or manual recording: stops only on request or when sources go down.
     pub const MEETING: Self = Self {
         kind: Kind::Meeting,
         stop_after_silence: None,
@@ -87,18 +88,18 @@ impl StartOptions {
     }
 }
 
-/// Por que o laço de gravação terminou.
+/// Why the recording loop ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StopReason {
-    /// Pedido de parada (botão, atalho, bandeja, fim da reunião).
+    /// Stop request (button, shortcut, tray, meeting end).
     Requested,
-    /// Todas as fontes acabaram.
+    /// All sources ended.
     SourcesEnded,
-    /// Nota: houve voz e depois o silêncio configurado.
+    /// Voice note: speech followed by the configured silence.
     Silence,
-    /// Nota: nenhuma voz nos primeiros segundos.
+    /// Voice note: no speech in the first few seconds.
     NoSpeech,
-    /// A gravação falhou (erro de E/S ou pânico da thread de gravação).
+    /// Recording failed (I/O error or recording thread panic).
     Failed,
 }
 
@@ -112,22 +113,22 @@ impl StopReason {
     ];
 }
 
-/// O andamento de uma gravação, compartilhado com a thread que grava.
+/// Recording progress, shared with the recording thread.
 #[derive(Debug)]
 pub struct Progress {
-    /// Amostras gravadas, a 16 kHz.
+    /// Samples recorded, at 16 kHz.
     samples: AtomicU64,
-    /// 0 enquanto grava; depois, 1 + o índice em [`StopReason::ALL`].
+    /// 0 while recording; afterwards, 1 + the index in [`StopReason::ALL`].
     reason: AtomicU8,
-    /// Quanto falta de silêncio para a nota parar; `u64::MAX` quando não conta.
+    /// Silence remaining before the voice note stops; `u64::MAX` when not counting.
     stops_in_ms: AtomicU64,
     meter: Mutex<[f32; METER_BARS]>,
     paused: AtomicBool,
-    /// O nível RMS do último trecho mixado, em bits de `f32`.
+    /// RMS level of the last mixed segment, as `f32` bits.
     level: AtomicU32,
-    /// O estado de cada faixa (fonte), na ordem das fontes.
+    /// State of each lane (source), in source order.
     sources: Mutex<Vec<SourceState>>,
-    /// Amostras descartadas por anel cheio, somadas as faixas.
+    /// Samples dropped due to full rings, summed across lanes.
     dropped: AtomicU64,
 }
 
@@ -147,8 +148,8 @@ impl Default for Progress {
 }
 
 impl Progress {
-    /// O tempo de áudio, em ms: o gravado, sem as pausas. É a base dos marcadores e não se
-    /// desalinha com um vazio de fonte como o relógio se desalinharia.
+    /// Audio time, in ms: recorded time, excluding pauses. This is the basis for markers and
+    /// does not drift with a source gap as a clock would.
     pub fn position_ms(&self) -> i64 {
         let samples = self.samples.load(Ordering::Acquire);
         i64::try_from(samples * 1_000 / u64::from(TARGET_RATE)).unwrap_or(i64::MAX)
@@ -158,17 +159,17 @@ impl Progress {
         self.paused.load(Ordering::Acquire)
     }
 
-    /// O nível RMS do último trecho gravado, de 0 a 1; 0 pausado.
+    /// RMS level of the last recorded segment, from 0 to 1; 0 while paused.
     pub fn level(&self) -> f32 {
         f32::from_bits(self.level.load(Ordering::Acquire))
     }
 
-    /// Os últimos níveis da nota, de 0 a 1 (vazio numa reunião).
+    /// The voice note's latest levels, from 0 to 1 (empty for a meeting).
     pub fn meter(&self) -> [f32; METER_BARS] {
         self.meter.lock().map_or([0.0; METER_BARS], |meter| *meter)
     }
 
-    /// Quanto falta de silêncio para a nota parar, enquanto a pessoa está calada.
+    /// Silence remaining before the voice note stops, while the person is silent.
     pub fn stops_in_ms(&self) -> Option<u64> {
         match self.stops_in_ms.load(Ordering::Acquire) {
             u64::MAX => None,
@@ -176,20 +177,20 @@ impl Progress {
         }
     }
 
-    /// O estado de cada faixa, na ordem das fontes: uma faixa em
-    /// [`SourceState::Reconnecting`] está entregando silêncio enquanto o dispositivo volta.
+    /// State of each lane, in source order: a lane in [`SourceState::Reconnecting`] delivers
+    /// silence while the device returns.
     pub fn source_states(&self) -> Vec<SourceState> {
         self.sources
             .lock()
             .map_or_else(|_| Vec::new(), |states| states.clone())
     }
 
-    /// Amostras descartadas por anel cheio até agora, somadas as faixas.
+    /// Samples dropped due to full rings so far, summed across lanes.
     pub fn dropped_samples(&self) -> u64 {
         self.dropped.load(Ordering::Acquire)
     }
 
-    /// Copia o estado e os descartes das fontes; devolve o total de descartes.
+    /// Copies source states and drops; returns the total drops.
     fn track_sources(&self, sources: &[Box<dyn AudioSource>]) -> u64 {
         if let Ok(mut states) = self.sources.lock() {
             states.clear();
@@ -200,7 +201,7 @@ impl Progress {
         dropped
     }
 
-    /// Por que a gravação terminou; `None` enquanto grava.
+    /// Why recording ended; `None` while recording.
     pub fn stop_reason(&self) -> Option<StopReason> {
         match self.reason.load(Ordering::Acquire) {
             0 => None,
@@ -208,7 +209,7 @@ impl Progress {
         }
     }
 
-    /// Guarda o primeiro motivo; os seguintes não o trocam.
+    /// Stores the first reason; later reasons do not replace it.
     fn finish(&self, reason: StopReason) {
         let code = StopReason::ALL
             .iter()
@@ -241,7 +242,7 @@ impl Progress {
     }
 }
 
-/// Uma gravação em andamento.
+/// A recording in progress.
 pub struct ActiveRecording {
     id: String,
     kind: Kind,
@@ -254,8 +255,8 @@ pub struct ActiveRecording {
     worker: JoinHandle<Result<u64>>,
 }
 
-/// Começa a gravar as fontes dadas (mic e sistema numa reunião, só o mic numa nota) e registra a
-/// gravação na fila.
+/// Starts recording the given sources (mic and system for a meeting, only mic for a voice note)
+/// and registers the recording in the queue.
 pub fn start(
     config: &RecorderConfig,
     queue: &Queue,
@@ -297,7 +298,7 @@ pub fn start(
             .context("falha ao criar a thread de gravação")?
     };
     log::info!(
-        "gravação {id} ({}) iniciada em {}",
+        "recording {id} ({}) started at {}",
         options.kind.as_str(),
         part_path.display()
     );
@@ -324,7 +325,7 @@ impl ActiveRecording {
         self.kind
     }
 
-    /// Início, em milissegundos desde a época Unix.
+    /// Start, in milliseconds since the Unix epoch.
     pub fn started_at(&self) -> i64 {
         self.started_at
     }
@@ -333,7 +334,7 @@ impl ActiveRecording {
         &self.progress
     }
 
-    /// Pausa (ou retoma) sem fechar as fontes: pausada, as amostras lidas são descartadas.
+    /// Pauses (or resumes) without closing sources: while paused, read samples are discarded.
     pub fn set_paused(&self, paused: bool) {
         self.progress.paused.store(paused, Ordering::Release);
     }
@@ -342,44 +343,46 @@ impl ActiveRecording {
         self.progress.is_paused()
     }
 
-    /// O tempo de áudio, em ms (sem as pausas).
+    /// Audio time, in ms (excluding pauses).
     pub fn audio_ms(&self) -> i64 {
         self.progress.position_ms()
     }
 
-    /// O nível RMS do último trecho gravado, de 0 a 1.
+    /// RMS level of the last recorded segment, from 0 to 1.
     pub fn level(&self) -> f32 {
         self.progress.level()
     }
 
-    /// Se a gravação terminou sozinha (fontes acabaram, erro, ou a nota parou no silêncio); o
-    /// motivo está em [`Progress::stop_reason`].
+    /// Whether recording ended on its own (sources ended, error, or the voice note stopped on
+    /// silence); the reason is in [`Progress::stop_reason`].
     pub fn is_finished(&self) -> bool {
         self.worker.is_finished()
     }
 
-    /// Para a gravação, fecha o arquivo e o entrega à fila como `pending` (com `details_pending`
-    /// quando a config pede título e tipo ao parar): [`ActiveRecording::close`] seguido de
-    /// [`Closed::deliver`]. Sempre fecha: um erro ou pânico da thread de gravação vai para o log e
-    /// a linha sai com `interrupted = 1`, a duração do que foi gravado e o Ogg legível até a
-    /// última página escrita. Só falha quando a fila falha ou o `.part` segue preso depois das
-    /// retentativas; aí a linha fica `recording` para [`recover_orphans`].
+    /// Stops recording, closes the file and delivers it to the queue as `pending` (with
+    /// `details_pending` when config requests title and type on stop):
+    /// [`ActiveRecording::close`] followed by [`Closed::deliver`]. Always closes: a recording
+    /// thread error or panic is logged and the row gets `interrupted = 1`, the duration
+    /// recorded, and Ogg readable through the last written page. Only fails when the queue
+    /// fails or the `.part` stays locked after retries; then the row stays `recording` for
+    /// [`recover_orphans`].
     pub fn stop(self, queue: &Queue) -> Result<QueuedRecording> {
         self.close()?.deliver(queue)
     }
 
-    /// A parte lenta da parada, sem a fila: sinaliza, espera a thread de gravação (que solta os
-    /// dispositivos e faz o `fsync`) e renomeia o `.part`. Quem segura locks os solta antes dela.
+    /// The slow part of stopping, without the queue: signals, waits for the recording thread
+    /// (which releases devices and performs `fsync`) and renames the `.part`. Callers holding
+    /// locks release them first.
     pub fn close(self) -> Result<Closed> {
         self.stop.store(true, Ordering::Release);
         let interrupted = match self.worker.join() {
             Ok(Ok(_)) => false,
             Ok(Err(err)) => {
-                log::error!("a gravação {} falhou: {err:#}", self.id);
+                log::error!("recording {} failed: {err:#}", self.id);
                 true
             }
             Err(_) => {
-                log::error!("a thread da gravação {} entrou em pânico", self.id);
+                log::error!("recording thread {} panicked", self.id);
                 self.progress.finish(StopReason::Failed);
                 true
             }
@@ -398,7 +401,8 @@ impl ActiveRecording {
     }
 }
 
-/// Uma gravação já fechada em disco, ainda em `recording` na fila até [`Closed::deliver`].
+/// A recording already closed on disk, still `recording` in the queue until
+/// [`Closed::deliver`].
 #[derive(Debug)]
 pub struct Closed {
     id: String,
@@ -407,7 +411,7 @@ pub struct Closed {
     duration_ms: i64,
     bytes: i64,
     interrupted: bool,
-    /// Amostras descartadas por anel cheio na gravação toda.
+    /// Samples dropped due to full rings throughout the recording.
     dropped: u64,
 }
 
@@ -416,8 +420,8 @@ impl Closed {
         &self.id
     }
 
-    /// Entrega a gravação fechada à fila: `pending`, com `interrupted` quando a gravação falhou e
-    /// `details_pending` quando a config pede título e tipo ao parar.
+    /// Delivers the closed recording to the queue: `pending`, with `interrupted` if recording
+    /// failed and `details_pending` when config requests title and type on stop.
     pub fn deliver(self, queue: &Queue) -> Result<QueuedRecording> {
         let Self {
             id,
@@ -436,7 +440,7 @@ impl Closed {
             queue.set_details_pending(&id)?;
         }
         log::info!(
-            "gravação {id} fechada: {duration_ms} ms, {bytes} bytes, {dropped} amostras descartadas"
+            "recording {id} closed: {duration_ms} ms, {bytes} bytes, {dropped} samples dropped"
         );
         queue
             .get(&id)?
@@ -444,8 +448,8 @@ impl Closed {
     }
 }
 
-/// Lê as fontes até o pedido de parada (ou até todas acabarem, ou até o detector da nota pedir),
-/// mixa e codifica. Devolve as amostras gravadas, a 16 kHz.
+/// Reads sources until a stop request (or all end, or the voice note detector requests it),
+/// mixes and encodes. Returns samples recorded, at 16 kHz.
 fn record_loop(
     sources: Vec<Box<dyn AudioSource>>,
     writer: OggOpusWriter<BufWriter<File>>,
@@ -474,7 +478,7 @@ fn record_until_done(
     let rates: Vec<u32> = sources.iter().map(|s| s.sample_rate()).collect();
     let mut mixer = Mixer::new(&rates)?;
     let mut live = vec![true; sources.len()];
-    // Descartes vão ao log no máximo a cada `DROP_LOG_EVERY`.
+    // Drops are logged at most every `DROP_LOG_EVERY`.
     let mut drops_logged = (0u64, Instant::now());
 
     while !stop.load(Ordering::Acquire) && live.iter().any(|alive| *alive) {
@@ -488,7 +492,7 @@ fn record_until_done(
                 }
                 Some(_) => {}
                 None => {
-                    log::warn!("fonte {lane} da gravação terminou");
+                    log::warn!("recording source {lane} ended");
                     live[lane] = false;
                     mixer.end(lane)?;
                 }
@@ -496,7 +500,7 @@ fn record_until_done(
         }
         let dropped = progress.track_sources(&sources);
         if dropped > drops_logged.0 && drops_logged.1.elapsed() >= DROP_LOG_EVERY {
-            log::warn!("{dropped} amostras descartadas por anel cheio até agora");
+            log::warn!("{dropped} samples dropped due to full rings so far");
             drops_logged = (dropped, Instant::now());
         }
         let ready = mixer.pop_ready();
@@ -516,7 +520,7 @@ fn record_until_done(
         }
     }
 
-    // Solta os dispositivos antes de fechar o arquivo.
+    // Release devices before closing the file.
     drop(sources);
     writer.write(&mixer.drain()?)?;
     let samples = writer.samples();
@@ -528,8 +532,8 @@ fn record_until_done(
     Ok(samples)
 }
 
-/// Abertura do app: acerta o que um encerramento inesperado deixou para trás
-/// ([`recover_orphans`], sem sessão viva) e devolve à fila os uploads que ficaram pela metade.
+/// App startup: fixes what an unexpected shutdown left behind ([`recover_orphans`], without a
+/// live session) and returns unfinished uploads to the queue.
 pub fn recover(queue: &Queue) -> Result<Vec<QueuedRecording>> {
     let recovered = recover_orphans(queue, &[])?;
     queue.release_stale_syncing()?;
@@ -537,10 +541,10 @@ pub fn recover(queue: &Queue) -> Result<Vec<QueuedRecording>> {
     Ok(recovered)
 }
 
-/// Cada gravação em `recording` cujo id não está em `live` (as sessões vivas do processo) tem o
-/// `.part` renomeado para `.ogg` (o Ogg é legível até a última página escrita) e vira `pending`
-/// com `interrupted = 1`. Uma linha por vez: um `.part` ainda preso fica como está, no log, para
-/// a próxima varredura.
+/// Each recording in `recording` whose id is not in `live` (the process's live sessions) has
+/// its `.part` renamed to `.ogg` (Ogg is readable through the last written page) and becomes
+/// `pending` with `interrupted = 1`. One row at a time: a still-locked `.part` stays as is,
+/// logged, for the next scan.
 pub fn recover_orphans(queue: &Queue, live: &[&str]) -> Result<Vec<QueuedRecording>> {
     let recovered = queue.recover_interrupted(live, |orphan| {
         let final_path = strip_part(&orphan.path);
@@ -552,12 +556,12 @@ pub fn recover_orphans(queue: &Queue, live: &[&str]) -> Result<Vec<QueuedRecordi
         Ok((final_path, i64::try_from(bytes)?))
     })?;
     for rec in &recovered {
-        log::warn!("gravação {} recuperada (interrompida)", rec.id);
+        log::warn!("recording {} recovered (interrupted)", rec.id);
     }
     Ok(recovered)
 }
 
-/// Renomeia o `.part`, tentando de novo enquanto o SO o recusa (ver [`RENAME_ATTEMPTS`]).
+/// Renames the `.part`, retrying while the OS refuses (see [`RENAME_ATTEMPTS`]).
 fn rename_retrying(from: &Path, to: &Path) -> Result<()> {
     let mut wait = RENAME_WAIT;
     let mut attempt = 1;
@@ -565,10 +569,7 @@ fn rename_retrying(from: &Path, to: &Path) -> Result<()> {
         match std::fs::rename(from, to) {
             Ok(()) => return Ok(()),
             Err(err) if attempt < RENAME_ATTEMPTS => {
-                log::warn!(
-                    "renomear {} falhou ({err}); tentando de novo",
-                    from.display()
-                );
+                log::warn!("renaming {} failed ({err}); retrying", from.display());
                 std::thread::sleep(wait);
                 wait *= 2;
                 attempt += 1;
@@ -580,7 +581,7 @@ fn rename_retrying(from: &Path, to: &Path) -> Result<()> {
     }
 }
 
-/// A raiz da média dos quadrados, de 0 a 1 para amostras em [-1, 1].
+/// Root mean square, from 0 to 1 for samples in [-1, 1].
 fn rms(samples: &[f32]) -> f32 {
     let sum: f32 = samples.iter().map(|s| s * s).sum();
     (sum / samples.len() as f32).sqrt().min(1.0)
@@ -598,7 +599,7 @@ fn new_id(started_at: i64) -> String {
     format!("{started_at}-{:04x}", (nanos ^ std::process::id()) & 0xffff)
 }
 
-/// Número de série do stream Ogg, derivado do id (FNV-1a).
+/// Ogg stream serial number, derived from the id (FNV-1a).
 fn serial_for(id: &str) -> u32 {
     id.bytes().fold(0x811c_9dc5u32, |hash, byte| {
         (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
@@ -618,7 +619,7 @@ mod tests {
     }
 
     #[test]
-    fn session_grava_duas_fontes_e_entrega_a_fila() {
+    fn session_records_two_sources_and_delivers_to_queue() {
         let dir = temp_dir("sessao");
         let queue = Queue::open_in_memory().unwrap();
         let sources: Vec<Box<dyn AudioSource>> = vec![
@@ -647,7 +648,7 @@ mod tests {
             Status::Recording
         );
 
-        // As fontes sintéticas acabam sozinhas; a gravação termina sem pedido de parada.
+        // Synthetic sources end on their own; recording ends without a stop request.
         while !active.is_finished() {
             std::thread::sleep(Duration::from_millis(5));
         }
@@ -670,13 +671,13 @@ mod tests {
     }
 
     #[test]
-    fn session_para_a_pedido_com_fonte_silenciosa() {
+    fn session_stops_on_request_with_silent_source() {
         let dir = temp_dir("parada");
         let queue = Queue::open_in_memory().unwrap();
-        // Uma fonte que nunca entrega (monitor suspenso) não trava a gravação.
+        // A source that never delivers (suspended monitor) does not stall recording.
         let silent = ScriptedSource::new(48_000, std::iter::repeat_n(Some(Vec::new()), 10_000));
-        // As fontes de teste não são cadenciadas: com 30 s de tom, um runner rápido consumia tudo
-        // antes do `stop` e a parada saía como `SourcesEnded`. Uma hora não acaba nos 100 ms.
+        // Test sources are not paced: with 30 s of tone, a fast runner consumed everything
+        // before `stop`, resulting in `SourcesEnded`. An hour does not end within 100 ms.
         let sources: Vec<Box<dyn AudioSource>> = vec![
             Box::new(SineSource::new(
                 16_000,
@@ -695,7 +696,7 @@ mod tests {
         .unwrap();
         std::thread::sleep(Duration::from_millis(100));
         let position = active.progress().position_ms();
-        assert!(position > 0, "posição {position} ms");
+        assert!(position > 0, "position {position} ms");
         let progress = Arc::clone(&active.progress);
         let rec = active.stop(&queue).unwrap();
         assert_eq!(progress.stop_reason(), Some(StopReason::Requested));
@@ -704,7 +705,8 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
-    /// Empurra 10 ms de tom a cada 10 ms no anel, até `until` (ou até `stop`), e o fecha.
+    /// Pushes 10 ms of tone into the ring every 10 ms, until `until` (or `stop`), and closes
+    /// it.
     fn feed(
         mut writer: eclume_audio_capture::ring::RingWriter,
         until: Duration,
@@ -721,14 +723,15 @@ mod tests {
     }
 
     #[test]
-    fn session_reconecta_o_microfone_que_caiu_sem_encerrar_a_faixa() {
+    fn session_reconnects_dropped_microphone_without_ending_lane() {
         use eclume_audio_capture::reconnect::{Opener, Reconnecting};
         use eclume_audio_capture::ring;
 
         let dir = temp_dir("reconecta");
         let queue = Queue::open_in_memory().unwrap();
         let stop = Arc::new(AtomicBool::new(false));
-        // O microfone toca 1 s, cai, e o dispositivo só volta 1,2 s depois da queda.
+        // The microphone plays for 1 s, drops, and the device only returns 1.2 s after the
+        // drop.
         let (writer, first) = ring::channel(1 << 14, 16_000);
         feed(writer, Duration::from_secs(1), Arc::clone(&stop));
         let opened = Instant::now();
@@ -769,7 +772,7 @@ mod tests {
         }
         assert!(
             saw_reconnecting,
-            "a faixa do microfone não passou por reconexão"
+            "the microphone lane did not go through reconnection"
         );
         assert_eq!(
             active.progress().source_states(),
@@ -779,17 +782,17 @@ mod tests {
         let elapsed_ms = i64::try_from(started.elapsed().as_millis()).unwrap();
         let rec = active.stop(&queue).unwrap();
         stop.store(true, Ordering::Release);
-        // O intervalo sem microfone entrou como silêncio: a duração segue o relógio.
+        // The gap without a microphone became silence: duration follows the clock.
         let duration = rec.duration_ms.unwrap();
         assert!(
             duration > elapsed_ms * 8 / 10 && duration < elapsed_ms * 12 / 10,
-            "{duration} ms gravados em {elapsed_ms} ms"
+            "{duration} ms recorded in {elapsed_ms} ms"
         );
         assert!(!rec.interrupted);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
-    /// Uma fonte que entrega em tempo real, como um microfone: 10 ms por leitura.
+    /// A source delivering in real time, like a microphone: 10 ms per read.
     struct Paced(SineSource);
 
     impl AudioSource for Paced {
@@ -804,7 +807,7 @@ mod tests {
     }
 
     #[test]
-    fn session_pausa_descarta_amostras_e_conta_so_o_tempo_de_audio() {
+    fn session_pause_discards_samples_and_counts_only_audio_time() {
         let dir = temp_dir("pausa");
         let queue = Queue::open_in_memory().unwrap();
         let sources: Vec<Box<dyn AudioSource>> = vec![Box::new(Paced(SineSource::new(
@@ -820,9 +823,9 @@ mod tests {
         };
         let active = start(&config, &queue, sources, StartOptions::MEETING).unwrap();
         std::thread::sleep(Duration::from_millis(150));
-        // Um seno de amplitude 0,5 tem RMS de 0,5/√2.
+        // A sine wave with amplitude 0.5 has RMS 0.5/√2.
         let level = active.level();
-        assert!((0.3..0.4).contains(&level), "nível {level}");
+        assert!((0.3..0.4).contains(&level), "level {level}");
 
         active.set_paused(true);
         assert!(active.is_paused());
@@ -837,7 +840,7 @@ mod tests {
         assert!(active.audio_ms() > paused_at);
         let audio_ms = active.audio_ms();
         let rec = active.stop(&queue).unwrap();
-        // A duração é o tempo de áudio, sem a pausa.
+        // Duration is audio time, excluding the pause.
         let duration = rec.duration_ms.unwrap();
         assert!(
             duration >= audio_ms && duration < audio_ms + 200,
@@ -849,7 +852,7 @@ mod tests {
     }
 
     #[test]
-    fn session_recupera_part_orfao() {
+    fn session_recovers_orphaned_part() {
         let dir = temp_dir("recuperacao");
         let queue = Queue::open_in_memory().unwrap();
         let part = dir.join("orfa.ogg.part");
@@ -867,7 +870,7 @@ mod tests {
     }
 
     #[test]
-    fn session_recupera_as_outras_quando_um_destino_esta_bloqueado() {
+    fn session_recovers_others_when_one_destination_is_locked() {
         let dir = temp_dir("recuperacao-bloqueada");
         let queue = Queue::open_in_memory().unwrap();
         for id in ["presa", "livre"] {
@@ -875,20 +878,20 @@ mod tests {
             std::fs::write(&part, b"OggS").unwrap();
             queue.begin(id, &part, 1).unwrap();
         }
-        // `rename(arquivo, diretório)` falha: simula o `.part` preso.
+        // `rename(file, directory)` fails: simulates the locked `.part`.
         std::fs::create_dir(dir.join("presa.ogg")).unwrap();
 
         let recovered = recover(&queue).unwrap();
         assert_eq!(recovered.len(), 1);
         assert_eq!(recovered[0].id, "livre");
-        let presa = queue.get("presa").unwrap().unwrap();
-        assert_eq!(presa.status, Status::Recording);
+        let locked = queue.get("presa").unwrap().unwrap();
+        assert_eq!(locked.status, Status::Recording);
         assert!(dir.join("presa.ogg.part").exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn session_recupera_orfas_sem_tocar_a_gravacao_viva() {
+    fn session_recovers_orphans_without_touching_live_recording() {
         let dir = temp_dir("recuperacao-viva");
         let queue = Queue::open_in_memory().unwrap();
         for id in ["viva", "orfa"] {
@@ -900,13 +903,13 @@ mod tests {
         let recovered = recover_orphans(&queue, &["viva"]).unwrap();
         assert_eq!(recovered.len(), 1);
         assert_eq!(recovered[0].id, "orfa");
-        let viva = queue.get("viva").unwrap().unwrap();
-        assert_eq!(viva.status, Status::Recording);
+        let live = queue.get("viva").unwrap().unwrap();
+        assert_eq!(live.status, Status::Recording);
         assert!(dir.join("viva.ogg.part").exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
-    /// Uma fonte que entra em pânico depois de algumas leituras.
+    /// A source that panics after a few reads.
     struct Panicking(SineSource, u32);
 
     impl AudioSource for Panicking {
@@ -915,14 +918,14 @@ mod tests {
         }
 
         fn read(&mut self, timeout: Duration) -> Option<Vec<f32>> {
-            assert!(self.1 > 0, "fonte quebrada");
+            assert!(self.1 > 0, "broken source");
             self.1 -= 1;
             self.0.read(timeout)
         }
     }
 
     #[test]
-    fn session_fecha_interrompida_quando_a_fonte_entra_em_panico() {
+    fn session_closes_as_interrupted_when_source_panics() {
         let dir = temp_dir("panico");
         let queue = Queue::open_in_memory().unwrap();
         let sine = SineSource::new(16_000, 440.0, 0.3, Duration::from_secs(30));
@@ -948,7 +951,7 @@ mod tests {
     }
 
     #[test]
-    fn session_parada_com_part_preso_deixa_a_linha_para_a_varredura() {
+    fn session_stop_with_locked_part_leaves_row_for_scan() {
         let dir = temp_dir("parada-presa");
         let queue = Queue::open_in_memory().unwrap();
         let sources: Vec<Box<dyn AudioSource>> = vec![Box::new(SineSource::new(
@@ -975,7 +978,7 @@ mod tests {
     }
 
     #[test]
-    fn session_recusa_gravar_sem_fontes() {
+    fn session_refuses_recording_without_sources() {
         let queue = Queue::open_in_memory().unwrap();
         assert!(start(
             &RecorderConfig::new(temp_dir("vazia")),
@@ -986,7 +989,7 @@ mod tests {
         .is_err());
     }
 
-    /// Fala (tom em rajadas) por `speech_ms` e depois silêncio digital até `total_ms`.
+    /// Speech (bursts of tone) for `speech_ms`, then digital silence until `total_ms`.
     fn voice_then_silence(speech_ms: u64, total_ms: u64) -> ScriptedSource {
         let chunk_ms = 10;
         let chunks = (0..total_ms / chunk_ms).map(move |i| {
@@ -1013,11 +1016,11 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(5));
         }
-        panic!("a gravação não terminou sozinha");
+        panic!("recording did not finish on its own");
     }
 
     #[test]
-    fn nota_para_sozinha_no_silencio_com_medidor_e_posicao() {
+    fn voice_note_stops_on_silence_with_meter_and_position() {
         let dir = temp_dir("nota-silencio");
         let queue = Queue::open_in_memory().unwrap();
         let source: Vec<Box<dyn AudioSource>> = vec![Box::new(voice_then_silence(1_000, 60_000))];
@@ -1033,11 +1036,11 @@ mod tests {
 
         let progress = active.progress();
         assert_eq!(progress.stop_reason(), Some(StopReason::Silence));
-        // Fala até 1 s (última rajada até 0,9 s) e 2 s de silêncio desde ela.
+        // Speech until 1 s (last burst until 0.9 s), then 2 s of silence since it.
         let position = progress.position_ms();
         assert!(
             (2_800..=3_100).contains(&position),
-            "parou em {position} ms"
+            "stopped at {position} ms"
         );
         assert_eq!(progress.stops_in_ms(), None);
         let rec = active.stop(&queue).unwrap();
@@ -1048,7 +1051,7 @@ mod tests {
     }
 
     #[test]
-    fn nota_sem_voz_para_por_falta_de_fala() {
+    fn voice_note_without_voice_stops_due_to_no_speech() {
         let dir = temp_dir("nota-muda");
         let queue = Queue::open_in_memory().unwrap();
         let source: Vec<Box<dyn AudioSource>> = vec![Box::new(voice_then_silence(0, 60_000))];
@@ -1067,11 +1070,11 @@ mod tests {
     }
 
     #[test]
-    fn nota_mostra_o_nivel_e_quanto_falta_enquanto_grava() {
+    fn voice_note_shows_level_and_remaining_time_while_recording() {
         let dir = temp_dir("nota-medidor");
         let queue = Queue::open_in_memory().unwrap();
         let source: Vec<Box<dyn AudioSource>> = vec![Box::new(voice_then_silence(1_500, 1_500))];
-        // "Nunca": a fonte acaba antes, e o laço termina pelas fontes.
+        // "Never": the source ends first, and the loop ends because of the sources.
         let active = start(
             &RecorderConfig::new(&dir),
             &queue,
@@ -1097,9 +1100,9 @@ mod tests {
         )
         .unwrap();
         wait_finished(&active);
-        // A fala acaba em 0,5 s e a fonte em 2 s: faltavam uns 6,5 s.
+        // Speech ends at 0.5 s and the source at 2 s: about 6.5 s remained.
         let left = active.progress().stops_in_ms().unwrap();
-        assert!((6_300..=6_700).contains(&left), "faltavam {left} ms");
+        assert!((6_300..=6_700).contains(&left), "{left} ms remained");
         active.stop(&queue).unwrap();
         std::fs::remove_dir_all(dir).unwrap();
     }

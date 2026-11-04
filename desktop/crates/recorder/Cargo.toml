@@ -1,6 +1,6 @@
 [package]
 name = "eclume-recorder"
-description = "Núcleo de gravação do app desktop do eclume: mixagem, Ogg/Opus e fila local."
+description = "Recording core of the eclume desktop app: mixing, Ogg/Opus and a local queue."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

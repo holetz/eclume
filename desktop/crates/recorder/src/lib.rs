@@ -1,6 +1,6 @@
-//! Núcleo de gravação do app desktop do eclume, sem dispositivo de áudio: mixagem das fontes,
-//! codificação em Ogg/Opus mono 16 kHz, fila local de gravações e as interfaces de upload e de
-//! detecção de reuniões (`ext`).
+//! Recording core of the eclume desktop app, without audio devices: source mixing, mono 16 kHz
+//! Ogg/Opus encoding, a local recording queue, and upload and meeting detection interfaces
+//! (`ext`).
 
 pub mod encode;
 pub mod ext;
