@@ -27,6 +27,9 @@ v1) has its own line and each entry cites it.
 - Account locale: each account has a product locale (`en`, the default, or `pt-BR`), read and
   changed at `/me/locale`; summaries, field values, the adjustment chat and the Agent answer in the
   owner's locale (contract 2.30.0, #248).
+- Web interface in English and Portuguese: the app follows the account locale (else the browser
+  language), switches in place at Settings › Account, loads only the active language, and shows
+  every API error in it (#249).
 
 ### Fixed
 
