@@ -1,5 +1,5 @@
-//! Estado do app: a gravação em andamento (e quem a iniciou), a fila, a configuração, a conta (a
-//! credencial de dispositivo ou o PAT antigo) e a detecção de reuniões.
+//! App state: the current recording (and who started it), the queue, configuration, account
+//! (device credential or legacy PAT), and meeting detection.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -24,19 +24,19 @@ use crate::capture::{AudioChoice, OpenedSources};
 use crate::config::{self, Account, Config, Connection, PendingUpdate};
 use crate::shortcuts::{Registration, Registrations, ShortcutAction, ShortcutMode, Shortcuts};
 
-/// A versão deste build.
+/// Version of this build.
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Versão que vai no `capture.client_version` e no `User-Agent`.
+/// Version sent in `capture.client_version` and `User-Agent`.
 pub const CLIENT_VERSION: &str = concat!("eclume-desktop/", env!("CARGO_PKG_VERSION"));
 
-/// O que a bandeja mostra.
+/// What the tray shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AppStatus {
     Idle,
     Recording,
-    /// Enviando gravações ao servidor.
+    /// Uploading recordings to the server.
     Syncing,
 }
 
@@ -50,7 +50,7 @@ impl AppStatus {
     }
 }
 
-/// Pedido de gravar com outra gravação em andamento.
+/// Request to record while another recording is in progress.
 #[derive(Debug)]
 pub struct Busy;
 
@@ -62,60 +62,60 @@ impl std::fmt::Display for Busy {
 
 impl std::error::Error for Busy {}
 
-/// O que "Nova nota" fez.
+/// What "New voice note" did.
 #[derive(Debug)]
 pub enum NoteToggle {
     Started,
-    /// Parou a nota em curso, que foi para a fila.
+    /// Stopped the current voice note, which was queued.
     Stopped(Box<QueuedRecording>),
 }
 
-/// Quanto o microfone pode ficar fora antes do aviso: a troca de perfil do Bluetooth costuma
-/// levar de 1 a 3 s.
+/// How long the microphone can be unavailable before the notice: Bluetooth profile switching
+/// usually takes 1 to 3 s.
 const MIC_LOST_AFTER: Duration = Duration::from_secs(5);
-/// O aviso da janela enquanto o microfone está fora.
+/// Window notice while the microphone is unavailable.
 const MIC_LOST_NOTICE: &str = "gravando sem microfone: tentando reconectar";
 
-/// Uma transição do microfone da gravação em curso, vista por [`AppState::watch_sources`].
+/// Microphone transition in the current recording, observed by [`AppState::watch_sources`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MicChange {
-    /// Fora há mais de [`MIC_LOST_AFTER`].
+    /// Unavailable for longer than [`MIC_LOST_AFTER`].
     Lost,
-    /// De volta depois de um [`MicChange::Lost`].
+    /// Back after a [`MicChange::Lost`].
     Back,
 }
 
-/// Uma gravação que terminou sozinha e foi fechada pelo reaper.
+/// Recording that ended on its own and was closed by the reaper.
 #[derive(Debug)]
 pub enum Reaped {
-    /// A gravação parou sozinha: as fontes de áudio caíram ([`StopReason::SourcesEnded`]) ou a
-    /// gravação falhou ([`StopReason::Failed`]).
+    /// Recording stopped on its own: audio sources disconnected ([`StopReason::SourcesEnded`]) or
+    /// the recording failed ([`StopReason::Failed`]).
     Stopped {
         recording: QueuedRecording,
         reason: StopReason,
     },
-    /// A nota parou no silêncio e foi para a fila.
+    /// Voice note stopped on silence and was queued.
     NoteSaved(QueuedRecording),
-    /// A nota não teve voz: saiu da fila e do disco.
+    /// Voice note had no speech: removed from the queue and disk.
     NoteDiscarded,
 }
 
-/// O medidor da nota em curso, para a janela.
+/// Meter for the current voice note, for the window.
 #[derive(Clone, Debug, Serialize)]
 pub struct NoteMeter {
     pub position_ms: i64,
-    /// Os últimos níveis, de 0 a 1, do mais antigo ao mais novo.
+    /// Latest levels, from 0 to 1, oldest to newest.
     pub levels: [f32; METER_BARS],
-    /// Quanto falta de silêncio para parar, enquanto a pessoa está calada.
+    /// Remaining silence before stopping, while the person is quiet.
     pub stops_in_ms: Option<u64>,
 }
 
-/// Quem iniciou a gravação em curso.
+/// Who started the current recording.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Origin {
-    /// Iniciada pela detecção (política `auto` ou resposta à pergunta).
+    /// Started by detection (`auto` policy or answer to the prompt).
     pub auto: bool,
-    /// App da reunião, quando veio da detecção.
+    /// Meeting app, when started by detection.
     pub app: Option<AppKey>,
 }
 
@@ -133,7 +133,7 @@ impl Origin {
     }
 }
 
-/// Um app de reunião, como a janela o mostra.
+/// Meeting app as shown in the window.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct MeetingView {
     pub app: AppKey,
@@ -149,67 +149,67 @@ impl From<AppKey> for MeetingView {
     }
 }
 
-/// O retrato do estado que a UI e a bandeja consomem.
+/// State snapshot consumed by the UI and tray.
 #[derive(Clone, Debug, Serialize)]
 pub struct StatusView {
     pub status: AppStatus,
     pub recording_id: Option<String>,
     pub recording_started_at: Option<i64>,
-    /// Reunião ou nota, na gravação em curso.
+    /// Meeting or voice note, for the current recording.
     pub recording_kind: Option<Kind>,
-    /// Silêncio que encerra uma nota, em segundos; `None` é "Nunca".
+    /// Silence that ends a voice note, in seconds; `None` means "Never".
     pub note_silence_s: Option<u32>,
-    /// `system`, `light` ou `dark`: a janela aplica sem abrir as configurações.
+    /// `system`, `light` or `dark`: the window applies it without opening settings.
     pub theme: String,
-    /// A gravação em curso foi iniciada pela detecção.
+    /// Current recording was started by detection.
     pub recording_auto: bool,
-    /// App da reunião da gravação em curso.
+    /// Meeting app for the current recording.
     pub recording_app: Option<MeetingView>,
-    /// Reunião detectada agora (depois do debounce).
+    /// Meeting detected now (after debounce).
     pub meeting: Option<MeetingView>,
-    /// Pergunta "gravar esta reunião?" esperando resposta.
+    /// "Record this meeting?" prompt awaiting an answer.
     pub pending_ask: Option<MeetingView>,
-    /// Marcadores da gravação em curso.
+    /// Markers for the current recording.
     pub marker_count: u32,
-    /// O último marcador da gravação em curso, cuja nota a janela deixa editar.
+    /// Last marker in the current recording, whose note the window allows editing.
     pub last_marker: Option<Marker>,
     pub counts: QueueCounts,
     pub web_url: String,
-    /// Aviso da última ação (fonte que faltou, erro ao gravar).
+    /// Notice from the last action (missing source, recording error).
     pub notice: Option<String>,
-    /// O que impede o sync (PAT ausente) ou o último erro dele.
+    /// What blocks sync (missing PAT) or its last error.
     pub sync_notice: Option<String>,
-    /// Por que a transcrição espera no servidor, por id remoto, das gravações enviadas há menos
-    /// de 24 h cujo job está na fila (`Job.queue`).
+    /// Why transcription is waiting on the server, by remote id, for recordings uploaded less
+    /// than 24 h ago whose job is queued (`Job.queue`).
     pub queue_waits: BTreeMap<String, QueueWait>,
-    /// "Atualizado para X", até a pessoa fechar o aviso.
+    /// "Updated to X", until the person dismisses the notice.
     pub updated: Option<PendingUpdate>,
-    /// Primeira execução, PAT antigo ou conta.
+    /// First run, legacy PAT, or account.
     pub connection: Connection,
     pub account: Option<Account>,
-    /// O microfone da gravação em curso está fora há mais de 5 s (reconectando).
+    /// Microphone in the current recording has been unavailable for over 5 s (reconnecting).
     pub mic_lost: bool,
 }
 
-/// "Testar conexão": quem o servidor reconhece e quando foi o último envio.
+/// "Test connection": who the server recognizes and when the last upload occurred.
 #[derive(Clone, Debug, Serialize)]
 pub struct ConnectionTest {
     pub email: String,
-    /// Quando o servidor confirmou a última gravação deste computador (ms desde a época).
+    /// When the server confirmed the last recording from this computer (ms since the epoch).
     pub last_upload_at: Option<i64>,
 }
 
-/// A política de um app, como a tela de configurações a mostra.
+/// App policy as shown in settings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct AppPolicyView {
     pub app: AppKey,
     pub label: &'static str,
     pub policy: Policy,
-    /// A política de fábrica, para "Restaurar padrões".
+    /// Factory policy, for "Restore defaults".
     pub default_policy: Policy,
 }
 
-/// As gravações que ainda ocupam este computador, para a aba Armazenamento.
+/// Recordings still stored on this computer, for the Storage tab.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct StorageInfo {
     pub dir: PathBuf,
@@ -217,19 +217,19 @@ pub struct StorageInfo {
     pub bytes: u64,
 }
 
-/// Um atalho global, como a aba Áudio o mostra.
+/// Global shortcut as shown in the Audio tab.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ShortcutView {
     pub action: ShortcutAction,
     pub label: &'static str,
     pub keys: String,
-    /// `None` antes do primeiro registro (no app, ele acontece na abertura).
+    /// `None` before the first registration (the app registers on open).
     pub registration: Option<Registration>,
-    /// "Em uso por outro app" ou "Indisponível nesta sessão".
+    /// "In use by another app" or "Unavailable in this session".
     pub problem: Option<&'static str>,
 }
 
-/// O que a tela de configurações mostra. O PAT nunca volta à janela: só de onde ele vem.
+/// What settings shows. The PAT never returns to the window: only its source does.
 #[derive(Clone, Debug, Serialize)]
 pub struct SettingsView {
     pub web_url: String,
@@ -242,35 +242,35 @@ pub struct SettingsView {
     pub connection: Connection,
     pub account: Option<Account>,
     pub shortcuts: Vec<ShortcutView>,
-    /// Global, portal ou sistema (com os comandos da CLI).
+    /// Global, portal, or system (with CLI commands).
     pub shortcut_mode: ShortcutMode,
-    /// O microfone escolhido; `None` é o padrão do sistema e `"none"`, nenhum.
+    /// Selected microphone; `None` means system default and `"none"` means none.
     pub mic: Option<String>,
-    /// `"follow"`, o id de uma saída ou `"none"`.
+    /// `"follow"`, an output id, or `"none"`.
     pub system_source: String,
-    /// Idioma da transcrição; `None` é o padrão do servidor.
+    /// Transcription language; `None` means server default.
     pub language: Option<String>,
-    /// `system`, `light` ou `dark`.
+    /// `system`, `light` or `dark`.
     pub theme: String,
-    /// Avisar quando o resumo automático fica pronto.
+    /// Notify when the automatic summary is ready.
     pub notify_summary: bool,
-    /// Iniciar com o computador.
+    /// Start with the computer.
     pub autostart: bool,
-    /// Quantas gravações recentes o painel do topo mostra; `0` o esconde.
+    /// Number of recent recordings in the top panel; `0` hides it.
     pub recent_count: u8,
-    /// Quantas gravações recentes o menu da bandeja mostra; `0` esconde a seção.
+    /// Number of recent recordings in the tray menu; `0` hides the section.
     pub tray_recent_count: u8,
-    /// A pasta sincronizada está ligada.
+    /// Synced folder is enabled.
     pub mirror_enabled: bool,
-    /// A raiz da pasta sincronizada; `None` até a pessoa escolher.
+    /// Synced folder root; `None` until the person chooses one.
     pub mirror_dir: Option<PathBuf>,
-    /// Espelhar também as transcrições.
+    /// Also mirror transcripts.
     pub mirror_transcripts: bool,
-    /// Silêncio que encerra uma nota, em segundos; `None` é "Nunca".
+    /// Silence that ends a voice note, in seconds; `None` means "Never".
     pub note_silence_s: Option<u32>,
 }
 
-/// O que a tela de configurações manda ao salvar.
+/// What settings sends on save.
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct SettingsInput {
     pub web_url: String,
@@ -282,78 +282,78 @@ pub struct SettingsInput {
     #[serde(default)]
     pub policies: BTreeMap<AppKey, Policy>,
     pub retention_days: Option<u32>,
-    /// PAT novo; vazio ou ausente mantém o guardado.
+    /// New PAT; empty or missing keeps the stored one.
     #[serde(default)]
     pub pat: Option<String>,
-    /// Esquecer o PAT guardado.
+    /// Forget the stored PAT.
     #[serde(default)]
     pub clear_pat: bool,
-    /// Atalhos novos; ausente mantém os de hoje.
+    /// New shortcuts; missing keeps the current ones.
     #[serde(default)]
     pub shortcuts: Option<Shortcuts>,
-    /// O microfone pelo nome, `""` para o padrão do sistema e `"none"` para nenhum; ausente
-    /// mantém o de hoje.
+    /// Microphone by name, `""` for system default and `"none"` for none; missing keeps the
+    /// current one.
     #[serde(default)]
     pub mic: Option<String>,
-    /// `"follow"` (ou `""`), o id de uma saída ou `"none"`; ausente mantém a de hoje.
+    /// `"follow"` (or `""`), an output id, or `"none"`; missing keeps the current one.
     #[serde(default)]
     pub system_source: Option<String>,
-    /// `pt`, `es`, `en`, ou `""` para o padrão do servidor; ausente mantém o de hoje.
+    /// `pt`, `es`, `en`, or `""` for server default; missing keeps the current one.
     #[serde(default)]
     pub language: Option<String>,
-    /// `system`, `light` ou `dark`; ausente mantém o de hoje.
+    /// `system`, `light` or `dark`; missing keeps the current one.
     #[serde(default)]
     pub theme: Option<String>,
-    /// Ausente mantém o de hoje.
+    /// Missing keeps the current value.
     #[serde(default)]
     pub notify_summary: Option<bool>,
-    /// Iniciar com o computador; ausente mantém o de hoje.
+    /// Start with the computer; missing keeps the current value.
     #[serde(default)]
     pub autostart: Option<bool>,
-    /// Gravações recentes no topo (0 a 10); ausente mantém o de hoje.
+    /// Recent recordings at the top (0 to 10); missing keeps the current value.
     #[serde(default)]
     pub recent_count: Option<u8>,
-    /// Gravações recentes no menu da bandeja (0 a 10); ausente mantém o de hoje.
+    /// Recent recordings in the tray menu (0 to 10); missing keeps the current value.
     #[serde(default)]
     pub tray_recent_count: Option<u8>,
-    /// Liga ou desliga a pasta sincronizada; ausente mantém o de hoje.
+    /// Enable or disable the synced folder; missing keeps the current value.
     #[serde(default)]
     pub mirror_enabled: Option<bool>,
-    /// A raiz da pasta sincronizada, `""` para limpar; ausente mantém a de hoje.
+    /// Synced folder root, `""` to clear; missing keeps the current one.
     #[serde(default)]
     pub mirror_dir: Option<String>,
-    /// Espelhar as transcrições; ausente mantém o de hoje.
+    /// Mirror transcripts; missing keeps the current value.
     #[serde(default)]
     pub mirror_transcripts: Option<bool>,
-    /// Parada por silêncio da nota em segundos, `0` para "Nunca"; ausente mantém a de hoje.
+    /// Voice note silence stop in seconds, `0` for "Never"; missing keeps the current value.
     #[serde(default)]
     pub note_silence_s: Option<u32>,
 }
 
-/// Como está a pasta sincronizada, para a aba da janela.
+/// Synced folder status, for the window tab.
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct MirrorStatus {
-    /// Há um ciclo em curso.
+    /// A cycle is running.
     pub running: bool,
-    /// Quando o último ciclo terminou bem (ms desde a época); `None` antes do primeiro.
+    /// When the last cycle succeeded (ms since the epoch); `None` before the first.
     pub last_sync_ms: Option<i64>,
-    /// O que deu errado no último ciclo, em palavras.
+    /// What went wrong in the last cycle, in words.
     pub last_error: Option<String>,
-    /// O que o último ciclo fez.
+    /// What the last cycle did.
     pub last: Option<crate::mirror_sync::Report>,
 }
 
-/// Quanto dura, no máximo, o teste de nível de uma fonte.
+/// Maximum duration of a source level test.
 pub const SOURCE_TEST: Duration = Duration::from_secs(10);
 
-/// O teste de nível em curso: o medidor, sem gravar nada. `running` desliga quando o teste acaba
-/// ou quando a janela pede para parar.
+/// Current level test: the meter, without recording. `running` turns off when the test ends
+/// or when the window requests a stop.
 struct SourceTest {
     levels: Arc<Mutex<[f32; METER_BARS]>>,
     running: Arc<AtomicBool>,
 }
 
-/// A gravação que está parando (join, desmontagem do driver e `fsync`, fora do lock).
+/// Recording being stopped (join, driver teardown, and `fsync`, outside the lock).
 struct Stopping {
     id: String,
     started_at: i64,
@@ -362,14 +362,14 @@ struct Stopping {
 
 struct Inner {
     active: Option<ActiveRecording>,
-    /// A gravação tirada de `active` e ainda fechando: o estado visível segue "Gravando",
-    /// iniciar ou parar de novo é [`Busy`] e a varredura de órfãs a conta como viva.
+    /// Recording removed from `active` and still closing: visible state remains "Recording",
+    /// starting or stopping again is [`Busy`], and the orphan sweep counts it as live.
     stopping: Option<Stopping>,
-    /// O microfone da gravação em curso está fora há mais de [`MIC_LOST_AFTER`].
+    /// Microphone in the current recording has been unavailable for longer than [`MIC_LOST_AFTER`].
     mic_lost: bool,
-    /// Quem iniciou `active`.
+    /// Who started `active`.
     origin: Option<Origin>,
-    /// Há um início em curso (dispositivos abrindo), fora do lock.
+    /// A start is in progress (opening devices), outside the lock.
     starting: bool,
     syncing: bool,
     config: Config,
@@ -377,29 +377,28 @@ struct Inner {
     notice: Option<String>,
     sync_notice: Option<String>,
     queue_waits: BTreeMap<String, QueueWait>,
-    /// A pasta sincronizada: o ciclo em curso e o resultado do último.
+    /// Synced folder: current cycle and last result.
     mirror: MirrorStatus,
-    /// Como ficou o registro de cada atalho global.
+    /// Registration result for each global shortcut.
     shortcut_registrations: Registrations,
-    /// Como os atalhos chegam ao app nesta sessão.
+    /// How shortcuts reach the app in this session.
     shortcut_mode: ShortcutMode,
-    /// O pedido de cancelamento da importação em curso, se houver uma.
+    /// Cancellation request for the current import, if any.
     importing: Option<Arc<AtomicBool>>,
     source_test: Option<SourceTest>,
-    /// A atualização a notificar nesta abertura (sai uma vez).
+    /// Update to notify on this open (sent once).
     update_to_notify: Option<PendingUpdate>,
-    /// Onde está a credencial guardada (PAT ou de dispositivo), se houver; lido na abertura e
-    /// atualizado ao entrar, sair e salvar, para a consulta de 1 s e as Configurações não irem ao
-    /// chaveiro.
+    /// Where the credential (PAT or device) is stored, if any; read on open and updated on
+    /// sign-in, sign-out, and save, so the 1 s poll and Settings avoid the keyring.
     token_source: Option<PatSource>,
-    /// O servidor escolhido na primeira execução, esperando a pessoa entrar.
+    /// Server selected on first run, waiting for the person to sign in.
     prepared: Option<PreparedServer>,
-    /// A CA do servidor não é mais a fixada: o sync para e a janela volta à primeira execução.
+    /// Server CA no longer matches the pinned one: sync stops and the window returns to first run.
     ca_changed: bool,
 }
 
 impl Inner {
-    /// Id, início e tipo da gravação em curso, também enquanto ela para.
+    /// Id, start, and kind of the current recording, including while it stops.
     fn current(&self) -> Option<(&str, i64, Kind)> {
         match (&self.active, &self.stopping) {
             (Some(active), _) => Some((active.id(), active.started_at(), active.kind())),
@@ -425,7 +424,7 @@ pub struct AppState {
     inner: Mutex<Inner>,
 }
 
-/// Lê a fonte por até `duration`, ou até `running` desligar, e publica o medidor em `levels`.
+/// Reads the source for up to `duration`, or until `running` turns off, publishing to `levels`.
 fn run_source_test(
     open: impl FnOnce() -> Result<Box<dyn AudioSource>>,
     duration: Duration,
@@ -449,7 +448,7 @@ fn run_source_test(
     Ok(())
 }
 
-/// Id de um arquivo importado: o instante da importação e um sufixo, como o das gravações.
+/// Imported file id: import time and a suffix, like recording ids.
 fn import_id() -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -461,15 +460,15 @@ fn import_id() -> String {
     )
 }
 
-/// Texto vazio (ou só espaços) vira `None`.
+/// Empty text (or only whitespace) becomes `None`.
 fn non_empty(value: Option<String>) -> Option<String> {
     value
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
 }
 
-/// Uma flag de "em curso" (`syncing`, `mirror.running`, `importing`): ligada ao criar a guarda e
-/// desligada no `Drop`, que pega o estado mesmo envenenado. Flag de "em curso" só se liga assim.
+/// An "in progress" flag (`syncing`, `mirror.running`, `importing`): set when creating the guard
+/// and cleared on `Drop`, which acquires state even if poisoned. Only guards set these flags.
 pub struct FlagGuard<'a> {
     state: &'a AppState,
     set: fn(&mut Inner, bool),
@@ -478,7 +477,7 @@ pub struct FlagGuard<'a> {
 impl<'a> FlagGuard<'a> {
     fn raise(state: &'a AppState, set: fn(&mut Inner, bool)) -> Self {
         set(
-            &mut recover_poison(state.inner.lock(), "estado do app"),
+            &mut recover_poison(state.inner.lock(), "application state"),
             true,
         );
         Self { state, set }
@@ -488,36 +487,36 @@ impl<'a> FlagGuard<'a> {
 impl Drop for FlagGuard<'_> {
     fn drop(&mut self) {
         (self.set)(
-            &mut recover_poison(self.state.inner.lock(), "estado do app"),
+            &mut recover_poison(self.state.inner.lock(), "application state"),
             false,
         );
     }
 }
 
-/// Um lock envenenado por pânico segue utilizável: o envenenamento vai para o log.
+/// A lock poisoned by a panic remains usable: poisoning is logged.
 fn recover_poison<'a, T>(
     lock: std::sync::LockResult<MutexGuard<'a, T>>,
     what: &str,
 ) -> MutexGuard<'a, T> {
     lock.unwrap_or_else(|poisoned| {
-        log::error!("{what} envenenado por um pânico; seguindo com o último valor");
+        log::error!("{what} poisoned by a panic; continuing with the last value");
         poisoned.into_inner()
     })
 }
 
 impl AppState {
-    /// Abre a fila em `data_dir`, recupera gravações interrompidas e lê a config e o PAT de
-    /// `config_dir`. Um `.part` preso não impede a abertura: a linha fica para a varredura. A
-    /// config só é gravada quando a versão aberta muda; ilegível, é guardada ao lado e a janela
-    /// avisa.
+    /// Opens the queue in `data_dir`, recovers interrupted recordings, and reads config and PAT
+    /// from `config_dir`. A stuck `.part` does not prevent opening: its row remains for the sweep.
+    /// Config is only saved when the opened version changes; if unreadable, it is saved alongside
+    /// and the window notifies the person.
     pub fn open(data_dir: &Path, config_dir: &Path) -> Result<Self> {
         Self::open_with(data_dir, config_dir, PatStore::new(config_dir))
     }
 
-    /// [`Self::open`] com o cofre do PAT dado (os testes passam um sem o chaveiro do SO). Uma CA
-    /// fixada com certificados a mais é regravada com um só ([`account::repair_pinned`]); a
-    /// credencial guardada pode ter passado por um interceptador, então é apagada e a janela pede
-    /// para entrar de novo.
+    /// [`Self::open`] with the given PAT store (tests pass one without the OS keyring). A pinned
+    /// CA with extra certificates is rewritten with just one ([`account::repair_pinned`]); the
+    /// stored credential may have passed through an interceptor, so it is deleted and the window
+    /// asks the person to sign in again.
     fn open_with(data_dir: &Path, config_dir: &Path, pat: PatStore) -> Result<Self> {
         let queue = Queue::open(&data_dir.join("queue.sqlite"))?;
         let recovered = session::recover(&queue)?;
@@ -527,21 +526,21 @@ impl AppState {
         let just_updated = config.open_version(CURRENT_VERSION);
         if config.last_version != previous_version {
             if let Err(err) = config.save(&config_path) {
-                log::warn!("falha ao registrar a versão aberta: {err:#}");
+                log::warn!("failed to record opened version: {err:#}");
             }
         }
         let ca_trimmed = account::repair_pinned(config_dir, &config).unwrap_or_else(|err| {
-            log::warn!("falha ao conferir a CA fixada: {err:#}");
+            log::warn!("failed to check pinned CA: {err:#}");
             false
         });
         if ca_trimmed {
             log::warn!("{}", eclume_sync::pin::CA_TRIMMED);
             if let Err(err) = pat.clear() {
-                log::warn!("falha ao apagar a credencial: {err:#}");
+                log::warn!("failed to delete credential: {err:#}");
             }
             config.account = None;
             if let Err(err) = config.save(&config_path) {
-                log::warn!("falha ao gravar a config sem a conta: {err:#}");
+                log::warn!("failed to save config without account: {err:#}");
             }
         }
         let state = Self::new(
@@ -568,7 +567,7 @@ impl AppState {
         inner.update_to_notify = just_updated;
         inner.notice = (!notices.is_empty()).then(|| notices.join(" · "));
         if ca_trimmed {
-            // O mesmo estado da CA trocada: sync parado e a primeira execução com o aviso.
+            // Same state as a changed CA: sync stopped and first run with the notice.
             inner.ca_changed = true;
             inner.sync_notice = Some(eclume_sync::pin::CA_TRIMMED.into());
         }
@@ -618,23 +617,23 @@ impl AppState {
         self.config_path.parent().unwrap_or(Path::new("."))
     }
 
-    /// O estado do app. Envenenado por um pânico, segue acessível (com o aviso no log): `Inner` é
-    /// dado simples, sem invariante entre campos que um pânico deixe perigoso.
+    /// App state. Remains accessible after a panic poisons it (with a log notice): `Inner` is
+    /// plain data, with no cross-field invariant that a panic could leave unsafe.
     fn inner(&self) -> Result<MutexGuard<'_, Inner>> {
-        Ok(recover_poison(self.inner.lock(), "estado do app"))
+        Ok(recover_poison(self.inner.lock(), "application state"))
     }
 
-    /// A fila. Envenenada por um pânico, segue acessível: as escritas do SQLite são transacionais.
+    /// Queue. Remains accessible after a panic poisons it: SQLite writes are transactional.
     fn lock_queue(&self) -> Result<MutexGuard<'_, Queue>> {
-        Ok(recover_poison(self.queue.lock(), "fila"))
+        Ok(recover_poison(self.queue.lock(), "queue"))
     }
 
-    /// A fila, para o laço de sync (`eclume_recorder::sync_pending`).
+    /// Queue, for the sync loop (`eclume_recorder::sync_pending`).
     pub fn queue(&self) -> &Mutex<Queue> {
         &self.queue
     }
 
-    /// A fila compartilhada, para o uploader guardar o estado de retomada nela.
+    /// Shared queue, so the uploader can store resume state in it.
     pub fn shared_queue(&self) -> Arc<Mutex<Queue>> {
         Arc::clone(&self.queue)
     }
@@ -687,15 +686,15 @@ impl AppState {
         })
     }
 
-    /// Começa uma gravação manual com as fontes que `open` abrir; a pergunta pendente de uma
-    /// reunião detectada sai da tela.
+    /// Starts a manual recording with the sources opened by `open`; the pending prompt for a
+    /// detected meeting is dismissed.
     pub fn start_recording(&self, open: impl FnOnce() -> Result<OpenedSources>) -> Result<()> {
         self.start_recording_as(Origin::MANUAL, open)?;
         self.inner()?.auto.on_manual_start();
         Ok(())
     }
 
-    /// Começa a gravar, registrando quem iniciou e, se veio da detecção, o app da reunião.
+    /// Starts recording, tracking who started it and, if from detection, the meeting app.
     pub fn start_recording_as(
         &self,
         origin: Origin,
@@ -704,8 +703,8 @@ impl AppState {
         self.start(origin, StartOptions::MEETING, open)
     }
 
-    /// "Nova nota": começa uma nota (só o microfone, parada pelo silêncio configurado) ou para a
-    /// nota em curso. Com outra gravação em andamento, é [`Busy`].
+    /// "New voice note": starts a voice note (microphone only, configured silence stop) or stops
+    /// the current voice note. With another recording in progress, returns [`Busy`].
     pub fn toggle_note(
         &self,
         open_mic: impl FnOnce() -> Result<OpenedSources>,
@@ -730,7 +729,7 @@ impl AppState {
         Ok(NoteToggle::Started)
     }
 
-    /// Marca o instante atual da gravação em curso: a posição no áudio, e não o relógio.
+    /// Marks the current instant in the recording: audio position, rather than wall time.
     pub fn add_marker(&self, note: Option<String>) -> Result<Marker> {
         let inner = self.inner()?;
         let active = inner
@@ -742,13 +741,13 @@ impl AppState {
             .add_marker(active.id(), at_ms, note.as_deref())
     }
 
-    /// Troca a nota de um marcador enquanto a gravação não subiu.
+    /// Changes a marker note while the recording has not been uploaded.
     pub fn set_marker_note(&self, client_id: &str, note: Option<String>) -> Result<Marker> {
         self.lock_queue()?
             .set_marker_note(client_id, note.as_deref())
     }
 
-    /// O medidor da nota em curso; `None` sem nota.
+    /// Current voice note meter; `None` without a voice note.
     pub fn note_meter(&self) -> Result<Option<NoteMeter>> {
         let inner = self.inner()?;
         Ok(inner
@@ -778,8 +777,8 @@ impl AppState {
             }
             inner.starting = true;
         }
-        // Abrir dispositivos pode levar segundos: sem segurar o estado, para a janela e a
-        // bandeja seguirem respondendo enquanto isso.
+        // Opening devices can take seconds: release state so the window and tray remain responsive
+        // in the meantime.
         let opened = open();
         let mut inner = self.inner()?;
         inner.starting = false;
@@ -804,10 +803,10 @@ impl AppState {
         Ok(())
     }
 
-    /// Para a gravação em andamento e a entrega à fila, em três tempos: sob o estado, tira
-    /// `active` e marca `stopping`; sem lock nenhum, fecha (join da thread, desmontagem do driver,
-    /// `fsync`, `rename`); com a fila, entrega. A janela e a bandeja seguem respondendo enquanto
-    /// isso; parar de novo no meio é [`Busy`].
+    /// Stops the current recording and queues it in three stages: under state, removes `active`
+    /// and sets `stopping`; without any lock, closes it (thread join, driver teardown, `fsync`,
+    /// `rename`); under the queue, hands it over. The window and tray remain responsive;
+    /// stopping again in the meantime returns [`Busy`].
     pub fn stop_recording(&self) -> Result<QueuedRecording> {
         let active = {
             let mut inner = self.inner()?;
@@ -837,7 +836,7 @@ impl AppState {
         result
     }
 
-    /// Inicia (manual) ou para, conforme o estado.
+    /// Starts (manually) or stops, depending on state.
     pub fn toggle_recording(&self, open: impl FnOnce() -> Result<OpenedSources>) -> Result<()> {
         if self.inner()?.current().is_some() {
             self.stop_recording().map(|_| ())
@@ -846,8 +845,8 @@ impl AppState {
         }
     }
 
-    /// Fecha a gravação que terminou sozinha: fontes que caíram, ou a nota que parou no
-    /// silêncio. A nota sem voz sai da fila e do disco.
+    /// Closes a recording that ended on its own: disconnected sources, or a voice note stopped
+    /// on silence. A voice note without speech is removed from the queue and disk.
     pub fn reap_finished(&self) -> Result<Option<Reaped>> {
         let reason = {
             let inner = self.inner()?;
@@ -862,9 +861,9 @@ impl AppState {
             Some(StopReason::NoSpeech) => {
                 self.lock_queue()?.discard(&recording.id)?;
                 if let Err(err) = std::fs::remove_file(&recording.path) {
-                    log::warn!("falha ao apagar {}: {err}", recording.path.display());
+                    log::warn!("failed to delete {}: {err}", recording.path.display());
                 }
-                log::info!("nota {} descartada: sem voz", recording.id);
+                log::info!("voice note {} discarded: no speech", recording.id);
                 Reaped::NoteDiscarded
             }
             Some(StopReason::SourcesEnded) => {
@@ -874,7 +873,7 @@ impl AppState {
                     reason: StopReason::SourcesEnded,
                 }
             }
-            // Sem motivo, a thread de gravação entrou em pânico: conta como falha.
+            // Without a reason, the recording thread panicked: counts as a failure.
             _ => {
                 self.inner()?.notice = Some("a gravação parou: falha ao gravar".into());
                 Reaped::Stopped {
@@ -885,9 +884,9 @@ impl AppState {
         }))
     }
 
-    /// Vigia as fontes da gravação em curso: um microfone fora há mais de [`MIC_LOST_AFTER`] põe o
-    /// aviso na janela e o marcador "microfone perdido" no instante da queda; a volta limpa o aviso
-    /// e marca "microfone de volta". Chamada pelo reaper a cada segundo.
+    /// Watches the current recording sources: a microphone unavailable for over [`MIC_LOST_AFTER`]
+    /// sets the window notice and a "microphone lost" marker at disconnection; its return clears
+    /// the notice and marks "microphone back". Called by the reaper every second.
     pub fn watch_sources(&self) -> Result<Option<MicChange>> {
         let mut inner = self.inner()?;
         let Some(active) = inner.active.as_ref() else {
@@ -911,7 +910,7 @@ impl AppState {
                     .add_marker(&id, at_ms, Some("microfone perdido"))?;
                 inner.mic_lost = true;
                 inner.notice = Some(MIC_LOST_NOTICE.into());
-                log::warn!("gravação {id}: microfone fora há {out_ms} ms");
+                log::warn!("recording {id}: microphone unavailable for {out_ms} ms");
                 MicChange::Lost
             }
             (None, true) => {
@@ -921,7 +920,7 @@ impl AppState {
                 if inner.notice.as_deref() == Some(MIC_LOST_NOTICE) {
                     inner.notice = None;
                 }
-                log::info!("gravação {id}: microfone de volta");
+                log::info!("recording {id}: microphone back");
                 MicChange::Back
             }
             _ => return Ok(None),
@@ -929,9 +928,9 @@ impl AppState {
         Ok(Some(change))
     }
 
-    /// Fecha as gravações que ficaram em `recording` sem sessão viva (o `.part` estava preso ao
-    /// parar), sem esperar a próxima abertura. Segura o estado durante a varredura: nenhuma
-    /// gravação começa no meio dela (ordem estado → fila).
+    /// Closes recordings left in `recording` without a live session (`.part` was stuck on stop),
+    /// without waiting for the next open. Holds state during the sweep: no recording can start
+    /// during it (state → queue order).
     pub fn sweep_orphans(&self) -> Result<usize> {
         let inner = self.inner()?;
         let live: Vec<&str> = inner.current().map(|(id, ..)| id).into_iter().collect();
@@ -939,7 +938,7 @@ impl AppState {
         Ok(recovered.len())
     }
 
-    /// Um evento do detector, pela máquina de gravação automática; o chamador executa a ação.
+    /// Detector event, through the automatic recording state machine; the caller runs the action.
     pub fn on_meeting_event(&self, event: &MeetingEvent) -> Result<Action> {
         let mut inner = self.inner()?;
         let recording = inner.recording();
@@ -947,25 +946,25 @@ impl AppState {
         Ok(auto.on_event(event, &config.detection, recording))
     }
 
-    /// A resposta à pergunta de reunião detectada; o chamador executa a ação.
+    /// Answer to the detected meeting prompt; the caller runs the action.
     pub fn answer_meeting(&self, record: bool) -> Result<Action> {
         let mut inner = self.inner()?;
         let recording = inner.recording();
         Ok(inner.auto.answer(record, recording))
     }
 
-    /// Liga "Sincronizando" até a guarda cair, mesmo que o trabalho entre em pânico.
+    /// Sets "Syncing" until the guard drops, even if the work panics.
     pub fn syncing(&self) -> FlagGuard<'_> {
         FlagGuard::raise(self, |inner, on| inner.syncing = on)
     }
 
-    /// Liga "pasta sincronizada em curso" até a guarda cair, mesmo que o ciclo entre em pânico.
+    /// Sets "synced folder running" until the guard drops, even if the cycle panics.
     pub fn mirror_running(&self) -> FlagGuard<'_> {
         FlagGuard::raise(self, |inner, on| inner.mirror.running = on)
     }
 
-    /// Encerra a importação reservada por [`AppState::begin_import`] quando a guarda cair, mesmo
-    /// que a conversão entre em pânico.
+    /// Ends the import reserved by [`AppState::begin_import`] when the guard drops, even if
+    /// conversion panics.
     pub fn import_guard(&self) -> FlagGuard<'_> {
         FlagGuard {
             state: self,
@@ -973,13 +972,13 @@ impl AppState {
         }
     }
 
-    /// O que impede o sync, ou o último erro dele (`None` quando tudo andou).
+    /// What blocks sync, or its last error (`None` when everything worked).
     pub fn set_sync_notice(&self, notice: Option<String>) -> Result<()> {
         self.inner()?.sync_notice = notice;
         Ok(())
     }
 
-    /// A espera na fila das gravações enviadas; devolve se mudou.
+    /// Queue waits for uploaded recordings; returns whether they changed.
     pub fn set_queue_waits(&self, waits: BTreeMap<String, QueueWait>) -> Result<bool> {
         let mut inner = self.inner()?;
         let changed = inner.queue_waits != waits;
@@ -987,7 +986,7 @@ impl AppState {
         Ok(changed)
     }
 
-    /// O que o uploader precisa; `None` sem PAT configurado.
+    /// What the uploader needs; `None` without a configured PAT.
     pub fn uploader_config(&self) -> Result<Option<UploaderConfig>> {
         if self.inner()?.ca_changed {
             return Ok(None);
@@ -1000,7 +999,7 @@ impl AppState {
             std::env::var(config::API_URL_ENV).ok(),
             std::env::var(config::WEB_URL_ENV).ok(),
         );
-        // Sem servidor escolhido não há para onde subir.
+        // Without a selected server there is nowhere to upload.
         if api_url.is_empty() {
             return Ok(None);
         }
@@ -1012,65 +1011,65 @@ impl AppState {
         }))
     }
 
-    /// Dias que o arquivo local fica depois da confirmação (`None`: para sempre).
+    /// Days to keep the local file after confirmation (`None`: forever).
     pub fn retention_days(&self) -> Result<Option<u32>> {
         Ok(self.inner()?.config.retention_days)
     }
 
-    /// Se a detecção de reuniões está ligada.
+    /// Whether meeting detection is enabled.
     pub fn detection_enabled(&self) -> Result<bool> {
         Ok(self.inner()?.config.detection.enabled)
     }
 
-    /// O microfone e as fontes que a aba Áudio escolheu.
+    /// Microphone and sources selected in the Audio tab.
     pub fn audio_choice(&self) -> Result<AudioChoice> {
         Ok(AudioChoice::from_config(&self.inner()?.config))
     }
 
-    /// Se o sync avisa quando o resumo de uma gravação enviada fica pronto.
+    /// Whether sync notifies when the summary of an uploaded recording is ready.
     pub fn notify_summary(&self) -> Result<bool> {
         Ok(self.inner()?.config.notify_summary)
     }
 
-    /// Quantas gravações recentes o painel do topo mostra; `0` o esconde.
+    /// Number of recent recordings in the top panel; `0` hides it.
     pub fn recent_count(&self) -> Result<u8> {
         Ok(self.inner()?.config.recent_count)
     }
 
-    /// Quantas gravações recentes o menu da bandeja mostra; `0` esconde a seção.
+    /// Number of recent recordings in the tray menu; `0` hides the section.
     pub fn tray_recent_count(&self) -> Result<u8> {
         Ok(self.inner()?.config.tray_recent_count)
     }
 
-    /// Se o app deve iniciar com o computador.
+    /// Whether the app should start with the computer.
     pub fn autostart(&self) -> Result<bool> {
         Ok(self.inner()?.config.autostart)
     }
 
-    /// O estado da pasta sincronizada para a janela.
+    /// Synced folder status for the window.
     pub fn mirror_status(&self) -> Result<MirrorStatus> {
         Ok(self.inner()?.mirror.clone())
     }
 
-    /// Atualiza o estado da pasta sincronizada.
+    /// Updates synced folder status.
     pub fn update_mirror(&self, change: impl FnOnce(&mut MirrorStatus)) -> Result<()> {
         change(&mut self.inner()?.mirror);
         Ok(())
     }
 
-    /// A pasta sincronizada: se está ligada, onde e se leva as transcrições.
+    /// Synced folder: whether enabled, where, and whether it includes transcripts.
     pub fn mirror_config(&self) -> Result<config::MirrorConfig> {
         Ok(self.inner()?.config.mirror.clone())
     }
 
-    /// O idioma da transcrição que os uploads pedem; `None` deixa o do servidor.
+    /// Transcription language requested by uploads; `None` uses the server default.
     pub fn language(&self) -> Result<Option<String>> {
         Ok(self.inner()?.config.language.clone())
     }
 
-    /// "Fale para testar" ou "Toque algo para testar": abre a fonte por até `duration`, numa
-    /// thread, e alimenta o medidor do detector de silêncio, sem gravar. Um teste por vez: o que
-    /// estiver em curso para.
+    /// "Speak to test" or "Play something to test": opens the source for up to `duration` on a
+    /// thread and feeds the silence detector meter, without recording. One test at a time:
+    /// any current test stops.
     pub fn start_source_test(
         &self,
         open: impl FnOnce() -> Result<Box<dyn AudioSource>> + Send + 'static,
@@ -1088,14 +1087,14 @@ impl AppState {
         });
         std::thread::spawn(move || {
             if let Err(err) = run_source_test(open, duration, &levels, &running) {
-                log::warn!("teste de nível: {err:#}");
+                log::warn!("level test: {err:#}");
             }
             running.store(false, Ordering::Relaxed);
         });
         Ok(())
     }
 
-    /// "Parar": encerra o teste de nível em curso na hora; sem teste, não faz nada.
+    /// "Stop": ends the current level test immediately; does nothing without a test.
     pub fn stop_source_test(&self) -> Result<()> {
         if let Some(test) = self.inner()?.source_test.take() {
             test.running.store(false, Ordering::Relaxed);
@@ -1103,7 +1102,7 @@ impl AppState {
         Ok(())
     }
 
-    /// O medidor do teste de nível; `None` quando não há teste em curso.
+    /// Level test meter; `None` when no test is running.
     pub fn source_test_meter(&self) -> Result<Option<[f32; METER_BARS]>> {
         let inner = self.inner()?;
         Ok(inner
@@ -1113,12 +1112,12 @@ impl AppState {
             .and_then(|t| t.levels.lock().ok().map(|levels| *levels)))
     }
 
-    /// A atualização a notificar nesta abertura; `None` depois da primeira chamada.
+    /// Update to notify on this open; `None` after the first call.
     pub fn take_update_notification(&self) -> Result<Option<PendingUpdate>> {
         Ok(self.inner()?.update_to_notify.take())
     }
 
-    /// Guarda a versão e as notas antes de o updater instalar.
+    /// Stores version and notes before the updater installs.
     pub fn record_pending_update(&self, version: &str, notes: Option<String>) -> Result<()> {
         let mut inner = self.inner()?;
         inner.config.pending_update = Some(PendingUpdate {
@@ -1128,7 +1127,7 @@ impl AppState {
         inner.config.save(&self.config_path)
     }
 
-    /// Fecha o aviso "Atualizado para X".
+    /// Dismisses the "Updated to X" notice.
     pub fn dismiss_update_notice(&self) -> Result<()> {
         let mut inner = self.inner()?;
         inner.config.pending_update = None;
@@ -1136,12 +1135,12 @@ impl AppState {
         inner.config.save(&self.config_path)
     }
 
-    /// Os atalhos globais da config.
+    /// Global shortcuts from config.
     pub fn shortcuts(&self) -> Result<Shortcuts> {
         Ok(self.inner()?.config.shortcuts.clone())
     }
 
-    /// Guarda o modo dos atalhos e como ficou o registro de cada um, para a aba Áudio.
+    /// Stores shortcut mode and each registration result, for the Audio tab.
     pub fn set_shortcuts_state(
         &self,
         mode: ShortcutMode,
@@ -1153,7 +1152,7 @@ impl AppState {
         Ok(())
     }
 
-    /// Marca o início de uma importação; só uma por vez.
+    /// Marks the start of an import; only one at a time.
     pub fn begin_import(&self) -> Result<Arc<AtomicBool>> {
         let mut inner = self.inner()?;
         if inner.importing.is_some() {
@@ -1164,7 +1163,7 @@ impl AppState {
         Ok(cancel)
     }
 
-    /// Pede o cancelamento da importação em curso.
+    /// Requests cancellation of the current import.
     pub fn cancel_import(&self) -> Result<()> {
         if let Some(cancel) = &self.inner()?.importing {
             cancel.store(true, Ordering::Relaxed);
@@ -1172,8 +1171,8 @@ impl AppState {
         Ok(())
     }
 
-    /// Converte `src` para `gravacoes/` (ou o copia) e o põe na fila, já pendente, com
-    /// `source: upload`. `recorded_at` é o início confirmado ou digitado na janela.
+    /// Converts `src` to `gravacoes/` (or copies it) and queues it as pending, with
+    /// `source: upload`. `recorded_at` is the start confirmed or entered in the window.
     pub fn import_file(
         &self,
         src: &Path,
@@ -1209,13 +1208,13 @@ impl AppState {
             .ok_or_else(|| anyhow!("importação {id} sumiu da fila"))
     }
 
-    /// A pasta das gravações.
+    /// Recordings folder.
     pub fn data_dir(&self) -> &Path {
         &self.recorder.dir
     }
 
-    /// Quantas gravações (e quantos bytes) ainda estão na pasta local; os `.part` de uma
-    /// conversão em curso não contam.
+    /// Number of recordings (and bytes) still in the local folder; `.part` files from a
+    /// conversion in progress do not count.
     pub fn storage_info(&self) -> Result<StorageInfo> {
         let mut info = StorageInfo {
             dir: self.recorder.dir.clone(),
@@ -1243,7 +1242,7 @@ impl AppState {
         self.lock_queue()?.list(limit)
     }
 
-    /// O servidor em vigor; erro claro num build sem servidor embutido antes da primeira execução.
+    /// Effective server; clear error before first run in a build without an embedded server.
     pub fn web_url(&self) -> Result<String> {
         let url = self.view()?.web_url;
         if url.is_empty() {
@@ -1252,8 +1251,8 @@ impl AppState {
         Ok(url)
     }
 
-    /// Em quem o TLS confia ([`account::trust_for`]), lendo só a config, sem passar pelo
-    /// chaveiro como [`Self::settings`]: o updater roda fora da thread do chaveiro.
+    /// TLS trust ([`account::trust_for`]), reading only config, without accessing the keyring like
+    /// [`Self::settings`]: the updater runs outside the keyring thread.
     pub fn trust(&self) -> Result<TrustMode> {
         let inner = self.inner()?;
         Ok(account::trust_for(
@@ -1313,8 +1312,8 @@ impl AppState {
         })
     }
 
-    /// Valida e grava a configuração e o PAT. Devolve a ação da detecção (tirar a pergunta
-    /// pendente quando a política dela mudou).
+    /// Validates and saves configuration and PAT. Returns the detection action (dismiss the
+    /// pending prompt when its policy changed).
     pub fn save_settings(&self, input: SettingsInput) -> Result<Action> {
         let mut next = self.inner()?.config.clone();
         next.web_url = input.web_url.trim().to_string();
@@ -1375,7 +1374,7 @@ impl AppState {
                     || next.ca_path != current.ca_path)
         };
         if moved && !input.clear_pat {
-            // A credencial do aparelho e a CA fixada valem para este servidor, não para outro.
+            // The device credential and pinned CA apply to this server, not another.
             bail!("Saia da conta antes de trocar o servidor ou a CA");
         }
 
@@ -1398,7 +1397,7 @@ impl AppState {
         Ok(action)
     }
 
-    /// Guarda a credencial no chaveiro; sem chaveiro, avisa que ela foi para o arquivo.
+    /// Stores the credential in the keyring; without one, warns that it was saved to a file.
     fn save_secret(&self, secret: &str) -> Result<PatSource> {
         let source = self.pat.save(secret)?;
         if source == PatSource::File {
@@ -1411,7 +1410,7 @@ impl AppState {
         Ok(source)
     }
 
-    /// Fixa a CA do servidor escolhido e o guarda para a pessoa entrar.
+    /// Pins the selected server CA and stores it for the person to sign in.
     pub fn prepare_server(
         &self,
         net: &dyn Net,
@@ -1425,7 +1424,7 @@ impl AppState {
         Ok(server)
     }
 
-    /// A pessoa conferiu a impressão digital do servidor preparado (`first_use`).
+    /// The person checked the prepared server fingerprint (`first_use`).
     pub fn confirm_server(&self, url: &str, ca_sha256: Option<&str>) -> Result<()> {
         match self.inner()?.prepared.as_mut() {
             Some(server) => account::confirm(server, url, ca_sha256),
@@ -1433,7 +1432,7 @@ impl AppState {
         }
     }
 
-    /// Entra no servidor escolhido, guarda a credencial e passa a sincronizar com ele.
+    /// Signs in to the selected server, stores the credential, and starts syncing with it.
     pub fn sign_in(&self, net: &dyn Net, login: Login<'_>) -> Result<()> {
         let server = account::require(self.inner()?.prepared.clone())?;
         let signed = account::sign_in(
@@ -1463,7 +1462,7 @@ impl AppState {
         Ok(())
     }
 
-    /// "Sair": apaga a credencial deste computador e volta à primeira execução; a fila fica.
+    /// "Sign out": deletes this computer's credential and returns to first run; the queue stays.
     pub fn sign_out(&self) -> Result<()> {
         self.pat.clear()?;
         let mut next = self.inner()?.config.clone();
@@ -1475,7 +1474,7 @@ impl AppState {
         Ok(())
     }
 
-    /// O endereço e a CA fixada pela primeira execução; `None` com CA escolhida à mão ou sem CA.
+    /// Address and CA pinned on first run; `None` with a manually chosen CA or no CA.
     pub fn pinned_ca(&self) -> Result<Option<(String, PathBuf)>> {
         let inner = self.inner()?;
         let ca_path = inner.config.ca_path.as_deref();
@@ -1484,12 +1483,12 @@ impl AppState {
             .flatten())
     }
 
-    /// O sync está parado porque a CA fixada mudou.
+    /// Sync is stopped because the pinned CA changed.
     pub fn pinned_ca_changed(&self) -> Result<bool> {
         Ok(self.inner()?.ca_changed)
     }
 
-    /// A CA do servidor mudou: o sync para e a janela pede para entrar de novo.
+    /// Server CA changed: sync stops and the window asks the person to sign in again.
     pub fn mark_ca_changed(&self) -> Result<()> {
         let mut inner = self.inner()?;
         inner.ca_changed = true;
@@ -1497,7 +1496,7 @@ impl AppState {
         Ok(())
     }
 
-    /// "Testar conexão": `GET /api/v1/me` com a credencial guardada.
+    /// "Test connection": `GET /api/v1/me` with the stored credential.
     pub fn test_connection(&self, net: &dyn Net) -> Result<ConnectionTest> {
         let Some(config) = self.uploader_config()? else {
             bail!("Entre para testar a conexão");
@@ -1521,7 +1520,7 @@ impl AppState {
     }
 }
 
-/// A primeira execução aparece sem credencial e quando a CA fixada mudou.
+/// First run appears without a credential and when the pinned CA changed.
 fn connection(inner: &Inner) -> Connection {
     if inner.ca_changed {
         Connection::FirstRun
@@ -1541,7 +1540,7 @@ mod tests {
     use super::*;
     use crate::capture::SourceChoice;
 
-    /// Chaveiro indisponível: o PAT vai ao arquivo, como numa sessão sem Secret Service.
+    /// Keyring unavailable: PAT goes to a file, as in a session without Secret Service.
     struct NoKeyring;
 
     impl eclume_sync::pat::SecretBackend for NoKeyring {
@@ -1581,7 +1580,7 @@ mod tests {
         })
     }
 
-    /// Uma fonte cujo descarte leva 2 s, como um driver lento ao soltar o dispositivo.
+    /// Source whose drop takes 2 s, like a slow driver releasing the device.
     struct SlowDrop(SineSource);
 
     impl eclume_recorder::AudioSource for SlowDrop {
@@ -1601,11 +1600,11 @@ mod tests {
     }
 
     #[test]
-    fn estado_microfone_perdido_e_de_volta_viram_aviso_e_marcadores() {
+    fn microphone_loss_and_return_become_notice_and_markers() {
         use eclume_audio_capture::reconnect::{Opener, Reconnecting};
         use eclume_audio_capture::ring;
 
-        /// Empurra 10 ms de tom a cada 10 ms até `stop` (ou `until`) e fecha o anel.
+        /// Pushes 10 ms of tone every 10 ms until `stop` (or `until`) and closes the ring.
         fn feed(mut writer: ring::RingWriter, until: Duration, stop: Arc<AtomicBool>) {
             std::thread::spawn(move || {
                 let started = std::time::Instant::now();
@@ -1648,7 +1647,7 @@ mod tests {
             })
             .unwrap();
 
-        // Fora por menos de 5 s: nada ainda.
+        // Unavailable for less than 5 s: nothing yet.
         std::thread::sleep(Duration::from_secs(2));
         assert_eq!(state.watch_sources().unwrap(), None);
         assert!(!state.view().unwrap().mic_lost);
@@ -1664,7 +1663,7 @@ mod tests {
         assert_eq!(view.notice.as_deref(), Some(MIC_LOST_NOTICE));
         let marker = view.last_marker.unwrap();
         assert_eq!(marker.note.as_deref(), Some("microfone perdido"));
-        // No instante da queda (~0,5 s de áudio), não no do aviso.
+        // At disconnection (~0.5 s of audio), rather than at the notice.
         assert!(marker.at_ms < 1_500, "{} ms", marker.at_ms);
 
         back.store(true, Ordering::Release);
@@ -1689,7 +1688,7 @@ mod tests {
     }
 
     #[test]
-    fn estado_para_fora_do_lock() {
+    fn state_stops_outside_lock() {
         let (state, dir) = state("parada-lenta");
         let state = Arc::new(state);
         state
@@ -1715,7 +1714,7 @@ mod tests {
         assert_eq!(state.status().unwrap(), AppStatus::Recording);
         assert!(state.view().unwrap().recording_id.is_some());
         assert!(asked.elapsed() < Duration::from_millis(100));
-        // Parar de novo, ou iniciar, no meio da parada é "ocupado".
+        // Stopping again, or starting, during a stop is "busy".
         assert!(state.stop_recording().unwrap_err().is::<Busy>());
         assert!(state
             .start_recording(|| sine_sources(1))
@@ -1729,7 +1728,7 @@ mod tests {
     }
 
     #[test]
-    fn estado_segue_acessivel_depois_de_um_panico() {
+    fn state_remains_accessible_after_panic() {
         let (state, dir) = state("envenenado");
         let state = Arc::new(state);
         {
@@ -1737,7 +1736,7 @@ mod tests {
             let _ = std::thread::spawn(move || {
                 let _inner = state.inner.lock().unwrap();
                 let _queue = state.queue.lock().unwrap();
-                panic!("pânico com os locks presos");
+                panic!("panic while holding locks");
             })
             .join();
         }
@@ -1775,7 +1774,7 @@ mod tests {
     }
 
     #[test]
-    fn estado_alterna_entre_ocioso_gravando_e_ocioso() {
+    fn state_toggles_between_idle_recording_and_idle() {
         let (state, dir) = state("alterna");
         assert_eq!(state.status().unwrap(), AppStatus::Idle);
 
@@ -1798,7 +1797,7 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
-    /// Espera o reaper fechar a gravação que terminou sozinha.
+    /// Waits for the reaper to close the recording that ended on its own.
     fn reap(state: &AppState) -> Reaped {
         for _ in 0..4_000 {
             if let Some(reaped) = state.reap_finished().unwrap() {
@@ -1806,10 +1805,10 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(5));
         }
-        panic!("a gravação não terminou sozinha");
+        panic!("recording did not end on its own");
     }
 
-    /// Um microfone sintético: fala por `speech_ms` e depois silêncio, até `total_ms`.
+    /// Synthetic microphone: speech for `speech_ms`, then silence, until `total_ms`.
     fn mic(speech_ms: u64, total_ms: u64) -> Result<OpenedSources> {
         let chunks = (0..total_ms / 10).map(move |i| {
             let t = i * 10;
@@ -1834,7 +1833,7 @@ mod tests {
     }
 
     #[test]
-    fn estado_fecha_gravacao_cujas_fontes_acabaram() {
+    fn state_closes_recording_whose_sources_ended() {
         let (state, dir) = state("colhe");
         state.start_recording(|| sine_sources(0)).unwrap();
         assert!(matches!(
@@ -1851,7 +1850,7 @@ mod tests {
     }
 
     #[test]
-    fn estado_varre_a_orfa_sem_tocar_a_gravacao_viva() {
+    fn state_sweeps_orphan_without_touching_live_recording() {
         let (state, dir) = state("varredura");
         state.start_recording(|| sine_sources(30)).unwrap();
         let orphan = dir.join("gravacoes").join("orfa.ogg.part");
@@ -1872,13 +1871,13 @@ mod tests {
     }
 
     #[test]
-    fn estado_abre_com_part_preso() {
+    fn state_opens_with_stuck_part() {
         let dir = std::env::temp_dir().join(format!("eclume-state-preso-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let part = dir.join("presa.ogg.part");
         std::fs::write(&part, b"OggS").unwrap();
-        // `rename(arquivo, diretório)` falha: simula o `.part` preso.
+        // Renaming a file to a directory fails: simulates the stuck `.part`.
         std::fs::create_dir(dir.join("presa.ogg")).unwrap();
         Queue::open(&dir.join("queue.sqlite"))
             .unwrap()
@@ -1893,7 +1892,7 @@ mod tests {
     }
 
     #[test]
-    fn estado_abre_grava_a_config_so_quando_a_versao_muda() {
+    fn state_open_saves_config_only_when_version_changes() {
         let dir = std::env::temp_dir().join(format!("eclume-state-versao-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let config_path = dir.join("config.json");
@@ -1908,7 +1907,7 @@ mod tests {
     }
 
     #[test]
-    fn estado_abre_com_config_ilegivel_e_avisa_na_janela() {
+    fn state_opens_with_unreadable_config_and_notifies_window() {
         let dir =
             std::env::temp_dir().join(format!("eclume-state-ilegivel-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1939,7 +1938,7 @@ mod tests {
     }
 
     #[test]
-    fn nota_para_no_silencio_e_vai_para_a_fila_como_nota() {
+    fn voice_note_stops_on_silence_and_is_queued_as_note() {
         let (state, dir) = state("nota");
         state.inner().unwrap().config = Config {
             note_silence_s: Some(2),
@@ -1955,7 +1954,7 @@ mod tests {
         assert!(state.note_meter().unwrap().is_some());
 
         let Reaped::NoteSaved(recording) = reap(&state) else {
-            panic!("a nota devia parar no silêncio");
+            panic!("voice note should stop on silence");
         };
         assert_eq!(recording.kind, Kind::Note);
         assert!(recording.path.exists());
@@ -1966,7 +1965,7 @@ mod tests {
     }
 
     #[test]
-    fn nota_sem_voz_e_descartada_da_fila_e_do_disco() {
+    fn voice_note_without_speech_is_removed_from_queue_and_disk() {
         let (state, dir) = state("nota-muda");
         state.toggle_note(|| mic(0, 60_000)).unwrap();
         let path = state.recorder.dir.clone();
@@ -1978,11 +1977,11 @@ mod tests {
     }
 
     #[test]
-    fn nova_nota_de_novo_para_a_nota_e_nunca_descarta() {
+    fn new_voice_note_again_stops_current_note_and_never_discards() {
         let (state, dir) = state("nota-manual");
         state.toggle_note(|| mic(0, 600_000)).unwrap();
         let NoteToggle::Stopped(recording) = state.toggle_note(|| mic(0, 1)).unwrap() else {
-            panic!("a segunda Nova nota devia parar a primeira");
+            panic!("the second New voice note should stop the first");
         };
         assert_eq!(recording.kind, Kind::Note);
         assert_eq!(state.recordings(10).unwrap().len(), 1);
@@ -1990,11 +1989,11 @@ mod tests {
     }
 
     #[test]
-    fn marcadores_na_posicao_do_audio_com_nota_editavel() {
+    fn markers_at_audio_position_with_editable_note() {
         let (state, dir) = state("marcadores");
         assert!(
             state.add_marker(None).is_err(),
-            "sem gravação não há marcador"
+            "no marker without a recording"
         );
         state.start_recording(|| sine_sources(60)).unwrap();
         std::thread::sleep(Duration::from_millis(200));
@@ -2031,13 +2030,13 @@ mod tests {
             .unwrap();
         assert_eq!(saved.len(), 2);
         assert_eq!(saved[0].note.as_deref(), Some("ação"));
-        // Enquanto não subiu, a nota ainda muda.
+        // Until uploaded, the note can still change.
         state.set_marker_note(&second.client_id, None).unwrap();
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn nova_nota_durante_uma_reuniao_e_ocupado() {
+    fn new_voice_note_during_meeting_is_busy() {
         let (state, dir) = state("nota-ocupado");
         state.start_recording(|| sine_sources(60)).unwrap();
         let err = state.toggle_note(|| mic(0, 1)).unwrap_err();
@@ -2050,7 +2049,7 @@ mod tests {
     }
 
     #[test]
-    fn estado_sem_fontes_registra_o_aviso() {
+    fn state_records_notice_without_sources() {
         let (state, _dir) = state("sem-fontes");
         assert!(state.start_recording(|| bail!("nenhuma fonte")).is_err());
         assert_eq!(state.status().unwrap(), AppStatus::Idle);
@@ -2062,12 +2061,12 @@ mod tests {
     }
 
     #[test]
-    fn gravacao_da_deteccao_guarda_o_app_e_para_no_fim_da_reuniao() {
+    fn detected_recording_stores_app_and_stops_when_meeting_ends() {
         let (state, dir) = state("auto");
         let started = MeetingEvent::Started {
             app: "teams".into(),
         };
-        // Política padrão: perguntar.
+        // Default policy: ask.
         assert_eq!(
             state.on_meeting_event(&started).unwrap(),
             Action::Ask(AppKey::Teams)
@@ -2099,7 +2098,7 @@ mod tests {
     }
 
     #[test]
-    fn gravacao_manual_tira_a_pergunta_e_nao_para_com_a_reuniao() {
+    fn manual_recording_dismisses_prompt_and_keeps_going_after_meeting() {
         let (state, dir) = state("manual");
         state
             .on_meeting_event(&MeetingEvent::Started { app: "zoom".into() })
@@ -2116,7 +2115,7 @@ mod tests {
     }
 
     #[test]
-    fn configuracoes_gravam_config_e_pat_e_validam() {
+    fn settings_save_config_and_pat_and_validate() {
         let (state, dir) = state("config");
         assert!(state.uploader_config().unwrap().is_none());
         assert_eq!(state.settings().unwrap().pat_source, None);
@@ -2159,7 +2158,7 @@ mod tests {
     }
 
     #[test]
-    fn configuracoes_gravam_as_recentes_da_janela_e_da_bandeja_apartadas() {
+    fn settings_save_window_and_tray_recent_counts_separately() {
         let (state, dir) = state("recentes-bandeja");
         let view = state.settings().unwrap();
         assert_eq!((view.recent_count, view.tray_recent_count), (5, 1));
@@ -2181,7 +2180,7 @@ mod tests {
     }
 
     #[test]
-    fn configuracoes_trocam_os_atalhos_e_mostram_o_registro() {
+    fn settings_change_shortcuts_and_show_registration() {
         let (state, dir) = state("atalhos");
         let view = state.settings().unwrap();
         assert_eq!(view.shortcuts.len(), 3);
@@ -2244,10 +2243,10 @@ mod tests {
     }
 
     #[test]
-    fn importar_converte_e_poe_na_fila_como_upload() {
+    fn import_converts_and_queues_as_upload() {
         let (state, dir) = state("importa");
         let cancel = state.begin_import().unwrap();
-        assert!(state.begin_import().is_err(), "uma importação por vez");
+        assert!(state.begin_import().is_err(), "one import at a time");
         let mut steps = Vec::new();
         let recording = state
             .import_file(
@@ -2286,7 +2285,7 @@ mod tests {
     }
 
     #[test]
-    fn importar_sem_audio_ou_cancelado_nao_entra_na_fila() {
+    fn import_without_audio_or_cancelled_is_not_queued() {
         let (state, dir) = state("importa-nao");
         let err = state
             .import_file(
@@ -2318,11 +2317,11 @@ mod tests {
     }
 
     #[test]
-    fn armazenamento_conta_as_gravacoes_da_pasta_local() {
+    fn storage_counts_recordings_in_local_folder() {
         let (state, dir) = state("armazenamento");
-        let vazio = state.storage_info().unwrap();
-        assert_eq!((vazio.recordings, vazio.bytes), (0, 0));
-        assert_eq!(vazio.dir, dir.join("gravacoes"));
+        let empty = state.storage_info().unwrap();
+        assert_eq!((empty.recordings, empty.bytes), (0, 0));
+        assert_eq!(empty.dir, dir.join("gravacoes"));
         std::fs::create_dir_all(state.data_dir()).unwrap();
         std::fs::write(state.data_dir().join("a.ogg"), [0u8; 100]).unwrap();
         std::fs::write(state.data_dir().join("b.avi"), [0u8; 50]).unwrap();
@@ -2333,56 +2332,56 @@ mod tests {
     }
 
     #[test]
-    fn configuracoes_trazem_a_politica_de_fabrica() {
+    fn settings_include_factory_policy() {
         let (state, _dir) = state("fabrica");
         let apps = state.settings().unwrap().apps;
         assert_eq!(apps.len(), 8);
-        let outro = apps.iter().find(|a| a.app == AppKey::Outro).unwrap();
-        assert_eq!(outro.default_policy, Policy::Ignore);
+        let other = apps.iter().find(|a| a.app == AppKey::Outro).unwrap();
+        assert_eq!(other.default_policy, Policy::Ignore);
         let teams = apps.iter().find(|a| a.app == AppKey::Teams).unwrap();
         assert_eq!(teams.default_policy, Policy::Ask);
     }
 
     #[test]
-    fn pasta_sincronizada_liga_com_pasta_e_ausente_mantem() {
+    fn synced_folder_enables_with_folder_and_missing_keeps_current() {
         let (state, dir) = state("espelho");
         let view = state.settings().unwrap();
         assert!(!view.mirror_enabled && view.mirror_transcripts);
         assert_eq!(view.mirror_dir, None);
 
-        // Ligar sem pasta a config recusa, e nada é gravado.
-        let mut sem_pasta = settings_input(&state);
-        sem_pasta.mirror_enabled = Some(true);
-        assert!(state.save_settings(sem_pasta).is_err());
+        // Config rejects enabling without a folder, and nothing is saved.
+        let mut without_folder = settings_input(&state);
+        without_folder.mirror_enabled = Some(true);
+        assert!(state.save_settings(without_folder).is_err());
         assert!(!state.settings().unwrap().mirror_enabled);
 
-        let pasta = dir.join("resumos");
+        let folder = dir.join("resumos");
         let mut input = settings_input(&state);
         input.mirror_enabled = Some(true);
-        input.mirror_dir = Some(pasta.to_string_lossy().into_owned());
+        input.mirror_dir = Some(folder.to_string_lossy().into_owned());
         input.mirror_transcripts = Some(false);
         state.save_settings(input).unwrap();
         let mirror = state.mirror_config().unwrap();
         assert!(mirror.enabled && !mirror.transcripts);
-        assert_eq!(mirror.dir.as_deref(), Some(pasta.as_path()));
+        assert_eq!(mirror.dir.as_deref(), Some(folder.as_path()));
         assert_eq!(Config::load(&dir.join("config.json")).mirror, mirror);
 
-        // Ausente mantém; "" limpa a pasta (e, ligada, a config recusa).
+        // Missing keeps the current value; "" clears the folder (rejected by config when enabled).
         state.save_settings(settings_input(&state)).unwrap();
         assert_eq!(state.mirror_config().unwrap(), mirror);
-        let mut limpa = settings_input(&state);
-        limpa.mirror_dir = Some(String::new());
-        assert!(state.save_settings(limpa).is_err());
-        let mut desliga = settings_input(&state);
-        desliga.mirror_enabled = Some(false);
-        desliga.mirror_dir = Some(String::new());
-        state.save_settings(desliga).unwrap();
+        let mut clear_folder = settings_input(&state);
+        clear_folder.mirror_dir = Some(String::new());
+        assert!(state.save_settings(clear_folder).is_err());
+        let mut disable = settings_input(&state);
+        disable.mirror_enabled = Some(false);
+        disable.mirror_dir = Some(String::new());
+        state.save_settings(disable).unwrap();
         assert_eq!(state.mirror_config().unwrap().dir, None);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn audio_escolhe_microfone_sistema_e_silencio() {
+    fn audio_selects_microphone_system_and_silence() {
         let (state, dir) = state("audio");
         assert_eq!(state.audio_choice().unwrap(), AudioChoice::default());
         let mut input = settings_input(&state);
@@ -2403,7 +2402,7 @@ mod tests {
             Some("Jabra Evolve2 65")
         );
 
-        // Ausente mantém; "" volta ao padrão; 0 é "Nunca".
+        // Missing keeps the current value; "" restores the default; 0 means "Never".
         state.save_settings(settings_input(&state)).unwrap();
         assert_eq!(state.settings().unwrap().note_silence_s, Some(8));
         let mut input = settings_input(&state);
@@ -2419,7 +2418,7 @@ mod tests {
         bad.note_silence_s = Some(5);
         assert!(state.save_settings(bad).is_err());
 
-        // Uma saída escolhida, depois "Nenhum" nas duas fontes, que a config recusa.
+        // A selected output, then "None" for both sources, which config rejects.
         let mut input = settings_input(&state);
         input.system_source = Some("alsa_output.usb".into());
         state.save_settings(input).unwrap();
@@ -2441,10 +2440,10 @@ mod tests {
     }
 
     #[test]
-    fn teste_de_nivel_mostra_o_medidor_acaba_sozinho_e_para_na_hora() {
+    fn level_test_shows_meter_finishes_on_its_own_and_stops_immediately() {
         let (state, _dir) = state("teste-nivel");
         assert!(state.source_test_meter().unwrap().is_none());
-        /// Um tom que chega no ritmo do relógio, como um microfone de verdade.
+        /// Tone arriving at clock pace, like a real microphone.
         struct Paced(SineSource);
         impl AudioSource for Paced {
             fn sample_rate(&self) -> u32 {
@@ -2475,11 +2474,11 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(5));
         }
-        assert!(heard, "o medidor devia subir com o tom");
+        assert!(heard, "the meter should rise with the tone");
         std::thread::sleep(Duration::from_millis(600));
         assert!(state.source_test_meter().unwrap().is_none());
 
-        // "Parar" encerra antes do fim e libera a fonte logo.
+        // "Stop" ends early and releases the source promptly.
         let (tx, rx) = std::sync::mpsc::channel();
         let open = move || -> Result<Box<dyn AudioSource>> {
             Ok(Box::new(Notify(
@@ -2487,7 +2486,7 @@ mod tests {
                 tx,
             )))
         };
-        /// Avisa quando a fonte é descartada, isto é, quando o teste largou o dispositivo.
+        /// Notifies when the source is dropped, meaning the test released the device.
         struct Notify(Paced, std::sync::mpsc::Sender<()>);
         impl AudioSource for Notify {
             fn sample_rate(&self) -> u32 {
@@ -2516,11 +2515,11 @@ mod tests {
         state.stop_source_test().unwrap();
         assert!(state.source_test_meter().unwrap().is_none());
         rx.recv_timeout(Duration::from_secs(1))
-            .expect("parar devia fechar a fonte em bem menos que os 10 s");
+            .expect("stopping should close the source well before 10 s");
     }
 
     #[test]
-    fn atualizado_para_x_ate_fechar_e_notificado_uma_vez() {
+    fn updated_to_x_until_dismissed_and_notified_once() {
         let dir =
             std::env::temp_dir().join(format!("eclume-state-atualizado-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -2547,7 +2546,7 @@ mod tests {
         assert!(state.take_update_notification().unwrap().is_none());
         drop(state);
 
-        // Reaberto sem fechar o aviso: ele segue na janela, sem notificar de novo.
+        // Reopened without dismissing the notice: it stays in the window without notifying again.
         let state = AppState::open(&dir.join("dados"), &config_dir).unwrap();
         assert!(state.view().unwrap().updated.is_some());
         assert!(state.take_update_notification().unwrap().is_none());
@@ -2573,7 +2572,7 @@ mod tests {
     }
 
     #[test]
-    fn mudar_a_politica_tira_a_pergunta_pendente() {
+    fn changing_policy_dismisses_pending_prompt() {
         let (state, dir) = state("politica");
         state
             .on_meeting_event(&MeetingEvent::Started { app: "meet".into() })
@@ -2586,7 +2585,7 @@ mod tests {
     }
 
     #[test]
-    fn guarda_solta_cada_flag_mesmo_com_panico() {
+    fn guard_clears_each_flag_even_on_panic() {
         let (state, _dir) = state("guardas");
         let panics = |work: &dyn Fn()| {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).unwrap_err();
@@ -2594,25 +2593,25 @@ mod tests {
         panics(&|| {
             let _syncing = state.syncing();
             assert_eq!(state.status().unwrap(), AppStatus::Syncing);
-            panic!("sync quebrado");
+            panic!("sync failed");
         });
         assert_eq!(state.status().unwrap(), AppStatus::Idle);
         panics(&|| {
             let _running = state.mirror_running();
             assert!(state.mirror_status().unwrap().running);
-            panic!("pasta quebrada");
+            panic!("folder failed");
         });
         assert!(!state.mirror_status().unwrap().running);
         state.begin_import().unwrap();
         panics(&|| {
             let _importing = state.import_guard();
-            panic!("decodificador quebrado");
+            panic!("decoder failed");
         });
         assert!(state.begin_import().is_ok());
     }
 
     #[test]
-    fn estado_sincronizando_e_aviso_do_sync() {
+    fn syncing_state_and_sync_notice() {
         let (state, _dir) = state("sync");
         let syncing = state.syncing();
         assert_eq!(state.status().unwrap(), AppStatus::Syncing);
@@ -2629,7 +2628,7 @@ mod tests {
     }
 
     #[test]
-    fn primeira_execucao_entrar_e_sair() {
+    fn first_run_sign_in_and_sign_out() {
         use crate::account::tests::{
             body, credential, info, pem, ScriptNet, Shared, CA_SHA256, SECRET, URL,
         };
@@ -2660,7 +2659,7 @@ mod tests {
         let shared = Shared(std::sync::Arc::clone(&net));
         let server = state.prepare_server(&shared, URL, Some(CA_SHA256)).unwrap();
         assert_eq!(server.name, "eclume");
-        // Fora do instalador, a impressão digital é conferida pela pessoa antes de entrar.
+        // Outside the installer, the person checks the fingerprint before signing in.
         state.confirm_server(URL, Some(CA_SHA256)).unwrap();
         state
             .sign_in(
@@ -2684,13 +2683,13 @@ mod tests {
         );
         let uploader = state.uploader_config().unwrap().unwrap();
         assert_eq!(uploader.pat, SECRET);
-        // A CA fixada pela primeira execução é a única em que o sync confia.
+        // The CA pinned on first run is the only one sync trusts.
         assert_eq!(uploader.trust, TrustMode::Pinned(pinned.clone()));
         assert_eq!(state.trust().unwrap(), TrustMode::Pinned(pinned));
         let saved = Config::load(&dir.join("config.json"));
         assert_eq!(saved.account.unwrap().token_id.as_deref(), Some("t-1"));
 
-        // A CA mudou: o sync para e a janela volta à primeira execução.
+        // CA changed: sync stops and the window returns to first run.
         state.mark_ca_changed().unwrap();
         assert!(state.uploader_config().unwrap().is_none());
         let view = state.view().unwrap();
@@ -2700,7 +2699,7 @@ mod tests {
             Some("O certificado do servidor mudou")
         );
 
-        // Sair apaga a credencial, mas não a fila nem o servidor.
+        // Signing out deletes the credential, but keeps the queue and server.
         state.sign_out().unwrap();
         assert_eq!(state.view().unwrap().connection, Connection::FirstRun);
         assert!(state.uploader_config().unwrap().is_none());
@@ -2709,7 +2708,7 @@ mod tests {
     }
 
     #[test]
-    fn quem_ja_usa_pat_continua_sincronizando() {
+    fn existing_pat_users_keep_syncing() {
         let (state, dir) = state("pat-antigo");
         let mut input = settings_input(&state);
         input.pat = Some("eclp_antigo".into());
@@ -2729,7 +2728,7 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
-    /// Abre o estado com uma conta, a credencial em arquivo e `pem` como a CA fixada.
+    /// Opens state with an account, the credential in a file, and `pem` as the pinned CA.
     fn opened_with_pinned(name: &str, pem: &str) -> (AppState, PathBuf, PathBuf) {
         use crate::account::tests::{SECRET, URL};
         use eclume_sync::pat::PAT_FILE;
@@ -2758,7 +2757,7 @@ mod tests {
     }
 
     #[test]
-    fn ca_fixada_com_certificado_a_mais_pede_nova_entrada_na_abertura() {
+    fn pinned_ca_with_extra_certificate_requires_sign_in_on_open() {
         use crate::account::tests::CA;
 
         let other = include_str!("../../../server/tests/fixtures/ca-test.pem");
@@ -2776,7 +2775,7 @@ mod tests {
         drop(state);
         std::fs::remove_dir_all(dir).unwrap();
 
-        // Com um certificado só, nada muda e ninguém precisa entrar de novo.
+        // With just one certificate, nothing changes and nobody needs to sign in again.
         let (state, dir, pinned) = opened_with_pinned("ca-unica", CA);
         let view = state.view().unwrap();
         assert_eq!(view.connection, Connection::Account);

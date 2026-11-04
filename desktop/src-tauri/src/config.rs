@@ -1,5 +1,5 @@
-//! Configuração do app, em `config.json` no diretório de config do sistema. Todo campo tem
-//! padrão, então um `config.json` de uma versão anterior continua lendo.
+//! App configuration in `config.json` in the system config directory. Every field has a default,
+//! so `config.json` from an earlier version can still be read.
 
 use std::path::{Path, PathBuf};
 
@@ -9,19 +9,19 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::shortcuts::Shortcuts;
 
-/// Variável de ambiente que sobrepõe `web_url` sem mexer no arquivo.
+/// Environment variable that overrides `web_url` without changing the file.
 pub const WEB_URL_ENV: &str = "ECLUME_WEB_URL";
-/// Variável de ambiente que sobrepõe o endereço da API (dev, com web e API separados).
+/// Environment variable that overrides the API address (dev, with separate web and API).
 pub const API_URL_ENV: &str = "ECLUME_API_URL";
-/// Dias que o arquivo local fica depois da confirmação do servidor, por padrão.
+/// Default days to keep the local file after server confirmation.
 pub const DEFAULT_RETENTION_DAYS: u32 = 7;
-/// Teto da retenção configurável (10 anos).
+/// Maximum configurable retention (10 years).
 pub const MAX_RETENTION_DAYS: u32 = 3650;
-/// As paradas por silêncio que a nota oferece, em segundos (além de "Nunca").
+/// Silence stops offered for voice notes, in seconds (besides "Never").
 pub const NOTE_SILENCE_CHOICES: [u32; 3] = [2, 4, 8];
-/// A parada por silêncio padrão da nota, em segundos.
+/// Default voice note silence stop, in seconds.
 pub const DEFAULT_NOTE_SILENCE_S: u32 = 4;
-/// Os temas da janela; `system` acompanha o `prefers-color-scheme`.
+/// Window themes; `system` follows `prefers-color-scheme`.
 pub const THEMES: [&str; 3] = ["system", "light", "dark"];
 
 fn default_theme() -> String {
@@ -32,41 +32,41 @@ fn default_true() -> bool {
     true
 }
 
-/// Quantas gravações recentes o painel do topo da janela mostra por padrão.
+/// Default number of recent recordings shown in the panel at the top of the window.
 pub const DEFAULT_RECENT_COUNT: u8 = 5;
-/// O máximo do painel de gravações recentes; `0` o esconde.
+/// Maximum number in the recent recordings panel; `0` hides it.
 pub const MAX_RECENT_COUNT: u8 = 10;
 
 fn default_recent_count() -> u8 {
     DEFAULT_RECENT_COUNT
 }
 
-/// Quantas gravações recentes o menu da bandeja mostra por padrão.
+/// Default number of recent recordings shown in the tray menu.
 pub const DEFAULT_TRAY_RECENT_COUNT: u8 = 1;
 
 fn default_tray_recent_count() -> u8 {
     DEFAULT_TRAY_RECENT_COUNT
 }
 
-/// Os idiomas de transcrição que a aba Áudio oferece, além de `auto` (detectar) e do padrão da
-/// conta (`null`).
+/// Transcription languages offered in the Audio tab, besides `auto` (detect) and the account
+/// default (`null`).
 pub const LANGUAGES: [&str; 4] = ["auto", "pt", "es", "en"];
 
-/// "Nenhum" no microfone ou no áudio do sistema: a fonte fica de fora.
+/// "None" for microphone or system audio: the source is excluded.
 pub const SOURCE_NONE: &str = "none";
-/// O áudio do sistema seguindo a saída em uso, o padrão.
+/// System audio following the output in use, the default.
 pub const SYSTEM_FOLLOW: &str = "follow";
 
-/// O servidor embutido no instalador pelo release por servidor (`desktop-release.yml` passa as
-/// variáveis do repositório ao `tauri build`): a primeira execução o mostra como "Veio com este
-/// instalador" e fixa a CA pela impressão digital.
+/// Server embedded in the installer by the per-server release (`desktop-release.yml` passes
+/// repository variables to `tauri build`): first run shows it as "Came with this installer"
+/// and pins the CA by its fingerprint.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct EmbeddedServer {
     pub url: String,
     pub ca_sha256: Option<String>,
 }
 
-/// O servidor embutido neste build; `None` num build sem `ECLUME_SERVER_URL`.
+/// Server embedded in this build; `None` in a build without `ECLUME_SERVER_URL`.
 pub fn embedded_server() -> Option<EmbeddedServer> {
     embedded_from(
         option_env!("ECLUME_SERVER_URL"),
@@ -74,7 +74,7 @@ pub fn embedded_server() -> Option<EmbeddedServer> {
     )
 }
 
-/// Lê as variáveis do build: vazias (variável do repositório ausente) ou inválidas não valem.
+/// Reads build variables: empty (missing repository variable) or invalid values are ignored.
 fn embedded_from(url: Option<&str>, ca_sha256: Option<&str>) -> Option<EmbeddedServer> {
     let url = url
         .map(str::trim)
@@ -85,113 +85,114 @@ fn embedded_from(url: Option<&str>, ca_sha256: Option<&str>) -> Option<EmbeddedS
     })
 }
 
-/// A conta em que este computador entrou com e-mail e senha ou código de pareamento.
+/// Account this computer signed in to with email and password or a pairing code.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Account {
     pub email: String,
-    /// O token de dispositivo, que a web desvincula.
+    /// Device token that the web can unlink.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_name: Option<String>,
 }
 
-/// Como o app fala com o servidor, o que decide a primeira execução.
+/// How the app connects to the server, which determines first run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Connection {
-    /// Nenhuma credencial guardada: a janela abre na primeira execução.
+    /// No stored credential: the window opens on first run.
     FirstRun,
-    /// Um PAT colado numa versão anterior (ou `ECLUME_PAT`): continua sincronizando, e a aba
-    /// Servidor oferece entrar com e-mail e senha.
+    /// PAT pasted in an earlier version (or `ECLUME_PAT`): keeps syncing, and the Server tab
+    /// offers sign-in with email and password.
     PersonalToken,
-    /// A credencial de dispositivo de uma conta.
+    /// Device credential for an account.
     Account,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
-    /// Endereço do servidor do eclume: o eclume web (item da bandeja) e, sem `api_url`, a API.
-    /// Vazio num build sem servidor embutido até a primeira execução escolher um.
+    /// eclume server address: eclume web (tray item) and, without `api_url`, the API.
+    /// Empty in a build without an embedded server until first run selects one.
     #[serde(default = "default_web_url")]
     pub web_url: String,
-    /// A conta em que este computador entrou; `null` antes de entrar e com um PAT antigo.
+    /// Account this computer signed in to; `null` before sign-in and with an old PAT.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<Account>,
-    /// Endereço da API quando difere do eclume web.
+    /// API address when it differs from eclume web.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_url: Option<String>,
-    /// PEM com a CA extra a confiar (a CA interna do Caddy, `tls internal`).
+    /// PEM with the extra trusted CA (Caddy internal CA, `tls internal`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ca_path: Option<PathBuf>,
-    /// Detecção de reuniões e políticas por app.
+    /// Meeting detection and per-app policies.
     #[serde(default)]
     pub detection: DetectionConfig,
-    /// Dias que o arquivo local fica depois de o servidor confirmar a gravação: `0` apaga logo,
-    /// `null` guarda para sempre.
+    /// Days to keep the local file after the server confirms the recording: `0` deletes at once,
+    /// `null` keeps it forever.
     #[serde(default = "default_retention_days")]
     pub retention_days: Option<u32>,
-    /// Silêncio que encerra uma nota por voz, em segundos; `null` é "Nunca".
+    /// Silence that ends a voice note, in seconds; `null` means "Never".
     #[serde(default = "default_note_silence")]
     pub note_silence_s: Option<u32>,
-    /// Atalhos globais de gravar, nova nota e marcador.
+    /// Global shortcuts for recording, new voice note, and marker.
     #[serde(default)]
     pub shortcuts: Shortcuts,
-    /// Idioma da transcrição (`pt`, `es`, `en` ou `auto`, detectar); `null` deixa o da conta.
+    /// Transcription language (`pt`, `es`, `en` or `auto`, detect); `null` uses the account
+    /// default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
-    /// Tema da janela: `system` (acompanha o sistema), `light` ou `dark`.
+    /// Window theme: `system` (follows the system), `light` or `dark`.
     #[serde(default = "default_theme")]
     pub theme: String,
-    /// Avisar quando o resumo automático de uma gravação enviada fica pronto.
+    /// Notify when the automatic summary of an uploaded recording is ready.
     #[serde(default = "default_true")]
     pub notify_summary: bool,
-    /// Iniciar com o computador: o app concilia o registro do sistema a esta preferência a cada
-    /// abertura e a cada salvar. Ligado por padrão, também numa config de versão anterior.
+    /// Start with the computer: the app reconciles system registration with this preference on
+    /// each open and save. Enabled by default, also for config from an earlier version.
     #[serde(default = "default_true")]
     pub autostart: bool,
-    /// Quantas gravações recentes o painel do topo da janela mostra (0 a 10, `0` esconde).
-    /// Cinco por padrão, também numa config de versão anterior.
+    /// Number of recent recordings in the panel at the top of the window (0 to 10, `0` hides it).
+    /// Five by default, also for config from an earlier version.
     #[serde(default = "default_recent_count")]
     pub recent_count: u8,
-    /// Quantas gravações recentes a seção Recentes do menu da bandeja mostra (0 a 10, `0`
-    /// esconde), apartada da janela. Uma por padrão, também numa config de versão anterior.
+    /// Number of recent recordings in the tray menu Recent section (0 to 10, `0` hides it),
+    /// separate from the window. One by default, also for config from an earlier version.
     #[serde(default = "default_tray_recent_count")]
     pub tray_recent_count: u8,
-    /// A pasta local que espelha os resumos e as transcrições da biblioteca.
+    /// Local folder mirroring library summaries and transcripts.
     #[serde(default)]
     pub mirror: MirrorConfig,
-    /// O microfone pelo nome; `null` é o padrão do sistema e `"none"`, nenhum.
+    /// Microphone by name; `null` means system default and `"none"` means none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mic: Option<String>,
-    /// O áudio do sistema nas reuniões: `"follow"` segue a saída em uso, o id de uma saída a
-    /// fixa e `"none"` não grava. Lê também o `system_audio` booleano da versão anterior.
+    /// System audio in meetings: `"follow"` follows the output in use, an output id pins it,
+    /// and `"none"` disables recording. Also reads the earlier version's `system_audio` boolean.
     #[serde(
         default = "default_system_source",
         alias = "system_audio",
         deserialize_with = "system_source_or_legacy"
     )]
     pub system_source: String,
-    /// A versão que abriu por último; `null` antes da primeira abertura.
+    /// Last version opened; `null` before the first open.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_version: Option<String>,
-    /// A versão que o updater instalou, com as notas, guardada antes de instalar; some quando a
-    /// pessoa fecha o aviso "Atualizado para X".
+    /// Version installed by the updater, with notes, stored before installation; removed when
+    /// the person dismisses the "Updated to X" notice.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_update: Option<PendingUpdate>,
 }
 
-/// A pasta sincronizada: resumos em Markdown e transcrições em JSONL, uma subpasta por Collection
-/// (contrato em docs/standards/code/desktop-pasta-sincronizada.md). Desligada até a pessoa
-/// escolher a pasta.
+/// Synced folder: Markdown summaries and JSONL transcripts, one subfolder per collection
+/// (contract in docs/standards/code/desktop-pasta-sincronizada.md). Disabled until the person
+/// chooses a folder.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MirrorConfig {
     #[serde(default)]
     pub enabled: bool,
-    /// A raiz do espelho; `null` até a pessoa escolher.
+    /// Mirror root; `null` until the person chooses one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dir: Option<PathBuf>,
-    /// Espelhar também as transcrições (`.jsonl`).
+    /// Also mirror transcripts (`.jsonl`).
     #[serde(default = "default_true")]
     pub transcripts: bool,
 }
@@ -225,14 +226,14 @@ impl MirrorConfig {
         }
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
         if home.is_some_and(|home| Path::new(&home) == dir.as_path()) {
-            // Uma Collection chamada "Documents" escreveria em ~/Documents.
+            // A collection named "Documents" would write to ~/Documents.
             bail!("Escolha uma subpasta, não a pasta pessoal");
         }
         Ok(())
     }
 }
 
-/// Uma atualização instalada pelo updater: a versão e as notas do release (`body` do
+/// Update installed by the updater: version and release notes (`body` of
 /// `latest.json`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingUpdate {
@@ -245,7 +246,7 @@ fn default_system_source() -> String {
     SYSTEM_FOLLOW.to_string()
 }
 
-/// O `system_source` de agora ou o `system_audio` antigo: `true` seguia a saída em uso.
+/// Current `system_source` or legacy `system_audio`: `true` followed the output in use.
 fn system_source_or_legacy<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> std::result::Result<String, D::Error> {
@@ -262,7 +263,7 @@ fn system_source_or_legacy<'de, D: Deserializer<'de>>(
     })
 }
 
-/// O servidor embutido; um build sem servidor embutido começa sem servidor (vazio).
+/// Embedded server; a build without an embedded server starts with no server (empty).
 fn default_web_url() -> String {
     embedded_server()
         .map(|server| server.url)
@@ -304,8 +305,8 @@ impl Default for Config {
 }
 
 impl Config {
-    /// A primeira execução aparece sem credencial guardada; um PAT sem `account` é de uma versão
-    /// anterior e segue valendo.
+    /// First run appears without a stored credential; a PAT without `account` comes from an
+    /// earlier version and remains valid.
     pub fn connection(&self, has_token: bool) -> Connection {
         match (has_token, &self.account) {
             (false, _) => Connection::FirstRun,
@@ -314,16 +315,16 @@ impl Config {
         }
     }
 
-    /// O aviso "Atualizado para X" da janela: a atualização guardada é a desta versão.
+    /// Window "Updated to X" notice: the stored update is for this version.
     pub fn update_notice(&self, current: &str) -> Option<&PendingUpdate> {
         self.pending_update
             .as_ref()
             .filter(|update| update.version == current)
     }
 
-    /// Registra a abertura de `current`. Devolve a atualização quando esta é a primeira abertura
-    /// depois de o updater instalá-la (para a notificação sair uma vez só); na primeira
-    /// instalação, sem `last_version`, não há aviso.
+    /// Records opening `current`. Returns the update on the first open after the updater
+    /// installed it (so the notification appears only once); a fresh installation, without
+    /// `last_version`, has no notice.
     pub fn open_version(&mut self, current: &str) -> Option<PendingUpdate> {
         let previous = self.last_version.replace(current.to_string());
         let just_updated = previous.as_deref().is_some_and(|v| v != current);
@@ -335,14 +336,14 @@ impl Config {
             .flatten()
     }
 
-    /// Lê o arquivo; ausente ou ilegível cai no padrão (ver [`Config::load_checked`]).
+    /// Reads the file; missing or unreadable uses defaults (see [`Config::load_checked`]).
     pub fn load(path: &Path) -> Self {
         Self::load_checked(path).0
     }
 
-    /// Lê o arquivo; ausente cai no padrão. Ilegível, é guardado ao lado como
-    /// `config.json.ilegivel-<ms>` antes de o padrão valer, e o caminho da cópia volta junto para
-    /// a janela avisar.
+    /// Reads the file; missing uses defaults. If unreadable, saves it alongside as
+    /// `config.json.ilegivel-<ms>` before using defaults, and returns the copy path so the
+    /// window can notify the person.
     pub fn load_checked(path: &Path) -> (Self, Option<PathBuf>) {
         let problem = match std::fs::read_to_string(path) {
             Ok(text) => match serde_json::from_str(&text) {
@@ -359,21 +360,21 @@ impl Config {
             .map_or(0, |d| d.as_millis());
         let copy = path.with_file_name(format!("{}.ilegivel-{ms}", file_name(path)));
         log::warn!(
-            "config ilegível em {} ({problem}); guardada em {} e usando o padrão",
+            "unreadable config at {} ({problem}); saved to {} and using defaults",
             path.display(),
             copy.display()
         );
         match std::fs::rename(path, &copy) {
             Ok(()) => (Self::default(), Some(copy)),
             Err(err) => {
-                log::warn!("falha ao guardar a config ilegível: {err}");
+                log::warn!("failed to save unreadable config: {err}");
                 (Self::default(), None)
             }
         }
     }
 
-    /// Grava por um temporário vizinho (`.config.json.tmp`), com `sync_all`, e renomeia: uma queda
-    /// no meio nunca deixa o arquivo pela metade. Falhando, o temporário é apagado.
+    /// Writes through a neighboring temporary file (`.config.json.tmp`), with `sync_all`, then
+    /// renames: a crash never leaves a partial file. On failure, the temporary file is deleted.
     pub fn save(&self, path: &Path) -> Result<()> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)
@@ -394,21 +395,21 @@ impl Config {
         Ok(())
     }
 
-    /// O endereço em vigor: o da variável de ambiente, se houver, senão o do arquivo.
+    /// Effective address: the environment variable, if present, otherwise the file.
     pub fn effective_web_url(&self, env: Option<String>) -> String {
         env.filter(|url| validate_web_url(url).is_ok())
             .unwrap_or_else(|| self.web_url.clone())
     }
 
-    /// O endereço da API em vigor: a variável, a `api_url` ou o próprio servidor.
+    /// Effective API address: the environment variable, `api_url`, or the server itself.
     pub fn effective_api_url(&self, env: Option<String>, web_env: Option<String>) -> String {
         env.filter(|url| validate_web_url(url).is_ok())
             .or_else(|| self.api_url.clone())
             .unwrap_or_else(|| self.effective_web_url(web_env))
     }
 
-    /// Confere o que a janela pode mandar: endereços, CA legível e retenção no limite. O
-    /// servidor vazio é o "ainda sem servidor" de um build sem servidor embutido.
+    /// Validates what the window can send: addresses, readable CA, and retention within bounds.
+    /// An empty server means "no server yet" in a build without an embedded server.
     pub fn validate(&self) -> Result<()> {
         if !self.web_url.is_empty() {
             validate_web_url(&self.web_url)?;
@@ -452,7 +453,7 @@ impl Config {
     }
 }
 
-/// Aceita só endereços `http(s)://` com host.
+/// Accepts only `http(s)://` addresses with a host.
 pub fn validate_web_url(url: &str) -> Result<()> {
     let rest = url
         .strip_prefix("https://")
@@ -480,22 +481,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn iniciar_com_o_computador_vem_ligado_e_lembra_o_desligar() {
-        let antiga: Config = serde_json::from_str("{}").unwrap();
-        assert!(antiga.autostart);
-        let desligada = Config {
+    fn autostart_defaults_to_enabled_and_remembers_disabling() {
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert!(old.autostart);
+        let disabled = Config {
             autostart: false,
             ..Config::default()
         };
-        let json = serde_json::to_string(&desligada).unwrap();
-        let lida: Config = serde_json::from_str(&json).unwrap();
-        assert!(!lida.autostart);
+        let json = serde_json::to_string(&disabled).unwrap();
+        let read: Config = serde_json::from_str(&json).unwrap();
+        assert!(!read.autostart);
     }
 
     #[test]
-    fn gravacoes_recentes_no_topo_tem_padrao_5_e_vao_de_0_a_10() {
-        let antiga: Config = serde_json::from_str("{}").unwrap();
-        assert_eq!(antiga.recent_count, 5);
+    fn window_recent_recordings_default_to_5_and_range_from_0_to_10() {
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.recent_count, 5);
         assert_eq!(Config::default().recent_count, DEFAULT_RECENT_COUNT);
         let mut config = Config {
             recent_count: 0,
@@ -504,17 +505,17 @@ mod tests {
         config.validate().unwrap();
         config.recent_count = 10;
         config.validate().unwrap();
-        let lida: Config = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
-        assert_eq!(lida.recent_count, 10);
+        let read: Config = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert_eq!(read.recent_count, 10);
         config.recent_count = 11;
         assert!(config.validate().is_err());
     }
 
     #[test]
-    fn gravacoes_recentes_na_bandeja_tem_padrao_1_e_vao_de_0_a_10() {
-        let antiga: Config = serde_json::from_str("{}").unwrap();
-        assert_eq!(antiga.tray_recent_count, 1);
-        assert_eq!(antiga.recent_count, 5);
+    fn tray_recent_recordings_default_to_1_and_range_from_0_to_10() {
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.tray_recent_count, 1);
+        assert_eq!(old.recent_count, 5);
         assert_eq!(
             Config::default().tray_recent_count,
             DEFAULT_TRAY_RECENT_COUNT
@@ -526,14 +527,14 @@ mod tests {
         config.validate().unwrap();
         config.tray_recent_count = 10;
         config.validate().unwrap();
-        let lida: Config = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
-        assert_eq!((lida.tray_recent_count, lida.recent_count), (10, 5));
+        let read: Config = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert_eq!((read.tray_recent_count, read.recent_count), (10, 5));
         config.tray_recent_count = 11;
         assert!(config.validate().is_err());
     }
 
     #[test]
-    fn tema_e_aviso_de_resumo_tem_padrao_e_o_tema_e_fechado() {
+    fn theme_and_summary_notice_have_defaults_and_theme_is_restricted() {
         let config: Config = serde_json::from_str("{}").unwrap();
         assert_eq!(config.theme, "system");
         assert!(config.notify_summary);
@@ -544,14 +545,14 @@ mod tests {
         };
         config.validate().unwrap();
         let json = serde_json::to_string(&config).unwrap();
-        let lido: Config = serde_json::from_str(&json).unwrap();
-        assert_eq!((lido.theme.as_str(), lido.notify_summary), ("dark", false));
+        let read: Config = serde_json::from_str(&json).unwrap();
+        assert_eq!((read.theme.as_str(), read.notify_summary), ("dark", false));
         config.theme = "sepia".into();
         assert!(config.validate().is_err());
     }
 
     #[test]
-    fn pasta_sincronizada_vem_desligada_e_config_antiga_le() {
+    fn synced_folder_defaults_to_disabled_and_reads_old_config() {
         let config: Config = serde_json::from_str("{}").unwrap();
         assert_eq!(config.mirror, MirrorConfig::default());
         assert!(!config.mirror.enabled);
@@ -562,7 +563,7 @@ mod tests {
     }
 
     #[test]
-    fn ligar_a_pasta_exige_um_caminho_completo_que_nao_seja_a_raiz() {
+    fn enabling_synced_folder_requires_an_absolute_path_other_than_root() {
         let dir = std::env::temp_dir();
         let mut config = Config::default();
         config.mirror.enabled = true;
@@ -571,7 +572,7 @@ mod tests {
         assert!(config.validate().is_err());
         config.mirror.dir = dir.ancestors().last().map(Path::to_path_buf);
         assert!(config.validate().is_err());
-        // A pasta pessoal também é recusada: as Collections viram subpastas dela.
+        // The home folder is also rejected: collections become its subfolders.
         if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
             config.mirror.dir = Some(PathBuf::from(home));
             assert!(config.validate().is_err());
@@ -579,16 +580,16 @@ mod tests {
         config.mirror.dir = Some(dir.join("eclume-resumos"));
         config.validate().unwrap();
         let json = serde_json::to_string(&config).unwrap();
-        let lido: Config = serde_json::from_str(&json).unwrap();
-        assert_eq!(lido.mirror, config.mirror);
-        // Desligada, a pasta não é conferida.
+        let read: Config = serde_json::from_str(&json).unwrap();
+        assert_eq!(read.mirror, config.mirror);
+        // When disabled, the folder is not checked.
         config.mirror.enabled = false;
         config.mirror.dir = Some(PathBuf::from("relativa"));
         config.validate().unwrap();
     }
 
     #[test]
-    fn idioma_da_transcricao_e_opcional_e_fechado() {
+    fn transcription_language_is_optional_and_restricted() {
         let config: Config = serde_json::from_str("{}").unwrap();
         assert_eq!(config.language, None);
         assert!(!serde_json::to_string(&config).unwrap().contains("language"));
@@ -604,26 +605,26 @@ mod tests {
     }
 
     #[test]
-    fn config_padrao_aponta_para_o_servidor_embutido_ou_nenhum() {
+    fn default_config_uses_embedded_server_or_none() {
         let expected = embedded_server().map(|s| s.url).unwrap_or_default();
         assert_eq!(Config::default().web_url, expected);
-        // Sem servidor, a config segue válida: a primeira execução escolhe um.
-        let sem_servidor = Config {
+        // Without a server, config remains valid: first run selects one.
+        let without_server = Config {
             web_url: String::new(),
             ..Config::default()
         };
-        assert!(sem_servidor.validate().is_ok());
-        // A config antiga sem `web_url` recebe o padrão do build (o embutido dos instaladores).
-        let antiga: Config = serde_json::from_str("{}").unwrap();
-        assert_eq!(antiga.web_url, expected);
+        assert!(without_server.validate().is_ok());
+        // Old config without `web_url` gets the build default (embedded in installers).
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.web_url, expected);
     }
 
     #[test]
-    fn servidor_embutido_no_build() {
-        // O verify roda também com ECLUME_SERVER_URL=https://eclume.teste:8443.
+    fn server_is_embedded_in_build() {
+        // Verification also runs with ECLUME_SERVER_URL=https://eclume.teste:8443.
         match option_env!("ECLUME_SERVER_URL").filter(|url| !url.trim().is_empty()) {
             Some(url) => {
-                let server = embedded_server().expect("o build embutiu um servidor");
+                let server = embedded_server().expect("the build embedded a server");
                 assert_eq!(server.url, url.trim().trim_end_matches('/'));
                 assert_eq!(Config::default().web_url, server.url);
             }
@@ -632,7 +633,7 @@ mod tests {
     }
 
     #[test]
-    fn variaveis_do_build_vazias_ou_invalidas_nao_embutem() {
+    fn empty_or_invalid_build_variables_do_not_embed() {
         let ca = "98E209F5457514B7B12EC349D22B3B0D93C03C3F10E52350EA5F9E0B3D97792F";
         assert_eq!(
             embedded_from(Some(" https://eclume.teste:8443/ "), Some(ca)),
@@ -654,10 +655,10 @@ mod tests {
     }
 
     #[test]
-    fn primeira_execucao_so_sem_credencial() {
+    fn first_run_only_without_credential() {
         let mut config = Config::default();
         assert_eq!(config.connection(false), Connection::FirstRun);
-        // Quem já usa um PAT (0.1.x) não vê a primeira execução.
+        // Existing PAT users (0.1.x) do not see first run.
         assert_eq!(config.connection(true), Connection::PersonalToken);
         config.account = Some(Account {
             email: "ana@exemplo.com.br".into(),
@@ -665,7 +666,7 @@ mod tests {
             server_name: Some("eclume".into()),
         });
         assert_eq!(config.connection(true), Connection::Account);
-        // A credencial sumiu do chaveiro: entra de novo.
+        // Credential missing from the keyring: sign in again.
         assert_eq!(config.connection(false), Connection::FirstRun);
         let back: Config = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
         assert_eq!(back.account, config.account);
@@ -675,7 +676,7 @@ mod tests {
     }
 
     #[test]
-    fn config_ausente_ou_invalida_cai_no_padrao() {
+    fn missing_or_invalid_config_uses_defaults() {
         let dir = std::env::temp_dir().join(format!("eclume-config-{}", std::process::id()));
         let path = dir.join("config.json");
         assert_eq!(Config::load_checked(&path), (Config::default(), None));
@@ -683,7 +684,7 @@ mod tests {
         std::fs::write(&path, "{ quebrado").unwrap();
         let (config, copy) = Config::load_checked(&path);
         assert_eq!(config, Config::default());
-        // O ilegível é guardado ao lado, com o conteúdo, antes de o padrão valer.
+        // The unreadable file is saved alongside, with its contents, before using defaults.
         let copy = copy.unwrap();
         assert!(copy
             .file_name()
@@ -698,7 +699,7 @@ mod tests {
     }
 
     #[test]
-    fn config_grava_por_temporario_sem_deixar_sobra() {
+    fn config_writes_through_temporary_file_without_leftovers() {
         let dir = std::env::temp_dir().join(format!("eclume-config-tmp-{}", std::process::id()));
         let path = dir.join("config.json");
         Config::default().save(&path).unwrap();
@@ -708,7 +709,7 @@ mod tests {
             .map(|entry| entry.unwrap().file_name())
             .collect();
         assert_eq!(names, vec![std::ffi::OsString::from("config.json")]);
-        // Destino bloqueado (um diretório): a gravação falha e o temporário some.
+        // Blocked destination (a directory): writing fails and the temporary file is removed.
         std::fs::remove_file(&path).unwrap();
         std::fs::create_dir(&path).unwrap();
         assert!(Config::default().save(&path).is_err());
@@ -717,7 +718,7 @@ mod tests {
     }
 
     #[test]
-    fn config_salva_e_relê() {
+    fn config_saves_and_reads_back() {
         let dir = std::env::temp_dir().join(format!("eclume-config-rt-{}", std::process::id()));
         let path = dir.join("sub").join("config.json");
         let mut config = Config {
@@ -736,7 +737,7 @@ mod tests {
     }
 
     #[test]
-    fn config_variavel_de_ambiente_valida_sobrepoe() {
+    fn valid_environment_variable_overrides_config() {
         let config = Config::default();
         assert_eq!(
             config.effective_web_url(Some("http://localhost:5173".into())),
@@ -750,7 +751,7 @@ mod tests {
     }
 
     #[test]
-    fn config_da_versao_anterior_ganha_os_padroes() {
+    fn config_from_previous_version_gets_defaults() {
         let config: Config =
             serde_json::from_str(r#"{"web_url": "https://eclume.local"}"#).unwrap();
         assert_eq!(config.web_url, "https://eclume.local");
@@ -768,12 +769,12 @@ mod tests {
     }
 
     #[test]
-    fn audio_do_sistema_da_versao_anterior_vira_origem() {
+    fn legacy_system_audio_becomes_source() {
         let off: Config = serde_json::from_str(r#"{"system_audio": false}"#).unwrap();
         assert_eq!(off.system_source, SOURCE_NONE);
         let on: Config = serde_json::from_str(r#"{"system_audio": true}"#).unwrap();
         assert_eq!(on.system_source, SYSTEM_FOLLOW);
-        // Gravar de novo troca o booleano pela origem.
+        // Saving again replaces the boolean with the source.
         let text = serde_json::to_string(&off).unwrap();
         assert!(!text.contains("system_audio"), "{text}");
         let back: Config = serde_json::from_str(&text).unwrap();
@@ -784,7 +785,7 @@ mod tests {
     }
 
     #[test]
-    fn config_endereco_da_api() {
+    fn config_api_address() {
         let mut config = Config::default();
         assert_eq!(config.effective_api_url(None, None), default_web_url());
         assert_eq!(
@@ -800,7 +801,7 @@ mod tests {
     }
 
     #[test]
-    fn config_valida_o_que_a_janela_manda() {
+    fn config_validates_window_input() {
         let mut config = Config::default();
         config.validate().unwrap();
         config.api_url = Some("sem-esquema".into());
@@ -828,12 +829,12 @@ mod tests {
     }
 
     #[test]
-    fn aviso_de_atualizacao_uma_vez_e_ate_fechar() {
+    fn update_notice_once_and_until_dismissed() {
         let pending = PendingUpdate {
             version: "0.2.0".into(),
             notes: Some("Nova nota".into()),
         };
-        // Primeira instalação: nada a avisar.
+        // Fresh installation: nothing to notify.
         let mut fresh = Config::default();
         assert_eq!(fresh.open_version("0.2.0"), None);
         assert_eq!(fresh.last_version.as_deref(), Some("0.2.0"));
@@ -845,10 +846,10 @@ mod tests {
         };
         assert_eq!(config.open_version("0.2.0"), Some(pending.clone()));
         assert_eq!(config.update_notice("0.2.0"), Some(&pending));
-        // Reabrir não notifica de novo, mas o aviso da janela fica até ser fechado.
+        // Reopening does not notify again, but the window notice stays until dismissed.
         assert_eq!(config.open_version("0.2.0"), None);
         assert_eq!(config.update_notice("0.2.0"), Some(&pending));
-        // Uma atualização guardada que não chegou a instalar não vira aviso.
+        // A stored update that was never installed does not become a notice.
         assert_eq!(config.update_notice("0.1.2"), None);
 
         let text = serde_json::to_string(&config).unwrap();
@@ -857,7 +858,7 @@ mod tests {
     }
 
     #[test]
-    fn config_valida_endereco() {
+    fn config_validates_address() {
         assert!(validate_web_url("https://192.168.15.199:8443").is_ok());
         assert!(validate_web_url("http://localhost").is_ok());
         assert!(validate_web_url("https://").is_err());
