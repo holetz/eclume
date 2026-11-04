@@ -1,8 +1,8 @@
-//! Grava mic + áudio do sistema por alguns segundos, sem janela nem bandeja, e mostra onde ficou
-//! o `.ogg`. Serve para provar a captura real numa máquina com sessão de áudio.
+//! Records mic + system audio for a few seconds, without a window or tray, and shows where the
+//! `.ogg` was saved. Verifies real capture on a machine with an audio session.
 //!
 //! ```bash
-//! cargo run -p eclume-desktop --example gravar -- 5 /tmp/eclume-gravar
+//! cargo run -p eclume-desktop --example record -- 5 /tmp/eclume-record
 //! ```
 
 use std::path::PathBuf;
@@ -21,7 +21,7 @@ fn main() -> Result<()> {
         .next()
         .map(|s| s.parse())
         .transpose()
-        .context("o primeiro argumento é a duração em segundos")?
+        .context("the first argument is the duration in seconds")?
         .unwrap_or(5);
     let dir = args
         .next()
@@ -30,22 +30,22 @@ fn main() -> Result<()> {
     let queue = Queue::open(&dir.join("queue.sqlite"))?;
     let opened = open_sources(&AudioChoice::default())?;
     for reason in &opened.missing {
-        eprintln!("aviso: gravando sem {reason}");
+        eprintln!("warning: recording without {reason}");
     }
-    let fontes = opened.sources.len();
+    let source_count = opened.sources.len();
     let active = session::start(
         &RecorderConfig::new(&dir),
         &queue,
         opened.sources,
         session::StartOptions::MEETING,
     )?;
-    eprintln!("gravando {fontes} fonte(s) por {seconds} s...");
+    eprintln!("recording {source_count} source(s) for {seconds} s...");
     std::thread::sleep(Duration::from_secs(seconds));
     let rec = active.stop(&queue)?;
 
     println!("{}", rec.path.display());
     eprintln!(
-        "duração {} ms, {} bytes, estado {}",
+        "duration {} ms, {} bytes, status {}",
         rec.duration_ms.unwrap_or(0),
         rec.bytes.unwrap_or(0),
         rec.status.as_str()

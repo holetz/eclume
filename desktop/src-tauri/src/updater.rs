@@ -1,12 +1,12 @@
-//! Atualização automática pelo updater do Tauri: o manifesto `latest.json` é servido pelo próprio
-//! servidor eclume em `<web_url>/downloads/`, e o pacote é verificado pela chave minisign do
-//! `tauri.conf.json` antes de instalar. Nunca instala nem reinicia durante gravação ou sync.
+//! Automatic updates through the Tauri updater: the eclume server serves the `latest.json`
+//! manifest at `<web_url>/downloads/`, and the package is checked against the minisign key in
+//! `tauri.conf.json` before installing. Never installs or restarts during recording or sync.
 //!
-//! O cliente HTTP do updater confia no servidor como o sync ([`AppState::trust`]): a CA fixada
-//! pela primeira execução é a única raiz (`tls_certs_only`); uma CA escolhida à mão é somada às do
-//! sistema (`tls_certs_merge`); sem CA própria, o cliente padrão. Uma CA fixada ilegível, ou com
-//! mais de um certificado, faz a checagem não rodar (fica no log), sem cair nas raízes do sistema.
-//! O pacote segue conferido pela minisign; o TLS fixado protege o `latest.json` e o download.
+//! The updater HTTP client trusts the server like sync ([`AppState::trust`]): the CA pinned
+//! at first run is the only root (`tls_certs_only`); a manually chosen CA is added to system
+//! roots (`tls_certs_merge`); without a custom CA, uses the default client. An unreadable pinned
+//! CA, or one with multiple certificates, skips the check (logged), without using system roots.
+//! The package is still checked by minisign; pinned TLS protects `latest.json` and the download.
 
 use std::path::Path;
 use std::time::Duration;
@@ -18,28 +18,28 @@ use tauri_plugin_updater::UpdaterExt;
 
 use crate::state::{AppState, AppStatus};
 
-/// Espera depois de abrir o app, para não competir com a inicialização.
+/// Wait after opening the app to avoid competing with startup.
 const FIRST_CHECK: Duration = Duration::from_secs(30);
-/// Intervalo entre checagens.
+/// Interval between checks.
 const INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
-/// Onde o servidor eclume publica o manifesto do updater.
+/// Where the eclume server publishes the updater manifest.
 fn endpoint(web_url: &str) -> Result<Url> {
     let url = format!("{}/downloads/latest.json", web_url.trim_end_matches('/'));
-    Url::parse(&url).with_context(|| format!("endereço de atualização inválido: {url}"))
+    Url::parse(&url).with_context(|| format!("invalid update URL: {url}"))
 }
 
-/// As raízes do cliente do updater.
+/// Updater client roots.
 enum Roots {
-    /// Sem CA própria do servidor: o cliente padrão.
+    /// No custom server CA: the default client.
     Default,
-    /// CA escolhida à mão: somada às do sistema.
+    /// Manually chosen CA: added to system roots.
     Merge(Vec<reqwest::Certificate>),
-    /// CA fixada pela primeira execução: a única raiz.
+    /// CA pinned at first run: the only root.
     Only(reqwest::Certificate),
 }
 
-/// As raízes pela confiança do sync; a CA fixada tem de ter exatamente um certificado.
+/// Roots based on sync trust; the pinned CA must have exactly one certificate.
 fn roots(trust: &TrustMode) -> Result<Roots> {
     match trust {
         TrustMode::PlatformPlus(None) => Ok(Roots::Default),
@@ -48,7 +48,7 @@ fn roots(trust: &TrustMode) -> Result<Roots> {
             let mut certs = read_certs(path)?;
             if certs.len() != 1 {
                 bail!(
-                    "a CA fixada em {} tem {} certificados; esperava exatamente um",
+                    "the CA pinned at {} has {} certificates; expected exactly one",
                     path.display(),
                     certs.len()
                 );
@@ -58,14 +58,14 @@ fn roots(trust: &TrustMode) -> Result<Roots> {
     }
 }
 
-/// Os certificados de um PEM; um arquivo sem nenhum é erro.
+/// Certificates from a PEM; a file without any is an error.
 fn read_certs(path: &Path) -> Result<Vec<reqwest::Certificate>> {
     let pem = std::fs::read(path)
-        .with_context(|| format!("falha ao ler a CA extra em {}", path.display()))?;
+        .with_context(|| format!("failed to read the extra CA at {}", path.display()))?;
     let certs = reqwest::Certificate::from_pem_bundle(&pem)
-        .with_context(|| format!("PEM inválido em {}", path.display()))?;
+        .with_context(|| format!("invalid PEM at {}", path.display()))?;
     if certs.is_empty() {
-        bail!("nenhum certificado no PEM {}", path.display());
+        bail!("no certificates in PEM {}", path.display());
     }
     Ok(certs)
 }
@@ -74,7 +74,7 @@ fn is_idle(app: &AppHandle) -> bool {
     matches!(app.state::<AppState>().status(), Ok(AppStatus::Idle))
 }
 
-/// Checa, baixa e instala uma versão nova, se houver. Devolve se instalou.
+/// Checks, downloads and installs a new version, if available. Returns whether it installed.
 async fn check_and_install(app: &AppHandle) -> Result<bool> {
     let state = app.state::<AppState>();
     let url = endpoint(&state.web_url()?)?;
@@ -88,44 +88,41 @@ async fn check_and_install(app: &AppHandle) -> Result<bool> {
         Ok(Roots::Only(root)) => {
             builder = builder.configure_client(move |client| client.tls_certs_only([root.clone()]));
         }
-        // A CA fixada ilegível para a checagem: as raízes do sistema não a substituem.
+        // An unreadable pinned CA stops the check: system roots do not replace it.
         Err(err) if matches!(trust, TrustMode::Pinned(_)) => {
-            return Err(err.context("atualização não consultada"));
+            return Err(err.context("update not checked"));
         }
-        // Uma CA escolhida à mão ilegível não impede a checagem: as do sistema ainda podem bastar.
-        Err(err) => log::warn!("atualização sem a CA extra: {err:#}"),
+        // An unreadable manually chosen CA does not stop the check: system roots may still suffice.
+        Err(err) => log::warn!("update without the extra CA: {err:#}"),
     }
     let updater = builder.build()?;
     let Some(update) = updater
         .check()
         .await
-        .with_context(|| format!("falha ao consultar {url}"))?
+        .with_context(|| format!("failed to check {url}"))?
     else {
         return Ok(false);
     };
-    log::info!("versão {} disponível; baixando", update.version);
+    log::info!("version {} available; downloading", update.version);
     let bytes = update.download(|_, _| {}, || {}).await?;
     if !is_idle(app) {
-        log::info!(
-            "atualização {} adiada: o app não está ocioso",
-            update.version
-        );
+        log::info!("update {} deferred: the app is not idle", update.version);
         return Ok(false);
     }
-    // As notas vão para o aviso "Atualizado para X" da próxima abertura.
+    // The notes go into the "Updated to X" notice on the next launch.
     if let Err(err) = state.record_pending_update(&update.version, update.body.clone()) {
         log::warn!(
-            "falha ao guardar as notas da versão {}: {err:#}",
+            "failed to save notes for version {}: {err:#}",
             update.version
         );
     }
-    // No Windows, `install` abre o instalador em modo passivo e encerra o app.
+    // On Windows, `install` opens the installer in passive mode and exits the app.
     update.install(bytes)?;
-    log::info!("versão {} instalada", update.version);
+    log::info!("version {} installed", update.version);
     Ok(true)
 }
 
-/// Checa por atualização 30 s depois de abrir e a cada 6 h. Build de depuração não se atualiza.
+/// Checks for updates 30 s after launch and every 6 h. Debug builds do not update themselves.
 pub fn spawn(app: AppHandle) {
     if cfg!(debug_assertions) {
         return;
@@ -134,20 +131,20 @@ pub fn spawn(app: AppHandle) {
         tokio::time::sleep(FIRST_CHECK).await;
         loop {
             if is_idle(&app) {
-                // Cada checagem numa subtarefa: um pânico nela fica no log e o laço segue.
+                // Each check runs in a subtask: a panic is logged and the loop continues.
                 let check = {
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move { check_and_install(&app).await })
                 };
                 match check.await {
-                    // Linux e macOS: a versão nova vale depois de reabrir.
+                    // Linux and macOS: the new version takes effect after reopening.
                     Ok(Ok(true)) if is_idle(&app) => app.restart(),
                     Ok(Ok(_)) => {}
-                    Ok(Err(err)) => log::warn!("atualização: {err:#}"),
+                    Ok(Err(err)) => log::warn!("update: {err:#}"),
                     Err(tauri::Error::JoinError(err)) if err.is_panic() => {
-                        log::error!("pânico na checagem de atualização; a próxima segue no prazo");
+                        log::error!("panic during update check; next check remains on schedule");
                     }
-                    Err(err) => log::warn!("checagem de atualização interrompida: {err}"),
+                    Err(err) => log::warn!("update check interrupted: {err}"),
                 }
             }
             tokio::time::sleep(INTERVAL).await;
@@ -174,7 +171,7 @@ urwVrn2LuMQiFhpsFqzijXlyfFPQmgIhALpw58Bg8XjfqCOaXRJ53v7gVlG7SPkr
 -----END CERTIFICATE-----\n";
 
     #[test]
-    fn sem_ca_propria_usa_o_cliente_padrao() {
+    fn no_custom_ca_uses_default_client() {
         assert!(matches!(
             roots(&TrustMode::PlatformPlus(None)),
             Ok(Roots::Default)
@@ -182,7 +179,7 @@ urwVrn2LuMQiFhpsFqzijXlyfFPQmgIhALpw58Bg8XjfqCOaXRJ53v7gVlG7SPkr
     }
 
     #[test]
-    fn ca_extra_vira_raiz_do_cliente_do_updater() {
+    fn extra_ca_becomes_updater_client_root() {
         let dir = std::env::temp_dir().join(format!("eclume-updater-ca-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("eclume-root.crt");
@@ -192,10 +189,10 @@ urwVrn2LuMQiFhpsFqzijXlyfFPQmgIhALpw58Bg8XjfqCOaXRJ53v7gVlG7SPkr
         std::fs::write(&path, CA).unwrap();
         assert!(matches!(roots(&pinned()), Ok(Roots::Only(_))));
 
-        // À mão, os dois somam-se às do sistema; fixada, dois certificados são recusados.
+        // Manually chosen, both are added to system roots; pinned, two certificates are rejected.
         std::fs::write(&path, format!("{CA}{CA}")).unwrap();
         let Ok(Roots::Merge(certs)) = roots(&chosen()) else {
-            panic!("a CA escolhida à mão soma-se às do sistema");
+            panic!("the manually chosen CA is added to system roots");
         };
         assert_eq!(certs.len(), 2);
         assert!(roots(&pinned()).is_err());
@@ -209,7 +206,7 @@ urwVrn2LuMQiFhpsFqzijXlyfFPQmgIhALpw58Bg8XjfqCOaXRJ53v7gVlG7SPkr
     }
 
     #[test]
-    fn endpoint_fica_em_downloads_do_web_url() {
+    fn endpoint_is_in_web_url_downloads() {
         assert_eq!(
             endpoint("https://192.168.15.199:8443").unwrap().as_str(),
             "https://192.168.15.199:8443/downloads/latest.json"

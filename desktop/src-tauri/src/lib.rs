@@ -1,6 +1,6 @@
-//! App desktop do eclume: grava reuniões (mic + áudio do sistema) em Ogg/Opus, percebe sozinho
-//! quando uma reunião começa, mantém a fila local de gravações, sobe-as ao servidor com a
-//! credencial de dispositivo (ou o PAT de uma versão anterior) e fica na bandeja do sistema.
+//! eclume desktop app: records meetings (mic + system audio) as Ogg/Opus, detects when a
+//! meeting starts, keeps a local recording queue, uploads recordings to the server with the
+//! device credential (or a PAT from an earlier version) and stays in the system tray.
 
 mod account;
 mod auto;
@@ -30,15 +30,15 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::state::{AppState, Busy, MicChange, NoteToggle, Reaped};
 
-/// Nome exibido na janela e na bandeja do sistema.
+/// Name shown in the window and system tray.
 pub const APP_NAME: &str = "eclume";
 
-/// Evento que a janela escuta para se atualizar.
+/// Event the window listens to for updates.
 const STATUS_EVENT: &str = "status-changed";
 
-/// Concilia o início com o computador ao que a config diz: registra ou remove o app no sistema.
-/// Um build de desenvolvimento não registra (poria o binário de `target/` no início do sistema),
-/// e uma falha do sistema só vai ao log.
+/// Reconciles autostart with the config: registers or removes the app in the system.
+/// A development build skips registration (it would add the `target/` binary to autostart),
+/// and system failures are only logged.
 pub(crate) fn reconcile_autostart(app: &AppHandle) {
     if cfg!(debug_assertions) {
         return;
@@ -53,18 +53,18 @@ pub(crate) fn reconcile_autostart(app: &AppHandle) {
         _ => Ok(()),
     };
     if let Err(err) = result {
-        log::error!("falha ao conciliar o início com o computador: {err}");
+        log::error!("failed to reconcile autostart: {err}");
     }
 }
 
-/// Atualiza tudo que mostra o estado: a bandeja e a janela. Seguro de qualquer thread: a bandeja
-/// só é tocada na thread principal (`tray::refresh` despacha para ela).
+/// Updates everything that shows state: the tray and window. Safe from any thread: the tray
+/// is only touched on the main thread (`tray::refresh` dispatches to it).
 pub(crate) fn refresh_ui(app: &AppHandle) {
     tray::refresh(app);
     let _ = app.emit(STATUS_EVENT, ());
 }
 
-/// Mostra e foca a janela principal (criada oculta).
+/// Shows and focuses the main window (created hidden).
 pub(crate) fn show_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
@@ -73,7 +73,7 @@ pub(crate) fn show_window(app: &AppHandle) {
     }
 }
 
-/// Abre o eclume web no navegador padrão.
+/// Opens eclume web in the default browser.
 pub(crate) fn open_web(app: &AppHandle, state: &AppState) -> anyhow::Result<()> {
     let url = state.web_url()?;
     app.opener()
@@ -81,8 +81,8 @@ pub(crate) fn open_web(app: &AppHandle, state: &AppState) -> anyhow::Result<()> 
         .with_context(|| format!("falha ao abrir {url}"))
 }
 
-/// Inicia ou para a gravação, da bandeja ou do atalho. Abrir dispositivos pode levar segundos:
-/// fora da thread da UI.
+/// Starts or stops recording from the tray or shortcut. Opening devices can take seconds:
+/// runs off the UI thread.
 pub(crate) fn spawn_toggle_recording(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
@@ -91,15 +91,15 @@ pub(crate) fn spawn_toggle_recording(app: &AppHandle) {
             .audio_choice()
             .and_then(|choice| state.toggle_recording(|| capture::open_sources(&choice)));
         if let Err(err) = result {
-            log::error!("falha ao alternar a gravação: {err:#}");
+            log::error!("failed to toggle recording: {err:#}");
         }
         sync::nudge(&app);
         refresh_ui(&app);
     });
 }
 
-/// "Nova nota", da janela, da bandeja ou do atalho: começa uma nota ou para a nota em curso. O
-/// resultado sai por notificação, porque o atalho não abre a janela.
+/// "New voice note", from the window, tray or shortcut: starts a note or stops the current one.
+/// The result appears in a notification because the shortcut does not open the window.
 pub(crate) fn toggle_note(app: &AppHandle) -> anyhow::Result<()> {
     let state = app.state::<AppState>();
     let result = state
@@ -116,16 +116,16 @@ pub(crate) fn toggle_note(app: &AppHandle) -> anyhow::Result<()> {
     result.map(|_| ())
 }
 
-/// Marcador pela bandeja ou pelo atalho: não abre nada nem notifica, para não atrapalhar a reunião.
+/// Marker from tray or shortcut: opens nothing and sends no notice to avoid disrupting the meeting.
 pub(crate) fn add_marker(app: &AppHandle) {
     match app.state::<AppState>().add_marker(None) {
-        Ok(marker) => log::info!("marcador em {} ms", marker.at_ms),
-        Err(err) => log::warn!("marcador ignorado: {err:#}"),
+        Ok(marker) => log::info!("marker at {} ms", marker.at_ms),
+        Err(err) => log::warn!("marker ignored: {err:#}"),
     }
     refresh_ui(app);
 }
 
-/// O endereço de um artigo da central de ajuda do servidor; sem artigo, a central.
+/// The URL of a server help center article; without an article, the help center itself.
 pub(crate) fn help_url(web_url: &str, article: Option<&str>) -> anyhow::Result<String> {
     let base = format!("{}/ajuda", web_url.trim_end_matches('/'));
     match article {
@@ -142,13 +142,13 @@ pub(crate) fn help_url(web_url: &str, article: Option<&str>) -> anyhow::Result<S
     }
 }
 
-/// Arquivo de log, no diretório de logs do app.
+/// Log file in the app's log directory.
 const LOG_FILE: &str = "eclume.log";
-/// Acima disso, o log vira `eclume.log.1` ao abrir o app.
+/// Above this size, the log becomes `eclume.log.1` when the app opens.
 const LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 
-/// Liga o log (`info`, ou o que `RUST_LOG` pedir) no stderr e em `<dir>/eclume.log`: no Windows o
-/// release não tem console, e sem o arquivo nenhuma falha ficaria registrada.
+/// Enables logging (`info`, or what `RUST_LOG` requests) to stderr and `<dir>/eclume.log`: on
+/// Windows, release builds have no console, so without the file no failure would be recorded.
 fn init_logging(dir: &Path) {
     let builder =
         &mut env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
@@ -156,14 +156,14 @@ fn init_logging(dir: &Path) {
         Ok(tee) => {
             builder.target(env_logger::Target::Pipe(Box::new(tee)));
         }
-        Err(err) => eprintln!("log só no stderr: falha ao abrir {}: {err}", dir.display()),
+        Err(err) => eprintln!("stderr only: failed to open {}: {err}", dir.display()),
     }
     let _ = builder.try_init();
     std::panic::set_hook(Box::new(log_panic));
 }
 
-/// Um panic vai para o log com a thread, o local e o backtrace: o padrão só escreve no stderr, que
-/// o app aberto pelo menu do sistema não guarda em lugar nenhum que a pessoa ache.
+/// Logs panics with the thread, location and backtrace: the default only writes to stderr, which
+/// an app launched from the system menu does not save anywhere the user can find.
 fn log_panic(info: &std::panic::PanicHookInfo<'_>) {
     let thread = std::thread::current();
     let payload = info.payload();
@@ -171,18 +171,18 @@ fn log_panic(info: &std::panic::PanicHookInfo<'_>) {
         .downcast_ref::<&str>()
         .copied()
         .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
-        .unwrap_or("(sem mensagem)");
+        .unwrap_or("(no message)");
     let location = info
         .location()
-        .map_or_else(String::new, |at| format!(" em {at}"));
+        .map_or_else(String::new, |at| format!(" at {at}"));
     log::error!(
-        "panic na thread {}{location}: {message}\n{}",
-        thread.name().unwrap_or("sem nome"),
+        "panic in thread {}{location}: {message}\n{}",
+        thread.name().unwrap_or("unnamed"),
         std::backtrace::Backtrace::force_capture()
     );
 }
 
-/// Abre o log para acréscimo, girando para `.1` o que passou de `max_bytes`.
+/// Opens the log for appending, rotating it to `.1` if it exceeds `max_bytes`.
 fn open_log(dir: &Path, max_bytes: u64) -> io::Result<File> {
     fs::create_dir_all(dir)?;
     let path = dir.join(LOG_FILE);
@@ -192,8 +192,8 @@ fn open_log(dir: &Path, max_bytes: u64) -> io::Result<File> {
     OpenOptions::new().create(true).append(true).open(path)
 }
 
-/// Escreve no arquivo e, quando houver, no stderr. Passando de `max_bytes`, gira o arquivo para
-/// `.1` com o app aberto (sob o lock do `env_logger`, que serializa as escritas).
+/// Writes to the file and, when available, stderr. Above `max_bytes`, rotates the file to
+/// `.1` while the app is open (under the `env_logger` lock, which serializes writes).
 struct Tee {
     dir: PathBuf,
     max_bytes: u64,
@@ -213,7 +213,7 @@ impl Tee {
         })
     }
 
-    /// Fecha o arquivo (o Windows não renomeia arquivo aberto), gira e reabre.
+    /// Closes the file (Windows cannot rename an open file), rotates and reopens it.
     fn rotate(&mut self) -> io::Result<()> {
         self.file = None;
         let file = open_log(&self.dir, 0).or_else(|_| open_log(&self.dir, u64::MAX))?;
@@ -232,7 +232,7 @@ impl Write for Tee {
         let file = self
             .file
             .as_mut()
-            .ok_or_else(|| io::Error::other("log fechado"))?;
+            .ok_or_else(|| io::Error::other("log closed"))?;
         file.write_all(buf)?;
         self.written += buf.len() as u64;
         Ok(buf.len())
@@ -243,9 +243,9 @@ impl Write for Tee {
     }
 }
 
-/// Fecha, a cada segundo, a gravação que terminou sozinha: fontes que caíram, falha ao gravar
-/// (com o aviso "A gravação parou") ou a nota que parou no silêncio (a nota sem voz é
-/// descartada). A cada minuto, varre as gravações órfãs (`AppState::sweep_orphans`).
+/// Every second, closes recordings that ended on their own: lost sources, recording failures
+/// (with the "Recording stopped" notice) or a note that stopped on silence (a note without
+/// speech is discarded). Every minute, sweeps orphan recordings (`AppState::sweep_orphans`).
 fn spawn_reaper(app: AppHandle) {
     std::thread::spawn(move || {
         let mut ticks: u64 = 0;
@@ -258,7 +258,7 @@ fn spawn_reaper(app: AppHandle) {
     });
 }
 
-/// Uma passada do reaper.
+/// One reaper pass.
 fn reap_once(app: &AppHandle, ticks: u64) {
     match app.state::<AppState>().watch_sources() {
         Ok(Some(change)) => {
@@ -268,7 +268,7 @@ fn reap_once(app: &AppHandle, ticks: u64) {
             refresh_ui(app);
         }
         Ok(None) => {}
-        Err(err) => log::error!("falha ao vigiar as fontes da gravação: {err:#}"),
+        Err(err) => log::error!("failed to watch recording sources: {err:#}"),
     }
     match app.state::<AppState>().reap_finished() {
         Ok(Some(reaped)) => {
@@ -283,9 +283,9 @@ fn reap_once(app: &AppHandle, ticks: u64) {
             refresh_ui(app);
         }
         Ok(None) => {}
-        Err(err) => log::error!("falha ao fechar gravação encerrada: {err:#}"),
+        Err(err) => log::error!("failed to close finished recording: {err:#}"),
     }
-    // A cada minuto, fecha a gravação cujo `.part` ficou preso ao parar.
+    // Every minute, closes recordings whose `.part` got stuck on stop.
     if ticks.is_multiple_of(60) {
         match app.state::<AppState>().sweep_orphans() {
             Ok(0) => {}
@@ -293,7 +293,7 @@ fn reap_once(app: &AppHandle, ticks: u64) {
                 sync::nudge(app);
                 refresh_ui(app);
             }
-            Err(err) => log::error!("falha na varredura de gravações órfãs: {err:#}"),
+            Err(err) => log::error!("failed to sweep orphan recordings: {err:#}"),
         }
     }
 }
@@ -301,7 +301,7 @@ fn reap_once(app: &AppHandle, ticks: u64) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        // Primeiro plugin: a segunda instância entrega os argumentos à primeira e sai.
+        // First plugin: the second instance passes its arguments to the first and exits.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             match shortcuts::action_from_args(&argv) {
                 Some(action) => shortcuts::run(app, action),
@@ -323,7 +323,7 @@ pub fn run() {
             let config_dir = app.path().app_config_dir()?;
             let state = AppState::open(&data_dir, &config_dir)?;
             log::info!(
-                "eclume {} ({}) com dados em {}",
+                "eclume {} ({}) with data in {}",
                 env!("CARGO_PKG_VERSION"),
                 std::env::consts::OS,
                 data_dir.display()
@@ -342,12 +342,12 @@ pub fn run() {
             }
             reconcile_autostart(app.handle());
             shortcuts::init(app.handle());
-            // Aberto por um atalho do sistema sem instância rodando: faz a ação já.
+            // Opened by a system shortcut with no running instance: performs the action now.
             if let Some(action) = shortcuts::action_from_args(&std::env::args().collect::<Vec<_>>())
             {
                 shortcuts::run(app.handle(), action);
             }
-            // No macOS, o app vive na barra de menus, sem ícone no Dock.
+            // On macOS, the app lives in the menu bar, with no Dock icon.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             spawn_reaper(app.handle().clone());
@@ -361,13 +361,13 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             match event {
-                // Fechar a janela só a esconde: o app segue na bandeja.
+                // Closing the window only hides it: the app stays in the tray.
                 WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     let _ = window.hide();
                 }
-                // Um arquivo arrastado para a janela abre a importação (o primeiro, se vierem
-                // vários).
+                // Dropping a file onto the window opens import (the first file if
+                // there are several).
                 WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
                     if let Some(path) = paths.first() {
                         import::open_in_window(window.app_handle(), path);
@@ -423,7 +423,7 @@ pub fn run() {
             commands::mirror_sync_now,
         ])
         .run(tauri::generate_context!())
-        .expect("falha ao iniciar o app desktop do eclume");
+        .expect("failed to start the eclume desktop app");
 }
 
 #[cfg(test)]
@@ -431,7 +431,7 @@ mod tests {
     use super::{help_url, open_log, Tee, APP_NAME, LOG_FILE};
 
     #[test]
-    fn endereco_da_ajuda() {
+    fn help_address() {
         assert_eq!(
             help_url("https://192.168.15.199:8443/", None).unwrap(),
             "https://192.168.15.199:8443/ajuda"
@@ -445,30 +445,30 @@ mod tests {
     }
 
     #[test]
-    fn nome_do_app() {
+    fn app_name() {
         assert_eq!(APP_NAME, "eclume");
     }
 
     #[test]
-    fn log_acrescenta_e_gira_o_que_passou_do_limite() {
+    fn log_appends_and_rotates_above_limit() {
         use std::io::Write;
         let dir = std::env::temp_dir().join(format!("eclume-log-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
 
         writeln!(open_log(&dir, 16).unwrap(), "primeira linha").unwrap();
         writeln!(open_log(&dir, 64).unwrap(), "segunda").unwrap();
-        let atual = std::fs::read_to_string(dir.join(LOG_FILE)).unwrap();
-        assert_eq!(atual, "primeira linha\nsegunda\n");
+        let current = std::fs::read_to_string(dir.join(LOG_FILE)).unwrap();
+        assert_eq!(current, "primeira linha\nsegunda\n");
 
         open_log(&dir, 16).unwrap();
-        let girado = std::fs::read_to_string(dir.join(format!("{LOG_FILE}.1"))).unwrap();
-        assert_eq!(girado, "primeira linha\nsegunda\n");
+        let rotated = std::fs::read_to_string(dir.join(format!("{LOG_FILE}.1"))).unwrap();
+        assert_eq!(rotated, "primeira linha\nsegunda\n");
         assert_eq!(std::fs::read_to_string(dir.join(LOG_FILE)).unwrap(), "");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
-    fn log_gira_com_o_app_aberto() {
+    fn log_rotates_while_app_is_open() {
         use std::io::Write;
         let dir = std::env::temp_dir().join(format!("eclume-log-aberto-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -490,15 +490,15 @@ mod tests {
         )
         .unwrap();
         tee.flush().unwrap();
-        let girado = std::fs::read_to_string(dir.join(format!("{LOG_FILE}.1"))).unwrap();
+        let rotated = std::fs::read_to_string(dir.join(format!("{LOG_FILE}.1"))).unwrap();
         assert_eq!(
-            girado,
+            rotated,
             "primeira linha do log
 "
         );
-        let atual = std::fs::read_to_string(dir.join(LOG_FILE)).unwrap();
+        let current = std::fs::read_to_string(dir.join(LOG_FILE)).unwrap();
         assert_eq!(
-            atual,
+            current,
             "segunda linha do log
 terceira
 "
