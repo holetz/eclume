@@ -112,7 +112,7 @@ describe('API client', () => {
 })
 
 describe('errorMessage', () => {
-  it('translates by code, details validation and falls back to the detail', () => {
+  it('translates by code, details validation and reads an unknown code by its status', () => {
     expect(errorMessage(new ApiError(403, { type: 'x', title: 't', status: 403, code: 'forbidden' }))).toMatch(
       /permissão/,
     )
@@ -125,8 +125,8 @@ describe('errorMessage', () => {
     })
     expect(errorMessage(validation)).toBe('Confira os campos — name: obrigatório.')
     expect(
-      errorMessage(new ApiError(500, { type: 'x', title: 't', status: 500, code: 'novo', detail: 'Falhou.' })),
-    ).toBe('Falhou.')
+      errorMessage(new ApiError(500, { type: 'x', title: 't', status: 500, code: 'novo', detail: 'Failed.' })),
+    ).toBe('O servidor não respondeu. Tente de novo em instantes.')
     expect(errorMessage(new ApiError(502, null))).toMatch(/HTTP 502/)
     expect(errorMessage(new TypeError('Failed to fetch'))).toMatch(/Sem conexão/)
   })
