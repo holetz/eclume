@@ -2251,7 +2251,7 @@ mod tests {
         let mut steps = Vec::new();
         let recording = state
             .import_file(
-                &fixture("tom.mp3"),
+                &fixture("tone.mp3"),
                 1_789_826_520_000,
                 RecordedAtSource::User,
                 &cancel,
@@ -2265,7 +2265,7 @@ mod tests {
         assert_eq!(recording.kind, Kind::Meeting);
         assert_eq!(recording.recorded_at_source, RecordedAtSource::User);
         assert_eq!(recording.started_at, 1_789_826_520_000);
-        assert_eq!(recording.original_name.as_deref(), Some("tom"));
+        assert_eq!(recording.original_name.as_deref(), Some("tone"));
         assert_eq!(recording.content_type, None);
         assert!(recording.path.starts_with(dir.join("gravacoes")));
         assert!(recording.path.exists());
@@ -2273,7 +2273,7 @@ mod tests {
 
         let avi = state
             .import_file(
-                &fixture("tom.avi"),
+                &fixture("tone.avi"),
                 0,
                 RecordedAtSource::FileMetadata,
                 &AtomicBool::new(false),
@@ -2290,7 +2290,7 @@ mod tests {
         let (state, dir) = state("importa-nao");
         let err = state
             .import_file(
-                &fixture("sem-audio.mp4"),
+                &fixture("no-audio.mp4"),
                 0,
                 RecordedAtSource::User,
                 &AtomicBool::new(false),
@@ -2303,7 +2303,7 @@ mod tests {
         state.cancel_import().unwrap();
         let err = state
             .import_file(
-                &fixture("tom.wav"),
+                &fixture("tone.wav"),
                 0,
                 RecordedAtSource::User,
                 &cancel,

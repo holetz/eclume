@@ -1,5 +1,5 @@
-//! Importação de arquivos de áudio e vídeo no app desktop: a leitura da duração e da data de
-//! gravação ([`probe`]) antes de a pessoa confirmar, e a conversão para Opus ([`convert`]).
+//! Import of audio and video files in the desktop app: reading the duration and the recording
+//! date ([`probe`]) before the person confirms, and the conversion to Opus ([`convert`]).
 
 pub mod convert;
 mod mp4date;

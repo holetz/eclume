@@ -133,9 +133,9 @@ mod tests {
     #[test]
     fn previa_do_arquivo() {
         let path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/import/tests/fixtures/tom.m4a");
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/import/tests/fixtures/tone.m4a");
         let preview = preview(&path).unwrap();
-        assert_eq!(preview.name, "tom.m4a");
+        assert_eq!(preview.name, "tone.m4a");
         let json = serde_json::to_value(&preview).unwrap();
         assert_eq!(json["date_origin"], "mvhd");
         assert_eq!(json["has_audio"], true);

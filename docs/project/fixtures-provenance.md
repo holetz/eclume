@@ -19,8 +19,8 @@ real person's voice without recorded consent. It does not replace or rename any 
 | Fixture | Origin | Real voice | State |
 | --- | --- | --- | --- |
 | `worker-gpu/tests/fixtures/two-voices.ogg` | `worker-gpu/scripts/make-test-audio.sh fixture`: a pt-BR dialogue synthesized with two Piper TTS voices (`faber`, `cadu`), about 30 s, Opus mono 16 kHz | No: both voices are synthetic | Consent not needed. Confirm that the licence of the two Piper voice models allows redistributing their output; record it here |
-| `desktop/crates/import/tests/fixtures/tom.{m4a,mp3,wav,webm,ogg,avi}` | `desktop/crates/import/tests/fixtures/gerar.sh`: a 2 s sine tone at 440 Hz, encoded with ffmpeg in each format | No: a pure tone | Clean |
-| `desktop/crates/import/tests/fixtures/sem-audio.mp4` | The same script: a 1 s black video with no audio track | No | Clean |
+| `desktop/crates/import/tests/fixtures/tone.{m4a,mp3,wav,webm,ogg,avi}` | `desktop/crates/import/tests/fixtures/generate.sh`: a 2 s sine tone at 440 Hz, encoded with ffmpeg in each format | No: a pure tone | Clean |
+| `desktop/crates/import/tests/fixtures/no-audio.mp4` | The same script: a 1 s black video with no audio track | No | Clean |
 
 The one-hour benchmark audio that `make-test-audio.sh bench` builds from public-domain LibriVox
 readings is not committed; see [calibracao-voz.md](calibracao-voz.md) for the readers it uses.
