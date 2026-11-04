@@ -10,11 +10,11 @@
     <script type="module" src="js/main.js"></script>
   </head>
   <body>
-    <section class="tray tray-window" data-vista="principal" aria-label="eclume">
+    <section class="tray tray-window" data-view="home" aria-label="eclume">
       <div class="tray-section">
-        <div class="alert" id="aviso" role="alert" hidden>
-          <span class="alert-title" id="aviso-titulo"></span>
-          <span id="aviso-texto"></span>
+        <div class="alert" id="notice" role="alert" hidden>
+          <span class="alert-title" id="notice-title"></span>
+          <span id="notice-text"></span>
         </div>
         <div class="row row-between">
           <span class="brand brand-sm"
@@ -27,110 +27,110 @@
             >eclume</span
           >
           <div class="row row-tight">
-            <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="abrir-ajuda"
-              data-icone="ajuda" aria-label="Ajuda" aria-haspopup="menu" aria-expanded="false"></button>
-            <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="abrir-configuracoes"
-              data-icone="configuracoes" aria-label="Configurações"></button>
+            <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="open-help"
+              data-icon="help" aria-label="Ajuda" aria-haspopup="menu" aria-expanded="false"></button>
+            <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="open-settings"
+              data-icon="settings" aria-label="Configurações"></button>
           </div>
         </div>
-        <div class="menu menu-ajuda" role="menu" id="menu-ajuda" aria-label="Ajuda" hidden>
-          <button type="button" class="menu-item" role="menuitem" id="ajuda-primeiros-passos">Primeiros passos</button>
-          <button type="button" class="menu-item" role="menuitem" id="ajuda-permissoes">Permissões de microfone</button>
-          <button type="button" class="menu-item" role="menuitem" id="ajuda-pasta">Pasta sincronizada</button>
-          <button type="button" class="menu-item" role="menuitem" id="ajuda-atalhos">
-            Atalhos de teclado<kbd id="ajuda-atalhos-tecla"></kbd>
+        <div class="menu help-menu" role="menu" id="menu-help" aria-label="Ajuda" hidden>
+          <button type="button" class="menu-item" role="menuitem" id="help-first-steps">Primeiros passos</button>
+          <button type="button" class="menu-item" role="menuitem" id="help-permissions">Permissões de microfone</button>
+          <button type="button" class="menu-item" role="menuitem" id="help-folder">Pasta sincronizada</button>
+          <button type="button" class="menu-item" role="menuitem" id="help-shortcuts">
+            Atalhos de teclado<kbd id="help-shortcuts-tecla"></kbd>
           </button>
-          <button type="button" class="menu-item" role="menuitem" id="ajuda-central">
+          <button type="button" class="menu-item" role="menuitem" id="help-center">
             Abrir a central de ajuda<kbd>↗</kbd>
           </button>
           <div class="menu-sep"></div>
-          <button type="button" class="menu-item menu-item-dica" role="menuitem" id="ajuda-problema">
+          <button type="button" class="menu-item menu-item-hint" role="menuitem" id="help-problem">
             Relatar um problema…<small>Anexe o eclume.log</small>
           </button>
           <div class="menu-sep"></div>
-          <span class="menu-item" aria-disabled="true" id="ajuda-versao"></span>
+          <span class="menu-item" aria-disabled="true" id="help-version"></span>
         </div>
-        <div class="recentes" id="recentes" aria-label="Gravações recentes" hidden>
+        <div class="recent-panel" id="recent" aria-label="Gravações recentes" hidden>
           <div class="row row-between">
             <span class="kicker">Recentes</span>
-            <span class="badge badge-warning" id="recentes-alerta" role="status" hidden></span>
+            <span class="badge badge-warning" id="recent-alert" role="status" hidden></span>
           </div>
-          <ul class="recentes-lista" id="recentes-lista"></ul>
-          <span class="text-muted small" id="recentes-vazio" hidden>Nenhuma gravação ainda.</span>
+          <ul class="recent-list" id="recent-list"></ul>
+          <span class="text-muted small" id="recent-empty" hidden>Nenhuma gravação ainda.</span>
         </div>
-        <span class="status-line" id="linha-status" role="status">Carregando…</span>
-        <div class="row row-meter" id="nota" hidden>
-          <div class="meter" id="medidor" aria-hidden="true"></div>
-          <span class="mono tiny" id="nota-silencio"></span>
+        <span class="status-line" id="line-status" role="status">Carregando…</span>
+        <div class="row row-meter" id="note" hidden>
+          <div class="meter" id="meter" aria-hidden="true"></div>
+          <span class="mono tiny" id="note-silence"></span>
         </div>
-        <button type="button" class="btn btn-rec btn-rec-lg" id="gravar" aria-pressed="false">
+        <button type="button" class="btn btn-rec btn-rec-lg" id="record" aria-pressed="false">
           Iniciar gravação
         </button>
-        <span class="text-muted small" id="gravacao-automatica" hidden
+        <span class="text-muted small" id="recording-automatic" hidden
           >Iniciada automaticamente. Para quando a reunião acabar.</span
         >
-        <div class="stack-tight" id="marcadores" hidden>
+        <div class="stack-tight" id="markers" hidden>
           <div class="row">
-            <button type="button" class="btn btn-secondary btn-sm" id="marcador">
-              Marcador<kbd id="atalho-marcador"></kbd>
+            <button type="button" class="btn btn-secondary btn-sm" id="marker">
+              Marcador<kbd id="shortcut-marker"></kbd>
             </button>
-            <span class="marker-count" id="contagem-marcadores"></span>
+            <span class="marker-count" id="count-markers"></span>
           </div>
-          <div class="field" id="nota-marcador" hidden>
-            <label for="nota-marcador-texto" id="nota-marcador-rotulo"></label>
-            <input class="input" id="nota-marcador-texto" maxlength="500" placeholder="Nota curta (opcional)" />
+          <div class="field" id="note-marker" hidden>
+            <label for="note-marker-text" id="note-marker-label"></label>
+            <input class="input" id="note-marker-text" maxlength="500" placeholder="Nota curta (opcional)" />
           </div>
         </div>
         <div class="grid-2">
-          <button type="button" class="btn btn-secondary" id="nova-nota">
-            Nova nota<kbd id="atalho-nota"></kbd>
+          <button type="button" class="btn btn-secondary" id="new-note">
+            Nova nota<kbd id="shortcut-note"></kbd>
           </button>
-          <button type="button" class="btn btn-secondary" id="importar">Importar arquivo…</button>
+          <button type="button" class="btn btn-secondary" id="import">Importar arquivo…</button>
         </div>
       </div>
 
-      <div class="tray-section" id="politica" hidden>
+      <div class="tray-section" id="policy" hidden>
         <div class="row row-between">
-          <span class="kicker" id="politica-titulo"></span>
-          <a href="#" class="small" id="politica-configuracoes">Mudar nas configurações</a>
+          <span class="kicker" id="policy-title"></span>
+          <a href="#" class="small" id="policy-settings">Mudar nas configurações</a>
         </div>
-        <span class="seg" role="radiogroup" id="politica-opcoes">
+        <span class="seg" role="radiogroup" id="policy-options">
           <label class="seg-opt"><input type="radio" name="politica" value="auto" />Gravar</label>
           <label class="seg-opt"><input type="radio" name="politica" value="ask" />Confirmar</label>
           <label class="seg-opt"><input type="radio" name="politica" value="ignore" />Ignorar</label>
         </span>
       </div>
 
-      <div class="tray-section" id="pergunta" hidden>
+      <div class="tray-section" id="prompt" hidden>
         <div class="alert alert-warning">
           <span class="alert-title">Reunião detectada</span>
-          <span id="pergunta-texto"></span>
+          <span id="prompt-text"></span>
         </div>
         <div class="row">
-          <button type="button" class="btn btn-primary" id="pergunta-gravar">Gravar</button>
-          <button type="button" class="btn btn-secondary" id="pergunta-agora-nao">Agora não</button>
+          <button type="button" class="btn btn-primary" id="prompt-record">Gravar</button>
+          <button type="button" class="btn btn-secondary" id="prompt-now-no">Agora não</button>
         </div>
       </div>
 
       <div class="tray-section">
         <div class="row row-between">
           <span class="kicker">Fila de envio</span>
-          <span class="text-muted tiny" id="fila-resumo"></span>
+          <span class="text-muted tiny" id="queue-summary"></span>
         </div>
-        <ul class="queue" id="fila"></ul>
-        <span class="text-muted small" id="fila-vazia" hidden>Nenhuma gravação ainda.</span>
+        <ul class="queue" id="queue"></ul>
+        <span class="text-muted small" id="queue-empty" hidden>Nenhuma gravação ainda.</span>
       </div>
 
       <div class="tray-section stack-tight">
-        <strong class="small" id="conta-nome"></strong>
+        <strong class="small" id="account-name"></strong>
         <span class="text-muted tiny"
-          ><a href="#" id="conta-servidor"></a> · <span id="conta-versao"></span> ·
-          <a href="#" id="conta-acao"></a
+          ><a href="#" id="account-server"></a> · <span id="account-version"></span> ·
+          <a href="#" id="account-action"></a
         ></span>
       </div>
     </section>
 
-    <section class="tray tray-window" data-vista="primeira-execucao" aria-label="Bem-vindo" hidden>
+    <section class="tray tray-window" data-view="first-run" aria-label="Bem-vindo" hidden>
       <div class="tray-section">
         <div class="row row-between">
           <span class="brand brand-sm"
@@ -142,145 +142,145 @@
               <rect x="20.5" y="9" width="3" height="6"></rect></svg
             >eclume</span
           >
-          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="bv-voltar"
-            data-icone="fechar" aria-label="Voltar" hidden></button>
+          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="first-run-back"
+            data-icon="close" aria-label="Voltar" hidden></button>
         </div>
         <h4 class="flush">Bem-vindo</h4>
-        <div class="alert alert-error" id="bv-aviso" role="alert" hidden>
-          <span id="bv-aviso-texto"></span>
+        <div class="alert alert-error" id="first-run-notice" role="alert" hidden>
+          <span id="first-run-notice-text"></span>
         </div>
-        <span class="text-muted small" id="bv-procurando">Procurando o servidor na rede…</span>
-        <div class="stack stack-tight" id="bv-servidores" role="radiogroup" aria-label="Servidor"></div>
-        <div class="alert alert-warning" id="bv-confianca" hidden>
+        <span class="text-muted small" id="first-run-searching">Procurando o servidor na rede…</span>
+        <div class="stack stack-tight" id="first-run-servers" role="radiogroup" aria-label="Servidor"></div>
+        <div class="alert alert-warning" id="first-run-trust" hidden>
           <span class="alert-title">Confira com quem administra o servidor</span>
-          <span>A impressão digital do certificado de <span id="bv-confianca-servidor"></span> é:</span>
-          <span class="code-block"><span id="bv-impressao"></span></span>
+          <span>A impressão digital do certificado de <span id="first-run-trust-server"></span> é:</span>
+          <span class="code-block"><span id="first-run-fingerprint"></span></span>
           <div class="row">
-            <button type="button" class="btn btn-primary btn-sm" id="bv-confiar">Confiar e continuar</button>
+            <button type="button" class="btn btn-primary btn-sm" id="first-run-trust-continue">Confiar e continuar</button>
           </div>
         </div>
       </div>
-      <form class="tray-section" id="bv-entrar-form">
+      <form class="tray-section" id="first-run-sign-in-form">
         <div class="field">
-          <label for="bv-email">E-mail</label>
-          <input class="input" type="email" id="bv-email" autocomplete="username" required />
+          <label for="first-run-email">E-mail</label>
+          <input class="input" type="email" id="first-run-email" autocomplete="username" required />
         </div>
         <div class="field">
-          <label for="bv-senha">Senha</label>
-          <input class="input" type="password" id="bv-senha" autocomplete="current-password" required />
+          <label for="first-run-password">Senha</label>
+          <input class="input" type="password" id="first-run-password" autocomplete="current-password" required />
         </div>
-        <button type="submit" class="btn btn-primary btn-block" id="bv-entrar">Entrar</button>
-        <span class="text-muted small">Sem conta? <a href="#" id="bv-cadastro">Crie uma na web</a></span>
+        <button type="submit" class="btn btn-primary btn-block" id="first-run-sign-in">Entrar</button>
+        <span class="text-muted small">Sem conta? <a href="#" id="first-run-signup">Crie uma na web</a></span>
       </form>
       <div class="tray-section">
-        <details class="disclosure" id="bv-avancado">
+        <details class="disclosure" id="first-run-advanced">
           <summary>Avançado<span class="text-muted">Entrar com um código ou digitar o endereço</span></summary>
           <div class="stack">
             <div class="field">
-              <label for="bv-codigo">Código de pareamento</label>
+              <label for="first-run-code">Código de pareamento</label>
               <div class="row">
-                <input class="input mono input-codigo" id="bv-codigo" maxlength="7" autocomplete="off"
+                <input class="input mono input-code" id="first-run-code" maxlength="7" autocomplete="off"
                   placeholder="K7Q-4MX" />
-                <button type="button" class="btn btn-secondary" id="bv-parear">Entrar com o código</button>
+                <button type="button" class="btn btn-secondary" id="first-run-pair">Entrar com o código</button>
               </div>
               <span class="text-muted tiny">Gere o código na web, em Minhas configurações › App desktop. Vale por 10 minutos.</span>
             </div>
             <div class="field">
-              <label for="bv-endereco">Endereço do servidor</label>
+              <label for="first-run-address">Endereço do servidor</label>
               <div class="row">
-                <input class="input mono input-endereco" id="bv-endereco" placeholder="servidor.local:8443" />
-                <button type="button" class="btn btn-secondary" id="bv-usar-endereco">Usar este endereço</button>
+                <input class="input mono input-address" id="first-run-address" placeholder="servidor.local:8443" />
+                <button type="button" class="btn btn-secondary" id="first-run-use-address">Usar este endereço</button>
               </div>
-              <a href="#" class="small" id="bv-procurar">Procurar na rede de novo</a>
+              <a href="#" class="small" id="first-run-search">Procurar na rede de novo</a>
             </div>
           </div>
         </details>
       </div>
     </section>
 
-    <section class="tray tray-window" data-vista="importar" aria-label="Importar um arquivo" hidden>
+    <section class="tray tray-window" data-view="import" aria-label="Importar um arquivo" hidden>
       <div class="tray-section">
         <div class="row row-between">
           <h4 class="flush">Importar um arquivo</h4>
-          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="importar-fechar"
-            data-icone="fechar" aria-label="Fechar"></button>
+          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="import-close"
+            data-icon="close" aria-label="Fechar"></button>
         </div>
-        <label class="dropzone" id="importar-alvo">
+        <label class="dropzone" id="import-target">
           <strong>Solte o áudio ou o vídeo aqui</strong>
-          <span class="text-muted">ou <a href="#" id="importar-escolher">escolha um arquivo</a></span>
+          <span class="text-muted">ou <a href="#" id="import-choose">escolha um arquivo</a></span>
         </label>
       </div>
 
-      <div class="tray-section" id="importar-arquivo" hidden>
+      <div class="tray-section" id="import-file" hidden>
         <div class="field">
-          <label for="importar-data" id="importar-nome"></label>
-          <input class="input mono" type="datetime-local" id="importar-data" step="60" />
-          <span class="date-source" id="importar-origem"></span>
+          <label for="import-date" id="import-name"></label>
+          <input class="input mono" type="datetime-local" id="import-date" step="60" />
+          <span class="date-source" id="import-origin"></span>
         </div>
-        <div class="stack-tight" id="importar-andamento" hidden>
-          <progress class="progress" id="importar-progresso" max="1" value="0"></progress>
-          <span class="progress-row"><span>Convertendo para Opus…</span><span id="importar-porcento"></span></span>
+        <div class="stack-tight" id="import-conversion" hidden>
+          <progress class="progress" id="import-progress" max="1" value="0"></progress>
+          <span class="progress-row"><span>Convertendo para Opus…</span><span id="import-percent"></span></span>
         </div>
         <div class="row">
-          <button type="button" class="btn btn-primary" id="importar-confirmar">Pôr na fila de envio</button>
-          <button type="button" class="btn btn-secondary" id="importar-cancelar">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="import-confirm">Pôr na fila de envio</button>
+          <button type="button" class="btn btn-secondary" id="import-cancel">Cancelar</button>
         </div>
       </div>
 
-      <div class="tray-section" id="importar-erro" hidden>
+      <div class="tray-section" id="import-error" hidden>
         <div class="alert alert-error" role="alert">
           <span class="alert-title">Não deu para importar</span>
-          <span id="importar-erro-texto"></span>
+          <span id="import-error-text"></span>
         </div>
       </div>
     </section>
 
-    <section class="tray tray-window" data-vista="atalhos" aria-label="Atalhos de teclado" hidden>
+    <section class="tray tray-window" data-view="shortcuts" aria-label="Atalhos de teclado" hidden>
       <div class="tray-section">
         <div class="row row-between">
           <div>
             <span class="kicker">Ajuda</span>
-            <h2 class="flush titulo-folha">Atalhos de teclado</h2>
+            <h2 class="flush sheet-title">Atalhos de teclado</h2>
           </div>
-          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="atalhos-fechar"
-            data-icone="fechar" aria-label="Fechar"></button>
+          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="shortcuts-close"
+            data-icon="close" aria-label="Fechar"></button>
         </div>
       </div>
       <div class="tray-section">
         <span class="kicker text-muted">Em qualquer lugar do computador</span>
-        <dl class="shortcuts" id="atalhos-globais"></dl>
+        <dl class="shortcuts" id="shortcuts-global"></dl>
         <span class="kicker text-muted">Nesta janela</span>
-        <dl class="shortcuts" id="atalhos-janela"></dl>
+        <dl class="shortcuts" id="shortcuts-window"></dl>
       </div>
       <div class="tray-section">
-        <a href="#" class="small" id="atalhos-mudar">Mudar os atalhos nas configurações</a>
+        <a href="#" class="small" id="shortcuts-change">Mudar os atalhos nas configurações</a>
       </div>
     </section>
 
-    <section class="tray tray-window" data-vista="configuracoes" aria-label="Configurações" hidden>
+    <section class="tray tray-window" data-view="settings" aria-label="Configurações" hidden>
       <div class="tray-section tray-section-tabs">
         <div class="row">
-          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="config-voltar"
-            data-icone="voltar" aria-label="Voltar"></button>
+          <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="config-back"
+            data-icon="back" aria-label="Voltar"></button>
           <h4 class="flush">Configurações</h4>
         </div>
         <div class="tabs tabs-flush" role="tablist">
-          <button type="button" class="tab" role="tab" data-aba="geral" aria-selected="true">Geral</button>
-          <button type="button" class="tab" role="tab" data-aba="reunioes" aria-selected="false">Reuniões</button>
-          <button type="button" class="tab" role="tab" data-aba="audio" aria-selected="false">Áudio</button>
-          <button type="button" class="tab" role="tab" data-aba="armazenamento" aria-selected="false">Armazenamento</button>
-          <button type="button" class="tab" role="tab" data-aba="pasta" aria-selected="false">Pasta</button>
-          <button type="button" class="tab" role="tab" data-aba="servidor" aria-selected="false">Servidor</button>
+          <button type="button" class="tab" role="tab" data-tab="general" aria-selected="true">Geral</button>
+          <button type="button" class="tab" role="tab" data-tab="meetings" aria-selected="false">Reuniões</button>
+          <button type="button" class="tab" role="tab" data-tab="audio" aria-selected="false">Áudio</button>
+          <button type="button" class="tab" role="tab" data-tab="storage" aria-selected="false">Armazenamento</button>
+          <button type="button" class="tab" role="tab" data-tab="folder" aria-selected="false">Pasta</button>
+          <button type="button" class="tab" role="tab" data-tab="server" aria-selected="false">Servidor</button>
         </div>
       </div>
 
-      <div class="tray-section" id="config-aviso-secao">
-        <div class="alert" id="config-aviso" role="status" hidden>
-          <span id="config-aviso-texto"></span>
+      <div class="tray-section" id="config-notice-section">
+        <div class="alert" id="config-notice" role="status" hidden>
+          <span id="config-notice-text"></span>
         </div>
       </div>
 
-      <div data-painel="geral">
+      <div data-panel="general">
         <div class="tray-section">
           <span class="kicker">Aparência</span>
           <div class="list">
@@ -288,18 +288,18 @@
               <span class="list-row-title">Tema</span>
               <span class="list-row-sub">Claro, escuro ou como o sistema</span>
               <span class="list-row-actions">
-                <span class="seg" role="radiogroup" aria-label="Tema" id="tema">
-                  <label class="seg-opt"><input type="radio" name="tema" value="system" />Sistema</label>
-                  <label class="seg-opt"><input type="radio" name="tema" value="light" />Claro</label>
-                  <label class="seg-opt"><input type="radio" name="tema" value="dark" />Escuro</label>
+                <span class="seg" role="radiogroup" aria-label="Tema" id="theme">
+                  <label class="seg-opt"><input type="radio" name="theme" value="system" />Sistema</label>
+                  <label class="seg-opt"><input type="radio" name="theme" value="light" />Claro</label>
+                  <label class="seg-opt"><input type="radio" name="theme" value="dark" />Escuro</label>
                 </span>
               </span>
             </div>
             <div class="list-row">
-              <label class="list-row-title" for="recentes-quantidade">Gravações recentes na janela</label>
+              <label class="list-row-title" for="recent-count">Gravações recentes na janela</label>
               <span class="list-row-sub">Estado, alertas e Copiar resumo no topo da janela principal</span>
               <span class="list-row-actions">
-                <select class="input" id="recentes-quantidade">
+                <select class="input" id="recent-count">
                   <option value="0">Ocultar</option>
                   <option value="3">3</option>
                   <option value="5">5</option>
@@ -308,10 +308,10 @@
               </span>
             </div>
             <div class="list-row">
-              <label class="list-row-title" for="recentes-bandeja-quantidade">Gravações recentes no menu da bandeja</label>
+              <label class="list-row-title" for="recent-tray-count">Gravações recentes no menu da bandeja</label>
               <span class="list-row-sub">Título, estado e ações no menu do ícone ao lado do relógio</span>
               <span class="list-row-actions">
-                <select class="input" id="recentes-bandeja-quantidade">
+                <select class="input" id="recent-tray-count">
                   <option value="0">Ocultar</option>
                   <option value="1">1</option>
                   <option value="3">3</option>
@@ -324,7 +324,7 @@
         <div class="tray-section">
           <span class="kicker">Início</span>
           <label class="switch"
-            ><input type="checkbox" id="iniciar-com-o-sistema" /><span class="track"></span>Iniciar com o
+            ><input type="checkbox" id="start-with-the-system" /><span class="track"></span>Iniciar com o
             computador</label
           >
           <span class="text-muted small"
@@ -335,7 +335,7 @@
         <div class="tray-section">
           <span class="kicker">Avisos</span>
           <label class="switch"
-            ><input type="checkbox" id="avisar-resumo" /><span class="track"></span>Avisar quando uma gravação
+            ><input type="checkbox" id="notify-summary" /><span class="track"></span>Avisar quando uma gravação
             terminar de processar</label
           >
           <span class="text-muted small"
@@ -344,9 +344,9 @@
         </div>
       </div>
 
-      <div data-painel="reunioes" hidden>
+      <div data-panel="meetings" hidden>
         <div class="tray-section">
-          <label class="switch"><input type="checkbox" id="detectar" /><span class="track"></span>Detectar reuniões</label>
+          <label class="switch"><input type="checkbox" id="detect" /><span class="track"></span>Detectar reuniões</label>
           <span class="text-muted small"
             >O eclume observa qual app usa o microfone. Nunca grava sem mostrar na bandeja.</span
           >
@@ -354,7 +354,7 @@
         <div class="tray-section tray-section-list">
           <div class="row row-between">
             <span class="kicker">Quando uma reunião começa no</span>
-            <a href="#" class="small" id="restaurar-padroes">Restaurar padrões</a>
+            <a href="#" class="small" id="restore-defaults">Restaurar padrões</a>
           </div>
           <div class="list" id="apps"></div>
           <span class="text-muted small"
@@ -364,33 +364,33 @@
         </div>
       </div>
 
-      <div data-painel="audio" hidden>
+      <div data-panel="audio" hidden>
         <div class="tray-section">
           <span class="kicker">Fontes</span>
           <div class="field">
-            <label for="microfone">Microfone</label>
-            <select class="input" id="microfone"></select>
+            <label for="microphone">Microfone</label>
+            <select class="input" id="microphone"></select>
           </div>
           <div class="field">
-            <label for="audio-sistema">Áudio do sistema</label>
-            <select class="input" id="audio-sistema"></select>
+            <label for="audio-system">Áudio do sistema</label>
+            <select class="input" id="audio-system"></select>
           </div>
           <span class="text-muted small"
             >Capta as outras pessoas da chamada pelos alto-falantes ou pelo fone. As duas fontes viram um
             arquivo só; "Nenhum" deixa uma delas de fora.</span
           >
           <div class="row row-meter">
-            <div class="meter meter-accent" id="medidor-teste" aria-hidden="true"></div>
-            <button type="button" class="btn btn-ghost btn-sm" id="testar-mic" data-fonte="mic">Fale para testar</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="testar-sistema" data-fonte="system">Toque algo para testar</button>
+            <div class="meter meter-accent" id="meter-test" aria-hidden="true"></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="test-mic" data-source="mic">Fale para testar</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="test-system" data-source="system">Toque algo para testar</button>
           </div>
         </div>
         <div class="tray-section">
           <span class="kicker">Transcrição</span>
           <div class="field">
-            <label for="idioma">Idioma da transcrição</label>
-            <select class="input" id="idioma">
-              <option value="" id="idioma-padrao">Padrão da conta</option>
+            <label for="language">Idioma da transcrição</label>
+            <select class="input" id="language">
+              <option value="" id="language-default">Padrão da conta</option>
               <option value="auto">Detectar automaticamente</option>
               <option value="pt">Português</option>
               <option value="es">Español</option>
@@ -401,9 +401,9 @@
         </div>
         <div class="tray-section">
           <span class="kicker">Atalhos em qualquer lugar do computador</span>
-          <p class="text-muted small" id="atalhos-modo" hidden></p>
-          <div class="list" id="atalhos"></div>
-          <button type="button" class="btn btn-secondary btn-sm" id="atalhos-gnome" hidden></button>
+          <p class="text-muted small" id="shortcuts-mode" hidden></p>
+          <div class="list" id="shortcuts"></div>
+          <button type="button" class="btn btn-secondary btn-sm" id="shortcuts-gnome" hidden></button>
         </div>
         <div class="tray-section">
           <span class="kicker">Notas de voz</span>
@@ -412,11 +412,11 @@
               <span class="list-row-title">Parar depois de silêncio</span>
               <span class="list-row-sub">Encerra a nota quando você para de falar</span>
               <span class="list-row-actions">
-                <span class="seg" role="radiogroup" aria-label="Parar depois de silêncio" id="silencio">
-                  <label class="seg-opt"><input type="radio" name="silencio" value="2" />2 s</label>
-                  <label class="seg-opt"><input type="radio" name="silencio" value="4" />4 s</label>
-                  <label class="seg-opt"><input type="radio" name="silencio" value="8" />8 s</label>
-                  <label class="seg-opt"><input type="radio" name="silencio" value="0" />Nunca</label>
+                <span class="seg" role="radiogroup" aria-label="Parar depois de silêncio" id="silence">
+                  <label class="seg-opt"><input type="radio" name="silence" value="2" />2 s</label>
+                  <label class="seg-opt"><input type="radio" name="silence" value="4" />4 s</label>
+                  <label class="seg-opt"><input type="radio" name="silence" value="8" />8 s</label>
+                  <label class="seg-opt"><input type="radio" name="silence" value="0" />Nunca</label>
                 </span>
               </span>
             </div>
@@ -424,23 +424,23 @@
         </div>
       </div>
 
-      <div data-painel="armazenamento" hidden>
+      <div data-panel="storage" hidden>
         <div class="tray-section">
           <span class="kicker">Depois que o servidor confirma uma gravação</span>
           <label class="choice"
-            ><input type="radio" name="retencao" value="apagar" /><span class="dot"></span
+            ><input type="radio" name="retention" value="delete" /><span class="dot"></span
             ><strong>Apagar a cópia local</strong><small>Libera espaço na hora</small></label
           >
-          <label class="choice choice-dias"
-            ><input type="radio" name="retencao" value="dias" /><span class="dot"></span
+          <label class="choice choice-days"
+            ><input type="radio" name="retention" value="days" /><span class="dot"></span
             ><strong>Manter por alguns dias</strong><small>Padrão · até 3650 dias</small
-            ><span class="choice-dias-campo"
-              ><input class="input mono input-dias" id="retencao-dias" type="number" min="1" max="3650"
+            ><span class="choice-days-field"
+              ><input class="input mono input-days" id="retention-days" type="number" min="1" max="3650"
                 aria-label="Dias" /><span class="text-muted small">dias</span></span
             ></label
           >
           <label class="choice"
-            ><input type="radio" name="retencao" value="sempre" /><span class="dot"></span
+            ><input type="radio" name="retention" value="forever" /><span class="dot"></span
             ><strong>Manter para sempre</strong><small>Nada é apagado deste computador</small></label
           >
           <span class="text-muted small">Gravações ainda não enviadas nunca são apagadas.</span>
@@ -449,20 +449,20 @@
           <div class="field">
             <span class="field-label">Pasta local</span>
             <div class="code-block">
-              <span id="pasta-local"></span>
-              <button type="button" class="btn btn-ghost btn-sm" id="mostrar-pasta">Mostrar</button>
+              <span id="folder-local"></span>
+              <button type="button" class="btn btn-ghost btn-sm" id="show-folder">Mostrar</button>
             </div>
           </div>
           <div class="row row-between">
-            <span class="text-muted small" id="espaco-usado"></span>
-            <button type="button" class="btn btn-secondary btn-sm" id="tentar-de-novo">Tentar de novo as falhas</button>
+            <span class="text-muted small" id="space-used"></span>
+            <button type="button" class="btn btn-secondary btn-sm" id="retry">Tentar de novo as falhas</button>
           </div>
         </div>
       </div>
 
-      <div data-painel="pasta" hidden>
+      <div data-panel="folder" hidden>
         <div class="tray-section">
-          <label class="switch"><input type="checkbox" id="pasta-ligar" /><span class="track"></span>Sincronizar resumos numa pasta</label>
+          <label class="switch"><input type="checkbox" id="folder-enable" /><span class="track"></span>Sincronizar resumos numa pasta</label>
           <span class="text-muted small"
             >O resumo de cada gravação vira um arquivo Markdown e a transcrição, um arquivo JSONL, numa pasta
             deste computador. Vale para toda a sua biblioteca, não só para o que este computador gravou.</span
@@ -472,19 +472,19 @@
           <div class="field">
             <span class="field-label">Pasta de destino</span>
             <div class="code-block">
-              <span id="pasta-caminho">Nenhuma</span>
-              <button type="button" class="btn btn-ghost btn-sm" id="pasta-escolher">Escolher pasta…</button>
+              <span id="folder-path">Nenhuma</span>
+              <button type="button" class="btn btn-ghost btn-sm" id="folder-choose">Escolher pasta…</button>
             </div>
           </div>
-          <label class="switch"><input type="checkbox" id="pasta-transcricoes" /><span class="track"></span>Incluir as transcrições (.jsonl)</label>
+          <label class="switch"><input type="checkbox" id="folder-transcripts" /><span class="track"></span>Incluir as transcrições (.jsonl)</label>
           <div class="row row-between">
-            <span class="status-line" id="pasta-estado" role="status" data-status="idle">Desligada</span>
-            <button type="button" class="btn btn-secondary btn-sm" id="pasta-agora">Sincronizar agora</button>
+            <span class="status-line" id="folder-estado" role="status" data-status="idle">Desligada</span>
+            <button type="button" class="btn btn-secondary btn-sm" id="folder-now">Sincronizar agora</button>
           </div>
         </div>
-        <div class="tray-section" id="pasta-como">
+        <div class="tray-section" id="folder-layout">
           <span class="kicker">Como a pasta é organizada</span>
-          <ul class="stack stack-tight small" id="pasta-regras">
+          <ul class="stack stack-tight small" id="folder-rules">
             <li><strong>Coleções viram subpastas, e cada uma se divide por mês.</strong> Ex.: <code>Clientes/2026-09/</code>. Uma gravação em mais de uma coleção aparece em cada uma; as sem coleção ficam em <code>sem-colecao</code>. Organize as coleções no eclume web.</li>
             <li><strong>Nome que ordena por data.</strong> <code>2026-09-18_1100_01928f3a.md</code>: data, hora e a referência da gravação (a mesma "ref." do eclume web). O título fica dentro do arquivo, não no nome.</li>
             <li><strong>Resumo e transcrição lado a lado.</strong> O resumo é um <code>.md</code> com propriedades no topo; a transcrição é um <code>.jsonl</code> com o mesmo nome.</li>
@@ -492,48 +492,48 @@
             <li><strong>Pasta de trabalho de agente.</strong> O app mantém um <code>AGENTS.md</code> na raiz que explica a um agente (como o Claude Code) como ler e pesquisar os arquivos.</li>
             <li><strong>É um espelho.</strong> O eclume sobrescreve os arquivos que gerou; edite uma cópia. Arquivos seus na pasta nunca são tocados.</li>
           </ul>
-          <a href="#" class="small" id="pasta-ajuda">Saiba mais na ajuda</a>
+          <a href="#" class="small" id="folder-help">Saiba mais na ajuda</a>
         </div>
       </div>
 
-      <div data-painel="servidor" hidden>
+      <div data-panel="server" hidden>
         <div class="tray-section">
           <div class="row row-between">
             <div class="stack stack-tight">
-              <strong id="servidor-conta"></strong>
-              <span class="text-muted small" id="servidor-conta-sub"></span>
+              <strong id="server-account"></strong>
+              <span class="text-muted small" id="server-account-sub"></span>
             </div>
-            <button type="button" class="btn btn-secondary btn-sm" id="servidor-entrar" hidden>Entrar com e-mail e senha</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="servidor-sair">Sair</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="server-sign-in" hidden>Entrar com e-mail e senha</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="server-sign-out">Sair</button>
           </div>
-          <span class="status-line" id="servidor-conexao" hidden></span>
+          <span class="status-line" id="server-connection" hidden></span>
         </div>
         <div class="tray-section">
           <div class="field">
-            <label for="servidor-endereco">Endereço do servidor</label>
-            <input class="input mono" id="servidor-endereco" />
+            <label for="server-address">Endereço do servidor</label>
+            <input class="input mono" id="server-address" />
           </div>
           <details class="disclosure">
             <summary>Avançado<span class="text-muted">Para servidores com API separada ou certificado próprio</span></summary>
             <div class="stack">
               <div class="field">
-                <label for="servidor-api">Endereço da API</label>
-                <input class="input mono" id="servidor-api" placeholder="O mesmo do servidor" />
+                <label for="server-api">Endereço da API</label>
+                <input class="input mono" id="server-api" placeholder="O mesmo do servidor" />
               </div>
               <div class="field">
                 <span class="field-label">Autoridade certificadora extra</span>
                 <div class="code-block">
-                  <span id="servidor-ca"></span>
-                  <button type="button" class="btn btn-ghost btn-sm" id="servidor-ca-limpar" hidden>Remover</button>
-                  <button type="button" class="btn btn-ghost btn-sm" id="servidor-ca-escolher">Escolher…</button>
+                  <span id="server-ca"></span>
+                  <button type="button" class="btn btn-ghost btn-sm" id="server-ca-clear" hidden>Remover</button>
+                  <button type="button" class="btn btn-ghost btn-sm" id="server-ca-choose">Escolher…</button>
                 </div>
                 <span class="text-muted tiny">Arquivo PEM. Só é preciso quando o servidor usa um certificado próprio.</span>
               </div>
             </div>
           </details>
           <div class="row">
-            <button type="button" class="btn btn-primary" id="servidor-salvar">Salvar</button>
-            <button type="button" class="btn btn-secondary" id="servidor-testar">Testar conexão</button>
+            <button type="button" class="btn btn-primary" id="server-save">Salvar</button>
+            <button type="button" class="btn btn-secondary" id="server-test">Testar conexão</button>
           </div>
         </div>
       </div>

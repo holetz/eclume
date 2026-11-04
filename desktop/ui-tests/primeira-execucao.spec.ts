@@ -1,110 +1,110 @@
-import { test, expect, chamadas } from './fixtures'
+import { test, expect, chamadas as calls } from './fixtures'
 
-test('sem conta, abre na primeira execução com o servidor do instalador e entra por senha', async ({ abrir }) => {
-  const page = await abrir('primeiraExecucao')
-  const vista = page.locator('[data-vista="primeira-execucao"]')
-  await expect(vista).toBeVisible()
-  await expect(page.locator('[data-vista="principal"]')).toBeHidden()
-  await expect(vista.locator('h4')).toHaveText('Bem-vindo')
+test("without an account, first run uses the installer server and signs in by password", async ({ abrir: open }) => {
+  const page = await open('firstRun')
+  const view = page.locator('[data-view="first-run"]')
+  await expect(view).toBeVisible()
+  await expect(page.locator('[data-view="home"]')).toBeHidden()
+  await expect(view.locator('h4')).toHaveText('Bem-vindo')
 
-  const opcoes = page.locator('#bv-servidores .choice')
-  await expect(opcoes).toHaveCount(2)
-  await expect(opcoes.first().locator('strong')).toHaveText('eclume em 192.168.15.199')
-  await expect(opcoes.first().locator('small')).toHaveText('Veio com este instalador · Usar outro')
-  await expect(opcoes.nth(1).locator('strong')).toHaveText('Escritório em 10.0.0.2')
-  await expect(opcoes.nth(1).locator('small')).toContainText('Encontrado na rede')
-  await expect(opcoes.first().locator('input')).toBeChecked()
-  // A CA do instalador vem com a impressão digital: nada a conferir.
-  await expect(page.locator('#bv-confianca')).toBeHidden()
-  await expect(page.locator('#bv-entrar')).toBeEnabled()
+  const options = page.locator('#first-run-servers .choice')
+  await expect(options).toHaveCount(2)
+  await expect(options.first().locator('strong')).toHaveText('eclume em 192.168.15.199')
+  await expect(options.first().locator('small')).toHaveText('Veio com este instalador · Usar outro')
+  await expect(options.nth(1).locator('strong')).toHaveText('Escritório em 10.0.0.2')
+  await expect(options.nth(1).locator('small')).toContainText('Encontrado na rede')
+  await expect(options.first().locator('input')).toBeChecked()
+  // The installer CA comes with its fingerprint: nothing to check.
+  await expect(page.locator('#first-run-trust')).toBeHidden()
+  await expect(page.locator('#first-run-sign-in')).toBeEnabled()
 
-  await page.locator('#bv-email').fill('ana@exemplo.com.br')
-  await page.locator('#bv-senha').fill('errada')
-  await page.locator('#bv-entrar').click()
-  await expect(page.locator('#bv-aviso')).toHaveText('E-mail ou senha incorretos')
+  await page.locator('#first-run-email').fill('ana@exemplo.com.br')
+  await page.locator('#first-run-password').fill('errada')
+  await page.locator('#first-run-sign-in').click()
+  await expect(page.locator('#first-run-notice')).toHaveText('E-mail ou senha incorretos')
 
-  await page.locator('#bv-senha').fill('segredo')
-  await page.locator('#bv-entrar').click()
-  await expect(page.locator('[data-vista="principal"]')).toBeVisible()
-  await expect(page.locator('#conta-nome')).toHaveText('ana@exemplo.com.br')
-  await expect(page.locator('#conta-acao')).toHaveText('Sair')
+  await page.locator('#first-run-password').fill('segredo')
+  await page.locator('#first-run-sign-in').click()
+  await expect(page.locator('[data-view="home"]')).toBeVisible()
+  await expect(page.locator('#account-name')).toHaveText('ana@exemplo.com.br')
+  await expect(page.locator('#account-action')).toHaveText('Sair')
 
-  const feitas = await chamadas(page)
-  expect(feitas).toContainEqual({
+  const made = await calls(page)
+  expect(made).toContainEqual({
     comando: 'prepare_server',
     args: {
       url: 'https://192.168.15.199:8443',
       caSha256: '98e209f5457514b7b12ec349d22b3b0d93c03c3f10e52350ea5f9e0b3d97792f',
     },
   })
-  expect(feitas).toContainEqual({ comando: 'sign_in', args: { email: 'ana@exemplo.com.br', password: 'segredo' } })
+  expect(made).toContainEqual({ comando: 'sign_in', args: { email: 'ana@exemplo.com.br', password: 'segredo' } })
 })
 
-test('servidor anunciado na rede pede para conferir a impressão digital antes de entrar', async ({ abrir }) => {
-  const page = await abrir('primeiraExecucao')
-  await page.locator('#bv-servidores .choice').nth(1).click()
-  const confianca = page.locator('#bv-confianca')
-  await expect(confianca).toBeVisible()
-  // O anúncio do mDNS traz a impressão digital, mas não é autenticado: a pessoa confere.
-  await expect(page.locator('#bv-impressao')).toHaveText(/^98:E2:09:F5:.*:79:2F$/)
-  await expect(page.locator('#bv-entrar')).toBeDisabled()
-  await expect(page.locator('#bv-parear')).toBeDisabled()
-  await page.locator('#bv-confiar').click()
-  await expect(confianca).toBeHidden()
-  await expect(page.locator('#bv-entrar')).toBeEnabled()
-  expect(await chamadas(page)).toContainEqual({
+test("a server announced on the network requires checking its fingerprint before sign-in", async ({ abrir: open }) => {
+  const page = await open('firstRun')
+  await page.locator('#first-run-servers .choice').nth(1).click()
+  const trust = page.locator('#first-run-trust')
+  await expect(trust).toBeVisible()
+  // The mDNS announcement includes the fingerprint but is unauthenticated: the person checks it.
+  await expect(page.locator('#first-run-fingerprint')).toHaveText(/^98:E2:09:F5:.*:79:2F$/)
+  await expect(page.locator('#first-run-sign-in')).toBeDisabled()
+  await expect(page.locator('#first-run-pair')).toBeDisabled()
+  await page.locator('#first-run-trust-continue').click()
+  await expect(trust).toBeHidden()
+  await expect(page.locator('#first-run-sign-in')).toBeEnabled()
+  expect(await calls(page)).toContainEqual({
     comando: 'confirm_server',
     args: { url: 'https://10.0.0.2', caSha256: '98e209f5457514b7b12ec349d22b3b0d93c03c3f10e52350ea5f9e0b3d97792f' },
   })
 })
 
-test('Avançado: endereço digitado e código de pareamento', async ({ abrir }) => {
-  const page = await abrir('semServidor')
-  await expect(page.locator('#bv-procurando')).toHaveText('Nenhum servidor na rede. Digite o endereço em Avançado.')
-  await expect(page.locator('#bv-avancado')).toHaveAttribute('open', '')
-  await expect(page.locator('#bv-entrar')).toBeDisabled()
+test("Advanced: typed address and pairing code", async ({ abrir: open }) => {
+  const page = await open('noServer')
+  await expect(page.locator('#first-run-searching')).toHaveText('Nenhum servidor na rede. Digite o endereço em Avançado.')
+  await expect(page.locator('#first-run-advanced')).toHaveAttribute('open', '')
+  await expect(page.locator('#first-run-sign-in')).toBeDisabled()
 
-  await page.locator('#bv-endereco').fill('eclume local')
-  await page.locator('#bv-usar-endereco').click()
-  await expect(page.locator('#bv-aviso')).toContainText('Endereço inválido')
+  await page.locator('#first-run-address').fill('eclume local')
+  await page.locator('#first-run-use-address').click()
+  await expect(page.locator('#first-run-notice')).toContainText('Endereço inválido')
 
-  // Só o host vale: o https:// entra sozinho.
-  await page.locator('#bv-endereco').fill('eclume.local:8443/')
-  await page.locator('#bv-usar-endereco').click()
-  const digitado = page.locator('#bv-servidores .choice')
-  await expect(digitado).toHaveCount(1)
-  await expect(digitado.locator('small')).toContainText('Endereço digitado')
-  await page.locator('#bv-confiar').click()
+  // A bare host is valid: https:// is added automatically.
+  await page.locator('#first-run-address').fill('eclume.local:8443/')
+  await page.locator('#first-run-use-address').click()
+  const typed = page.locator('#first-run-servers .choice')
+  await expect(typed).toHaveCount(1)
+  await expect(typed.locator('small')).toContainText('Endereço digitado')
+  await page.locator('#first-run-trust-continue').click()
 
-  await page.locator('#bv-parear').click()
-  await expect(page.locator('#bv-aviso')).toContainText('código de 6 caracteres')
-  await page.locator('#bv-codigo').fill('AAA-AAA')
-  await page.locator('#bv-parear').click()
-  await expect(page.locator('#bv-aviso')).toHaveText('Código inválido ou vencido')
-  await page.locator('#bv-codigo').fill('k7q-4mx')
-  await page.locator('#bv-parear').click()
-  await expect(page.locator('[data-vista="principal"]')).toBeVisible()
-  await expect(page.locator('#conta-servidor')).toHaveText('eclume em eclume.local')
+  await page.locator('#first-run-pair').click()
+  await expect(page.locator('#first-run-notice')).toContainText('código de 6 caracteres')
+  await page.locator('#first-run-code').fill('AAA-AAA')
+  await page.locator('#first-run-pair').click()
+  await expect(page.locator('#first-run-notice')).toHaveText('Código inválido ou vencido')
+  await page.locator('#first-run-code').fill('k7q-4mx')
+  await page.locator('#first-run-pair').click()
+  await expect(page.locator('[data-view="home"]')).toBeVisible()
+  await expect(page.locator('#account-server')).toHaveText('eclume em eclume.local')
 
-  const feitas = await chamadas(page)
-  expect(feitas).toContainEqual({ comando: 'prepare_server', args: { url: 'https://eclume.local:8443', caSha256: null } })
-  expect(feitas).toContainEqual({ comando: 'pair', args: { code: 'k7q-4mx' } })
+  const made = await calls(page)
+  expect(made).toContainEqual({ comando: 'prepare_server', args: { url: 'https://eclume.local:8443', caSha256: null } })
+  expect(made).toContainEqual({ comando: 'pair', args: { code: 'k7q-4mx' } })
 })
 
-test('"Crie uma na web" abre o cadastro do servidor escolhido', async ({ abrir }) => {
-  const page = await abrir('primeiraExecucao')
-  await expect(page.locator('#bv-entrar')).toBeEnabled()
-  await page.locator('#bv-cadastro').click()
+test("Create one on the web opens sign-up on the selected server", async ({ abrir: open }) => {
+  const page = await open('firstRun')
+  await expect(page.locator('#first-run-sign-in')).toBeEnabled()
+  await page.locator('#first-run-signup').click()
   await expect
-    .poll(async () => (await chamadas(page)).find((c) => c.comando === 'open_signup')?.args)
+    .poll(async () => (await calls(page)).find((c) => c.comando === 'open_signup')?.args)
     .toEqual({ url: 'https://192.168.15.199:8443' })
 })
 
-test('CA trocada: volta à primeira execução com o aviso e sem as teclas da janela', async ({ abrir }) => {
-  const page = await abrir('caMudou')
-  await expect(page.locator('[data-vista="primeira-execucao"]')).toBeVisible()
-  await expect(page.locator('#bv-aviso')).toHaveText('O certificado do servidor mudou')
+test("a changed CA returns to first run with a notice and disables window keys", async ({ abrir: open }) => {
+  const page = await open('caChanged')
+  await expect(page.locator('[data-view="first-run"]')).toBeVisible()
+  await expect(page.locator('#first-run-notice')).toHaveText('O certificado do servidor mudou')
   await page.keyboard.press('Control+,')
-  await expect(page.locator('[data-vista="configuracoes"]')).toBeHidden()
-  await expect(page.locator('#bv-voltar')).toBeHidden()
+  await expect(page.locator('[data-view="settings"]')).toBeHidden()
+  await expect(page.locator('#first-run-back')).toBeHidden()
 })

@@ -1,95 +1,95 @@
-import { test, expect, chamadas } from './fixtures'
+import { test, expect, chamadas as calls } from './fixtures'
 
-test('nota em curso: linha de status, medidor, silêncio e Parar nota', async ({ abrir }) => {
-  const page = await abrir('nota')
-  await expect(page.locator('#linha-status')).toHaveText('Gravando uma nota · para depois de 4 s de silêncio')
-  await expect(page.locator('#linha-status')).toHaveAttribute('data-status', 'recording')
-  await expect(page.locator('#nota')).toBeVisible()
-  await expect(page.locator('#medidor i')).toHaveCount(16)
-  await expect(page.locator('#medidor i[data-quiet]')).toHaveCount(7)
-  const altura = await page.locator('#medidor i').nth(4).evaluate((i) => i.style.getPropertyValue('--h'))
-  expect(altura).toBe('90%')
-  await expect(page.locator('#nota-silencio')).toHaveText('Silêncio · para em 3 s')
-  await expect(page.locator('#gravar')).toHaveText('Parar nota · 00:00:42')
-  await expect(page.locator('#gravar')).toHaveAttribute('aria-pressed', 'true')
+test("ongoing voice note: status line, meter, silence and Stop note", async ({ abrir: open }) => {
+  const page = await open('note')
+  await expect(page.locator('#line-status')).toHaveText('Gravando uma nota · para depois de 4 s de silêncio')
+  await expect(page.locator('#line-status')).toHaveAttribute('data-status', 'recording')
+  await expect(page.locator('#note')).toBeVisible()
+  await expect(page.locator('#meter i')).toHaveCount(16)
+  await expect(page.locator('#meter i[data-quiet]')).toHaveCount(7)
+  const height = await page.locator('#meter i').nth(4).evaluate((i) => i.style.getPropertyValue('--h'))
+  expect(height).toBe('90%')
+  await expect(page.locator('#note-silence')).toHaveText('Silêncio · para em 3 s')
+  await expect(page.locator('#record')).toHaveText('Parar nota · 00:00:42')
+  await expect(page.locator('#record')).toHaveAttribute('aria-pressed', 'true')
 
-  await page.locator('#gravar').click()
-  await expect(page.locator('#nota')).toBeHidden()
-  await expect(page.locator('#gravar')).toHaveText('Iniciar gravação')
-  const feitas = await chamadas(page)
-  expect(feitas.map((c) => c.comando)).toContain('new_note')
-  expect(feitas.map((c) => c.comando)).not.toContain('toggle_recording')
+  await page.locator('#record').click()
+  await expect(page.locator('#note')).toBeHidden()
+  await expect(page.locator('#record')).toHaveText('Iniciar gravação')
+  const made = await calls(page)
+  expect(made.map((c) => c.comando)).toContain('new_note')
+  expect(made.map((c) => c.comando)).not.toContain('toggle_recording')
 })
 
-test('nota com parada "Nunca" não promete parar sozinha', async ({ abrir }) => {
-  const page = await abrir('nota')
+test("a voice note set to Never stop does not promise to stop automatically", async ({ abrir: open }) => {
+  const page = await open('note')
   await page.evaluate(() => {
-    const mock = (window as unknown as { __mock: { estado: { status: { note_silence_s: number | null } } } }).__mock
-    mock.estado.status.note_silence_s = null
+    const mock = (window as unknown as { __mock: { state: { status: { note_silence_s: number | null } } } }).__mock
+    mock.state.status.note_silence_s = null
   })
-  await expect(page.locator('#linha-status')).toHaveText('Gravando uma nota')
+  await expect(page.locator('#line-status')).toHaveText('Gravando uma nota')
 })
 
-test('Nova nota começa a nota e mostra o atalho', async ({ abrir }) => {
-  const page = await abrir()
-  await expect(page.locator('#atalho-nota')).toHaveText('Ctrl+Alt+N')
-  await expect(page.locator('#nota')).toBeHidden()
-  await page.locator('#nova-nota').click()
-  await expect(page.locator('#nota')).toBeVisible()
-  await expect(page.locator('#linha-status')).toHaveText(/^Gravando uma nota/)
+test("New note starts a voice note and shows its shortcut", async ({ abrir: open }) => {
+  const page = await open()
+  await expect(page.locator('#shortcut-note')).toHaveText('Ctrl+Alt+N')
+  await expect(page.locator('#note')).toBeHidden()
+  await page.locator('#new-note').click()
+  await expect(page.locator('#note')).toBeVisible()
+  await expect(page.locator('#line-status')).toHaveText(/^Gravando uma nota/)
 })
 
-test('marcador durante a gravação, com contagem e nota', async ({ abrir }) => {
-  const page = await abrir('gravando')
-  await expect(page.locator('#marcadores')).toBeVisible()
-  await expect(page.locator('#atalho-marcador')).toHaveText('Ctrl+Alt+M')
-  await expect(page.locator('#contagem-marcadores')).toBeHidden()
-  await expect(page.locator('#nota-marcador')).toBeHidden()
+test("a marker during recording has a count and note", async ({ abrir: open }) => {
+  const page = await open('isRecording')
+  await expect(page.locator('#markers')).toBeVisible()
+  await expect(page.locator('#shortcut-marker')).toHaveText('Ctrl+Alt+M')
+  await expect(page.locator('#count-markers')).toBeHidden()
+  await expect(page.locator('#note-marker')).toBeHidden()
 
-  await page.locator('#marcador').click()
-  await expect(page.locator('#contagem-marcadores')).toHaveText('1 marcador')
-  await expect(page.locator('#contagem-marcadores')).toHaveClass(/marker-count/)
-  await expect(page.locator('#nota-marcador')).toBeVisible()
-  await expect(page.locator('#nota-marcador-rotulo')).toHaveText('Nota do marcador em 1:00')
-  await expect(page.locator('#nota-marcador-texto')).toBeFocused()
-  await page.locator('#nota-marcador-texto').fill('ação para a Ana')
-  await page.locator('#nota-marcador-texto').press('Enter')
+  await page.locator('#marker').click()
+  await expect(page.locator('#count-markers')).toHaveText('1 marcador')
+  await expect(page.locator('#count-markers')).toHaveClass(/marker-count/)
+  await expect(page.locator('#note-marker')).toBeVisible()
+  await expect(page.locator('#note-marker-label')).toHaveText('Nota do marcador em 1:00')
+  await expect(page.locator('#note-marker-text')).toBeFocused()
+  await page.locator('#note-marker-text').fill('ação para a Ana')
+  await page.locator('#note-marker-text').press('Enter')
   await expect
-    .poll(async () => (await chamadas(page)).filter((c) => c.comando === 'set_marker_note'))
+    .poll(async () => (await calls(page)).filter((c) => c.comando === 'set_marker_note'))
     .toEqual([{ comando: 'set_marker_note', args: { clientId: 'm1', note: 'ação para a Ana' } }])
 
-  await page.locator('#marcador').click()
-  await expect(page.locator('#contagem-marcadores')).toHaveText('2 marcadores')
-  await expect(page.locator('#nota-marcador-texto')).toHaveValue('')
+  await page.locator('#marker').click()
+  await expect(page.locator('#count-markers')).toHaveText('2 marcadores')
+  await expect(page.locator('#note-marker-text')).toHaveValue('')
 })
 
-test('o último marcador traz a nota que já tem', async ({ abrir }) => {
-  const page = await abrir('marcadores')
-  await expect(page.locator('#contagem-marcadores')).toHaveText('1 marcador')
-  await expect(page.locator('#nota-marcador-rotulo')).toHaveText('Nota do marcador em 2:05')
-  await expect(page.locator('#nota-marcador-texto')).toHaveValue('decisão do orçamento')
-  await expect(page.locator('#politica')).toBeHidden()
+test("the last marker loads its existing note", async ({ abrir: open }) => {
+  const page = await open('markers')
+  await expect(page.locator('#count-markers')).toHaveText('1 marcador')
+  await expect(page.locator('#note-marker-label')).toHaveText('Nota do marcador em 2:05')
+  await expect(page.locator('#note-marker-text')).toHaveValue('decisão do orçamento')
+  await expect(page.locator('#policy')).toBeHidden()
 })
 
-test('fora de gravação não há marcador', async ({ abrir }) => {
-  const page = await abrir()
-  await expect(page.locator('#marcadores')).toBeHidden()
-  await expect(page.locator('#politica')).toBeHidden()
+test("there are no markers outside a recording", async ({ abrir: open }) => {
+  const page = await open()
+  await expect(page.locator('#markers')).toBeHidden()
+  await expect(page.locator('#policy')).toBeHidden()
 })
 
-test('gravação automática mostra a política do app e deixa mudá-la', async ({ abrir }) => {
-  const page = await abrir('gravando')
-  await expect(page.locator('#gravacao-automatica')).toBeVisible()
-  await expect(page.locator('#politica')).toBeVisible()
-  await expect(page.locator('#politica-titulo')).toHaveText('Reuniões no Teams')
-  await expect(page.locator('#politica .seg-opt')).toHaveText(['Gravar', 'Confirmar', 'Ignorar'])
-  await expect(page.locator('#politica input[value="ask"]')).toBeChecked()
+test("automatic recording shows the app policy and allows changing it", async ({ abrir: open }) => {
+  const page = await open('isRecording')
+  await expect(page.locator('#recording-automatic')).toBeVisible()
+  await expect(page.locator('#policy')).toBeVisible()
+  await expect(page.locator('#policy-title')).toHaveText('Reuniões no Teams')
+  await expect(page.locator('#policy .seg-opt')).toHaveText(['Gravar', 'Confirmar', 'Ignorar'])
+  await expect(page.locator('#policy input[value="ask"]')).toBeChecked()
 
-  await page.locator('#politica .seg-opt', { hasText: 'Gravar' }).click()
-  await expect(page.locator('#politica input[value="auto"]')).toBeChecked()
-  const salvas = (await chamadas(page)).filter((c) => c.comando === 'save_settings')
-  expect(salvas).toHaveLength(1)
-  const input = (salvas[0].args as { input: { policies: Record<string, string>; web_url: string } }).input
+  await page.locator('#policy .seg-opt', { hasText: 'Gravar' }).click()
+  await expect(page.locator('#policy input[value="auto"]')).toBeChecked()
+  const saved = (await calls(page)).filter((c) => c.comando === 'save_settings')
+  expect(saved).toHaveLength(1)
+  const input = (saved[0].args as { input: { policies: Record<string, string>; web_url: string } }).input
   expect(input.policies.teams).toBe('auto')
   expect(input.policies.zoom).toBe('ask')
   expect(input.web_url).toBe('https://192.168.15.199:8443')

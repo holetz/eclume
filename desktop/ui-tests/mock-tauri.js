@@ -1,21 +1,21 @@
-// Tauri simulado para os testes de navegador da UI do desktop. Define `window.__TAURI__` (o que o
-// `withGlobalTauri` expõe) com `core.invoke` e `event.listen`, e `window.__mock` para os testes:
-// `cenario(nome)` troca o estado, `emitir(evento, payload)` dispara um evento do Rust e
-// `chamadas` registra cada comando recebido. O cenário inicial vem de `window.__MOCK_CENARIO`.
+// Mock Tauri for desktop UI browser tests. Define `window.__TAURI__` (as exposed by
+// `withGlobalTauri`) with `core.invoke` and `event.listen`, and `window.__mock` for tests:
+// `scenario(name)` changes state, `emit(event, payload)` fires a Rust event, and
+// `chamadas` records commands for frozen fixtures; `window.__MOCK_CENARIO` sets the initial scenario.
 (() => {
-  const agora = Date.now();
+  const now = Date.now();
   const MIN = 60_000;
-  const hoje = (h, m) => {
-    const d = new Date(agora);
+  const today = (h, m) => {
+    const d = new Date(now);
     d.setHours(h, m, 0, 0);
     return d.getTime();
   };
 
-  function gravacao(id, extra) {
+  function recording(id, extra) {
     return {
       id,
       path: `/dados/gravacoes/${id}.ogg`,
-      started_at: hoje(9, 0),
+      started_at: today(9, 0),
       ended_at: null,
       duration_ms: 54 * MIN,
       bytes: 750_000,
@@ -27,7 +27,7 @@
       upload_id: null,
       sha256: null,
       next_attempt_at: null,
-      synced_at: agora,
+      synced_at: now,
       purged_at: null,
       meeting_app: null,
       title: null,
@@ -36,15 +36,15 @@
     };
   }
 
-  /** Uma linha do painel Recentes, como o comando `recent` do Rust a devolve. */
-  function recente(key, extra) {
+  /** A Recent panel row, as returned by the Rust `recent` command. */
+  function recentItem(key, extra) {
     return {
       key,
       remote_id: key.startsWith("local:") ? null : key,
       local_id: key.startsWith("local:") ? key.slice(6) : null,
       title: "",
       started_at: null,
-      created_at: new Date(hoje(8, 0)).toISOString(),
+      created_at: new Date(today(8, 0)).toISOString(),
       duration_ms: null,
       phase: "summary_ready",
       stage: null,
@@ -58,7 +58,7 @@
   }
 
   const CA = "98e209f5457514b7b12ec349d22b3b0d93c03c3f10e52350ea5f9e0b3d97792f";
-  const CONTA = { email: "ana@exemplo.com.br", token_id: "t-1", server_name: "eclume" };
+  const ACCOUNT = { email: "ana@exemplo.com.br", token_id: "t-1", server_name: "eclume" };
 
   function base() {
     return {
@@ -82,12 +82,12 @@
         queue_waits: {},
         updated: null,
         connection: "account",
-        account: CONTA,
+        account: ACCOUNT,
       },
       recordings: [
-        gravacao("a", { started_at: hoje(9, 0), duration_ms: 54 * MIN }),
-        gravacao("b", { started_at: hoje(8, 18), duration_ms: 1 * MIN }),
-        gravacao("c", { started_at: hoje(8, 18) - 24 * 60 * MIN + 8 * 60 * MIN, duration_ms: 22 * MIN }),
+        recording("a", { started_at: today(9, 0), duration_ms: 54 * MIN }),
+        recording("b", { started_at: today(8, 18), duration_ms: 1 * MIN }),
+        recording("c", { started_at: today(8, 18) - 24 * 60 * MIN + 8 * 60 * MIN, duration_ms: 22 * MIN }),
       ],
       settings: {
         web_url: "https://192.168.15.199:8443",
@@ -107,7 +107,7 @@
         retention_days: 7,
         pat_source: "keyring",
         connection: "account",
-        account: CONTA,
+        account: ACCOUNT,
         shortcuts: [
           ["record", "Iniciar ou parar a gravação", "Ctrl+Alt+R"],
           ["note", "Nova nota", "Ctrl+Alt+N"],
@@ -128,25 +128,25 @@
         note_silence_s: 4,
       },
       mirror: { running: false, last_sync_ms: null, last_error: null, last: null },
-      recentes: { items: [], fetched_at: agora, error: null },
-      /** O Markdown do resumo atual de cada gravação, para o `copy_summary`. */
-      resumos: {},
-      areaDeTransferencia: null,
-      gravacaoAberta: null,
-      microfones: { default: "Microfone embutido", names: ["Microfone embutido", "Jabra Evolve2 65"] },
-      saidas: {
+      recent: { items: [], fetched_at: now, error: null },
+      /** The current summary Markdown for each recording, for `copy_summary`. */
+      summaries: {},
+      clipboard: null,
+      openedRecording: null,
+      microphones: { default: "Microfone embutido", names: ["Microfone embutido", "Jabra Evolve2 65"] },
+      outputs: {
         default: "alsa_output.pci-0000_00_1f.3.analog-stereo",
         devices: [
           { id: "alsa_output.pci-0000_00_1f.3.analog-stereo", name: "Alto-falantes embutidos" },
           { id: "bluez_output.jabra", name: "Jabra Evolve2 65" },
         ],
       },
-      testeDeNivel: 0,
-      marcadores: [],
-      armazenamento: { dir: "/home/ana/.local/share/eclume/gravacoes", recordings: 3, bytes: 41_200_000 },
-      importacao: {
-        escolhido: "/home/ana/kickoff-guion.m4a",
-        arquivos: {
+      levelTest: 0,
+      markers: [],
+      storage: { dir: "/home/ana/.local/share/eclume/gravacoes", recordings: 3, bytes: 41_200_000 },
+      importing: {
+        chosen: "/home/ana/kickoff-guion.m4a",
+        files: {
           "/home/ana/kickoff-guion.m4a": {
             name: "kickoff-guion.m4a",
             duration_ms: 47 * MIN + 12_000,
@@ -168,89 +168,89 @@
             duration_ms: 60_000,
             has_audio: false,
             decodable: false,
-            recorded_at: agora,
+            recorded_at: now,
             date_origin: "file_mtime",
           },
         },
-        pedido: null,
-        falha: null,
-        segurar: false,
-        cancelada: false,
+        request: null,
+        failure: null,
+        hold: false,
+        cancelled: false,
       },
-      medidor: {
+      meter: {
         position_ms: 42_000,
         levels: [0.3, 0.55, 0.8, 0.65, 0.9, 0.45, 0.7, 0.35, 0.2, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05],
         stops_in_ms: 2_400,
       },
-      versao: "0.2.0",
-      servidores: [
+      version: "0.2.0",
+      servers: [
         { name: "192.168.15.199", url: "https://192.168.15.199:8443", ca_sha256: CA, origin: "installer" },
         { name: "Escritório", url: "https://10.0.0.2", ca_sha256: CA, origin: "network" },
       ],
-      preparado: null,
-      testeDeConexao: { email: CONTA.email, last_upload_at: new Date(2026, 8, 27, 10, 38).getTime() },
+      prepared: null,
+      connectionTest: { email: ACCOUNT.email, last_upload_at: new Date(2026, 8, 27, 10, 38).getTime() },
     };
   }
 
-  /** Sem credencial: a janela abre na primeira execução. */
-  function semConta(e) {
-    for (const alvo of [e.status, e.settings]) Object.assign(alvo, { connection: "first_run", account: null });
+  /** No credential: the window opens on first run. */
+  function noAccount(e) {
+    for (const target of [e.status, e.settings]) Object.assign(target, { connection: "first_run", account: null });
     e.settings.pat_source = null;
   }
 
-  const cenarios = {
-    ocioso() {},
-    gravando(e) {
+  const scenarios = {
+    idle() {},
+    isRecording(e) {
       Object.assign(e.status, {
         status: "recording",
         recording_id: "r1",
-        recording_started_at: agora - (12 * MIN + 4_000),
+        recording_started_at: now - (12 * MIN + 4_000),
         recording_auto: true,
         recording_app: { app: "teams", label: "Microsoft Teams" },
         meeting: { app: "teams", label: "Microsoft Teams" },
       });
-      e.recordings.unshift(gravacao("r1", { status: "recording", started_at: agora - 12 * MIN, duration_ms: null }));
+      e.recordings.unshift(recording("r1", { status: "recording", started_at: now - 12 * MIN, duration_ms: null }));
     },
-    nota(e) {
+    note(e) {
       Object.assign(e.status, {
         status: "recording",
         recording_id: "n1",
-        recording_started_at: agora - 42_000,
+        recording_started_at: now - 42_000,
         recording_kind: "note",
       });
-      e.recordings.unshift(gravacao("n1", { status: "recording", kind: "note", started_at: agora - 42_000, duration_ms: null }));
+      e.recordings.unshift(recording("n1", { status: "recording", kind: "note", started_at: now - 42_000, duration_ms: null }));
     },
-    marcadores(e) {
-      cenarios.gravando(e);
+    markers(e) {
+      scenarios.isRecording(e);
       e.status.recording_auto = false;
       e.status.recording_app = null;
-      e.marcadores = [
-        { client_id: "m1", recording_id: "r1", at_ms: 125_000, note: "decisão do orçamento", created_at: agora - 60_000 },
+      e.markers = [
+        { client_id: "m1", recording_id: "r1", at_ms: 125_000, note: "decisão do orçamento", created_at: now - 60_000 },
       ];
-      sincronizarMarcadores(e);
+      syncMarkers(e);
     },
-    pergunta(e) {
+    prompt(e) {
       e.status.meeting = { app: "zoom", label: "Zoom" };
       e.status.pending_ask = { app: "zoom", label: "Zoom" };
     },
-    fila(e) {
+    queue(e) {
       e.status.counts = { recording: 0, pending: 1, syncing: 1, synced: 1, failed: 1 };
       e.recordings = [
-        gravacao("s", { status: "syncing", started_at: hoje(9, 0) }),
-        gravacao("n", { status: "synced", started_at: hoje(8, 18), duration_ms: 1 * MIN, kind: "note" }),
-        gravacao("f", { status: "failed", last_error: "HTTP 413: arquivo grande demais" }),
-        gravacao("i", { status: "pending", original_name: "kickoff-guion", duration_ms: 47 * MIN }),
+        recording("s", { status: "syncing", started_at: today(9, 0) }),
+        recording("n", { status: "synced", started_at: today(8, 18), duration_ms: 1 * MIN, kind: "note" }),
+        recording("f", { status: "failed", last_error: "HTTP 413: arquivo grande demais" }),
+        recording("i", { status: "pending", original_name: "kickoff-guion", duration_ms: 47 * MIN }),
       ];
     },
-    titulos(e) {
+    titles(e) {
       e.recordings[0].server_title = "Alinhamento semanal";
       e.recordings[1].title = "Ideia do orçamento";
       e.recordings[1].server_title = "Nota de voz";
     },
-    espera(e) {
-      const processador = { online: true, offline_since: null };
+    wait(e) {
+      const processor = { online: true, offline_since: null };
       e.status.queue_waits = {
-        "srv-a": { reason: "account_turn", ahead: null, account_ahead: 2, estimated_start_at: null, resumes_at: null, processor: processador },
+        "srv-a": { reason: "account_turn", ahead: null, account_ahead: 2, estimated_start_at: null, resumes_at: null, processor: processor },
         "srv-b": {
           reason: "processor_queue",
           ahead: 0,
@@ -261,18 +261,18 @@
         },
       };
     },
-    recentes(e) {
-      e.recentes.items = [
-        recente("local:g1", { phase: "recording", started_at: hoje(10, 5), created_at: null }),
-        recente("local:f1", {
+    recent(e) {
+      e.recent.items = [
+        recentItem("local:g1", { phase: "recording", started_at: today(10, 5), created_at: null }),
+        recentItem("local:f1", {
           phase: "upload_failed",
           attention: "upload_failed",
           title: "Kickoff Guion",
           detail: "HTTP 413: arquivo grande demais",
         }),
-        recente("srv-t", { phase: "transcribing", title: "Alinhamento semanal", stage: "asr", progress: 420 }),
-        recente("srv-r", { phase: "summary_ready", title: "Comitê de crédito" }),
-        recente("srv-l", {
+        recentItem("srv-t", { phase: "transcribing", title: "Alinhamento semanal", stage: "asr", progress: 420 }),
+        recentItem("srv-r", { phase: "summary_ready", title: "Comitê de crédito" }),
+        recentItem("srv-l", {
           phase: "unknown",
           attention: "needs_you",
           title: "Reunião com a diretoria",
@@ -280,16 +280,16 @@
           detail: "waiting",
           reason: "unnamed_speakers",
         }),
-        recente("srv-s", { phase: "summary_failed", attention: "summary_failed", title: "1:1 com a Bia" }),
-        recente("srv-q", {
+        recentItem("srv-s", { phase: "summary_failed", attention: "summary_failed", title: "1:1 com a Bia" }),
+        recentItem("srv-q", {
           phase: "queued",
           title: "Daily do time",
           wait: { reason: "processor_queue", ahead: 1, account_ahead: null, estimated_start_at: null, resumes_at: null, processor: null },
         }),
       ];
-      e.resumos = { "srv-r": "# Comitê de crédito\n\n- Aprovado o limite da cooperativa" };
+      e.summaries = { "srv-r": "# Comitê de crédito\n\n- Aprovado o limite da cooperativa" };
     },
-    atualizado(e) {
+    updated(e) {
       e.status.updated = { version: "0.2.0", notes: "Nova nota, Importar arquivo e entrar com e-mail e senha" };
     },
     wayland(e) {
@@ -302,56 +302,56 @@
           ["marker", "--marcador"],
         ].map(([action, flag]) => ({ action, command: `/usr/bin/eclume-desktop ${flag}` })),
       };
-      for (const atalho of e.settings.shortcuts) {
-        Object.assign(atalho, { registration: "system", problem: "Crie o atalho no sistema" });
+      for (const shortcut of e.settings.shortcuts) {
+        Object.assign(shortcut, { registration: "system", problem: "Crie o atalho no sistema" });
       }
     },
-    atalhoEmUso(e) {
+    shortcutInUse(e) {
       Object.assign(e.settings.shortcuts[1], { registration: "in_use", problem: "Em uso por outro app" });
       e.settings.mic = "Headset antigo";
     },
-    vazio(e) {
+    empty(e) {
       e.recordings = [];
       e.status.counts = { recording: 0, pending: 0, syncing: 0, synced: 0, failed: 0 };
       e.settings.detection_enabled = false;
       e.status.sync_notice = "Falha ao sincronizar: o servidor respondeu 503";
     },
     pat(e) {
-      for (const alvo of [e.status, e.settings]) Object.assign(alvo, { connection: "personal_token", account: null });
+      for (const target of [e.status, e.settings]) Object.assign(target, { connection: "personal_token", account: null });
     },
-    primeiraExecucao: semConta,
-    semServidor(e) {
-      semConta(e);
-      e.servidores = [];
+    firstRun: noAccount,
+    noServer(e) {
+      noAccount(e);
+      e.servers = [];
     },
-    caMudou(e) {
-      semConta(e);
+    caChanged(e) {
+      noAccount(e);
       e.status.sync_notice = "O certificado do servidor mudou";
     },
   };
 
-  function sincronizarMarcadores(e) {
-    e.status.marker_count = e.marcadores.length;
-    e.status.last_marker = e.marcadores.at(-1) ?? null;
+  function syncMarkers(e) {
+    e.status.marker_count = e.markers.length;
+    e.status.last_marker = e.markers.at(-1) ?? null;
   }
 
-  const ouvintes = new Map();
+  const listeners = new Map();
   const mock = {
-    estado: base(),
+    state: base(),
     chamadas: [],
-    cenario(nome) {
-      const aplicar = cenarios[nome];
-      if (!aplicar) throw new Error(`cenário desconhecido: ${nome}`);
-      mock.estado = base();
-      aplicar(mock.estado);
-      mock.emitir("status-changed");
+    scenario(name) {
+      const apply = scenarios[name];
+      if (!apply) throw new Error(`cenário desconhecido: ${name}`);
+      mock.state = base();
+      apply(mock.state);
+      mock.emit("status-changed");
     },
-    emitir(evento, payload) {
-      for (const handler of ouvintes.get(evento) ?? []) handler({ event: evento, payload });
+    emit(event, payload) {
+      for (const handler of listeners.get(event) ?? []) handler({ event: event, payload });
     },
   };
 
-  const comandos = {
+  const commands = {
     status: (e) => e.status,
     recordings: (e) => e.recordings,
     settings: (e) => e.settings,
@@ -378,46 +378,46 @@
       }
       return null;
     },
-    pick_import_file: (e) => e.importacao.escolhido,
+    pick_import_file: (e) => e.importing.chosen,
     probe_import(e, { path }) {
-      const lido = e.importacao.arquivos[path];
-      if (!lido) throw `arquivo ilegível: ${path}`;
-      return { path, ...lido };
+      const probed = e.importing.files[path];
+      if (!probed) throw `arquivo ilegível: ${path}`;
+      return { path, ...probed };
     },
     import_file(e, args) {
-      e.importacao.pedido = args;
-      if (e.importacao.falha) {
-        setTimeout(() => mock.emitir("import-failed", e.importacao.falha), 20);
+      e.importing.request = args;
+      if (e.importing.failure) {
+        setTimeout(() => mock.emit("import-failed", e.importing.failure), 20);
         return null;
       }
-      setTimeout(() => mock.emitir("import-progress", 0.5), 10);
-      if (!e.importacao.segurar) setTimeout(() => mock.emitir("import-finished", "imp-1"), 30);
+      setTimeout(() => mock.emit("import-progress", 0.5), 10);
+      if (!e.importing.hold) setTimeout(() => mock.emit("import-finished", "imp-1"), 30);
       return null;
     },
     cancel_import(e) {
-      e.importacao.cancelada = true;
+      e.importing.cancelled = true;
       return null;
     },
-    note_meter: (e) => (e.status.recording_kind === "note" ? e.medidor : null),
+    note_meter: (e) => (e.status.recording_kind === "note" ? e.meter : null),
     add_marker(e, { note }) {
       if (e.status.status !== "recording") throw "nenhuma gravação em andamento";
-      const marcador = {
-        client_id: `m${e.marcadores.length + 1}`,
+      const marker = {
+        client_id: `m${e.markers.length + 1}`,
         recording_id: e.status.recording_id,
-        at_ms: 60_000 * (e.marcadores.length + 1),
+        at_ms: 60_000 * (e.markers.length + 1),
         note: note ?? null,
         created_at: Date.now(),
       };
-      e.marcadores.push(marcador);
-      sincronizarMarcadores(e);
-      return marcador;
+      e.markers.push(marker);
+      syncMarkers(e);
+      return marker;
     },
     set_marker_note(e, { clientId, note }) {
-      const marcador = e.marcadores.find((m) => m.client_id === clientId);
-      if (!marcador) throw "marcador não encontrado";
-      marcador.note = note;
-      sincronizarMarcadores(e);
-      return marcador;
+      const marker = e.markers.find((m) => m.client_id === clientId);
+      if (!marker) throw "marcador não encontrado";
+      marker.note = note;
+      syncMarkers(e);
+      return marker;
     },
     save_settings(e, { input }) {
       if (!/^https?:\/\/\S+$/.test(input.web_url)) throw "endereço inválido: use http:// ou https:// seguido do host";
@@ -429,7 +429,7 @@
       const mirrorDir = input.mirror_dir === undefined ? e.settings.mirror_dir : input.mirror_dir || null;
       const mirrorEnabled = input.mirror_enabled ?? e.settings.mirror_enabled;
       if (mirrorEnabled && !mirrorDir) throw "Escolha a pasta dos resumos para ligar a sincronização";
-      e.ultimaEntrada = input;
+      e.lastInput = input;
       e.settings = {
         ...e.settings,
         web_url: input.web_url,
@@ -459,9 +459,9 @@
       return e.settings;
     },
     system_shortcuts(e, { install }) {
-      for (const atalho of e.settings.shortcuts) {
+      for (const shortcut of e.settings.shortcuts) {
         Object.assign(
-          atalho,
+          shortcut,
           install
             ? { registration: "registered", problem: null }
             : { registration: "system", problem: "Crie o atalho no sistema" },
@@ -469,70 +469,70 @@
       }
       return e.settings;
     },
-    storage_info: (e) => e.armazenamento,
+    storage_info: (e) => e.storage,
     open_help: () => null,
     dismiss_update_notice(e) {
       e.status.updated = null;
       return null;
     },
     open_log_dir: () => null,
-    list_input_devices: (e) => e.microfones,
-    list_output_devices: (e) => e.saidas,
+    list_input_devices: (e) => e.microphones,
+    list_output_devices: (e) => e.outputs,
     source_test(e) {
-      e.testeDeNivel = 10;
+      e.levelTest = 10;
       return null;
     },
     source_test_stop(e) {
-      e.testeDeNivel = 0;
+      e.levelTest = 0;
       return null;
     },
     source_test_meter(e) {
-      if (e.testeDeNivel <= 0) return null;
-      e.testeDeNivel -= 1;
+      if (e.levelTest <= 0) return null;
+      e.levelTest -= 1;
       return [0.3, 0.6, 0.9, 0.7, 0.5, 0.3, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05];
     },
     open_data_dir: () => null,
     sync_now: () => null,
-    discover_servers: (e) => e.servidores,
+    discover_servers: (e) => e.servers,
     prepare_server(e, { url, caSha256 }) {
       if (url.includes("fora")) throw `não foi possível falar com o servidor em ${url}`;
       if (caSha256 && caSha256 !== CA) throw "a CA não confere com a impressão digital esperada";
-      e.preparado = {
+      e.prepared = {
         name: "eclume",
         url,
         ca_sha256: caSha256 ?? "3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d",
-        // Como no Rust: só o endereço e a impressão digital do instalador dispensam a conferência.
-        trusted_by: e.servidores.some((s) => s.origin === "installer" && s.url === url && s.ca_sha256 === caSha256)
+        // As in Rust: only the installer address and fingerprint skip the manual check.
+        trusted_by: e.servers.some((s) => s.origin === "installer" && s.url === url && s.ca_sha256 === caSha256)
           ? "fingerprint"
           : "first_use",
         confirmed: false,
       };
-      return e.preparado;
+      return e.prepared;
     },
     confirm_server(e, { url }) {
-      if (e.preparado?.url !== url) throw "O servidor escolhido mudou; confira a impressão digital de novo";
-      e.preparado.confirmed = true;
+      if (e.prepared?.url !== url) throw "O servidor escolhido mudou; confira a impressão digital de novo";
+      e.prepared.confirmed = true;
       return null;
     },
     sign_in(e, { email, password }) {
-      if (!e.preparado) throw "Escolha o servidor antes de entrar";
-      if (e.preparado.trusted_by === "first_use" && !e.preparado.confirmed) throw "Confira a impressão digital do servidor antes de entrar";
+      if (!e.prepared) throw "Escolha o servidor antes de entrar";
+      if (e.prepared.trusted_by === "first_use" && !e.prepared.confirmed) throw "Confira a impressão digital do servidor antes de entrar";
       if (password === "errada") throw "E-mail ou senha incorretos";
-      entrar(e, email);
+      enter(e, email);
       return null;
     },
     pair(e, { code }) {
-      if (!e.preparado) throw "Escolha o servidor antes de entrar";
-      if (e.preparado.trusted_by === "first_use" && !e.preparado.confirmed) throw "Confira a impressão digital do servidor antes de entrar";
+      if (!e.prepared) throw "Escolha o servidor antes de entrar";
+      if (e.prepared.trusted_by === "first_use" && !e.prepared.confirmed) throw "Confira a impressão digital do servidor antes de entrar";
       if (code.replace("-", "").toUpperCase() !== "K7Q4MX") throw "Código inválido ou vencido";
-      entrar(e, CONTA.email);
+      enter(e, ACCOUNT.email);
       return null;
     },
     sign_out(e) {
-      semConta(e);
+      noAccount(e);
       return null;
     },
-    test_connection: (e) => e.testeDeConexao,
+    test_connection: (e) => e.connectionTest,
     account_language: () => "pt",
     open_signup: () => null,
     pick_ca_file: () => "/home/ana/caddy-root.pem",
@@ -540,18 +540,18 @@
     mirror_status: (e) => e.mirror,
     recent(e) {
       const count = e.settings.recent_count;
-      const items = e.recentes.items.slice(0, count);
-      return { count, items, needs_you: items.filter((i) => i.attention).length, fetched_at: e.recentes.fetched_at, error: e.recentes.error };
+      const items = e.recent.items.slice(0, count);
+      return { count, items, needs_you: items.filter((i) => i.attention).length, fetched_at: e.recent.fetched_at, error: e.recent.error };
     },
     recent_refresh: () => null,
     copy_summary(e, { recordingId }) {
-      const markdown = e.resumos[recordingId];
+      const markdown = e.summaries[recordingId];
       if (!markdown) throw "O resumo ainda não está pronto";
-      e.areaDeTransferencia = markdown;
+      e.clipboard = markdown;
       return null;
     },
     open_recording(e, { recordingId }) {
-      e.gravacaoAberta = recordingId;
+      e.openedRecording = recordingId;
       return null;
     },
     mirror_sync_now(e) {
@@ -560,10 +560,10 @@
     },
   };
 
-  function entrar(e, email) {
-    const conta = { ...CONTA, email };
-    for (const alvo of [e.status, e.settings]) {
-      Object.assign(alvo, { connection: "account", account: conta, web_url: e.preparado.url });
+  function enter(e, email) {
+    const account = { ...ACCOUNT, email };
+    for (const target of [e.status, e.settings]) {
+      Object.assign(target, { connection: "account", account: account, web_url: e.prepared.url });
     }
     e.settings.pat_source = "keyring";
     e.status.sync_notice = null;
@@ -572,27 +572,27 @@
   window.__mock = mock;
   window.__TAURI__ = {
     core: {
-      async invoke(comando, args) {
-        mock.chamadas.push({ comando, args: args ?? null });
-        const handler = comandos[comando];
-        if (!handler) throw `comando sem mock: ${comando}`;
-        return structuredClone(handler(mock.estado, args ?? {}));
+      async invoke(command, args) {
+        mock.chamadas.push({ comando: command, args: args ?? null });
+        const handler = commands[command];
+        if (!handler) throw `comando sem mock: ${command}`;
+        return structuredClone(handler(mock.state, args ?? {}));
       },
     },
     app: {
       async getVersion() {
-        return mock.estado.versao;
+        return mock.state.version;
       },
     },
     event: {
-      async listen(evento, handler) {
-        if (!ouvintes.has(evento)) ouvintes.set(evento, new Set());
-        ouvintes.get(evento).add(handler);
-        return () => ouvintes.get(evento).delete(handler);
+      async listen(event, handler) {
+        if (!listeners.has(event)) listeners.set(event, new Set());
+        listeners.get(event).add(handler);
+        return () => listeners.get(event).delete(handler);
       },
     },
   };
 
-  const inicial = cenarios[window.__MOCK_CENARIO] ? window.__MOCK_CENARIO : "ocioso";
-  cenarios[inicial](mock.estado);
+  const initial = scenarios[window.__MOCK_CENARIO] ? window.__MOCK_CENARIO : "ocioso";
+  scenarios[initial](mock.state);
 })();

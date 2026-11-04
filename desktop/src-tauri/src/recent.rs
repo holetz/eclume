@@ -669,7 +669,7 @@ fn stage_progress(stage: &str) -> &'static str {
     }
 }
 
-/// A row’s state as text, with the labels `recentes.js` takes from the vocabulary: the
+/// A row’s state as text, with the labels `recent.js` takes from the vocabulary: the
 /// native menu does not go through the window.
 pub fn state_label(item: &RecentItem) -> &'static str {
     match item.phase {
