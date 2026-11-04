@@ -4,10 +4,10 @@ title: Web app structure
 description: The eclume web app (web/) talks to the API through a client generated from the contract, on the same origin and with a cookie session and double-submit CSRF; the admin panel is a separate app, with its own login, session and frame; it is organized into a shell with grouped navigation, the Ask item highlighted at the top and a help drawer, features (library timeline with the Import modal, recording centered on the summary, people, search, collections, organize, rules with the view of automatic processing, grouped my settings, help center, admin) and an upload engine without React; and it is tested with vitest over the contract fixtures and with a Playwright E2E against the Prism mock.
 resource: web/src/**, web/e2e/**, web/playwright.config.ts, web/vite.config.ts, web/package.json
 tags: [code, web, react, api, upload, testes]
-timestamp: 2026-10-06
+timestamp: 2026-11-04
 audience: both
 authority: current
-source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#127, holetz/eclume#144, holetz/eclume#143, holetz/eclume#142, holetz/eclume#145, holetz/eclume#153
+source: holetz/eclume#10, holetz/eclume#12, holetz/eclume#15, holetz/eclume#26, holetz/eclume#32, holetz/eclume#36, holetz/eclume#37, holetz/eclume#38, holetz/eclume#39, holetz/eclume#72, holetz/eclume#75, holetz/eclume#76, holetz/eclume#77, holetz/eclume#78, holetz/eclume#79, holetz/eclume#86, holetz/eclume#110, holetz/eclume#111, holetz/eclume#112, holetz/eclume#113, holetz/eclume#100, holetz/eclume#114, holetz/eclume#99, holetz/eclume#98, holetz/eclume#117, holetz/eclume#118, holetz/eclume#119, holetz/eclume#116, holetz/eclume#115, holetz/eclume#120, holetz/eclume#121, holetz/eclume#127, holetz/eclume#144, holetz/eclume#143, holetz/eclume#142, holetz/eclume#145, holetz/eclume#153, holetz/eclume#249
 maintainer: holetz
 ---
 
@@ -90,6 +90,7 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); media conversion comes from the li
 |---|---|
 | `src/api/` | generated client, `client.ts`, `problem.ts` |
 | `src/app/` | shell, brand (`Brand.tsx`), navigation (`nav.ts`), routes (`routes.tsx`), `PageHead`, 404, help drawer, session, providers, theme, and the DS pieces `Dialog`, `ConfirmDialog`, `MenuButton`, `CopyValue`, `HelpHint` and `storage.ts` |
+| `src/i18n/` | i18next setup (`index.ts`, `setLocale`, `activeLocale`), `LocaleSync`, and the typed catalogs `en/<ns>.ts` and `pt-BR/<ns>.ts`: [i18n.md](i18n.md#the-web-app) |
 | `src/features/<área>/` | page, components, CSS Module and tests of each area |
 | `src/upload/` | multipart upload engine, without React |
 | `src/styles/` | `global.css` (entry), `fonts.css`, `eclume.css` (faithful copy of the DS) and `app.css` (product): [web-design-system.md](web-design-system.md) |
@@ -104,6 +105,12 @@ v1 ([contrato-v1.md](../api/contrato-v1.md)); media conversion comes from the li
   an owner lives in its owner (`PersonCombobox`, with its CSS, in `features/people/`); importing another
   feature's `queries.ts` is still allowed as long as it does not close a cycle. No barrel: whoever
   uses it imports from the file that defines it.
+- **UI text goes through `t()`.** A new visible string (JSX text, `aria-label`, `title`,
+  `placeholder`, a `label` or `hint` prop) is a key in the area's namespace, written in both
+  `en/<ns>.ts` and `pt-BR/<ns>.ts`, read with `useTranslation('<ns>')` in a component or `i18n.t` in
+  a module. Dates and numbers use `Intl` with `activeLocale()`. An area in `COVERED` of
+  `src/test/literalStrings.test.ts` fails the suite on a literal; the rules are in
+  [i18n.md](i18n.md#the-web-app).
 
 - **Routes in pt-BR** (`/entrar`, `/cadastro`, `/redefinir-senha`, `/parear`, `/gravacoes/:id`, `/pessoas`,
   `/pessoas/:id`, `/busca`, `/agente`, `/agente/:sessionId`, `/agente/conversas`, `/agente/habilidades`, `/colecoes`, `/config/campos`, `/config/agendas`, `/config/mcp`,
