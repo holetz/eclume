@@ -1,7 +1,9 @@
 // Labels and formats with no domain owner, used by more than one feature: recording state and step,
-// dates, times, durations, sizes and the audio clock, in the active locale (the `shared` catalog and
-// `Intl`). The tones still come from lib/vocabulario.js, whose pt-BR labels are the desktop's and the
-// phone's. Unknown enum values (the contract only grows) show up raw, without breaking the screen.
+// the pipeline vocabulary (step names and states, skip reasons, device states, the queue wait), dates,
+// times, durations, sizes and the audio clock, in the active locale (the `shared` catalog and `Intl`).
+// The tones still come from lib/vocabulario.js, whose pt-BR labels are the desktop's and the phone's
+// (vocabulary.test.ts keeps the pt-BR catalog equal to them). Unknown enum values (the contract only
+// grows) show up raw, without breaking the screen.
 import type { Schemas } from '../api/client'
 import { activeLocale, i18n } from '../i18n'
 import { ESTADOS_SERVIDOR, type Tom } from '../lib/vocabulario.js'
@@ -14,6 +16,47 @@ type Tone = Tom
 type Step = Schemas['PipelineStep']['step']
 
 const BUSY_STEPS = ['received', 'preprocessing', 'transcription', 'speakers', 'agenda_type', 'fields', 'summary'] as const
+
+/** The step's name ("Transcription"), or the raw step for an unknown one. */
+export function stepName(step: string): string {
+  return (BUSY_STEPS as readonly string[]).includes(step)
+    ? i18n.t(`shared:step.${step as (typeof BUSY_STEPS)[number]}`)
+    : step
+}
+
+export type StepState = 'pending' | 'active' | 'done' | 'skipped' | 'failed' | 'waiting'
+
+/** The step's state as a word ("skipped"), to be read without the bar's color. */
+export function stepStateLabel(state: StepState): string {
+  return i18n.t(`shared:stepState.${state}`)
+}
+
+const REASONS = [
+  'no_provider',
+  'no_auto_fields',
+  'no_types',
+  'set_by_user',
+  'no_agenda_type',
+  'before_pipeline',
+  'worker_without_preprocess',
+  'summary_deleted',
+  'cancelled',
+  'unnamed_speakers',
+  'continued_by_user',
+  'naming_not_required',
+] as const
+
+/** The text of a skipped or waiting step's `reason`, or the code itself when it has no text yet. */
+export function reasonText(code: string): string {
+  return (REASONS as readonly string[]).includes(code) ? i18n.t(`shared:reason.${code as (typeof REASONS)[number]}`) : code
+}
+
+export type DeviceState = 'recording' | 'pending' | 'uploading' | 'uploaded' | 'interrupted' | 'failed'
+
+/** The recording on the device, before and during upload ("Uploading"). */
+export function deviceStateLabel(state: DeviceState): string {
+  return i18n.t(`shared:device.${state}`)
+}
 
 /** The step in progress as a word ("Transcribing"), or the raw step for an unknown one. */
 function stepBusy(step: string): string {
@@ -136,7 +179,19 @@ export function shortRef(id: string): string {
   return id.replace(/[^0-9a-zA-Z]/g, '').slice(0, 8)
 }
 
-/** The library's pt-BR month names, for its pt-BR period phrases (translated with the library, #250). */
+/** "novembro", "November": the month's long name in the active locale. */
+export function monthName(day: Date): string {
+  return dateFormat('monthLong', { month: 'long' }).format(day)
+}
+
+/** "3 de novembro", "November 3"; with `withYear`, "3 de novembro de 2026", "November 3, 2026". */
+export function dayMonth(day: Date, withYear = false): string {
+  return withYear
+    ? dateFormat('dayMonthYear', { day: 'numeric', month: 'long', year: 'numeric' }).format(day)
+    : dateFormat('dayMonth', { day: 'numeric', month: 'long' }).format(day)
+}
+
+/** The library's pt-BR month names, until its period phrases move to `monthName` and `dayMonth` (task 2.1). */
 export const MONTHS = [
   'janeiro',
   'fevereiro',
@@ -185,4 +240,60 @@ export function formatClock(ms: number, withHours = false): string {
   const seconds = total % 60
   const mmss = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
   return withHours || hours > 0 ? `${hours}:${mmss}` : mmss
+}
+
+interface QueueWait {
+  reason: string
+  ahead?: number | null
+  account_ahead?: number | null
+  estimated_start_at?: string | null
+  resumes_at?: string | null
+  processor?: { online: boolean; offline_since?: string | null }
+}
+
+/** An instant's time: "14:02" on the same day, "02/10 às 14:02" on another. */
+function instantLabel(iso: string, now: Date): string {
+  const date = new Date(iso)
+  const time = timeLabel(date)
+  if (date.toDateString() === now.toDateString()) return time
+  const day = dateFormat('dayMonthNumeric', { day: '2-digit', month: '2-digit' }).format(date)
+  return i18n.t('shared:queue.dayTime', { date: day, time })
+}
+
+/** How long until an instant, in words: "menos de 1 min", "cerca de 12 min", "cerca de 1 h 20 min". */
+function etaLabel(iso: string, now: Date): string {
+  const minutes = Math.round((new Date(iso).getTime() - now.getTime()) / 60000)
+  if (minutes < 1) return i18n.t('shared:queue.lessThanMinute')
+  if (minutes < 60) return i18n.t('shared:queue.minutes', { minutes })
+  const rest = minutes % 60
+  const hours = Math.floor(minutes / 60)
+  return rest ? i18n.t('shared:queue.hoursMinutes', { hours, minutes: rest }) : i18n.t('shared:queue.hours', { hours })
+}
+
+/**
+ * The wait of a recording in the transcription queue (`Job.queue`), the same rule as the desktop's
+ * and the phone's (`fraseDaEspera` in lib/vocabulario.js); `null` with no wait. The start forecast is
+ * always labeled as an estimate.
+ */
+export function waitingPhrase(queue: QueueWait | null | undefined, now = new Date()): string | null {
+  if (!queue) return null
+  const processor = queue.processor
+  if (processor && !processor.online) {
+    return processor.offline_since
+      ? i18n.t('shared:queue.offlineSince', { time: instantLabel(processor.offline_since, now) })
+      : i18n.t('shared:queue.offline')
+  }
+  if (queue.reason === 'account_turn') {
+    const ahead = queue.account_ahead ?? 0
+    return ahead === 0 ? i18n.t('shared:queue.accountNext') : i18n.t('shared:queue.accountAhead', { count: ahead })
+  }
+  if (queue.reason === 'quota_window') {
+    return queue.resumes_at
+      ? i18n.t('shared:queue.quotaAt', { time: instantLabel(queue.resumes_at, now) })
+      : i18n.t('shared:queue.quotaLater')
+  }
+  const parts: string[] = []
+  if (queue.ahead != null) parts.push(i18n.t('shared:queue.position', { position: queue.ahead + 1 }))
+  if (queue.estimated_start_at) parts.push(i18n.t('shared:queue.starts', { eta: etaLabel(queue.estimated_start_at, now) }))
+  return parts.length > 0 ? parts.join(' · ') : i18n.t('shared:queue.waiting')
 }

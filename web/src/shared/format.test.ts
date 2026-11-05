@@ -4,10 +4,12 @@ import { fixtures } from '../test/fixtures'
 import { setLocale } from '../i18n'
 import { languageLabel } from '../lib/languages'
 import {
+  dayMonth,
   formatBytes,
   formatDate,
   formatDuration,
   markersLabel,
+  monthName,
   recordingState,
   shortDayLabel,
   shortRef,
@@ -114,11 +116,17 @@ describe('in the active locale', () => {
   it('formats labels, dates, sizes and language names in English after a switch', async () => {
     const day = new Date(2026, 8, 26, 9, 5)
     expect(weekdayShort(day)).toBe('sáb')
+    expect(monthName(day)).toBe('setembro')
+    expect(dayMonth(day)).toBe('26 de setembro')
+    expect(dayMonth(day, true)).toBe('26 de setembro de 2026')
     expect(markersLabel(2)).toBe('2 marcadores')
     expect(languageLabel('auto')).toBe('Detectar automaticamente')
     await setLocale('en')
     expect(weekdayShort(day)).toBe('Sat')
     expect(shortDayLabel(day)).toBe('Sat 26 Sep')
+    expect(monthName(day)).toBe('September')
+    expect(dayMonth(day)).toBe('September 26')
+    expect(dayMonth(day, true)).toBe('September 26, 2026')
     expect(markersLabel(1)).toBe('1 marker')
     expect(markersLabel(2)).toBe('2 markers')
     expect(formatBytes(11.1 * 1024 * 1024)).toBe('11.1 MB')

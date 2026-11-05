@@ -14,6 +14,7 @@ import {
   WATCH_MS,
   type Ended,
 } from './processingWatch'
+import { setLocale } from '../i18n'
 import { saveNotifyOutcomes } from './preferences'
 import { setTitleCount, usePageTitle } from './usePageTitle'
 
@@ -120,6 +121,16 @@ describe('outcome (the same cases as desktop/crates/sync/src/outcome.rs)', () =>
     expect(text({ outcome: 'awaiting_speakers', reason: 'unnamed_speakers' })).toBe(
       'Precisa de você · Kickoff · nomeie os locutores para seguir com o resumo',
     )
+  })
+
+  it('notice texts in en, the skip reason included', async () => {
+    await setLocale('en')
+    try {
+      const { body } = outcomeText({ recordingId: 'r', title: 'Kickoff', reason: 'no_provider', at: T, outcome: 'no_summary' })
+      expect(body).toBe('Kickoff · no agent configured; ask your administrator')
+    } finally {
+      await setLocale('pt-BR')
+    }
   })
 })
 
