@@ -4,7 +4,7 @@ title: GPU host runbook
 description: "How to prepare the server 192.168.15.199 (Ubuntu 26.04, GTX 1660 Super) to receive the eclume and lumea containers: fixed IP, NVIDIA driver, Docker, NVIDIA Container Toolkit, firewall and docker context."
 resource: deploy/**
 tags: [host, deploy, gpu, runbook]
-timestamp: 2026-10-08
+timestamp: 2026-11-05
 audience: both
 authority: current
 source: holetz/eclume#1, holetz/eclume#28, holetz/eclume#41
@@ -13,8 +13,8 @@ maintainer: holetz
 
 # Preparing the host 192.168.15.199
 
-This is the runbook for **this** host: it gets the institution's server ready to receive the
-eclume and lumea containers. The requirements and steps for any server, with or without a GPU,
+This is the runbook of the **reference deployment**: it gets the maintainer institution's server ready to
+receive the eclume containers and a neighbouring application's. The requirements and steps for any server, with or without a GPU,
 are in [auto-hospedar.md](../how-to/auto-hospedar.md); developing without a GPU and without this host, in
 [desenvolver-sem-gpu.md](../how-to/desenvolver-sem-gpu.md). The server
 runs Ubuntu 26.04 LTS (upgraded from 24.04 on 2026-10-08) with an NVIDIA GTX 1660 Super (6 GB). Steps 1 to 8 run **on the
@@ -24,7 +24,7 @@ Ports:
 
 | Service | Address |
 |---|---|
-| lumea | `https://192.168.15.199` (443) |
+| other application | `https://192.168.15.199` (443) |
 | eclume | `https://192.168.15.199:8443` |
 
 ## Actual state of the host (provisioned on 2026-09-24, spec holetz/eclume#4)
@@ -35,7 +35,7 @@ Ports:
 | GPU | GTX 1660 SUPER 6 GB, driver 595.99.02 (`nvidia-driver-595-open` and `linux-modules-nvidia-595-open-generic`), `nvidia` runtime already configured in Docker |
 | Docker | 29.1.3 from the Ubuntu repository, kept in place of Docker CE (step 3 skipped). `docker.io`, `containerd` and `runc` marked as manual (`apt-mark manual`), and the compose and buildx plugins in `~/.docker/cli-plugins` |
 | Coexistence | The host is the user's home server, with Jellyfin, *arr, qBittorrent, homepage, Sunshine and Samba. Those services are **not touched**. Jellyfin may compete for the GPU. |
-| Firewall | ufw already active, with rules for 443 (lumea) and 8443 (eclume) only for `192.168.15.0/24` |
+| Firewall | ufw already active, with rules for 443 (other application) and 8443 (eclume) only for `192.168.15.0/24` |
 | SSH | the dev machine's `ed25519` key authorized. **Password login was kept** (step 1.4 not applied), so as not to lock the user out of other devices. |
 | Claude | `~/.local/bin/claude` (2.1.282) already logged in |
 | Builds | uv and Rust stable in `~/.local/bin` and `~/.cargo/bin`, with the Tauri build deps installed |
@@ -120,8 +120,8 @@ docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu24.04 nvidia-smi
 ## 5. Data directories
 
 ```bash
-sudo mkdir -p /srv/eclume /srv/lumea
-sudo chown "$USER":"$USER" /srv/eclume /srv/lumea
+sudo mkdir -p /srv/eclume
+sudo chown "$USER":"$USER" /srv/eclume
 df -h /srv   # reserve at least 50 GB for models and audio
 ```
 
@@ -200,7 +200,7 @@ scp holetz@192.168.15.199:/srv/eclume/downloads/eclume-root.crt .
   `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain eclume-root.crt`.
 - **Firefox:** import it in Settings → Certificates, because it uses its own store.
 
-Checking the fingerprint and use by lumea (`LUMEA_ECLUME_CA_BUNDLE`) are in
+Checking the fingerprint and use by API integrations are in
 [deploy-producao.md](deploy-producao.md#root-ca-on-the-clients).
 
 ## Ubuntu version upgrade
@@ -229,12 +229,12 @@ because the package is removed without purge. On the next upgrade:
   `jellyfin`, `: < /dev/nvidia-uvm` gives `Operation not permitted`. The host stays normal and the
   watchdog does not notice, because it tests the host's `nvidia-smi` and the worker's heartbeat. To fix it,
   `docker restart` on both is enough.
-- **Containers without a restart policy** do not come back after a boot. lumea stayed down from
+- **Containers without a restart policy** do not come back after a boot. The neighbouring application stayed down from
   2026-10-02 to 2026-10-08 this way. It was fixed with
   `docker update --restart unless-stopped` on the long-running services, which is what its
-  `docker-compose.remote.yml` declares.
+  compose file declares.
 - **Proof:** eclume's read-only smoke ([deploy-producao.md](deploy-producao.md)) and
-  lumea's `curl -k https://192.168.15.199/api/health` (200).
+  the neighbouring application's own health check (200).
 
 ## Quality gate (`~/eclume-gate`)
 

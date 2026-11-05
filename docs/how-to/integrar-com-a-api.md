@@ -56,7 +56,7 @@ scope on its own:
 | Excluir gravações | `recordings:delete` |
 
 Outside the groups are `transcripts:write` (renaming speakers and correcting utterances), `people:read` and
-`people:write`. A transcript importer, like lumea, lives on `transcripts:read` and
+`people:write`. A transcript importer lives on `transcripts:read` and
 `people:read`. Each operation in the reference says the scope it asks for; without it, the response is **403**
 `insufficient_scope` with `required_scopes`.
 
