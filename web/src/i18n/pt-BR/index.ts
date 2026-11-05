@@ -4,6 +4,7 @@ import account from './account'
 import admin from './admin'
 import agent from './agent'
 import automation from './automation'
+import help from './help'
 import auth from './auth'
 import common from './common'
 import connect from './connect'
@@ -45,6 +46,7 @@ const catalogs: { [K in keyof typeof en]: unknown } = {
   admin,
   agent,
   automation,
+  help,
 }
 
 export default catalogs

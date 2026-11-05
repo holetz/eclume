@@ -1,5 +1,6 @@
 import { Search } from 'lucide-react'
 import type { ReactNode, Ref } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { SearchHit } from './search'
 
 interface HelpSearchProps {
@@ -14,14 +15,15 @@ interface HelpSearchProps {
 
 /** The Design System `.help-search`: icon, search field and, optionally, the "/" shortcut. */
 export function HelpSearch({ value, onChange, inputRef, placeholder, shortcut, className }: HelpSearchProps) {
+  const { t } = useTranslation('help')
   return (
     <label className={className ? `help-search ${className}` : 'help-search'}>
       <Search size={18} aria-hidden />
       <input
         ref={inputRef}
         type="search"
-        aria-label="Buscar na ajuda"
-        placeholder={placeholder ?? 'Buscar artigos e termos'}
+        aria-label={t('search.label')}
+        placeholder={placeholder ?? t('search.placeholder')}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
