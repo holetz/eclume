@@ -473,7 +473,7 @@ fn signed_in(app: &AppHandle, result: anyhow::Result<()>) -> CommandResult<()> {
         }
     }
     crate::refresh_ui(app);
-    to_js(locale_of(&state), result)
+    to_js(locale_of(&app.state::<AppState>()), result)
 }
 
 /// "Sign out": deletes this computer's credential; the queue waits for the next sign-in.
