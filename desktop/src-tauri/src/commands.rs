@@ -1,4 +1,4 @@
-//! Comandos Tauri que a janela chama (`window.__TAURI__.core.invoke`).
+//! Tauri commands called by the window (`window.__TAURI__.core.invoke`).
 
 use eclume_recorder::{Marker, QueuedRecording};
 use tauri::{AppHandle, State};
@@ -30,7 +30,7 @@ pub fn recordings(
     to_js(state.recordings(limit.unwrap_or(50)))
 }
 
-// `async`: abrir dispositivos pode levar segundos e não deve travar a thread da UI.
+// `async`: opening devices can take seconds and must not block the UI thread.
 #[tauri::command(async)]
 pub fn toggle_recording(app: AppHandle, state: State<'_, AppState>) -> CommandResult<StatusView> {
     let result = state
@@ -41,19 +41,19 @@ pub fn toggle_recording(app: AppHandle, state: State<'_, AppState>) -> CommandRe
     to_js(result.and_then(|()| state.view()))
 }
 
-/// "Nova nota": começa uma nota ou para a nota em curso.
+/// "New voice note": starts a note or stops the current one.
 #[tauri::command(async)]
 pub fn new_note(app: AppHandle) -> CommandResult<()> {
     to_js(crate::toggle_note(&app))
 }
 
-/// O medidor da nota em curso (`null` sem nota), que a janela consulta a cada 100 ms.
+/// The current voice note meter (`null` without a note), polled by the window every 100 ms.
 #[tauri::command]
 pub fn note_meter(state: State<'_, AppState>) -> CommandResult<Option<NoteMeter>> {
     to_js(state.note_meter())
 }
 
-/// Marca o instante atual da gravação, com nota opcional.
+/// Marks the current recording time, with an optional note.
 #[tauri::command]
 pub fn add_marker(
     app: AppHandle,
@@ -65,7 +65,7 @@ pub fn add_marker(
     to_js(result)
 }
 
-/// Troca a nota de um marcador da gravação em curso.
+/// Changes the note of a marker in the current recording.
 #[tauri::command]
 pub fn set_marker_note(
     state: State<'_, AppState>,
@@ -75,19 +75,19 @@ pub fn set_marker_note(
     to_js(state.set_marker_note(&client_id, note))
 }
 
-/// O diálogo nativo de importar; `null` quando a pessoa desiste.
+/// The native import dialog; `null` when the user cancels.
 #[tauri::command(async)]
 pub fn pick_import_file(app: AppHandle) -> Option<String> {
     crate::import::pick(&app).map(|path| path.to_string_lossy().into_owned())
 }
 
-/// Lê duração e data do arquivo antes da confirmação.
+/// Reads file duration and date before confirmation.
 #[tauri::command(async)]
 pub fn probe_import(path: String) -> CommandResult<ImportPreview> {
     to_js(crate::import::preview(std::path::Path::new(&path)))
 }
 
-/// Converte e põe na fila em segundo plano; o fim chega por evento.
+/// Converts and queues in the background; completion arrives through an event.
 #[tauri::command]
 pub fn import_file(
     app: AppHandle,
@@ -106,7 +106,7 @@ pub fn cancel_import(state: State<'_, AppState>) -> CommandResult<()> {
     to_js(state.cancel_import())
 }
 
-/// Abre um artigo da central de ajuda do servidor (`<web_url>/ajuda/<artigo>`), ou a central.
+/// Opens a server help center article (`<web_url>/ajuda/<artigo>`), or the help center itself.
 #[tauri::command]
 pub fn open_help(
     app: AppHandle,
@@ -126,7 +126,7 @@ pub fn open_help(
     )
 }
 
-/// "Relatar um problema…": abre a pasta de logs, para anexar o `eclume.log`.
+/// "Report a problem…": opens the log folder to attach `eclume.log`.
 #[tauri::command(async)]
 pub fn open_log_dir(app: AppHandle) -> CommandResult<()> {
     use tauri::Manager;
@@ -148,8 +148,8 @@ pub fn open_web(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()>
     to_js(crate::open_web(&app, &state))
 }
 
-/// O idioma de transcrição que vale para a conta (`GET /me/transcription`), para a aba Áudio
-/// nomear o padrão; `None` sem conta ou sem resposta do servidor.
+/// The effective account transcription language (`GET /me/transcription`), so the Audio tab
+/// can name the default; `None` without an account or server response.
 #[tauri::command(async)]
 pub fn account_language(state: State<'_, AppState>) -> Option<String> {
     let config = state.uploader_config().ok()??;
@@ -176,20 +176,20 @@ pub fn save_settings(
         crate::auto::execute(&app, *action);
         crate::shortcuts::register(&app);
         crate::reconcile_autostart(&app);
-        // PAT ou servidor novos: as falhas tentam de novo já.
+        // New PAT or server: retry failures now.
         if let Err(err) = crate::sync::sync_now(&app) {
             log::error!("{err:#}");
         }
-        // Pasta sincronizada ligada ou trocada: um ciclo já.
+        // Synced folder enabled or changed: run a cycle now.
         crate::mirror_sync::nudge(&app, false);
-        // Gravações recentes no topo mudou: o painel lê de novo.
+        // Recent recordings at the top changed: reload the panel.
         crate::recent::nudge(&app);
     }
     crate::refresh_ui(&app);
     to_js(result.and_then(|_| state.settings()))
 }
 
-/// "Criar atalhos no GNOME" (`install`) ou removê-los, no modo `sistema` do Wayland.
+/// "Create GNOME shortcuts" (`install`) or remove them, in Wayland `sistema` mode.
 #[tauri::command(async)]
 pub fn system_shortcuts(
     app: AppHandle,
@@ -207,13 +207,13 @@ pub fn system_shortcuts(
     to_js(result.and_then(|()| state.settings()))
 }
 
-/// Resposta da janela à pergunta de reunião detectada.
+/// The window's answer to the detected meeting prompt.
 #[tauri::command]
 pub fn answer_meeting(app: AppHandle, record: bool) {
     crate::auto::answer(&app, record);
 }
 
-/// Os microfones do sistema, para a aba Áudio.
+/// System microphones for the Audio tab.
 #[derive(serde::Serialize)]
 pub struct MicDevices {
     pub default: Option<String>,
@@ -230,7 +230,7 @@ pub fn list_input_devices() -> CommandResult<MicDevices> {
     )
 }
 
-/// As saídas de áudio do sistema, para a aba Áudio.
+/// System audio outputs for the Audio tab.
 #[derive(serde::Serialize)]
 pub struct OutputDevices {
     pub default: Option<String>,
@@ -260,8 +260,8 @@ pub fn list_output_devices() -> CommandResult<OutputDevices> {
     }))
 }
 
-/// "Fale para testar" (`mic`) ou "Toque algo para testar" (`system`): até 10 s de medidor com a
-/// fonte escolhida na aba Áudio. Um teste por vez.
+/// "Speak to test" (`mic`) or "Play something to test" (`system`): up to 10 s of metering with
+/// the source chosen in the Audio tab. One test at a time.
 #[tauri::command(async)]
 pub fn source_test(state: State<'_, AppState>, source: TestSource) -> CommandResult<()> {
     let choice = state.audio_choice();
@@ -273,13 +273,13 @@ pub fn source_test(state: State<'_, AppState>, source: TestSource) -> CommandRes
     }))
 }
 
-/// "Parar": encerra o teste de nível na hora.
+/// "Stop": ends the level test immediately.
 #[tauri::command]
 pub fn source_test_stop(state: State<'_, AppState>) -> CommandResult<()> {
     to_js(state.stop_source_test())
 }
 
-/// O medidor do teste de nível (`null` quando acabou), que a janela consulta a cada 100 ms.
+/// The level test meter (`null` when finished), polled by the window every 100 ms.
 #[tauri::command]
 pub fn source_test_meter(state: State<'_, AppState>) -> CommandResult<Option<Vec<f32>>> {
     to_js(
@@ -289,13 +289,13 @@ pub fn source_test_meter(state: State<'_, AppState>) -> CommandResult<Option<Vec
     )
 }
 
-/// Quantas gravações e quanto espaço ainda estão neste computador.
+/// How many recordings and how much space remain on this computer.
 #[tauri::command(async)]
 pub fn storage_info(state: State<'_, AppState>) -> CommandResult<StorageInfo> {
     to_js(state.storage_info())
 }
 
-/// "Mostrar": abre a pasta das gravações no gerenciador de arquivos.
+/// "Show": opens the recording folder in the file manager.
 #[tauri::command(async)]
 pub fn open_data_dir(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
     use tauri_plugin_opener::OpenerExt;
@@ -311,7 +311,7 @@ pub fn open_data_dir(app: AppHandle, state: State<'_, AppState>) -> CommandResul
     )
 }
 
-/// Fecha o aviso "Atualizado para X".
+/// Dismisses the "Updated to X" notice.
 #[tauri::command]
 pub fn dismiss_update_notice(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
     let result = state.dismiss_update_notice();
@@ -324,31 +324,31 @@ pub fn sync_now(app: AppHandle) -> CommandResult<()> {
     to_js(crate::sync::sync_now(&app))
 }
 
-/// O painel de gravações recentes do topo da principal.
+/// The recent recordings panel at the top of the main window.
 #[tauri::command]
 pub fn recent(app: AppHandle) -> CommandResult<crate::recent::RecentView> {
     to_js(crate::recent::view(&app))
 }
 
-/// Pede uma leitura das recentes já (a principal acabou de abrir).
+/// Requests a recent recordings refresh now (the main window just opened).
 #[tauri::command]
 pub fn recent_refresh(app: AppHandle) {
     crate::recent::nudge(&app);
 }
 
-/// "Copiar resumo": o Markdown do resumo atual na área de transferência.
+/// "Copy summary": places the current summary Markdown on the clipboard.
 #[tauri::command(async)]
 pub fn copy_summary(app: AppHandle, recording_id: String) -> CommandResult<()> {
     to_js(crate::recent::copy_summary(&app, &recording_id))
 }
 
-/// "Abrir no web": a página da gravação.
+/// "Open on web": the recording page.
 #[tauri::command]
 pub fn open_recording(app: AppHandle, recording_id: String) -> CommandResult<()> {
     to_js(crate::recent::open_recording(&app, &recording_id))
 }
 
-/// Os servidores da primeira execução: o do instalador e, por até 3 s, os anunciados na rede.
+/// First-run servers: the installer server and, for up to 3 s, those announced on the network.
 #[tauri::command(async)]
 pub fn discover_servers() -> Vec<ServerChoice> {
     let found = eclume_sync::discovery::discover(eclume_sync::discovery::DEFAULT_TIMEOUT)
@@ -359,7 +359,7 @@ pub fn discover_servers() -> Vec<ServerChoice> {
     crate::account::server_choices(crate::config::embedded_server(), found)
 }
 
-/// Fixa a CA do servidor escolhido (conferindo a impressão digital, quando há) e o guarda.
+/// Pins the chosen server CA (checking the fingerprint, when present) and saves the server.
 #[tauri::command(async)]
 pub fn prepare_server(
     state: State<'_, AppState>,
@@ -369,7 +369,7 @@ pub fn prepare_server(
     to_js(state.prepare_server(&RealNet, &url, ca_sha256.as_deref()))
 }
 
-/// A pessoa conferiu a impressão digital do servidor escolhido.
+/// The user checked the chosen server fingerprint.
 #[tauri::command(async)]
 pub fn confirm_server(
     state: State<'_, AppState>,
@@ -379,7 +379,7 @@ pub fn confirm_server(
     to_js(state.confirm_server(&url, ca_sha256.as_deref()))
 }
 
-/// Entra com e-mail e senha no servidor escolhido.
+/// Signs in to the chosen server with email and password.
 #[tauri::command(async)]
 pub fn sign_in(
     app: AppHandle,
@@ -397,14 +397,14 @@ pub fn sign_in(
     signed_in(&app, result)
 }
 
-/// Entra com o código de pareamento mostrado na web.
+/// Signs in with the pairing code shown on the web.
 #[tauri::command(async)]
 pub fn pair(app: AppHandle, state: State<'_, AppState>, code: String) -> CommandResult<()> {
     let result = state.sign_in(&RealNet, Login::Code(&code));
     signed_in(&app, result)
 }
 
-/// Depois de entrar, as gravações que esperavam sobem já.
+/// After sign-in, uploads waiting recordings immediately.
 fn signed_in(app: &AppHandle, result: anyhow::Result<()>) -> CommandResult<()> {
     if result.is_ok() {
         if let Err(err) = crate::sync::sync_now(app) {
@@ -415,7 +415,7 @@ fn signed_in(app: &AppHandle, result: anyhow::Result<()>) -> CommandResult<()> {
     to_js(result)
 }
 
-/// "Sair": apaga a credencial deste computador; a fila espera o próximo login.
+/// "Sign out": deletes this computer's credential; the queue waits for the next sign-in.
 #[tauri::command(async)]
 pub fn sign_out(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
     let result = state.sign_out();
@@ -423,13 +423,13 @@ pub fn sign_out(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()>
     to_js(result)
 }
 
-/// "Testar conexão".
+/// "Test connection".
 #[tauri::command(async)]
 pub fn test_connection(state: State<'_, AppState>) -> CommandResult<ConnectionTest> {
     to_js(state.test_connection(&RealNet))
 }
 
-/// "Escolher…" da CA extra: o diálogo nativo com filtro de PEM; `null` quando a pessoa desiste.
+/// "Choose…" for the extra CA: native dialog with a PEM filter; `null` when the user cancels.
 #[tauri::command(async)]
 pub fn pick_ca_file(app: AppHandle) -> Option<String> {
     use tauri_plugin_dialog::DialogExt;
@@ -442,8 +442,8 @@ pub fn pick_ca_file(app: AppHandle) -> Option<String> {
         .map(|path| path.to_string_lossy().into_owned())
 }
 
-/// "Escolher pasta…" da pasta sincronizada: o diálogo nativo de pasta; `null` quando a pessoa
-/// desiste.
+/// "Choose folder…" for the synced folder: native folder dialog; `null` when the user
+/// cancels.
 #[tauri::command(async)]
 pub fn pick_mirror_dir(app: AppHandle) -> Option<String> {
     use tauri_plugin_dialog::DialogExt;
@@ -455,19 +455,19 @@ pub fn pick_mirror_dir(app: AppHandle) -> Option<String> {
         .map(|path| path.to_string_lossy().into_owned())
 }
 
-/// O estado da pasta sincronizada: ciclo em curso, último resultado e erro.
+/// Synced folder status: current cycle, last result and error.
 #[tauri::command]
 pub fn mirror_status(state: State<'_, AppState>) -> CommandResult<crate::state::MirrorStatus> {
     to_js(state.mirror_status())
 }
 
-/// "Sincronizar agora" da pasta sincronizada: um ciclo já, conferindo também a biblioteca inteira.
+/// "Sync now" for the synced folder: runs a cycle now, also checking the whole library.
 #[tauri::command]
 pub fn mirror_sync_now(app: AppHandle) {
     crate::mirror_sync::nudge(&app, true);
 }
 
-/// "Criar conta": abre o cadastro do servidor escolhido no navegador.
+/// "Create account": opens the chosen server sign-up page in the browser.
 #[tauri::command]
 pub fn open_signup(app: AppHandle, url: String) -> CommandResult<()> {
     use tauri_plugin_opener::OpenerExt;

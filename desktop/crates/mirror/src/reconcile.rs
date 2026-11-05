@@ -1,6 +1,6 @@
-//! Leva a pasta ao estado do servidor: escreve o que difere, move e apaga só o que o manifesto
-//! lista e nunca sai da raiz. O servidor é a fonte: uma edição local num arquivo do app é
-//! sobrescrita no ciclo seguinte.
+//! Brings the folder to the server's state: writes what differs, moves and deletes only what the
+//! manifest lists, and never leaves the root. The server is the source: local edits to an app file
+//! are overwritten on the next cycle.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -12,7 +12,7 @@ use crate::layout;
 use crate::manifest::{sha256_hex, write_atomic, Entry, Manifest};
 use crate::{render, MirrorItem};
 
-/// O que um passo de sincronização fez em disco.
+/// What a sync step did on disk.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Applied {
     pub written: usize,
@@ -28,7 +28,7 @@ impl Applied {
     }
 }
 
-/// A pasta sincronizada: a raiz e o manifesto em memória (gravado por [`Mirror::save`]).
+/// The synced folder: the root and in-memory manifest (saved by [`Mirror::save`]).
 #[derive(Debug)]
 pub struct Mirror {
     pub(crate) root: PathBuf,
@@ -36,10 +36,10 @@ pub struct Mirror {
 }
 
 impl Mirror {
-    /// Abre (criando, se preciso) a raiz e lê o manifesto.
+    /// Opens (creating if needed) the root and reads the manifest.
     pub fn open(root: &Path) -> Result<Self> {
         fs::create_dir_all(root).with_context(|| format!("criar a pasta {}", root.display()))?;
-        // Um manifesto ilegível recomeça vazio: sem entradas, nada antigo é removido.
+        // An unreadable manifest starts empty: without entries, no old files are removed.
         let (manifest, _) = Manifest::load(root);
         Ok(Self {
             root: root.to_path_buf(),
@@ -51,29 +51,29 @@ impl Mirror {
         &self.root
     }
 
-    /// O que o manifesto sabe de uma gravação.
+    /// What the manifest knows about a recording.
     pub fn entry(&self, recording_id: &str) -> Option<&Entry> {
         self.manifest.recordings.get(recording_id)
     }
 
-    /// Os ids que o manifesto conhece.
+    /// The ids the manifest knows.
     pub fn known_ids(&self) -> BTreeSet<String> {
         self.manifest.recordings.keys().cloned().collect()
     }
 
-    /// Os arquivos foram escritos com outro desenho de pasta e nome, ou com a opção de transcrições
-    /// de antes: o próximo ciclo refaz tudo, e o manifesto move e apaga o que ficou para trás.
+    /// Files were written with a different folder and name layout, or a previous transcript option:
+    /// the next cycle rebuilds everything, and the manifest moves and deletes what was left behind.
     pub fn needs_rebuild(&self, transcripts: bool) -> bool {
         self.manifest.layout != crate::manifest::LAYOUT
             || self.manifest.transcripts != Some(transcripts)
     }
 
-    /// Guarda com que opção de transcrições os arquivos foram escritos.
+    /// Stores the transcript option used when the files were written.
     pub fn set_transcripts(&mut self, transcripts: bool) {
         self.manifest.transcripts = Some(transcripts);
     }
 
-    /// As gravações que falharam e esperam nova tentativa.
+    /// Recordings that failed and await a retry.
     pub fn pending(&self) -> &std::collections::BTreeSet<String> {
         &self.manifest.pending
     }
@@ -82,12 +82,12 @@ impl Mirror {
         self.manifest.pending = pending;
     }
 
-    /// Marca que tudo foi escrito no layout atual (só depois de um ciclo sem falhas).
+    /// Marks everything as written in the current layout (only after a cycle without failures).
     pub fn mark_layout_current(&mut self) {
         self.manifest.layout = crate::manifest::LAYOUT;
     }
 
-    /// O cursor do próximo `?since=`; `None` na primeira passada.
+    /// The next `?since=` cursor; `None` on the first pass.
     pub fn since(&self) -> Option<&str> {
         self.manifest.since.as_deref()
     }
@@ -100,7 +100,7 @@ impl Mirror {
         self.manifest.save(&self.root)
     }
 
-    /// O caminho absoluto de um relativo do manifesto: só componentes normais, dentro da raiz.
+    /// The absolute path of a manifest relative path: only normal components, within the root.
     fn resolve(&self, relative: &str) -> Result<PathBuf> {
         let path = Path::new(relative);
         let normal = path
@@ -112,7 +112,7 @@ impl Mirror {
         Ok(self.root.join(path))
     }
 
-    /// Escreve o conteúdo no caminho relativo, se o disco for diferente.
+    /// Writes content to the relative path if the disk content differs.
     pub(crate) fn write_file(&self, relative: &str, content: &[u8]) -> Result<bool> {
         let path = self.resolve(relative)?;
         if let Ok(current) = fs::read(&path) {
@@ -127,7 +127,7 @@ impl Mirror {
         Ok(true)
     }
 
-    /// Apaga um arquivo do manifesto e as pastas que ficarem vazias (nunca a raiz).
+    /// Deletes a manifest file and any folders left empty (never the root).
     fn remove_file(&self, relative: &str) -> Result<bool> {
         let path = self.resolve(relative)?;
         let existed = match fs::remove_file(&path) {
@@ -140,7 +140,7 @@ impl Mirror {
             if current == self.root || !current.starts_with(&self.root) {
                 break;
             }
-            // `remove_dir` recusa pasta com conteúdo (arquivos do usuário ficam).
+            // `remove_dir` refuses nonempty folders (user files stay).
             if fs::remove_dir(&current).is_err() {
                 break;
             }
@@ -149,8 +149,8 @@ impl Mirror {
         Ok(existed)
     }
 
-    /// Escreve uma gravação: um `.md` e um `.jsonl` por Collection, e tira o que o manifesto tinha
-    /// para ela e deixou de valer (título ou Collection mudou).
+    /// Writes a recording: one `.md` and one `.jsonl` per collection, removing manifest entries
+    /// for it that no longer apply (title or collection changed).
     pub fn apply(&mut self, item: &MirrorItem) -> Result<Applied> {
         let mut wanted: Vec<(String, String)> = Vec::new();
         if let Some(markdown) = render::markdown(item) {
@@ -193,7 +193,7 @@ impl Mirror {
         Ok(applied)
     }
 
-    /// Esquece uma gravação: apaga os arquivos que o manifesto lista para ela.
+    /// Forgets a recording: deletes the files the manifest lists for it.
     pub fn forget(&mut self, recording_id: &str) -> Result<Applied> {
         let mut applied = Applied::default();
         let Some(entry) = self.manifest.recordings.get(recording_id).cloned() else {
@@ -208,7 +208,7 @@ impl Mirror {
         Ok(applied)
     }
 
-    /// Esquece o que não está em `keep` (gravações que saíram do servidor).
+    /// Forgets what is not in `keep` (recordings removed from the server).
     pub fn retain_only(&mut self, keep: &BTreeSet<String>) -> Result<Applied> {
         let mut applied = Applied::default();
         for id in self.known_ids() {
@@ -226,17 +226,17 @@ mod tests {
     use crate::testing::Tmp;
     use crate::{Segment, Speaker, Summary, Transcript};
 
-    fn item(id: &str, title: &str, colecoes: &[&str], versao: u64) -> MirrorItem {
+    fn item(id: &str, title: &str, collections: &[&str], version: u64) -> MirrorItem {
         MirrorItem {
             recording_id: id.into(),
             title: title.into(),
             recorded_at: Some("2026-09-18T14:00:05Z".into()),
             local_start: Some("2026-09-18T11:00:05".into()),
-            collections: colecoes.iter().map(|c| c.to_string()).collect(),
+            collections: collections.iter().map(|c| c.to_string()).collect(),
             agenda_type: None,
             summary: Some(Summary {
-                version: versao,
-                markdown: format!("# {title} v{versao}"),
+                version,
+                markdown: format!("# {title} v{version}"),
                 transcript_revision: None,
             }),
             transcript: Some(Transcript {
@@ -282,11 +282,11 @@ mod tests {
     }
 
     #[test]
-    fn primeira_passada_escreve_e_a_segunda_nao_mexe_em_nada() {
+    fn first_pass_writes_and_second_pass_changes_nothing() {
         let tmp = Tmp::new("reconcile-idempotente");
         let mut mirror = Mirror::open(tmp.path()).unwrap();
-        let ata = item("aaaaaaaa-1", "Ata", &["Clientes", "Interno"], 1);
-        let first = mirror.apply(&ata).unwrap();
+        let minutes = item("aaaaaaaa-1", "Ata", &["Clientes", "Interno"], 1);
+        let first = mirror.apply(&minutes).unwrap();
         assert_eq!((first.written, first.unchanged, first.removed), (4, 0, 0));
         assert_eq!(
             files(tmp.path()),
@@ -297,7 +297,7 @@ mod tests {
                 "Interno/2026-09/2026-09-18_1100_aaaaaaaa.md",
             ]
         );
-        let second = mirror.apply(&ata).unwrap();
+        let second = mirror.apply(&minutes).unwrap();
         assert_eq!(
             (second.written, second.unchanged, second.removed),
             (0, 4, 0)
@@ -305,30 +305,30 @@ mod tests {
     }
 
     #[test]
-    fn edicao_local_de_arquivo_do_app_e_sobrescrita() {
+    fn local_edit_to_app_file_is_overwritten() {
         let tmp = Tmp::new("reconcile-sobrescreve");
         let mut mirror = Mirror::open(tmp.path()).unwrap();
-        let ata = item("aaaaaaaa-1", "Ata", &["Clientes"], 1);
-        mirror.apply(&ata).unwrap();
+        let minutes = item("aaaaaaaa-1", "Ata", &["Clientes"], 1);
+        mirror.apply(&minutes).unwrap();
         let md = tmp
             .path()
             .join("Clientes/2026-09/2026-09-18_1100_aaaaaaaa.md");
         let original = fs::read_to_string(&md).unwrap();
         fs::write(&md, "editei à mão").unwrap();
-        let again = mirror.apply(&ata).unwrap();
+        let again = mirror.apply(&minutes).unwrap();
         assert_eq!(again.written, 1);
         assert_eq!(fs::read_to_string(&md).unwrap(), original);
     }
 
     #[test]
-    fn titulo_novo_reescreve_no_mesmo_lugar_e_horario_novo_move() {
+    fn new_title_rewrites_in_place_and_new_start_time_moves_files() {
         let tmp = Tmp::new("reconcile-renomeia");
         let mut mirror = Mirror::open(tmp.path()).unwrap();
         mirror
             .apply(&item("aaaaaaaa-1", "Ata", &["Clientes"], 1))
             .unwrap();
-        // O título não está no nome: mudar o título (e a versão) reescreve o `.md` e o `.jsonl`
-        // (o título vai no meta) no mesmo lugar, sem mover nada.
+        // The name omits the title: changing the title (and version) rewrites `.md` and `.jsonl`
+        // (the title is in meta) in place, without moving anything.
         let renamed = mirror
             .apply(&item("aaaaaaaa-1", "Ata final", &["Clientes"], 2))
             .unwrap();
@@ -351,8 +351,8 @@ mod tests {
         assert!(md.contains("title: \"Ata final\"") && md.contains("aliases:"));
         assert_eq!(mirror.entry("aaaaaaaa-1").unwrap().summary_version, Some(2));
 
-        // Mudar o início (o fuso do computador mudou, ou a data foi corrigida) move os arquivos,
-        // inclusive de mês, e apaga a pasta do mês antigo.
+        // Changing the start (the computer's time zone changed, or the date was fixed) moves files,
+        // even across months, and deletes the old month's folder.
         let mut later = item("aaaaaaaa-1", "Ata final", &["Clientes"], 2);
         later.local_start = Some("2026-10-01T00:30:00".into());
         let moved = mirror.apply(&later).unwrap();
@@ -365,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    fn sair_de_uma_colecao_apaga_a_copia_e_a_pasta_vazia() {
+    fn leaving_a_collection_deletes_copy_and_empty_folder() {
         let tmp = Tmp::new("reconcile-colecao");
         let mut mirror = Mirror::open(tmp.path()).unwrap();
         mirror
@@ -374,11 +374,11 @@ mod tests {
         let applied = mirror
             .apply(&item("aaaaaaaa-1", "Ata", &["Clientes"], 1))
             .unwrap();
-        // O `.md` que fica muda: a lista `collections` do front matter perdeu uma.
+        // The remaining `.md` changes: its front matter `collections` list lost one entry.
         assert_eq!((applied.written, applied.removed), (1, 2));
         assert!(!tmp.path().join("Interno").exists());
         assert!(tmp.path().join("Clientes").is_dir());
-        // Sem nenhuma Collection, vai para `sem-colecao`.
+        // Without any collection, it goes to `sem-colecao`.
         mirror.apply(&item("aaaaaaaa-1", "Ata", &[], 1)).unwrap();
         assert!(!tmp.path().join("Clientes").exists());
         assert!(tmp
@@ -388,7 +388,7 @@ mod tests {
     }
 
     #[test]
-    fn so_o_que_o_manifesto_lista_e_apagado() {
+    fn only_files_listed_in_manifest_are_deleted() {
         let tmp = Tmp::new("reconcile-alheios");
         let mut mirror = Mirror::open(tmp.path()).unwrap();
         mirror
@@ -397,7 +397,7 @@ mod tests {
         mirror
             .apply(&item("bbbbbbbb-2", "Outra", &["Clientes"], 1))
             .unwrap();
-        // Uma nota do usuário na mesma pasta e outra na raiz.
+        // A user note in the same folder and another at the root.
         fs::write(tmp.path().join("Clientes/minha nota.md"), "minha").unwrap();
         fs::write(tmp.path().join("diario.md"), "diario").unwrap();
 
@@ -416,13 +416,13 @@ mod tests {
             .join("Clientes/2026-09/2026-09-18_1100_aaaaaaaa.md")
             .exists());
 
-        // A pasta com nota do usuário não some, mesmo depois de esquecer tudo.
+        // The folder with a user note stays, even after forgetting everything.
         mirror.retain_only(&BTreeSet::new()).unwrap();
         assert!(tmp.path().join("Clientes/minha nota.md").exists());
     }
 
     #[test]
-    fn manifesto_salvo_e_relido_e_o_ilegivel_nao_apaga_nada() {
+    fn saved_manifest_is_reloaded_and_unreadable_manifest_deletes_nothing() {
         let tmp = Tmp::new("reconcile-recupera");
         let mut mirror = Mirror::open(tmp.path()).unwrap();
         mirror
@@ -435,7 +435,7 @@ mod tests {
         fs::write(tmp.path().join(crate::manifest::FILE), b"lixo").unwrap();
         let mut broken = Mirror::open(tmp.path()).unwrap();
         assert!(broken.known_ids().is_empty());
-        // Sem manifesto, nada foi apagado e a gravação é reescrita sem duplicar.
+        // Without a manifest, nothing was deleted; the recording is rewritten without duplicates.
         let applied = broken
             .apply(&item("aaaaaaaa-1", "Ata", &["Clientes"], 1))
             .unwrap();
@@ -446,7 +446,7 @@ mod tests {
     }
 
     #[test]
-    fn manifesto_de_outro_layout_pede_para_refazer_tudo() {
+    fn manifest_from_another_layout_requires_full_rebuild() {
         let tmp = Tmp::new("reconcile-layout");
         let mut mirror = Mirror::open(tmp.path()).unwrap();
         assert!(mirror.needs_rebuild(true));
@@ -455,9 +455,9 @@ mod tests {
         mirror.save().unwrap();
         let again = Mirror::open(tmp.path()).unwrap();
         assert!(!again.needs_rebuild(true));
-        // Mudar a opção de transcrições também pede para refazer tudo.
+        // Changing the transcript option also requires rebuilding everything.
         assert!(again.needs_rebuild(false));
-        // Um manifesto de antes da versão do layout (sem o campo) está desatualizado.
+        // A manifest from before the layout version (without the field) is outdated.
         fs::write(
             tmp.path().join(crate::manifest::FILE),
             br#"{"version": 1, "recordings": {}}"#,
@@ -467,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn o_cursor_viaja_com_a_pasta() {
+    fn cursor_travels_with_folder() {
         let tmp = Tmp::new("reconcile-since");
         let mut mirror = Mirror::open(tmp.path()).unwrap();
         assert_eq!(mirror.since(), None);
@@ -477,7 +477,7 @@ mod tests {
             Mirror::open(tmp.path()).unwrap().since(),
             Some("2026-09-19T10:00:05Z")
         );
-        // Manifesto de antes do cursor (sem o campo) lê como "primeira passada".
+        // A manifest from before the cursor (without the field) reads as "first pass".
         fs::write(
             tmp.path().join(crate::manifest::FILE),
             br#"{"version": 1, "recordings": {}}"#,
@@ -487,41 +487,41 @@ mod tests {
     }
 
     #[test]
-    fn caminho_do_manifesto_que_foge_da_raiz_e_recusado() {
+    fn manifest_path_escaping_root_is_rejected() {
         let tmp = Tmp::new("reconcile-fuga");
-        let fora = tmp.path().join("fora.txt");
-        let raiz = tmp.path().join("raiz");
-        fs::create_dir_all(&raiz).unwrap();
-        fs::write(&fora, "nao apague").unwrap();
-        let mut mirror = Mirror::open(&raiz).unwrap();
-        for hostil in ["../fora.txt", "/etc/passwd", "a/../../fora.txt", ""] {
+        let outside = tmp.path().join("fora.txt");
+        let root = tmp.path().join("raiz");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&outside, "nao apague").unwrap();
+        let mut mirror = Mirror::open(&root).unwrap();
+        for hostile in ["../fora.txt", "/etc/passwd", "a/../../fora.txt", ""] {
             mirror.manifest.recordings.insert(
                 "x".into(),
                 Entry {
-                    files: vec![hostil.into()],
+                    files: vec![hostile.into()],
                     ..Entry::default()
                 },
             );
-            assert!(mirror.forget("x").is_err(), "{hostil}");
+            assert!(mirror.forget("x").is_err(), "{hostile}");
         }
-        assert_eq!(fs::read_to_string(&fora).unwrap(), "nao apague");
+        assert_eq!(fs::read_to_string(&outside).unwrap(), "nao apague");
     }
 
     #[test]
-    fn sem_resumo_escreve_so_a_transcricao_e_sem_nada_esquece() {
+    fn writes_only_transcript_without_summary_and_forgets_without_either() {
         let tmp = Tmp::new("reconcile-sem-resumo");
         let mut mirror = Mirror::open(tmp.path()).unwrap();
-        let mut so_transcricao = item("aaaaaaaa-1", "Ata", &["Clientes"], 1);
-        so_transcricao.summary = None;
-        let applied = mirror.apply(&so_transcricao).unwrap();
+        let mut transcript_only = item("aaaaaaaa-1", "Ata", &["Clientes"], 1);
+        transcript_only.summary = None;
+        let applied = mirror.apply(&transcript_only).unwrap();
         assert_eq!(applied.written, 1);
         assert_eq!(
             files(tmp.path()),
             ["Clientes/2026-09/2026-09-18_1100_aaaaaaaa.jsonl"]
         );
-        let mut vazio = so_transcricao.clone();
-        vazio.transcript = None;
-        assert_eq!(mirror.apply(&vazio).unwrap().removed, 1);
+        let mut empty = transcript_only.clone();
+        empty.transcript = None;
+        assert_eq!(mirror.apply(&empty).unwrap().removed, 1);
         assert!(mirror.entry("aaaaaaaa-1").is_none());
         assert!(files(tmp.path()).is_empty());
     }

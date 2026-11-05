@@ -1,8 +1,8 @@
-# Sinais de mic por plataforma adaptados de fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43
-# (crates/detect, MIT; ver VENDOR.md). Classificação, debounce e gravação automática são próprios.
+# Per-platform mic signals adapted from fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43
+# (crates/detect, MIT; see VENDOR.md). Classification, debounce and automatic recording are our own.
 [package]
 name = "eclume-detect"
-description = "Detecção de reuniões do app desktop do eclume: sinais de mic e processo, debounce e gravação automática."
+description = "Meeting detection for the eclume desktop app: mic and process signals, debounce and automatic recording."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

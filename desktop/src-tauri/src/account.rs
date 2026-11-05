@@ -1,9 +1,9 @@
-//! A conta do app (o lado do desktop da holetz/eclume#35): escolher o servidor e fixar a CA dele,
-//! entrar com e-mail e senha ou com o código de pareamento, e perceber quando a CA fixada mudou —
-//! trocando-a sozinho pela próxima raiz anunciada na rotação (holetz/eclume#101).
+//! The app account (the desktop side of holetz/eclume#35): choose the server and pin its CA,
+//! sign in with email and password or a pairing code, and detect when the pinned CA changes —
+//! automatically replacing it with the next root announced for rotation (holetz/eclume#101).
 //!
-//! As funções recebem a rede por [`Net`], para os testes roteirizarem as respostas; o estado do
-//! app (`state.rs`) guarda o servidor escolhido e aplica o resultado.
+//! Functions receive the network through [`Net`] so tests can script responses; the app state
+//! (`state.rs`) stores the chosen server and applies the result.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -18,16 +18,16 @@ use serde::Serialize;
 use crate::config::{validate_web_url, Account, Config};
 use crate::state::CLIENT_VERSION;
 
-/// Onde a CA de um servidor escolhido fica até a pessoa entrar nele.
+/// Where the CA of a chosen server stays until the person signs in.
 const PENDING_DIR: &str = "servidor-pendente";
 
-/// A rede: um transporte sem verificação só para baixar a CA raiz, e o verificado.
+/// The network: an unverified transport just to download the root CA, and a verified one.
 pub trait Net: Send + Sync {
     fn insecure(&self) -> Arc<dyn Transport>;
     fn verified(&self, trust: &TrustMode) -> Result<Arc<dyn Transport>>;
 }
 
-/// A rede de verdade, em `ureq`.
+/// The real network, using `ureq`.
 pub struct RealNet;
 
 impl Net for RealNet {
@@ -41,9 +41,9 @@ impl Net for RealNet {
     }
 }
 
-/// Em quem o app confia para falar com o servidor, pela origem do `ca_path`: a CA fixada pela
-/// primeira execução confia só nela (`Pinned`); uma escolhida à mão em "Avançado" soma-se às
-/// raízes do SO; sem CA (certificado público ou `http://` de dev), o verificador da plataforma.
+/// Who the app trusts to reach the server, based on the origin of `ca_path`: the CA pinned at
+/// first run is trusted alone (`Pinned`); one chosen manually in Advanced adds to the OS
+/// roots; without a CA (public certificate or dev `http://`), the platform verifier.
 pub fn trust_for(config_dir: &Path, ca_path: Option<&Path>) -> TrustMode {
     match ca_path {
         Some(path) if is_pinned(config_dir, Some(path)) => TrustMode::Pinned(path.to_path_buf()),
@@ -51,7 +51,7 @@ pub fn trust_for(config_dir: &Path, ca_path: Option<&Path>) -> TrustMode {
     }
 }
 
-/// A CA baixada e conferida na primeira execução (ainda pendente) é fixada; sem ela, o sistema.
+/// The CA downloaded and checked at first run (still pending) is pinned; otherwise, use the system.
 fn pending_trust(ca_path: Option<&Path>) -> TrustMode {
     match ca_path {
         Some(path) => TrustMode::Pinned(path.to_path_buf()),
@@ -59,47 +59,47 @@ fn pending_trust(ca_path: Option<&Path>) -> TrustMode {
     }
 }
 
-/// Como o app passou a confiar no servidor.
+/// How the app came to trust the server.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TrustedBy {
-    /// A CA conferiu com a impressão digital que veio com o instalador.
+    /// The CA matched the fingerprint bundled with the installer.
     Fingerprint,
-    /// Endereço digitado ou anunciado no mDNS (sem autenticação): a pessoa confere a impressão
-    /// digital que a tela mostra antes de entrar (TOFU).
+    /// Address typed or announced over mDNS (unauthenticated): the person checks the fingerprint
+    /// shown on screen before signing in (TOFU).
     FirstUse,
-    /// O certificado já é confiável pelo sistema (o servidor não publica CA própria).
+    /// The system already trusts the certificate (the server does not publish its own CA).
     System,
-    /// `http://`, só em desenvolvimento.
+    /// `http://`, for development only.
     Unencrypted,
 }
 
-/// O servidor escolhido na primeira execução, pronto para entrar.
+/// The server chosen at first run, ready for sign-in.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct PreparedServer {
     pub name: String,
     pub url: String,
     pub ca_sha256: Option<String>,
     pub trusted_by: TrustedBy,
-    /// A CA baixada, ainda fora do lugar definitivo.
+    /// The downloaded CA, still outside its final location.
     #[serde(skip)]
     pub ca_path: Option<PathBuf>,
-    /// A pessoa conferiu a impressão digital (`FirstUse`) por [`confirm`].
+    /// The person checked the fingerprint (`FirstUse`) through [`confirm`].
     #[serde(skip)]
     pub confirmed: bool,
 }
 
-/// Um servidor para a primeira execução mostrar.
+/// A server to show at first run.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ServerChoice {
     pub name: String,
     pub url: String,
     pub ca_sha256: Option<String>,
-    /// `installer` ("Veio com este instalador") ou `network` ("Encontrado na rede").
+    /// `installer` (bundled with this installer) or `network` (found on the network).
     pub origin: &'static str,
 }
 
-/// Os servidores conhecidos: o embutido no instalador primeiro, depois os achados na rede.
+/// Known servers: the one embedded in the installer first, then those found on the network.
 pub fn server_choices(
     embedded: Option<crate::config::EmbeddedServer>,
     found: Vec<eclume_sync::discovery::Found>,
@@ -126,15 +126,15 @@ pub fn server_choices(
     choices
 }
 
-/// O host de um endereço `http(s)://host[:porta][/...]`.
+/// The host of an `http(s)://host[:port][/...]` address.
 fn host_of(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     let host = rest.split(['/', ':']).next().unwrap_or(rest);
     host.to_string()
 }
 
-/// O endereço e a impressão digital são os que vieram com o instalador? Só eles dispensam a
-/// conferência: o anúncio do mDNS não é autenticado e qualquer máquina da rede pode forjá-lo.
+/// Are the address and fingerprint those bundled with the installer? Only these skip the
+/// check: the mDNS announcement is unauthenticated and any machine on the network can forge it.
 pub fn vouched_by_installer(
     embedded: Option<crate::config::EmbeddedServer>,
     url: &str,
@@ -149,9 +149,9 @@ pub fn vouched_by_installer(
             .is_some_and(|expected| expected.eq_ignore_ascii_case(ca_sha256.trim()))
 }
 
-/// Fixa a CA de `url` (conferindo `expected`, quando há) e lê o descritor já com verificação.
-/// Só a impressão digital `vouched` (a do instalador) dá `Fingerprint`; qualquer outra ainda é
-/// conferida na baixa da CA, mas a pessoa confirma antes de entrar (`FirstUse`).
+/// Pin the CA of `url` (checking `expected`, if present) and read the descriptor with verification.
+/// Only the `vouched` fingerprint (from the installer) grants `Fingerprint`; any other is still
+/// checked on CA download, but the person confirms before signing in (`FirstUse`).
 pub fn prepare(
     net: &dyn Net,
     config_dir: &Path,
@@ -188,7 +188,7 @@ pub fn prepare(
         }
         Err(err) if expected.is_some() => Err(err),
         Err(err) => {
-            log::info!("sem CA própria em {url} ({err:#}); usando as raízes do sistema");
+            log::info!("no custom CA at {url} ({err:#}); using system roots");
             let info = server_info(net.verified(&pending_trust(None))?, url)?;
             Ok(prepared(info, url, None, TrustedBy::System, None))
         }
@@ -216,13 +216,13 @@ fn prepared(
     }
 }
 
-/// `http://localhost` ou `http://127.0.0.1`, com ou sem porta.
+/// `http://localhost` or `http://127.0.0.1`, with or without a port.
 fn is_loopback(url: &str) -> bool {
     matches!(host_of(url).as_str(), "localhost" | "127.0.0.1")
 }
 
-/// A pessoa conferiu a impressão digital do servidor que a tela mostra; recusa quando o servidor
-/// preparado já é outro (uma escolha mais nova terminou antes).
+/// The person checked the server fingerprint shown on screen; reject if the prepared server
+/// has already changed (a newer choice finished first).
 pub fn confirm(server: &mut PreparedServer, url: &str, ca_sha256: Option<&str>) -> Result<()> {
     if server.url != url.trim().trim_end_matches('/') || server.ca_sha256.as_deref() != ca_sha256 {
         bail!("O servidor escolhido mudou; confira a impressão digital de novo");
@@ -231,23 +231,23 @@ pub fn confirm(server: &mut PreparedServer, url: &str, ca_sha256: Option<&str>) 
     Ok(())
 }
 
-/// Como a pessoa entra.
+/// How the person signs in.
 pub enum Login<'a> {
     Password { email: &'a str, password: &'a str },
     Code(&'a str),
 }
 
-/// O resultado de entrar: o que o estado grava.
+/// The sign-in result: what the state saves.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignedIn {
     pub secret: String,
     pub account: Account,
     pub web_url: String,
-    /// A CA fixada, já em `<config_dir>/servidor-ca.pem`.
+    /// The pinned CA, already in `<config_dir>/servidor-ca.pem`.
     pub ca_path: Option<PathBuf>,
 }
 
-/// Entra no servidor preparado e devolve a credencial com a conta.
+/// Sign in to the prepared server and return the device credential with the account.
 pub fn sign_in(
     net: &dyn Net,
     config_dir: &Path,
@@ -303,9 +303,9 @@ pub fn sign_in(
     })
 }
 
-/// A CA que o servidor serve hoje é outra que a fixada em `pinned`? Se a servida é a próxima
-/// guardada por [`learn_next`] e o descritor, lido fixando-a, não a contradiz, ela vira a fixada
-/// (`rename`) e a CA não conta como mudada: o sync e o updater seguem sem nova entrada.
+/// Is the CA served by the server different from the one pinned in `pinned`? If it is the next
+/// one saved by [`learn_next`] and the descriptor, read with it pinned, agrees, it becomes the
+/// pinned CA (`rename`) and does not count as changed: sync and updater continue without sign-in.
 pub fn ca_changed(net: &dyn Net, web_url: &str, pinned: &Path) -> Result<bool> {
     let pem =
         std::fs::read(pinned).with_context(|| format!("falha ao ler {}", pinned.display()))?;
@@ -323,7 +323,7 @@ pub fn ca_changed(net: &dyn Net, web_url: &str, pinned: &Path) -> Result<bool> {
             }
             pin::promote_next(pinned)?;
             log::info!(
-                "CA do servidor trocada pela próxima anunciada ({})",
+                "server CA replaced with the announced next one ({})",
                 next.sha256
             );
             Ok(false)
@@ -332,22 +332,23 @@ pub fn ca_changed(net: &dyn Net, web_url: &str, pinned: &Path) -> Result<bool> {
     }
 }
 
-/// Aprende a próxima raiz pelo descritor lido na conexão fixada em `pinned` (a raiz atual avaliza
-/// a nova, sem TOFU) e a guarda ao lado da fixada ([`pin::learn_next`]). Diz se gravou uma.
+/// Learn the next root from the descriptor read over the connection pinned to `pinned` (the current
+/// root vouches for it, without TOFU) and save it beside the pinned CA ([`pin::learn_next`]).
+/// Return whether one was saved.
 pub fn learn_next(net: &dyn Net, web_url: &str, pinned: &Path) -> Result<bool> {
     let transport = net.verified(&TrustMode::Pinned(pinned.to_path_buf()))?;
     let info = server_info(Arc::clone(&transport), web_url)?;
     pin::learn_next(&*transport, web_url, &info, pinned)
 }
 
-/// O `ca_path` é a CA fixada pela primeira execução (e não uma escolhida à mão em "Avançado").
+/// Is `ca_path` the CA pinned at first run (rather than one chosen manually in Advanced)?
 pub fn is_pinned(config_dir: &Path, ca_path: Option<&Path>) -> bool {
     ca_path.is_some_and(|path| path == config_dir.join(pin::PINNED_FILE))
 }
 
-/// Regrava a CA fixada pela primeira execução só com o primeiro certificado ([`pin::trim_saved`])
-/// e diz se havia certificados a mais: sinal de que a primeira conexão pode ter sido interceptada.
-/// Uma CA escolhida à mão em "Avançado" nunca é tocada.
+/// Rewrite the CA pinned at first run with only the first certificate ([`pin::trim_saved`])
+/// and report extra certificates: a sign that the first connection may have been intercepted.
+/// A CA chosen manually in Advanced is never touched.
 pub fn repair_pinned(config_dir: &Path, config: &Config) -> Result<bool> {
     match config.ca_path.as_deref() {
         Some(path) if is_pinned(config_dir, Some(path)) => Ok(pin::trim_saved(path)? > 0),
@@ -355,7 +356,7 @@ pub fn repair_pinned(config_dir: &Path, config: &Config) -> Result<bool> {
     }
 }
 
-/// Sem servidor escolhido, não há onde entrar.
+/// Without a chosen server, there is nowhere to sign in.
 pub fn require(server: Option<PreparedServer>) -> Result<PreparedServer> {
     match server {
         Some(server) => Ok(server),
@@ -374,14 +375,14 @@ pub(crate) mod tests {
 
     use super::*;
 
-    pub const CA: &str = include_str!("../../crates/sync/tests/fixtures/ca-teste.pem");
+    pub const CA: &str = include_str!("../../crates/sync/tests/fixtures/test-ca.pem");
     pub const CA_SHA256: &str = "b36a35276dcebd4b810c47c567f5b240f638450ab9701d196c64e4e7c6eaa233";
     pub const URL: &str = "https://eclume.teste:8443";
     pub const SECRET: &str = "eclp_Vb3kQ8rT2wY6uI1oP4aS7dF0gH3jK9lZ5xC";
 
-    /// Rede roteirizada: um roteiro só para os dois transportes, conferido em ordem por
-    /// `<verificado|inseguro> MÉTODO caminho`; guarda a confiança com que cada transporte
-    /// verificado foi criado.
+    /// Scripted network: one script for both transports, checked in order by
+    /// `<verificado|inseguro> METHOD path`; save the trust mode used to create each
+    /// verified transport.
     #[derive(Default)]
     pub struct ScriptNet {
         steps: Mutex<VecDeque<(String, Result<HttpResponse>)>>,
@@ -401,7 +402,7 @@ pub(crate) mod tests {
                 .lock()
                 .unwrap()
                 .pop_front()
-                .unwrap_or_else(|| panic!("requisição a mais: {} {}", request.method, request.url));
+                .unwrap_or_else(|| panic!("extra request: {} {}", request.method, request.url));
             let path = request.url.strip_prefix(URL).unwrap_or(&request.url);
             assert_eq!(format!("{} {} {path}", self.kind, request.method), call);
             response
@@ -422,7 +423,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// `Net` sobre um `Arc<ScriptNet>`, para os transportes guardarem o roteiro.
+    /// `Net` over an `Arc<ScriptNet>`, so the transports retain the script.
     pub struct Shared(pub Arc<ScriptNet>);
 
     impl Net for Shared {
@@ -481,7 +482,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn servidor_do_instalador_fixa_a_ca_e_entra_por_senha() {
+    fn installer_server_pins_ca_and_signs_in_with_password() {
         let dir = dir("senha");
         let net = Arc::new(
             ScriptNet::default()
@@ -519,7 +520,7 @@ pub(crate) mod tests {
         assert_eq!(std::fs::read(&pinned).unwrap(), CA.as_bytes());
         assert!(!pending.exists());
         assert!(is_pinned(&dir, signed.ca_path.as_deref()));
-        // O descritor e o login vão pelo transporte que confia só na CA baixada.
+        // The descriptor and sign-in use the transport that trusts only the downloaded CA.
         assert_eq!(
             *net.trusts.lock().unwrap(),
             vec![
@@ -530,7 +531,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn pareamento_le_o_email_da_conta() {
+    fn pairing_reads_account_email() {
         let dir = dir("codigo");
         let net = Arc::new(
             ScriptNet::default()
@@ -569,7 +570,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn impressao_digital_do_mdns_ainda_pede_a_conferencia() {
+    fn mdns_fingerprint_still_requires_verification() {
         let dir = dir("mdns");
         let net = Arc::new(
             ScriptNet::default()
@@ -585,7 +586,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn so_o_instalador_dispensa_a_conferencia() {
+    fn only_installer_skips_verification() {
         let embedded = || {
             Some(crate::config::EmbeddedServer {
                 url: URL.to_string(),
@@ -613,7 +614,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn impressao_digital_que_nao_confere_para_antes_de_entrar() {
+    fn mismatched_fingerprint_stops_before_sign_in() {
         let dir = dir("diverge");
         let net =
             Arc::new(ScriptNet::default().expect("inseguro GET /downloads/eclume-root.crt", pem()));
@@ -623,7 +624,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn descritor_com_outra_ca_acusa_a_troca() {
+    fn descriptor_with_another_ca_reports_change() {
         let dir = dir("descritor");
         let net = Arc::new(
             ScriptNet::default()
@@ -638,7 +639,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn sem_ca_publicada_usa_as_raizes_do_sistema() {
+    fn without_published_ca_uses_system_roots() {
         let dir = dir("sistema");
         let net = Arc::new(
             ScriptNet::default()
@@ -659,7 +660,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn senha_errada_nao_grava_nada() {
+    fn wrong_password_saves_nothing() {
         let dir = dir("recusa");
         let net = Arc::new(
             ScriptNet::default()
@@ -685,7 +686,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn percebe_a_ca_trocada() {
+    fn detects_changed_ca() {
         let dir = dir("trocada");
         let pinned = dir.join(pin::PINNED_FILE);
         std::fs::write(&pinned, CA).unwrap();
@@ -725,7 +726,7 @@ pub(crate) mod tests {
     const OTHER_CA: &str = include_str!("../../../server/tests/fixtures/ca-test.pem");
 
     #[test]
-    fn proxima_raiz_aprendida_pela_conexao_fixada() {
+    fn next_root_learned_over_pinned_connection() {
         let dir = dir("proxima");
         let pinned = dir.join(pin::PINNED_FILE);
         std::fs::write(&pinned, CA).unwrap();
@@ -751,11 +752,11 @@ pub(crate) mod tests {
         let shared = Shared(Arc::clone(&net));
         assert!(learn_next(&shared, URL, &pinned).unwrap());
         assert_eq!(pin::saved_next(&pinned).unwrap().sha256, other_sha);
-        assert!(!learn_next(&shared, URL, &pinned).unwrap(), "já guardada");
+        assert!(!learn_next(&shared, URL, &pinned).unwrap(), "already saved");
         assert!(!learn_next(&shared, URL, &pinned).unwrap());
         assert!(
             pin::saved_next(&pinned).is_none(),
-            "sem anúncio, a próxima sai"
+            "without an announcement, the next root is removed"
         );
         assert!(net.done());
         let trusts = net.trusts.lock().unwrap();
@@ -765,7 +766,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn troca_pela_proxima_quando_e_a_servida() {
+    fn switches_to_next_root_when_served() {
         let dir = dir("troca-proxima");
         let pinned = dir.join(pin::PINNED_FILE);
         std::fs::write(&pinned, CA).unwrap();
@@ -792,13 +793,13 @@ pub(crate) mod tests {
             *net.trusts.lock().unwrap(),
             vec![TrustMode::Pinned(pin::next_path(&pinned))]
         );
-        // Outra raiz, que não é a próxima anunciada: a CA mudou de fato.
+        // A different root, other than the announced next one: the CA has actually changed.
         assert!(ca_changed(&shared, URL, &pinned).unwrap());
         assert!(net.done());
     }
 
     #[test]
-    fn so_a_ca_fixada_com_certificado_a_mais_e_regravada() {
+    fn only_pinned_ca_with_extra_certificate_is_rewritten() {
         let dir = dir("reparo");
         let other = include_str!("../../../server/tests/fixtures/ca-test.pem");
         let two = format!("{CA}{other}");
@@ -827,7 +828,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_confianca_sai_da_origem_da_ca() {
+    fn trust_comes_from_ca_origin() {
         let dir = dir("confianca");
         let pinned = dir.join(pin::PINNED_FILE);
         assert_eq!(
@@ -843,7 +844,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn instalador_primeiro_e_sem_repetir() {
+    fn installer_first_without_duplicates() {
         let embedded = crate::config::EmbeddedServer {
             url: URL.into(),
             ca_sha256: Some(CA_SHA256.into()),

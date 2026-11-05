@@ -1,8 +1,8 @@
-//! Leitura do arquivo a importar: duração, se há áudio, se o app sabe decodificá-lo e a data de
-//! gravação, nesta ordem de confiança:
-//! 1. o `creation_time` do `mvhd` (MP4, MOV, M4A);
-//! 2. as tags de data (ID3 `TDRC`/`TYER`, Vorbis `DATE`, MP4 `©day`), só com dia completo;
-//! 3. a data de modificação do arquivo menos a duração (o início provável).
+//! Reading the file to import: duration, whether there is audio, whether the app can decode it,
+//! and the recording date, in this order of trust:
+//! 1. the `mvhd` `creation_time` (MP4, MOV, M4A);
+//! 2. the date tags (ID3 `TDRC`/`TYER`, Vorbis `DATE`, MP4 `©day`), only with a full day;
+//! 3. the file's modification date minus the duration (the likely start).
 
 use std::fs::File;
 use std::path::Path;
@@ -18,56 +18,57 @@ use symphonia::core::probe::Hint;
 
 use crate::mp4date;
 
-/// De onde veio a data de gravação.
+/// Where the recording date came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DateOrigin {
-    /// `creation_time` do `mvhd`.
+    /// The `mvhd` `creation_time`.
     Mvhd,
-    /// Tag de data do arquivo.
+    /// A date tag of the file.
     Tag,
-    /// Data de modificação menos a duração: a pessoa deve conferir.
+    /// Modification date minus the duration: the person should check it.
     FileMtime,
 }
 
-/// O que a tela de importação mostra antes de a pessoa confirmar.
+/// What the import screen shows before the person confirms.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Probe {
-    /// `None` quando o contêiner não diz e não dá para contar.
+    /// `None` when the container does not say and it cannot be counted.
     pub duration_ms: Option<u64>,
     pub has_audio: bool,
-    /// O app converte para Opus; `false` cai no fallback de copiar o original.
+    /// The app converts to Opus; `false` falls back to copying the original.
     pub decodable: bool,
-    /// Início da gravação, em ms desde 1970.
+    /// Start of the recording, in ms since 1970.
     pub recorded_at: i64,
     pub date_origin: DateOrigin,
 }
 
-/// O que o `symphonia` leu do arquivo.
+/// What `symphonia` read from the file.
 struct Audio {
     duration_ms: Option<u64>,
     decodable: bool,
     tag_date: Option<i64>,
 }
 
-/// Lê o arquivo sem decodificar o áudio.
+/// Reads the file without decoding the audio. The error is pt-BR UI copy (the import screen
+/// shows it).
 pub fn probe(path: &Path) -> Result<Probe> {
     let mp4 = mp4date::read(
         File::open(path).with_context(|| format!("falha ao abrir {}", path.display()))?,
     )
     .unwrap_or_else(|err| {
-        log::warn!("MP4 ilegível em {}: {err}", path.display());
+        log::warn!("unreadable MP4 in {}: {err}", path.display());
         None
     });
     let audio = match read_audio(path) {
         Ok(audio) => audio,
         Err(err) => {
-            log::info!("o symphonia não lê {}: {err:#}", path.display());
+            log::info!("symphonia cannot read {}: {err:#}", path.display());
             None
         }
     };
-    // Sem trilha que o symphonia reconheça, só o MP4 diz com certeza que não há som; um
-    // contêiner desconhecido (AVI) segue como áudio e vai pelo fallback.
+    // With no track symphonia recognizes, only MP4 says for sure that there is no sound; an
+    // unknown container (AVI) goes on as audio and takes the fallback.
     let has_audio = audio.is_some() || mp4.is_none_or(|info| info.has_sound);
     let duration_ms = audio.as_ref().and_then(|a| a.duration_ms);
 
@@ -95,7 +96,7 @@ pub fn probe(path: &Path) -> Result<Probe> {
     })
 }
 
-/// A trilha de áudio que o `symphonia` reconhece; `Ok(None)` quando não há nenhuma.
+/// The audio track `symphonia` recognizes; `Ok(None)` when there is none.
 fn read_audio(path: &Path) -> Result<Option<Audio>> {
     let file = File::open(path)?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -113,7 +114,7 @@ fn read_audio(path: &Path) -> Result<Option<Audio>> {
         return Ok(None);
     };
     let codec = track.codec_params.codec;
-    // O Opus o symphonia só demultiplexa: decodifica a libopus do recorder.
+    // symphonia only demuxes Opus: the recorder's libopus decodes it.
     let decodable =
         codec == CODEC_TYPE_OPUS || symphonia::default::get_codecs().get_codec(codec).is_some();
 
@@ -138,7 +139,7 @@ fn audio_track(tracks: &[Track]) -> Option<&Track> {
         .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
 }
 
-/// A duração que o contêiner declara.
+/// The duration the container declares.
 fn duration_ms(track: &Track) -> Option<u64> {
     let params = &track.codec_params;
     let frames = params.n_frames?;
@@ -150,7 +151,7 @@ fn duration_ms(track: &Track) -> Option<u64> {
     Some(frames * 1000 / rate)
 }
 
-/// Sem duração declarada (WebM, por exemplo), soma os pacotes da trilha, sem decodificar.
+/// With no declared duration (WebM, for example), adds up the track's packets, without decoding.
 fn count_duration(format: &mut dyn FormatReader, track: &Track) -> Option<u64> {
     let time_base = track.codec_params.time_base.or_else(|| {
         track
@@ -168,9 +169,9 @@ fn count_duration(format: &mut dyn FormatReader, track: &Track) -> Option<u64> {
     (end > 0).then(|| time.seconds * 1000 + (time.frac * 1000.0).round() as u64)
 }
 
-/// A primeira tag de data com dia completo.
+/// The first date tag with a full day.
 fn date_tag(revision: &MetadataRevision) -> Option<i64> {
-    // O symphonia põe o ID3 `TDRC`/`TYER`, o Vorbis `DATE` e o MP4 `©day` em `Date`.
+    // symphonia puts the ID3 `TDRC`/`TYER`, the Vorbis `DATE` and the MP4 `©day` in `Date`.
     [StandardTagKey::Date, StandardTagKey::OriginalDate]
         .into_iter()
         .find_map(|key| {
@@ -182,8 +183,8 @@ fn date_tag(revision: &MetadataRevision) -> Option<i64> {
         })
 }
 
-/// `AAAA-MM-DD`, com hora opcional (`THH:MM[:SS]` ou com espaço), em UTC. Só com o dia, vale o
-/// meio-dia UTC, que cai no mesmo dia em qualquer fuso do Brasil e na maioria dos outros.
+/// `YYYY-MM-DD`, with an optional time (`THH:MM[:SS]` or with a space), in UTC. With only the
+/// day, noon UTC applies, which falls on the same day in every Brazilian time zone and most others.
 pub(crate) fn parse_date(text: &str) -> Option<i64> {
     let text = text.trim();
     let bytes = text.as_bytes();
@@ -212,7 +213,7 @@ pub(crate) fn parse_date(text: &str) -> Option<i64> {
     Some((days_from_civil(year, month, day) * 86_400 + seconds_of_day) * 1000)
 }
 
-/// Dias desde 1970-01-01 no calendário gregoriano (algoritmo de Howard Hinnant).
+/// Days since 1970-01-01 in the Gregorian calendar (Howard Hinnant's algorithm).
 fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     let year = if month <= 2 { year - 1 } else { year };
     let era = year.div_euclid(400);
@@ -239,12 +240,12 @@ mod tests {
     const MVHD_MS: i64 = 1_789_826_520_000;
 
     fn assert_two_seconds(probe: &Probe) {
-        let ms = probe.duration_ms.expect("duração");
+        let ms = probe.duration_ms.expect("duration");
         assert!((1_950..=2_100).contains(&ms), "{ms} ms");
     }
 
     #[test]
-    fn datas_de_tag() {
+    fn tag_dates() {
         assert_eq!(parse_date("2026-09-19T14:02:00Z"), Some(MVHD_MS));
         assert_eq!(parse_date("2026-09-19 14:02"), Some(MVHD_MS));
         assert_eq!(
@@ -260,8 +261,8 @@ mod tests {
     }
 
     #[test]
-    fn m4a_usa_o_mvhd() {
-        let probe = probe(&fixture("tom.m4a")).unwrap();
+    fn m4a_uses_the_mvhd() {
+        let probe = probe(&fixture("tone.m4a")).unwrap();
         assert_two_seconds(&probe);
         assert!(probe.has_audio && probe.decodable);
         assert_eq!(probe.recorded_at, MVHD_MS);
@@ -269,14 +270,14 @@ mod tests {
     }
 
     #[test]
-    fn mp3_e_ogg_usam_a_tag() {
-        let mp3 = probe(&fixture("tom.mp3")).unwrap();
+    fn mp3_and_ogg_use_the_tag() {
+        let mp3 = probe(&fixture("tone.mp3")).unwrap();
         assert!(mp3.has_audio && mp3.decodable);
         assert_two_seconds(&mp3);
         assert_eq!(mp3.date_origin, DateOrigin::Tag);
         assert_eq!(Some(mp3.recorded_at), parse_date("2026-09-18"));
 
-        let ogg = probe(&fixture("tom.ogg")).unwrap();
+        let ogg = probe(&fixture("tone.ogg")).unwrap();
         assert!(ogg.decodable);
         assert_two_seconds(&ogg);
         assert_eq!(ogg.date_origin, DateOrigin::Tag);
@@ -284,8 +285,8 @@ mod tests {
     }
 
     #[test]
-    fn wav_cai_na_data_de_modificacao_menos_a_duracao() {
-        let path = fixture("tom.wav");
+    fn wav_falls_back_to_modification_date_minus_duration() {
+        let path = fixture("tone.wav");
         let probe = probe(&path).unwrap();
         assert!(probe.has_audio && probe.decodable);
         assert_two_seconds(&probe);
@@ -304,29 +305,29 @@ mod tests {
     }
 
     #[test]
-    fn webm_com_opus_conta_a_duracao_e_e_decodificavel() {
-        let probe = probe(&fixture("tom.webm")).unwrap();
+    fn webm_with_opus_counts_the_duration_and_is_decodable() {
+        let probe = probe(&fixture("tone.webm")).unwrap();
         assert!(probe.has_audio && probe.decodable);
         assert_two_seconds(&probe);
     }
 
     #[test]
-    fn avi_nao_decodifica_mas_segue_como_audio() {
-        let probe = probe(&fixture("tom.avi")).unwrap();
+    fn avi_does_not_decode_but_goes_on_as_audio() {
+        let probe = probe(&fixture("tone.avi")).unwrap();
         assert!(probe.has_audio);
         assert!(!probe.decodable);
         assert_eq!(probe.date_origin, DateOrigin::FileMtime);
     }
 
     #[test]
-    fn mp4_sem_audio() {
-        let probe = probe(&fixture("sem-audio.mp4")).unwrap();
+    fn mp4_without_audio() {
+        let probe = probe(&fixture("no-audio.mp4")).unwrap();
         assert!(!probe.has_audio);
         assert!(!probe.decodable);
     }
 
     #[test]
-    fn arquivo_ausente_e_erro() {
-        assert!(probe(&fixture("nao-existe.mp3")).is_err());
+    fn missing_file_is_an_error() {
+        assert!(probe(&fixture("does-not-exist.mp3")).is_err());
     }
 }

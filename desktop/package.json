@@ -1,7 +1,7 @@
 {
   "name": "eclume-desktop-release",
   "private": true,
-  "description": "A CLI do Tauri que compila e assina os instaladores do desktop, fixada por lockfile (npm ci --ignore-scripts; npx --no-install tauri).",
+  "description": "The Tauri CLI that builds and signs the desktop installers, pinned by lockfile (npm ci --ignore-scripts; npx --no-install tauri).",
   "engines": {
     "node": "22"
   },

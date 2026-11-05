@@ -1,16 +1,16 @@
-//! Sinais observados num instante e a classificação deles em "reunião em qual app".
+//! Signals observed at an instant and their classification as "meeting in which app".
 //!
-//! Tudo aqui é puro: a coleta real dos sinais fica em `platform`, e os testes montam o
-//! [`Snapshot`] à mão.
+//! Everything here is pure: actual signal collection lives in `platform`, and tests construct
+//! [`Snapshot`] by hand.
 
 use serde::{Deserialize, Serialize};
 
-/// Um processo usando o mic.
+/// A process using the mic.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AudioClient {
-    /// Identificador estável: binário, caminho do executável ou bundle id.
+    /// Stable identifier: binary, executable path or bundle id.
     pub id: String,
-    /// Nome legível, quando o SO dá um.
+    /// Readable name, when the OS provides one.
     pub name: String,
     pub pid: Option<u32>,
 }
@@ -24,31 +24,31 @@ impl AudioClient {
         }
     }
 
-    /// `id` e `name` em minúsculas, num texto só, para casar por trecho.
+    /// Lowercase `id` and `name` in a single string, for substring matching.
     fn haystack(&self) -> String {
         format!("{} {}", self.id, self.name).to_lowercase()
     }
 }
 
-/// O que os sinais do SO mostram num instante.
+/// What OS signals show at an instant.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Snapshot {
-    /// Processos usando o mic, identificados.
+    /// Identified processes using the mic.
     pub mic_users: Vec<AudioClient>,
-    /// O mic está em uso por alguém que o SO não identificou (só o estado do dispositivo).
+    /// The mic is in use by someone the OS did not identify (device state only).
     pub mic_busy: bool,
-    /// Nomes dos processos em execução.
+    /// Names of running processes.
     pub processes: Vec<String>,
-    /// Títulos das janelas de topo (vazio onde o SO não deixa ler).
+    /// Top-level window titles (empty where the OS does not allow reading them).
     pub window_titles: Vec<String>,
 }
 
-/// Fonte de sinais, consultada periodicamente.
+/// A signal source, queried periodically.
 pub trait SignalSource: Send {
     fn snapshot(&mut self) -> anyhow::Result<Snapshot>;
 }
 
-/// O app de uma reunião detectada; é a chave das políticas por app.
+/// The app of a detected meeting; the key for per-app policies.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AppKey {
@@ -58,9 +58,9 @@ pub enum AppKey {
     Webex,
     Slack,
     Whatsapp,
-    /// Navegador usando o mic, sem título de janela que diga qual reunião.
+    /// Browser using the mic, without a window title identifying the meeting.
     Navegador,
-    /// Mic em uso por um app que não é de reunião conhecido.
+    /// Mic in use by an app that is not a known meeting app.
     Outro,
 }
 
@@ -93,7 +93,7 @@ impl AppKey {
         Self::ALL.into_iter().find(|key| key.as_str() == value)
     }
 
-    /// Nome exibido na bandeja, nas notificações e na janela.
+    /// Name shown in the tray, notifications and window.
     pub fn label(self) -> &'static str {
         match self {
             Self::Teams => "Microsoft Teams",
@@ -107,7 +107,7 @@ impl AppKey {
         }
     }
 
-    /// Valor de `capture.meeting_app` no contrato v1 (`teams`, `meet`, `zoom` ou `other`).
+    /// Value of `capture.meeting_app` in contract v1 (`teams`, `meet`, `zoom` or `other`).
     pub fn meeting_app(self) -> &'static str {
         match self {
             Self::Teams => "teams",
@@ -118,9 +118,10 @@ impl AppKey {
     }
 }
 
-/// Apps de reunião com cliente próprio, pelo trecho do binário, nome ou bundle id
-/// (`WhatsApp.exe`, `net.whatsapp.WhatsApp`, `ms-teams.exe`, `MSTeams_8wekyb3d8bbwe`, `teams-for-linux`, `ZOOM VoiceEngine`, `us.zoom.xos`,
-/// `CptHost` do Zoom, `CiscoCollabHost` do Webex).
+/// Meeting apps with native clients, by substring of the binary, name or bundle id
+/// (`WhatsApp.exe`, `net.whatsapp.WhatsApp`, `ms-teams.exe`, `MSTeams_8wekyb3d8bbwe`,
+/// `teams-for-linux`, `ZOOM VoiceEngine`, `us.zoom.xos`,
+/// Zoom's `CptHost`, Webex's `CiscoCollabHost`).
 const NATIVE_APPS: [(AppKey, &[&str]); 5] = [
     (AppKey::Teams, &["teams"]),
     (AppKey::Zoom, &["zoom", "cpthost", "aomhost"]),
@@ -129,8 +130,8 @@ const NATIVE_APPS: [(AppKey, &[&str]); 5] = [
     (AppKey::Whatsapp, &["whatsapp"]),
 ];
 
-/// Navegadores, pelo trecho do binário ou nome (`chrome`, `msedge`, o processo GPU do WebKit
-/// que o Safari usa para o mic).
+/// Browsers, by substring of the binary or name (`chrome`, `msedge`, the WebKit GPU process
+/// Safari uses for the mic).
 const BROWSERS: [&str; 11] = [
     "chrome",
     "chromium",
@@ -145,7 +146,7 @@ const BROWSERS: [&str; 11] = [
     "librewolf",
 ];
 
-/// Títulos de janela que identificam a reunião aberta num navegador, em ordem de prioridade.
+/// Window titles identifying a meeting open in a browser, in priority order.
 const BROWSER_TITLES: [(AppKey, &[&str]); 5] = [
     (AppKey::Meet, &["meet.google.com", "google meet", "meet - "]),
     (AppKey::Teams, &["microsoft teams"]),
@@ -154,22 +155,22 @@ const BROWSER_TITLES: [(AppKey, &[&str]); 5] = [
         &["zoom meeting", "zoom workplace", "app.zoom.us"],
     ),
     (AppKey::Webex, &["webex"]),
-    // Por último: só vale se nenhuma reunião de verdade estiver aberta em outra aba.
+    // Last: only applies if no actual meeting is open in another tab.
     (AppKey::Whatsapp, &["whatsapp"]),
 ];
 
-/// Processos que só existem com uma reunião em andamento, para o caso em que o SO diz que o mic
-/// está em uso mas não diz por quem.
+/// Processes that only exist during a meeting, for when the OS says the mic is in use
+/// but does not say by whom.
 const IN_MEETING_PROCESSES: [(AppKey, &[&str]); 2] = [
     (AppKey::Zoom, &["cpthost", "aomhost"]),
     (AppKey::Teams, &["teams"]),
 ];
 
-/// Nome do próprio app: a gravação do eclume usa o mic e não pode se detectar.
+/// The app's own name: eclume recordings use the mic and must not detect themselves.
 const SELF_NAME: &str = "eclume";
 
-/// O próprio eclume, pelo pid ou pelo executável — nunca pela pasta: no Windows o id é o caminho
-/// inteiro, e um app qualquer em `C:\Projetos\eclume\` não é o eclume.
+/// eclume itself, by pid or executable — never by folder: on Windows the id is the full path,
+/// and an arbitrary app in `C:\Projetos\eclume\` is not eclume.
 pub fn is_self(client: &AudioClient, own_pid: u32) -> bool {
     client.pid == Some(own_pid) || names_self(client)
 }
@@ -192,7 +193,7 @@ fn is_browser(haystack: &str) -> bool {
     BROWSERS.iter().any(|b| haystack.contains(b))
 }
 
-/// Algum navegador usa o mic: só então vale ler os títulos de janela.
+/// A browser is using the mic: only then is reading window titles useful.
 pub fn wants_window_titles(users: &[AudioClient]) -> bool {
     users.iter().any(|client| is_browser(&client.haystack()))
 }
@@ -209,11 +210,12 @@ fn browser_meeting(titles: &[String]) -> Option<AppKey> {
         .map(|(key, _)| *key)
 }
 
-/// Decide se há reunião e em qual app. Sem mic em uso não há reunião, com qualquer app aberto.
+/// Decides whether there is a meeting and in which app. Without mic use there is no meeting,
+/// regardless of open apps.
 ///
-/// Ordem: um app de reunião nativo usando o mic; um navegador usando o mic, refinado pelo título
-/// das janelas (`navegador` sem título conhecido); mic ocupado sem dono identificado, refinado
-/// pelos processos de reunião em execução; qualquer outro usuário do mic vira `outro`.
+/// Order: a native meeting app using the mic; a browser using the mic, refined by window
+/// titles (`navegador` without a known title); mic busy without an identified owner, refined
+/// by running meeting processes; any other mic user becomes `outro`.
 pub fn classify(snapshot: &Snapshot) -> Option<AppKey> {
     let users: Vec<String> = snapshot
         .mic_users
@@ -262,7 +264,7 @@ mod tests {
     }
 
     #[test]
-    fn detecta_apps_nativos_pelo_binario() {
+    fn detects_native_apps_by_binary() {
         for (id, name, expected) in [
             ("ms-teams", "ms-teams", AppKey::Teams),
             ("MSTeams_8wekyb3d8bbwe", "", AppKey::Teams),
@@ -285,7 +287,7 @@ mod tests {
     }
 
     #[test]
-    fn meet_no_navegador_pelo_titulo_da_janela() {
+    fn meet_in_browser_by_window_title() {
         let mut snapshot = mic(&[("chrome", "Google Chrome")]);
         snapshot.window_titles = vec![
             "Caixa de entrada - Gmail".into(),
@@ -301,7 +303,7 @@ mod tests {
     }
 
     #[test]
-    fn whatsapp_web_pelo_titulo_e_reuniao_de_verdade_ganha() {
+    fn whatsapp_web_by_title_and_actual_meeting_wins() {
         let mut snapshot = mic(&[("chrome", "Google Chrome")]);
         snapshot.window_titles = vec!["(2) WhatsApp Web - Google Chrome".into()];
         assert_eq!(classify(&snapshot), Some(AppKey::Whatsapp));
@@ -314,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn navegador_sem_titulo_conhecido_vira_navegador() {
+    fn browser_without_known_title_becomes_browser() {
         let mut snapshot = mic(&[("firefox", "Firefox")]);
         assert_eq!(classify(&snapshot), Some(AppKey::Navegador));
         snapshot.window_titles = vec!["Documento sem título".into()];
@@ -322,13 +324,13 @@ mod tests {
     }
 
     #[test]
-    fn app_nativo_ganha_do_navegador() {
+    fn native_app_wins_over_browser() {
         let snapshot = mic(&[("chrome", "Google Chrome"), ("zoom", "zoom")]);
         assert_eq!(classify(&snapshot), Some(AppKey::Zoom));
     }
 
     #[test]
-    fn o_proprio_eclume_nao_conta() {
+    fn eclume_itself_does_not_count() {
         assert_eq!(classify(&mic(&[("eclume-desktop", "eclume")])), None);
         assert_eq!(
             classify(&mic(&[("eclume-desktop", "eclume"), ("teams", "Teams")])),
@@ -345,15 +347,15 @@ mod tests {
     }
 
     #[test]
-    fn app_numa_pasta_do_eclume_nao_e_o_proprio_app() {
-        let caminho = r"C:\Projetos\eclume\x\gravador.exe";
-        assert!(!is_self(&AudioClient::new(caminho, "gravador"), 7));
+    fn app_in_eclume_folder_is_not_eclume_itself() {
+        let executable_path = r"C:\Projetos\eclume\x\gravador.exe";
+        assert!(!is_self(&AudioClient::new(executable_path, "gravador"), 7));
         assert_eq!(
-            classify(&mic(&[(caminho, "gravador")])),
+            classify(&mic(&[(executable_path, "gravador")])),
             Some(AppKey::Outro)
         );
-        let instalado = r"C:\Users\u\AppData\Local\eclume\eclume-desktop.exe";
-        assert!(is_self(&AudioClient::new(instalado, "eclume-desktop"), 7));
+        let installed = r"C:\Users\u\AppData\Local\eclume\eclume-desktop.exe";
+        assert!(is_self(&AudioClient::new(installed, "eclume-desktop"), 7));
         assert!(is_self(
             &AudioClient::new("io.github.holetz.eclume", ""),
             7
@@ -361,7 +363,7 @@ mod tests {
     }
 
     #[test]
-    fn mic_livre_nao_e_reuniao_mesmo_com_teams_aberto() {
+    fn idle_mic_is_not_a_meeting_even_with_teams_open() {
         let snapshot = Snapshot {
             processes: vec!["ms-teams".into(), "zoom".into()],
             window_titles: vec!["Chat | Microsoft Teams".into()],
@@ -371,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn mic_ocupado_sem_dono_usa_os_processos() {
+    fn busy_mic_without_owner_uses_processes() {
         let mut snapshot = Snapshot {
             mic_busy: true,
             processes: vec!["Finder".into(), "CptHost".into()],
@@ -385,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn outro_usuario_do_mic_vira_outro() {
+    fn other_mic_user_becomes_other() {
         assert_eq!(
             classify(&mic(&[("obs", "OBS Studio")])),
             Some(AppKey::Outro)
@@ -393,7 +395,7 @@ mod tests {
     }
 
     #[test]
-    fn chaves_e_valores_do_contrato() {
+    fn contract_keys_and_values() {
         for key in AppKey::ALL {
             assert_eq!(AppKey::parse(key.as_str()), Some(key));
         }

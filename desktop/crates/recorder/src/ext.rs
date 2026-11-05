@@ -1,6 +1,7 @@
-//! Pontos de extensão do app: o upload das gravações e a detecção de reuniões. Aqui ficam os
-//! contratos e o laço de sync sobre a fila; as implementações reais são o `HttpUploader` do
-//! `eclume-sync` (HTTP com a credencial da conta) e o `DebouncedDetector` do `eclume-detect` (mic e processo).
+//! App extension points: recording uploads and meeting detection. This holds the contracts and
+//! sync loop over the queue; the actual implementations are `HttpUploader` from `eclume-sync`
+//! (HTTP with the account credential) and `DebouncedDetector` from `eclume-detect` (mic and
+//! process).
 
 use std::sync::Mutex;
 
@@ -8,30 +9,30 @@ use anyhow::{anyhow, Result};
 
 use crate::queue::{Queue, QueuedRecording};
 
-/// Envia uma gravação ao servidor do eclume e devolve o id remoto dela.
+/// Uploads a recording to the eclume server and returns its remote id.
 pub trait Uploader: Send + Sync {
     fn upload(&self, recording: &QueuedRecording) -> Result<String>;
 }
 
-/// Mudança observada pelo detector de reuniões.
+/// Change observed by the meeting detector.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MeetingEvent {
-    /// Uma reunião começou; `app` identifica o programa (Teams, Meet, Zoom...).
+    /// A meeting started; `app` identifies the program (Teams, Meet, Zoom...).
     Started { app: String },
-    /// A reunião em curso terminou.
+    /// The current meeting ended.
     Ended,
 }
 
-/// Detector de reuniões, consultado periodicamente pelo app.
+/// Meeting detector, polled periodically by the app.
 pub trait MeetingDetector: Send {
-    /// Devolve o próximo evento, se houver; não bloqueia.
+    /// Returns the next event, if any; does not block.
     fn poll(&mut self) -> Option<MeetingEvent>;
 }
 
-/// O sync foi interrompido de propósito (a rede do eclume caiu, o sistema parou o trabalho de
-/// sync): não é falha da gravação. Qualquer transporte pode devolvê-lo; o cliente HTTP não o
-/// retenta, e [`sync_pending`] devolve a gravação a `pending` sem gastar tentativa e encerra a
-/// passada. Só o celular o aciona.
+/// Sync was interrupted intentionally (the eclume network went down, the system stopped the
+/// sync job): this is not a recording failure. Any transport can return it; the HTTP client
+/// does not retry it, and [`sync_pending`] returns the recording to `pending` without spending
+/// an attempt and ends the pass. Only mobile triggers it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SyncInterrupted;
 
@@ -43,22 +44,23 @@ impl std::fmt::Display for SyncInterrupted {
 
 impl std::error::Error for SyncInterrupted {}
 
-/// Se a cadeia do erro traz um [`SyncInterrupted`].
+/// Whether the error chain contains a [`SyncInterrupted`].
 pub fn is_interrupted(err: &anyhow::Error) -> bool {
     err.chain().any(|cause| cause.is::<SyncInterrupted>())
 }
 
-/// Resultado de uma passada de sync.
+/// Result of a sync pass.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SyncReport {
     pub synced: usize,
     pub failed: usize,
 }
 
-/// Sincroniza, uma a uma, as gravações `pending` da fila. Cada falha fica registrada na própria
-/// gravação e não interrompe as demais; as falhas voltam à fila por [`Queue::retry_due`], no
-/// prazo do backoff que [`Queue::mark_failed`] agenda. Um [`SyncInterrupted`] na cadeia do erro
-/// devolve a gravação a `pending` ([`Queue::release_claim`]) e encerra a passada.
+/// Syncs the queue's `pending` recordings one at a time. Each failure is recorded on its
+/// recording and does not interrupt the others; failures return to the queue through
+/// [`Queue::retry_due`], after the backoff scheduled by [`Queue::mark_failed`]. A
+/// [`SyncInterrupted`] in the error chain returns the recording to `pending`
+/// ([`Queue::release_claim`]) and ends the pass.
 pub fn sync_pending(queue: &Mutex<Queue>, uploader: &dyn Uploader) -> Result<SyncReport> {
     let mut report = SyncReport::default();
     loop {
@@ -66,7 +68,7 @@ pub fn sync_pending(queue: &Mutex<Queue>, uploader: &dyn Uploader) -> Result<Syn
         let Some(recording) = claimed else {
             return Ok(report);
         };
-        // O upload roda sem segurar a fila, para a UI e o gravador seguirem livres.
+        // Upload runs without holding the queue, keeping the UI and recorder free.
         match uploader.upload(&recording) {
             Ok(remote_id) => {
                 lock(queue)?.mark_synced(&recording.id, &remote_id)?;
@@ -74,7 +76,7 @@ pub fn sync_pending(queue: &Mutex<Queue>, uploader: &dyn Uploader) -> Result<Syn
             }
             Err(err) if is_interrupted(&err) => {
                 lock(queue)?.release_claim(&recording.id)?;
-                log::info!("sync interrompido; {} volta à fila", recording.id);
+                log::info!("sync interrupted; {} returns to the queue", recording.id);
                 return Ok(report);
             }
             Err(err) => {
@@ -110,7 +112,7 @@ mod tests {
         }
     }
 
-    /// Sobe a primeira e é interrompido na segunda.
+    /// Uploads the first and is interrupted on the second.
     struct InterruptedUploader;
 
     impl Uploader for InterruptedUploader {
@@ -124,7 +126,7 @@ mod tests {
     }
 
     #[test]
-    fn sync_interrompido_devolve_a_gravacao_sem_gastar_tentativa() {
+    fn interrupted_sync_returns_recording_without_spending_attempt() {
         let queue = Queue::open_in_memory().unwrap();
         for (i, id) in ["primeira", "segunda", "terceira"].iter().enumerate() {
             let started = i as i64;
@@ -146,17 +148,17 @@ mod tests {
             }
         );
         let queue = queue.into_inner().unwrap();
-        let segunda = queue.get("segunda").unwrap().unwrap();
-        assert_eq!(segunda.status, Status::Pending);
-        assert_eq!(segunda.attempts, 0);
-        assert_eq!(segunda.last_error, None);
-        // A passada parou: a terceira nem foi tentada.
-        let terceira = queue.get("terceira").unwrap().unwrap();
-        assert_eq!((terceira.status, terceira.attempts), (Status::Pending, 0));
+        let second = queue.get("segunda").unwrap().unwrap();
+        assert_eq!(second.status, Status::Pending);
+        assert_eq!(second.attempts, 0);
+        assert_eq!(second.last_error, None);
+        // The pass stopped: the third was never attempted.
+        let third = queue.get("terceira").unwrap().unwrap();
+        assert_eq!((third.status, third.attempts), (Status::Pending, 0));
     }
 
     #[test]
-    fn session_sync_passa_pela_fila_e_isola_falhas() {
+    fn session_sync_uses_queue_and_isolates_failures() {
         let queue = Queue::open_in_memory().unwrap();
         for (i, id) in ["boa-1", "ruim-1", "boa-2"].iter().enumerate() {
             let started = i as i64;
@@ -179,9 +181,9 @@ mod tests {
         );
 
         let queue = queue.into_inner().unwrap();
-        let ruim = queue.get("ruim-1").unwrap().unwrap();
-        assert_eq!(ruim.status, Status::Failed);
-        assert_eq!(ruim.last_error.as_deref(), Some("servidor recusou"));
+        let bad = queue.get("ruim-1").unwrap().unwrap();
+        assert_eq!(bad.status, Status::Failed);
+        assert_eq!(bad.last_error.as_deref(), Some("servidor recusou"));
         assert_eq!(
             queue.get("boa-2").unwrap().unwrap().remote_id.as_deref(),
             Some("srv-boa-2")
@@ -201,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn session_detector_entrega_eventos_em_ordem() {
+    fn session_detector_delivers_events_in_order() {
         let mut detector: Box<dyn MeetingDetector> = Box::new(ScriptedDetector(vec![
             MeetingEvent::Started {
                 app: "teams".into(),

@@ -1,19 +1,19 @@
-//! O `AGENTS.md` da raiz: explica a um agente (Claude Code, Codex ou outro) o que há na pasta e
-//! como lê-la e pesquisá-la. É regerado a cada ciclo; um `AGENTS.md` do próprio usuário, sem o
-//! marcador abaixo, nunca é sobrescrito.
+//! The root `AGENTS.md`: tells an agent (Claude Code, Codex or another) what is in the folder and
+//! how to read and search it. Regenerated each cycle; a user's own `AGENTS.md` without the marker
+//! below is never overwritten.
 
 use anyhow::Result;
 
 use crate::reconcile::Mirror;
 
-/// Nome do arquivo, na raiz.
+/// File name at the root.
 pub const FILE: &str = "AGENTS.md";
 
-/// Primeira linha do arquivo gerado: é o que distingue o do app de um escrito à mão.
+/// The generated file's first line: distinguishes the app's file from a handwritten one.
 pub const MARKER: &str =
     "<!-- Gerado pelo eclume desktop; regerado a cada sincronização. Não edite. -->";
 
-/// O texto do `AGENTS.md`. Com `transcripts` falso, as instruções do JSONL saem.
+/// The `AGENTS.md` text. With `transcripts` false, JSONL instructions are omitted.
 pub fn markdown(transcripts: bool) -> String {
     let mut out = String::new();
     out.push_str(MARKER);
@@ -87,8 +87,8 @@ da transcrição; a transcrição é o registro bruto e pode ser longa.\n",
 }
 
 impl Mirror {
-    /// Escreve o `AGENTS.md` da raiz. Devolve `false` quando nada mudou ou quando há um
-    /// `AGENTS.md` que não é do app (sem o marcador), que fica intacto.
+    /// Writes the root `AGENTS.md`. Returns `false` when nothing changed or when an `AGENTS.md`
+    /// not owned by the app (without the marker) exists; that file stays intact.
     pub fn write_agents(&mut self, transcripts: bool) -> Result<bool> {
         let path = self.root.join(FILE);
         if let Ok(current) = std::fs::read_to_string(&path) {
@@ -108,10 +108,10 @@ mod tests {
     use crate::testing::Tmp;
 
     #[test]
-    fn explica_layout_front_matter_e_busca() {
+    fn explains_layout_front_matter_and_search() {
         let text = markdown(true);
         assert!(text.starts_with(MARKER));
-        for esperado in [
+        for expected in [
             "subpasta por Collection",
             "sem-colecao/",
             "AAAA-MM-DD_HHMM_<id8>.md",
@@ -124,12 +124,12 @@ mod tests {
             "jq -r",
             ".eclume-sync.json",
         ] {
-            assert!(text.contains(esperado), "faltou: {esperado}");
+            assert!(text.contains(expected), "missing: {expected}");
         }
     }
 
     #[test]
-    fn sem_transcricoes_o_texto_nao_fala_de_jsonl() {
+    fn text_omits_jsonl_without_transcripts() {
         let text = markdown(false);
         assert!(!text.contains("jsonl"));
         assert!(!text.contains("jq"));
@@ -138,12 +138,12 @@ mod tests {
     }
 
     #[test]
-    fn escreve_regera_e_nao_pisa_no_do_usuario() {
+    fn writes_regenerates_and_preserves_user_file() {
         let tmp = Tmp::new("agents");
         let mut mirror = Mirror::open(tmp.path()).unwrap();
         assert!(mirror.write_agents(true).unwrap());
         assert!(!mirror.write_agents(true).unwrap());
-        // Mudar a opção regera o texto.
+        // Changing the option regenerates the text.
         assert!(mirror.write_agents(false).unwrap());
         assert!(!std::fs::read_to_string(tmp.path().join(FILE))
             .unwrap()

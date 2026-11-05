@@ -1,11 +1,11 @@
-//! A ligação do aparelho (holetz/eclume#35): o descritor público `GET /server`, o login por
-//! e-mail e senha (`POST /devices/login`) e a troca do código de pareamento
-//! (`POST /devices/pair`). As três rotas são públicas; a credencial que voltam é um token `eclp_`
-//! de dispositivo, guardado no mesmo cofre do PAT.
+//! Device connection (holetz/eclume#35): the public descriptor `GET /server`, e-mail and password
+//! sign-in (`POST /devices/login`) and pairing code exchange (`POST /devices/pair`). All three
+//! routes are public; the credential they return is an `eclp_` device token, stored in the same
+//! vault as the PAT.
 //!
-//! O QR que a web mostra para o celular (`pair_url`) é lido por [`parse_pair_url`].
+//! The QR the web shows for the phone (`pair_url`) is read by [`parse_pair_url`].
 //!
-//! Sem retentativa: é uma ação da pessoa, e o erro vira texto na hora.
+//! No retries: this is a user action, and the error becomes text immediately.
 
 use std::sync::Arc;
 
@@ -16,7 +16,7 @@ use crate::api::{DeviceCredential, DeviceLogin, DevicePair, Problem, ServerInfo}
 use crate::protocol::{api_error, parse, parse_base};
 use crate::transport::{HttpRequest, HttpResponse, Transport};
 
-/// O `platform` do contrato para este sistema.
+/// The contract's `platform` for this system.
 pub fn platform() -> &'static str {
     if cfg!(target_os = "android") {
         "android"
@@ -31,7 +31,7 @@ pub fn platform() -> &'static str {
     }
 }
 
-/// O nome deste computador: o `device_name` da credencial e do `capture` do upload.
+/// This computer's name: the credential's `device_name` and the upload's `capture`.
 pub fn device_name() -> String {
     gethostname::gethostname()
         .into_string()
@@ -40,18 +40,18 @@ pub fn device_name() -> String {
         .unwrap_or_else(|| "computador".into())
 }
 
-/// O conteúdo do QR de pareamento: `<url>/parear?codigo=<code>&ca=<ca_sha256>`.
+/// The pairing QR content: `<url>/parear?codigo=<code>&ca=<ca_sha256>`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PairUrl {
-    /// O endereço do servidor, sem barra no fim.
+    /// The server address without a trailing slash.
     pub url: String,
     pub code: String,
-    /// A impressão digital da CA raiz; sem ela (raiz ainda não publicada), o app confere à mão.
+    /// The root CA fingerprint; without it (root not yet published), the app checks manually.
     pub ca_sha256: Option<String>,
 }
 
-/// Lê o texto de um QR de pareamento. O texto vem da câmera e não é confiável: só um
-/// `https://…/parear` com `codigo` de 6 caracteres e `ca` de 64 hexadecimais passa.
+/// Reads pairing QR text. The text comes from the camera and is untrusted: only `https://…/parear`
+/// with a 6-character `codigo` and 64-hex-digit `ca` passes.
 pub fn parse_pair_url(text: &str) -> Result<PairUrl> {
     let invalid = || anyhow!("Este código não é um pareamento do eclume");
     let parsed = Url::parse(text.trim()).map_err(|_| invalid())?;
@@ -91,7 +91,7 @@ pub fn parse_pair_url(text: &str) -> Result<PairUrl> {
     })
 }
 
-/// As rotas públicas de ligação do aparelho num servidor.
+/// The public device connection routes on a server.
 pub struct Devices {
     transport: Arc<dyn Transport>,
     base: Url,
@@ -118,7 +118,7 @@ impl Devices {
         })
     }
 
-    /// O descritor do servidor: nome, endereço e impressão digital da CA raiz.
+    /// The server descriptor: name, address and root CA fingerprint.
     pub fn server_info(&self) -> Result<ServerInfo> {
         let what = "falha ao ler o descritor do servidor";
         let response = self.send(HttpRequest::new("GET", self.endpoint("/server")))?;
@@ -128,7 +128,7 @@ impl Devices {
         parse(what, &response)
     }
 
-    /// Entra com e-mail e senha e recebe a credencial deste aparelho.
+    /// Signs in with e-mail and password and receives this device's credential.
     pub fn login(
         &self,
         email: &str,
@@ -145,7 +145,7 @@ impl Devices {
         self.credential(request, "E-mail ou senha incorretos")
     }
 
-    /// Troca o código de pareamento (6 caracteres, com ou sem hífen) pela credencial.
+    /// Exchanges the pairing code (6 characters, with or without a hyphen) for the credential.
     pub fn pair(&self, code: &str, device_name: &str) -> Result<DeviceCredential> {
         let body = DevicePair {
             code: code.trim(),
@@ -156,7 +156,7 @@ impl Devices {
         self.credential(request, "Código inválido ou vencido")
     }
 
-    /// `rejected` é o texto de um 401: a senha ou o código recusados.
+    /// `rejected` is the text for a 401: password or code rejected.
     fn credential(&self, request: HttpRequest, rejected: &str) -> Result<DeviceCredential> {
         let response = self.send(request)?;
         if response.is_success() {
@@ -166,7 +166,7 @@ impl Devices {
     }
 }
 
-/// O texto de uma recusa do login ou do pareamento.
+/// The text for a sign-in or pairing rejection.
 fn sign_in_error(response: &HttpResponse, rejected: &str) -> anyhow::Error {
     let problem: Problem = serde_json::from_slice(&response.body).unwrap_or_default();
     match (response.status, problem.code.as_deref()) {
@@ -213,24 +213,24 @@ mod tests {
     }
 
     #[test]
-    fn qr_de_pareamento_valido_e_invalidos() {
+    fn valid_and_invalid_pairing_qr() {
         let ca = "3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d";
-        let par = parse_pair_url(&format!(
+        let pair = parse_pair_url(&format!(
             "https://192.168.15.199:8443/parear?codigo=k7q-4mx&ca={}",
             ca.to_ascii_uppercase()
         ))
         .unwrap();
         assert_eq!(
-            par,
+            pair,
             PairUrl {
                 url: "https://192.168.15.199:8443".into(),
                 code: "K7Q4MX".into(),
                 ca_sha256: Some(ca.into()),
             }
         );
-        let sem_ca = parse_pair_url("https://eclume.test/parear?codigo=K7Q4MX").unwrap();
-        assert_eq!(sem_ca.ca_sha256, None);
-        for ruim in [
+        let without_ca = parse_pair_url("https://eclume.test/parear?codigo=K7Q4MX").unwrap();
+        assert_eq!(without_ca.ca_sha256, None);
+        for invalid_qr in [
             "http://eclume.test/parear?codigo=K7Q4MX",
             "https://eclume.test/entrar?codigo=K7Q4MX",
             "https://eclume.test/parear?codigo=K7Q",
@@ -239,12 +239,12 @@ mod tests {
             "javascript:alert(1)",
             "não é url",
         ] {
-            assert!(parse_pair_url(ruim).is_err(), "{ruim}");
+            assert!(parse_pair_url(invalid_qr).is_err(), "{invalid_qr}");
         }
     }
 
     #[test]
-    fn plataforma_do_contrato() {
+    fn contract_platform() {
         assert!(["windows", "macos", "linux", "android", "ios"].contains(&platform()));
     }
 
@@ -270,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn login_manda_o_aparelho_e_devolve_a_credencial() {
+    fn login_sends_device_and_returns_credential() {
         let script =
             Script::default().expect("POST /api/v1/devices/login", json(201, credential()));
         let (devices, script) = devices(script);
@@ -291,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn pareamento_troca_o_codigo() {
+    fn pairing_exchanges_code() {
         let script = Script::default().expect("POST /api/v1/devices/pair", json(201, credential()));
         let (devices, script) = devices(script);
         devices.pair(" K7Q-4MX ", "NOTEBOOK-ANA").unwrap();
@@ -301,7 +301,7 @@ mod tests {
     }
 
     #[test]
-    fn recusas_viram_texto() {
+    fn rejections_become_text() {
         let script = Script::default()
             .expect(
                 "POST /api/v1/devices/login",
@@ -361,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn descritor_do_servidor() {
+    fn server_descriptor() {
         let script = Script::default()
             .expect(
                 "GET /api/v1/server",
@@ -380,7 +380,7 @@ mod tests {
     }
 
     #[test]
-    fn endereco_invalido() {
+    fn invalid_address() {
         let transport: Arc<dyn Transport> = Arc::new(Script::default());
         assert!(Devices::new(Arc::clone(&transport), "ftp://x").is_err());
         assert!(Devices::new(transport, "192.168.15.199").is_err());

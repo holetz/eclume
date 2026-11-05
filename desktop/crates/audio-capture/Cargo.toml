@@ -1,9 +1,9 @@
-# Captura de áudio do eclume: mic por cpal e áudio do sistema por plataforma. Os backends de
-# sistema são adaptados de fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43
-# (crates/audio-actual/src/speaker, MIT; ver VENDOR.md).
+# eclume audio capture: mic through cpal and system audio per platform. System backends are
+# adapted from fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43
+# (crates/audio-actual/src/speaker, MIT; see VENDOR.md).
 [package]
 name = "eclume-audio-capture"
-description = "Captura de mic e áudio do sistema do app desktop do eclume."
+description = "Mic and system audio capture for the eclume desktop app."
 version.workspace = true
 edition = "2024"
 license.workspace = true
@@ -11,10 +11,10 @@ rust-version.workspace = true
 publish = false
 
 [features]
-# Sem `backends`, o crate só expõe o trait `AudioSource` e o anel de amostras, sem nenhuma
-# dependência de sistema — é assim que o `eclume-recorder` o usa nos testes. `mic` é só o
-# microfone por `cpal` (AAudio no Android), sem os backends de áudio do sistema, que o celular
-# não tem.
+# Without `backends`, this crate only exposes the `AudioSource` trait and sample ring buffer,
+# with no system dependencies — this is how `eclume-recorder` uses it in tests. `mic` only enables
+# the microphone through `cpal` (AAudio on Android), without system audio backends, which mobile
+# devices do not have.
 default = ["backends"]
 mic = ["dep:cpal"]
 backends = ["mic", "dep:pipewire", "dep:libpulse-binding", "dep:wasapi", "dep:cidre"]

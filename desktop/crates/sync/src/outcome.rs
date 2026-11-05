@@ -1,8 +1,8 @@
-//! O desfecho do processamento de uma gravação, lido da listagem por `?since=` (contrato 2.17.0):
-//! resumo pronto, resumo que falhou, pronta sem resumo, transcrição que falhou ou, desde a 2.22.0,
-//! a gravação parada à espera de o dono nomear os locutores (etapa `speakers` em `waiting`). A regra é a
-//! mesma do web (`web/src/app/processingWatch.ts`), com os mesmos casos de teste; a marca d'água
-//! garante que cada desfecho seja avisado uma vez, e nenhum anterior a ela.
+//! A recording's processing outcome, read from the `?since=` listing (contract 2.17.0): summary
+//! ready, summary failed, ready without summary, transcript failed or, since 2.22.0, a recording
+//! waiting for its owner to name the speakers (`speakers` step in `waiting`). The rule matches the
+//! web (`web/src/app/processingWatch.ts`), with the same test cases; the watermark ensures each
+//! outcome is notified once, and none before it.
 
 use std::collections::BTreeMap;
 
@@ -11,41 +11,40 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::{cursor_from, LibraryRecording};
 
-/// Folga da marca d'água e do `?since=`: cobre a transação que confirma depois de outra com
-/// instante maior (o `now()` do servidor é o início da transação).
+/// Watermark and `?since=` margin: covers a transaction committing after another with a later
+/// timestamp (the server's `now()` is the transaction start).
 pub const MARGIN_SECS: i64 = 60;
-/// Quanto tempo um desfecho avisado fica registrado: além disso, ele já está abaixo da marca.
+/// How long a notified outcome stays recorded: beyond that, it is already below the watermark.
 const KEEP_DAYS: i64 = 7;
-/// Motivos de etapa pulada que são ação da própria pessoa (ou anteriores ao pipeline): sem aviso.
+/// Skipped step reasons caused by the user (or predating the pipeline): no notification.
 const SILENT_REASONS: [&str; 3] = ["cancelled", "summary_deleted", "before_pipeline"];
 
-/// Os desfechos avisáveis.
+/// The outcomes that warrant a notification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Outcome {
     SummaryReady,
     SummaryFailed,
-    /// Pronta sem resumo: a etapa foi pulada (o motivo em [`Ended::reason`]).
+    /// Ready without summary: the step was skipped (reason in [`Ended::reason`]).
     NoSummary,
     TranscriptionFailed,
-    /// Parada à espera dos nomes dos locutores (a conta exige a marcação); o motivo em
-    /// [`Ended::reason`].
+    /// Waiting for speaker names (the account requires naming); reason in [`Ended::reason`].
     AwaitingSpeakers,
 }
 
-/// Um desfecho de uma gravação, com o instante em que aconteceu.
+/// A recording's outcome, with the time it occurred.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ended {
     pub recording_id: String,
     pub title: String,
     pub outcome: Outcome,
-    /// O motivo da etapa pulada, no vocabulário de `PipelineStep.reason`.
+    /// The skipped step reason, in the `PipelineStep.reason` vocabulary.
     pub reason: Option<String>,
-    /// `finished_at` da etapa `summary`, da etapa `speakers` em espera ou do job.
+    /// `finished_at` of the `summary` step, the waiting `speakers` step or the job.
     pub at: String,
 }
 
-/// O desfecho de um item da listagem, se o processamento dele terminou de um jeito avisável.
+/// A listing item's outcome, if its processing ended in a way that warrants a notification.
 pub fn outcome_of(recording: &LibraryRecording) -> Option<Ended> {
     let ended = |outcome, reason: Option<&String>, at: &String| Ended {
         recording_id: recording.id.clone(),
@@ -93,8 +92,8 @@ pub fn outcome_of(recording: &LibraryRecording) -> Option<Ended> {
     Some(ended(outcome, step.reason.as_ref(), at))
 }
 
-/// O que o cliente lembra entre leituras: o próximo `?since=`, a marca d'água (desfechos com
-/// instante até ela não avisam) e os desfechos já avisados acima dela (id → instante).
+/// What the client remembers between reads: the next `?since=`, the watermark (outcomes at or
+/// before it do not notify) and already notified outcomes above it (id → timestamp).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Watermark {
     pub since: String,
@@ -104,7 +103,7 @@ pub struct Watermark {
 }
 
 impl Watermark {
-    /// A primeira leitura: nada anterior a `now` é avisado.
+    /// The first read: nothing before `now` is notified.
     pub fn starting(now: DateTime<Utc>) -> Self {
         Self {
             since: format(now - Duration::seconds(MARGIN_SECS)),
@@ -113,13 +112,13 @@ impl Watermark {
         }
     }
 
-    /// [`Watermark::starting`] a partir de milissegundos desde a época Unix.
+    /// [`Watermark::starting`] from milliseconds since the Unix epoch.
     pub fn starting_ms(now_ms: i64) -> Self {
         Self::starting(DateTime::from_timestamp_millis(now_ms).unwrap_or_else(Utc::now))
     }
 
-    /// Os desfechos novos da leitura `items` (feita com `?since=` = [`Watermark::since`]), que
-    /// passam a contar como avisados; avança o `since` e a marca.
+    /// New outcomes from reading `items` (with `?since=` = [`Watermark::since`]), now counted as
+    /// notified; advances `since` and the watermark.
     pub fn take(&mut self, items: &[LibraryRecording]) -> Vec<Ended> {
         let mark = instant(&self.mark);
         let mut fresh = Vec::new();
@@ -214,7 +213,7 @@ mod tests {
     const T: &str = "2026-10-01T12:00:00Z";
 
     #[test]
-    fn os_quatro_desfechos_e_os_que_nao_avisam() {
+    fn four_outcomes_and_those_without_notifications() {
         let outcome = |rec: &LibraryRecording| outcome_of(rec).map(|e| (e.outcome, e.reason));
         assert_eq!(
             outcome(&recording("a", "transcribed", Some(("done", None, T)))),
@@ -236,7 +235,8 @@ mod tests {
             outcome(&failed_job("d", "failed", T)),
             Some((Outcome::TranscriptionFailed, None))
         );
-        // Cancelar, apagar o resumo durante a geração e a gravação em curso não avisam.
+        // Cancellation, deleting the summary during generation and an ongoing recording do not
+        // notify.
         assert_eq!(outcome(&failed_job("e", "cancelled", T)), None);
         assert_eq!(
             outcome(&recording(
@@ -262,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn a_gravacao_parada_a_espera_dos_locutores_avisa() {
+    fn recording_waiting_for_speakers_notifies() {
         let waiting = LibraryRecording {
             pipeline: vec![PipelineStepInfo {
                 step: "speakers".into(),
@@ -275,7 +275,7 @@ mod tests {
         let ended = outcome_of(&waiting).map(|e| (e.outcome, e.reason));
         let expected = Some((Outcome::AwaitingSpeakers, Some("unnamed_speakers".into())));
         assert_eq!(ended, expected);
-        // Solta, a etapa concluída não é mais desfecho da espera.
+        // Once released, the completed step is no longer a waiting outcome.
         let released = LibraryRecording {
             pipeline: vec![PipelineStepInfo {
                 step: "speakers".into(),
@@ -289,7 +289,7 @@ mod tests {
     }
 
     #[test]
-    fn marca_dagua_avisa_uma_vez_e_nada_anterior() {
+    fn watermark_notifies_once_and_nothing_earlier() {
         let start = instant(T).unwrap();
         let mut mark = Watermark::starting(start);
         assert_eq!(mark.since, "2026-10-01T11:59:00.000000Z");
@@ -310,16 +310,16 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["novo"]
         );
-        // Reaparecer (título editado) não repete o aviso.
+        // Reappearing (edited title) does not repeat the notification.
         assert!(mark.take(std::slice::from_ref(&new)).is_empty());
-        // Um desfecho que confirma atrasado, dentro da folga, ainda avisa.
+        // An outcome committing late, within the margin, still notifies.
         let late = recording(
             "atrasado",
             "transcribed",
             Some(("done", None, "2026-10-01T12:00:02Z")),
         );
         assert_eq!(mark.take(&[late]).len(), 1);
-        // O resumo refeito depois é outro desfecho.
+        // A summary regenerated later is another outcome.
         let redone = recording(
             "novo",
             "transcribed",
@@ -328,11 +328,11 @@ mod tests {
         assert_eq!(mark.take(&[redone]).len(), 1);
         assert_eq!(mark.since, "2026-10-01T12:29:00Z");
         assert_eq!(mark.mark, "2026-10-01T12:29:00.000000Z");
-        assert!(mark.take(&[new]).is_empty(), "abaixo da marca, não avisa");
+        assert!(mark.take(&[new]).is_empty(), "below watermark, no notice");
     }
 
     #[test]
-    fn a_marca_sobrevive_ao_arquivo() {
+    fn watermark_survives_file_round_trip() {
         let mut mark = Watermark::starting(instant(T).unwrap());
         mark.take(&[recording(
             "a",
@@ -341,7 +341,7 @@ mod tests {
         )]);
         let text = serde_json::to_string(&mark).unwrap();
         assert_eq!(serde_json::from_str::<Watermark>(&text).unwrap(), mark);
-        // O formato antigo (id → instante em ms) não é uma marca: o cliente recomeça dela.
+        // The old format (id → timestamp in ms) is not a watermark: the client restarts from it.
         assert!(serde_json::from_str::<Watermark>(r#"{"r1": 1727780000000}"#).is_err());
     }
 }

@@ -167,8 +167,8 @@ jobs:
           [ -n "$BASE_URL" ] || { echo "Set the ECLUME_DOWNLOADS_URL repository variable." >&2; exit 1; }
           [ -n "$NOTES" ] || NOTES="$(python3 deploy/version.py notes desktop "$VERSION")"
           cp desktop/INSTALACAO.md dist/
-          python3 desktop/scripts/manifestos_release.py --artefatos dist --versao "$VERSION" \
-            --base-url "$BASE_URL" --notas "$NOTES"
+          python3 desktop/scripts/release_manifests.py --artifacts dist --version "$VERSION" \
+            --base-url "$BASE_URL" --notes "$NOTES"
           cat dist/latest.json
           ls -la dist
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

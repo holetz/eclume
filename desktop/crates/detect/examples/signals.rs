@@ -1,6 +1,6 @@
-//! Diagnóstico de campo: imprime, a cada segundo, o retrato dos sinais do SO e a classificação.
+//! Field diagnostics: prints the OS signal snapshot and classification every second.
 //!
-//!     cargo run --manifest-path desktop/Cargo.toml -p eclume-detect --example sinais -- 10
+//!     cargo run --manifest-path desktop/Cargo.toml -p eclume-detect --example signals -- 10
 
 use std::time::Duration;
 
@@ -15,7 +15,7 @@ fn main() {
     for _ in 0..seconds {
         match signals.snapshot() {
             Ok(snapshot) => println!("{:?} ← {snapshot:?}", classify(&snapshot)),
-            Err(err) => println!("erro: {err:#}"),
+            Err(err) => println!("error: {err:#}"),
         }
         std::thread::sleep(Duration::from_secs(1));
     }

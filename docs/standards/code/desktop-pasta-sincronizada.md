@@ -2,7 +2,7 @@
 type: standard
 title: Desktop app synced folder
 description: The desktop app mirrors the user's library into a local folder — the current summary of each recording in Markdown with front matter and the transcript in JSONL, one subfolder per Collection, an AGENTS.md at the root and a manifest that only lets the app touch what it created — to serve as an Obsidian vault and as an agent's working folder; these are the layout, the formats, the incremental cycle, overwriting and what the server must offer.
-resource: desktop/crates/mirror/**, desktop/src-tauri/src/mirror_sync.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/state.rs, desktop/ui/js/vistas/configuracoes.js, desktop/crates/sync/src/protocol.rs
+resource: desktop/crates/mirror/**, desktop/src-tauri/src/mirror_sync.rs, desktop/src-tauri/src/config.rs, desktop/src-tauri/src/state.rs, desktop/ui/js/views/settings.js, desktop/crates/sync/src/protocol.rs
 tags: [code, desktop, sync, markdown, jsonl, obsidian, agentes, collections]
 timestamp: 2026-09-29
 audience: both
@@ -173,5 +173,5 @@ Collection is renamed or deleted; a marker is created, has its note edited or is
 `cargo test -p eclume-mirror` (layout, formats, manifest, reconciliation, `AGENTS.md`),
 `cargo test -p eclume-desktop -- mirror_sync` (cycles against a fake source: first pass,
 incremental, sweep, partial failure) and `cargo test -p eclume-sync` (the client reads).
-The tab and its explanatory text: `desktop/ui-tests/configuracoes.spec.ts`; on the server,
+The tab and its explanatory text: `desktop/ui-tests/settings.spec.ts`; on the server,
 `server/tests/test_devices.py` and `test_summaries.py`.

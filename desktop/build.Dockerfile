@@ -1,9 +1,9 @@
-# Ambiente de build do app desktop no Linux, para quem não tem as libs de desenvolvimento (ou
-# sudo): Ubuntu 24.04 com os mesmos pacotes da CI, o Rust de desktop/rust-toolchain.toml e o Node
-# da imagem oficial (o major do .nvmrc). Imagens base por digest; contexto mínimo (só o arquivo do
-# Rust, ver build.Dockerfile.dockerignore):
-#   docker build -t eclume-desktop-build:<versão do Rust> -f desktop/build.Dockerfile desktop
-# Ver desktop/README.md e docs/standards/code/desktop-distribuicao.md.
+# Build environment of the desktop app on Linux, for whoever lacks the development libraries (or
+# sudo): Ubuntu 24.04 with the same packages as CI, the Rust of desktop/rust-toolchain.toml and the
+# Node of the official image (the .nvmrc major). Base images by digest; minimal context (only the
+# Rust file, see build.Dockerfile.dockerignore):
+#   docker build -t eclume-desktop-build:<Rust version> -f desktop/build.Dockerfile desktop
+# See desktop/README.md and docs/standards/code/desktop-distribuicao.md.
 FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS node
 
 FROM ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3

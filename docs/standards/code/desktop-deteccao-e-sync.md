@@ -198,7 +198,7 @@ the user's decision, so `auto` is never a default.
   changes without moving `updated_at`: for recordings sent from here less than 24 h ago still with
   no outcome, `Client::queue_wait(id)` reads `job.queue` in `GET /recordings/{id}`, even with the
   notice off; the loop keeps the waits by remote id in `StatusView.queue_waits`, and the upload
-  queue shows, under the row, the vocabulary's `fraseDaEspera` phrase (`.fila-espera`).
+  queue shows, under the row, the vocabulary's `fraseDaEspera` phrase (`.queue-wait`).
 
 ## Recent recordings panel
 

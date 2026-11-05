@@ -1,29 +1,29 @@
-//! A descoberta do servidor na rede local por mDNS (holetz/eclume#35): procura
-//! `_eclume._tcp.local.` por alguns segundos e lê o TXT `url`, `ca`, `v` e `name` que o
-//! `eclume-server announce` publica. O parser do TXT é puro; a escuta usa o `mdns-sd`.
+//! Local network server discovery via mDNS (holetz/eclume#35): searches for `_eclume._tcp.local.`
+//! for a few seconds and reads the TXT `url`, `ca`, `v` and `name` published by
+//! `eclume-server announce`. The TXT parser is pure; listening uses `mdns-sd`.
 
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use mdns_sd::{ServiceDaemon, ServiceEvent};
 
-/// O tipo de serviço anunciado pelo servidor.
+/// The service type announced by the server.
 pub const SERVICE_TYPE: &str = "_eclume._tcp.local.";
-/// Quanto a primeira execução espera por respostas.
+/// How long first run waits for responses.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3);
 
-/// Um servidor achado na rede.
+/// A server found on the network.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct Found {
     pub name: String,
     pub url: String,
-    /// A impressão digital da CA raiz; `None` enquanto o servidor não a publicou.
+    /// The root CA fingerprint; `None` until the server publishes it.
     pub ca_sha256: Option<String>,
     pub contract_version: Option<String>,
 }
 
-/// Lê um anúncio: a instância (`eclume._eclume._tcp.local.`) e os pares do TXT. Sem `url`, o
-/// anúncio não serve e é ignorado.
+/// Reads an announcement: the instance (`eclume._eclume._tcp.local.`) and TXT pairs. Without `url`,
+/// the announcement is unusable and ignored.
 pub fn parse(fullname: &str, txt: &[(String, String)]) -> Option<Found> {
     let get = |key: &str| {
         txt.iter()
@@ -50,7 +50,7 @@ pub fn parse(fullname: &str, txt: &[(String, String)]) -> Option<Found> {
     })
 }
 
-/// Junta um achado à lista, sem repetir o mesmo endereço.
+/// Adds a result to the list without repeating the same address.
 fn merge(found: &mut Vec<Found>, item: Found) {
     match found.iter_mut().find(|f| f.url == item.url) {
         Some(existing) => *existing = item,
@@ -58,7 +58,7 @@ fn merge(found: &mut Vec<Found>, item: Found) {
     }
 }
 
-/// Escuta a rede por até `timeout` e devolve os servidores achados, na ordem em que responderam.
+/// Listens to the network for up to `timeout` and returns servers in response order.
 pub fn discover(timeout: Duration) -> Result<Vec<Found>> {
     let daemon = ServiceDaemon::new().context("falha ao abrir o mDNS")?;
     let receiver = daemon
@@ -97,7 +97,7 @@ mod tests {
     }
 
     #[test]
-    fn le_o_txt_do_anuncio() {
+    fn reads_announcement_txt() {
         let ca = "3F9A1C6E0B7D24F58E1A9C3B6D0F2E4A7C5B8D1E3F6A9C2B4D7E0F1A3C5E7B9D";
         let found = parse(
             "eclume._eclume._tcp.local.",
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn ca_vazia_e_nome_pela_instancia() {
+    fn empty_ca_and_name_from_instance() {
         let found = parse(
             "Escritório._eclume._tcp.local.",
             &txt(&[("url", "https://eclume.lan"), ("ca", "")]),
@@ -133,13 +133,13 @@ mod tests {
     }
 
     #[test]
-    fn anuncio_sem_url_e_ignorado() {
+    fn announcement_without_url_is_ignored() {
         assert_eq!(parse("x._eclume._tcp.local.", &txt(&[("name", "x")])), None);
         assert_eq!(parse("x._eclume._tcp.local.", &txt(&[("url", " ")])), None);
     }
 
     #[test]
-    fn nao_repete_o_mesmo_endereco() {
+    fn does_not_repeat_same_address() {
         let mut found = Vec::new();
         let a = parse("a._eclume._tcp.local.", &txt(&[("url", "https://a")])).unwrap();
         let b = parse("b._eclume._tcp.local.", &txt(&[("url", "https://b")])).unwrap();
@@ -155,11 +155,11 @@ mod tests {
         assert_eq!(found[0].ca_sha256.as_deref(), Some("ab"));
     }
 
-    /// Escuta a rede de verdade; roda só onde há um servidor anunciando (`--ignored`).
+    /// Listens to the real network; run only where a server is announcing (`--ignored`).
     #[test]
-    #[ignore = "depende de um servidor anunciando na rede local"]
-    fn acha_o_servidor_na_rede() {
+    #[ignore = "requires a server announcing on the local network"]
+    fn finds_server_on_network() {
         let found = discover(DEFAULT_TIMEOUT).unwrap();
-        assert!(!found.is_empty(), "nenhum servidor na rede");
+        assert!(!found.is_empty(), "no server on the network");
     }
 }

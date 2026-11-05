@@ -1,145 +1,145 @@
-// Verificação visual: cada vista nos dois tamanhos da janela (520 × 600, o padrão, e 380 × 420, o
-// menor útil) e nos dois temas. Confere as fontes do app, nenhuma requisição externa, nenhuma
-// rolagem horizontal, os cantos retos do DS e o botão de gravar no --color-rec, e grava a captura
-// em capturas/<vista>-<tamanho>-<tema>.png para revisão.
+// Visual checks: each view at both window sizes (520 × 600, the default, and 380 × 420, the
+// smallest useful size) and both themes. Check app fonts, no external requests, no
+// horizontal scrolling, square DS corners and the record button in --color-rec; save screenshots
+// under captures/<view>-<size>-<theme>.png for review.
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
 import { test, expect } from './fixtures'
 
-const CAPTURAS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'capturas')
+const SCREENSHOTS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'captures')
 
-const TAMANHOS = [
-  { nome: '520x600', width: 520, height: 600 },
-  { nome: '380x420', width: 380, height: 420 },
+const SIZES = [
+  { name: '520x600', width: 520, height: 600 },
+  { name: '380x420', width: 380, height: 420 },
 ]
 
-const TEMAS = [
-  { nome: 'claro', esquema: 'light' },
-  { nome: 'escuro', esquema: 'dark' },
+const THEMES = [
+  { name: 'light', scheme: 'light' },
+  { name: 'dark', scheme: 'dark' },
 ] as const
 
-type Vista = { nome: string; cenario: string; pronta: string; ir?: (page: Page) => Promise<void> }
+type View = { name: string; scenario: string; ready: string; go?: (page: Page) => Promise<void> }
 
-const aba = (nome: string) => async (page: Page) => {
+const tab = (name) => async (page: Page) => {
   await page.keyboard.press('Control+,')
-  await page.locator(`[data-aba="${nome}"]`).click()
+  await page.locator(`[data-tab="${name}"]`).click()
 }
 
-const VISTAS: Vista[] = [
-  { nome: 'principal', cenario: 'fila', pronta: '#fila li' },
-  { nome: 'gravando', cenario: 'marcadores', pronta: '#contagem-marcadores' },
-  { nome: 'nota', cenario: 'nota', pronta: '#nota-silencio' },
-  { nome: 'atualizado', cenario: 'atualizado', pronta: '#atualizado' },
-  { nome: 'primeira-execucao', cenario: 'primeiraExecucao', pronta: '#bv-servidores .choice' },
+const VIEWS = [
+  { name: 'home', scenario: 'queue', ready: '#queue li' },
+  { name: 'recording', scenario: 'markers', ready: '#count-markers' },
+  { name: 'note', scenario: 'note', ready: '#note-silence' },
+  { name: 'updated', scenario: 'updated', ready: '#updated' },
+  { name: 'first-run', scenario: 'firstRun', ready: '#first-run-servers .choice' },
   {
-    nome: 'primeira-execucao-conferir',
-    cenario: 'primeiraExecucao',
-    pronta: '#bv-confianca',
-    ir: async (page) => page.locator('#bv-servidores .choice').nth(1).click(),
+    name: 'first-run-check',
+    scenario: 'firstRun',
+    ready: '#first-run-trust',
+    go: async (page) => page.locator('#first-run-servers .choice').nth(1).click(),
   },
   {
-    nome: 'importar',
-    cenario: 'ocioso',
-    pronta: '#importar-arquivo',
-    ir: async (page) => {
+    name: 'import',
+    scenario: 'idle',
+    ready: '#import-file',
+    go: async (page) => {
       await page.keyboard.press('Control+o')
-      await page.locator('#importar-escolher').click()
+      await page.locator('#import-choose').click()
     },
   },
-  { nome: 'config-geral', cenario: 'ocioso', pronta: '#tema .seg-opt', ir: aba('geral') },
-  { nome: 'config-reunioes', cenario: 'ocioso', pronta: '#apps .list-row', ir: aba('reunioes') },
-  { nome: 'config-audio', cenario: 'ocioso', pronta: '#atalhos .list-row', ir: aba('audio') },
-  { nome: 'config-armazenamento', cenario: 'ocioso', pronta: '#espaco-usado:not(:empty)', ir: aba('armazenamento') },
-  { nome: 'config-pasta', cenario: 'ocioso', pronta: '#pasta-regras li', ir: aba('pasta') },
-  { nome: 'config-servidor', cenario: 'ocioso', pronta: '#servidor-conta:not(:empty)', ir: aba('servidor') },
+  { name: 'settings-general', scenario: 'idle', ready: '#theme .seg-opt', go: tab('general') },
+  { name: 'settings-meetings', scenario: 'idle', ready: '#apps .list-row', go: tab('meetings') },
+  { name: 'settings-audio', scenario: 'idle', ready: '#shortcuts .list-row', go: tab('audio') },
+  { name: 'settings-storage', scenario: 'idle', ready: '#space-used:not(:empty)', go: tab('storage') },
+  { name: 'settings-folder', scenario: 'idle', ready: '#folder-rules li', go: tab('folder') },
+  { name: 'settings-server', scenario: 'idle', ready: '#server-account:not(:empty)', go: tab('server') },
   {
-    nome: 'atalhos',
-    cenario: 'ocioso',
-    pronta: '#atalhos-globais dt',
-    ir: async (page) => page.keyboard.press('Control+/'),
+    name: 'shortcuts',
+    scenario: 'idle',
+    ready: '#shortcuts-global dt',
+    go: async (page) => page.keyboard.press('Control+/'),
   },
   {
-    nome: 'menu-ajuda',
-    cenario: 'ocioso',
-    pronta: '#menu-ajuda:not([hidden])',
-    ir: async (page) => page.locator('#abrir-ajuda').click(),
+    name: 'help-menu',
+    scenario: 'idle',
+    ready: '#menu-help:not([hidden])',
+    go: async (page) => page.locator('#open-help').click(),
   },
 ]
 
-/** Os seletores das peças do DS que precisam ter canto reto (os --radius-* valem 0). */
-const RETOS = '.btn, .input, .alert, .choice, .badge, .code-block, .seg, .seg-opt, .tab, .menu, .list, .dropzone, .queue li'
+/** Selectors for DS components that must have square corners (--radius-* tokens are 0). */
+const SQUARE = '.btn, .input, .alert, .choice, .badge, .code-block, .seg, .seg-opt, .tab, .menu, .list, .dropzone, .queue li'
 
-for (const vista of VISTAS) {
-  for (const tamanho of TAMANHOS) {
-    for (const tema of TEMAS) {
-      test(`${vista.nome} · ${tamanho.nome} · ${tema.nome}`, async ({ abrir, externas, page }) => {
-        await page.setViewportSize({ width: tamanho.width, height: tamanho.height })
-        await page.emulateMedia({ colorScheme: tema.esquema })
-        await abrir(vista.cenario)
-        // A primeira execução não passa pela principal: ela já é a vista pronta.
-        if (vista.cenario !== 'primeiraExecucao') {
-          await expect(page.locator('#linha-status')).not.toHaveText('Carregando…')
+for (const view of VIEWS) {
+  for (const size of SIZES) {
+    for (const theme of THEMES) {
+      test(`${view.name} · ${size.name} · ${theme.name}`, async ({ open, externalRequests, page }) => {
+        await page.setViewportSize({ width: size.width, height: size.height })
+        await page.emulateMedia({ colorScheme: theme.scheme })
+        await open(view.scenario)
+        // First run skips home: it is already the ready view.
+        if (view.scenario !== 'firstRun') {
+          await expect(page.locator('#line-status')).not.toHaveText('Carregando…')
         }
-        await vista.ir?.(page)
-        await expect(page.locator(vista.pronta).first()).toBeVisible()
-        await expect(page.locator('html')).toHaveAttribute('data-theme', tema.esquema)
+        await view.go?.(page)
+        await expect(page.locator(view.ready).first()).toBeVisible()
+        await expect(page.locator('html')).toHaveAttribute('data-theme', theme.scheme)
 
-        const medida = await page.evaluate(async (retos) => {
+        const measurement = await page.evaluate(async (square) => {
           await document.fonts.ready
-          const visiveis = [...document.querySelectorAll<HTMLElement>(retos)].filter((e) => e.offsetParent !== null)
-          const cor = (valor: string) => {
-            const sonda = document.createElement('i')
-            sonda.style.color = valor
-            document.body.append(sonda)
-            const resolvida = getComputedStyle(sonda).color
-            sonda.remove()
-            return resolvida
+          const visible = [...document.querySelectorAll<HTMLElement>(square)].filter((e) => e.offsetParent !== null)
+          const color = (value) => {
+            const probe = document.createElement('i')
+            probe.style.color = value
+            document.body.append(probe)
+            const resolved = getComputedStyle(probe).color
+            probe.remove()
+            return resolved
           }
-          const gravar = document.querySelector<HTMLElement>('[data-vista]:not([hidden]) .btn-rec')
+          const record = document.querySelector<HTMLElement>('[data-view]:not([hidden]) .btn-rec')
           return {
-            familias: [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family.replaceAll('"', '')),
-            rolagem: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-            arredondados: visiveis
+            families: [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family.replaceAll('"', '')),
+            scroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            rounded: visible
               .filter((e) => getComputedStyle(e).borderRadius !== '0px')
               .map((e) => `${e.tagName.toLowerCase()}#${e.id}.${e.className}`),
-            gravar: gravar && {
-              cor: getComputedStyle(gravar).backgroundColor,
-              esperada: cor('var(--color-rec)'),
-              pressionado: gravar.getAttribute('aria-pressed'),
+            record: record && {
+              color: getComputedStyle(record).backgroundColor,
+              expected: color('var(--color-rec)'),
+              pressed: record.getAttribute('aria-pressed'),
             },
           }
-        }, RETOS)
+        }, SQUARE)
 
-        expect(medida.familias).toContain('Archivo')
-        expect(medida.rolagem, 'rolagem horizontal').toBeLessThanOrEqual(0)
-        expect(medida.arredondados).toEqual([])
-        if (medida.gravar && medida.gravar.pressionado === 'false') {
-          expect(medida.gravar.cor).toBe(medida.gravar.esperada)
+        expect(measurement.families).toContain('Archivo')
+        expect(measurement.scroll, 'rolagem horizontal').toBeLessThanOrEqual(0)
+        expect(measurement.rounded).toEqual([])
+        if (measurement.record && measurement.record.pressed === 'false') {
+          expect(measurement.record.color).toBe(measurement.record.expected)
         }
-        await mkdir(CAPTURAS, { recursive: true })
-        await page.screenshot({ path: path.join(CAPTURAS, `${vista.nome}-${tamanho.nome}-${tema.nome}.png`), fullPage: true })
-        expect(externas).toEqual([])
+        await mkdir(SCREENSHOTS, { recursive: true })
+        await page.screenshot({ path: path.join(SCREENSHOTS, `${view.name}-${size.name}-${theme.name}.png`), fullPage: true })
+        expect(externalRequests).toEqual([])
       })
     }
   }
 }
 
-test('o tema escolhido vence o do sistema e volta a segui-lo em "Sistema"', async ({ abrir, page }) => {
+test("the chosen theme overrides the system and follows it again under System", async ({ open, page }) => {
   await page.emulateMedia({ colorScheme: 'light' })
-  await abrir()
-  await page.locator('#abrir-configuracoes').click()
-  await expect(page.locator('input[name="tema"][value="system"]')).toBeChecked()
-  await page.locator('#tema .seg-opt', { hasText: 'Escuro' }).click()
+  await open()
+  await page.locator('#open-settings').click()
+  await expect(page.locator('input[name="theme"][value="system"]')).toBeChecked()
+  await page.locator('#theme .seg-opt', { hasText: 'Escuro' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-  // A próxima consulta do estado não desfaz a escolha, e o sistema trocar não a vence.
+  // The next state poll does not undo the choice, nor does a system theme change override it.
   await page.waitForTimeout(1_200)
   await page.emulateMedia({ colorScheme: 'light' })
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-  await page.locator('#tema .seg-opt', { hasText: 'Claro' }).click()
+  await page.locator('#theme .seg-opt', { hasText: 'Claro' }).click()
   await page.emulateMedia({ colorScheme: 'dark' })
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
-  await page.locator('#tema .seg-opt', { hasText: 'Sistema' }).click()
+  await page.locator('#theme .seg-opt', { hasText: 'Sistema' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
 })

@@ -1,5 +1,5 @@
-# Vendorizado de fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:crates/resampler
-# (MIT; ver VENDOR.md). Sem a feature `async-source` nem os benchmarks.
+# Vendored from fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:crates/resampler
+# (MIT; see VENDOR.md). Without the `async-source` feature or benchmarks.
 [package]
 name = "resampler"
 version = "0.0.1"

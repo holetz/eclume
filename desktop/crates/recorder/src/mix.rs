@@ -1,11 +1,11 @@
-//! Mixagem das fontes num único fluxo mono de 16 kHz.
+//! Mixes sources into a single mono 16 kHz stream.
 //!
-//! Cada fonte (uma "faixa") é reamostrada para [`TARGET_RATE`] e somada às outras em blocos de
-//! [`FRAME`] amostras (20 ms), com limitador rígido em ±1,0. Uma faixa que fica mais de
-//! `max_lag` atrás das outras é completada com silêncio — um monitor de sink suspenso ou o
-//! loopback do WASAPI ocioso não entregam nada. Esse silêncio vira uma dívida de no máximo
-//! `max_lag`, descontada só quando a faixa entrega uma rajada à frente das outras; a faixa que
-//! volta a entregar em tempo real entra alinhada, sem perder amostras.
+//! Each source (a "lane") is resampled to [`TARGET_RATE`] and added to the others in blocks of
+//! [`FRAME`] samples (20 ms), with hard limiting at ±1.0. A lane more than `max_lag` behind the
+//! others is padded with silence — a suspended sink monitor or idle WASAPI loopback delivers
+//! nothing. This silence becomes a debt of at most `max_lag`, deducted only when the lane
+//! delivers a burst ahead of the others; a lane that resumes real-time delivery joins in sync
+//! without losing samples.
 
 use std::collections::VecDeque;
 
@@ -15,14 +15,14 @@ use resampler::{
     WindowFunction,
 };
 
-/// Taxa do fluxo mixado, em Hz.
+/// Mixed stream rate, in Hz.
 pub const TARGET_RATE: u32 = 16_000;
-/// Amostras por bloco de mixagem e por frame Opus: 20 ms a 16 kHz.
+/// Samples per mixing block and per Opus frame: 20 ms at 16 kHz.
 pub const FRAME: usize = 320;
-/// Atraso máximo tolerado entre faixas antes de completar a atrasada com silêncio: 200 ms.
+/// Maximum tolerated lag between lanes before padding the late one with silence: 200 ms.
 pub const DEFAULT_MAX_LAG: usize = 3_200;
 
-/// Bloco de entrada do reamostrador: 10 ms na taxa de origem.
+/// Resampler input block: 10 ms at the source rate.
 fn input_block(rate: u32) -> usize {
     (rate as usize / 100).max(1)
 }
@@ -52,7 +52,7 @@ struct Lane {
     rate: u32,
     resampler: Option<RubatoChunkResampler<Async<f32>, 1>>,
     queue: VecDeque<f32>,
-    /// Amostras de silêncio já emitidas por esta faixa e ainda não descontadas.
+    /// Silence samples already emitted by this lane and not yet deducted.
     debt: usize,
     ended: bool,
 }
@@ -78,7 +78,7 @@ impl Lane {
 
     fn push(&mut self, samples: &[f32], rate: u32) -> Result<()> {
         if rate != self.rate && rate > 0 {
-            // O dispositivo trocou de taxa: descarrega o reamostrador antigo e recomeça.
+            // The device changed rate: flush the old resampler and start over.
             self.flush()?;
             self.rate = rate;
             self.resampler = Self::resampler_for(rate)?;
@@ -112,9 +112,9 @@ impl Lane {
         self.queue.extend(samples);
     }
 
-    /// Desconta a dívida só do que a faixa tem à frente de `ahead_of`: uma rajada atrasada paga,
-    /// e uma faixa que volta a entregar em tempo real depois de um silêncio sem pacotes (o
-    /// loopback do WASAPI ocioso) não perde nada.
+    /// Deducts debt only from what the lane has ahead of `ahead_of`: a late burst pays it off,
+    /// and a lane resuming real-time delivery after silence with no packets (idle WASAPI
+    /// loopback) loses nothing.
     fn pay_debt(&mut self, ahead_of: usize) {
         let excess = self.queue.len().saturating_sub(ahead_of);
         let paid = self.debt.min(excess);
@@ -122,8 +122,8 @@ impl Lane {
         self.debt -= paid;
     }
 
-    /// Tira `n` amostras; o que faltar vira silêncio e dívida (se a faixa ainda está viva), no
-    /// máximo `max_lag`.
+    /// Takes `n` samples; missing samples become silence and debt (if the lane is still live),
+    /// up to `max_lag`.
     fn take_into(&mut self, out: &mut [f32], max_lag: usize) {
         let available = self.queue.len().min(out.len());
         for (slot, sample) in out.iter_mut().zip(self.queue.drain(..available)) {
@@ -135,14 +135,14 @@ impl Lane {
     }
 }
 
-/// Mixador de N faixas para mono 16 kHz.
+/// Mixer from N lanes to mono 16 kHz.
 pub struct Mixer {
     lanes: Vec<Lane>,
     max_lag: usize,
 }
 
 impl Mixer {
-    /// Cria o mixador com uma faixa por taxa inicial.
+    /// Creates the mixer with one lane per initial rate.
     pub fn new(rates: &[u32]) -> Result<Self> {
         Self::with_max_lag(rates, DEFAULT_MAX_LAG)
     }
@@ -157,7 +157,7 @@ impl Mixer {
         })
     }
 
-    /// Entrega amostras mono da faixa `lane`, na taxa `rate`.
+    /// Delivers mono samples from lane `lane`, at rate `rate`.
     pub fn push(&mut self, lane: usize, samples: &[f32], rate: u32) -> Result<()> {
         self.lanes[lane].push(samples, rate)?;
         let ahead_of = self
@@ -172,7 +172,7 @@ impl Mixer {
         Ok(())
     }
 
-    /// Marca a faixa como encerrada: daqui em diante ela conta como silêncio.
+    /// Marks the lane as ended: from now on it counts as silence.
     pub fn end(&mut self, lane: usize) -> Result<()> {
         let lane = &mut self.lanes[lane];
         lane.flush()?;
@@ -181,7 +181,7 @@ impl Mixer {
         Ok(())
     }
 
-    /// Devolve os blocos completos já mixáveis (múltiplo de [`FRAME`]).
+    /// Returns complete blocks ready to mix (a multiple of [`FRAME`]).
     pub fn pop_ready(&mut self) -> Vec<f32> {
         let mut out = Vec::new();
         loop {
@@ -201,7 +201,7 @@ impl Mixer {
         out
     }
 
-    /// Descarrega tudo ao parar: reamostradores e filas, completando com silêncio.
+    /// Flushes everything on stop: resamplers and queues, padding with silence.
     pub fn drain(&mut self) -> Result<Vec<f32>> {
         for lane in &mut self.lanes {
             lane.flush()?;
@@ -245,11 +245,11 @@ mod tests {
     }
 
     #[test]
-    fn mix_de_48k_e_44k1_vira_um_fluxo_de_16k() {
+    fn mix_of_48k_and_44k1_becomes_a_16k_stream() {
         let mut mixer = Mixer::new(&[48_000, 44_100]).unwrap();
         let mic = sine(48_000, 300.0, 0.3, 1.0);
         let sys = sine(44_100, 700.0, 0.3, 1.0);
-        // Entrega em pedaços irregulares, como os callbacks de áudio.
+        // Deliver in irregular chunks, like audio callbacks.
         let mut out = Vec::new();
         for (a, b) in mic.chunks(480).zip(sys.chunks(441)) {
             mixer.push(0, a, 48_000).unwrap();
@@ -261,15 +261,15 @@ mod tests {
 
         let expected = TARGET_RATE as usize;
         let diff = out.len().abs_diff(expected);
-        assert!(diff <= 2 * FRAME, "saída com {} amostras", out.len());
-        // Duas senoides independentes de 0,3 somam RMS ≈ 0,3.
+        assert!(diff <= 2 * FRAME, "output with {} samples", out.len());
+        // Two independent sine waves of 0.3 add up to RMS ≈ 0.3.
         let middle = &out[2_000..14_000];
         let level = rms(middle);
         assert!((0.25..0.35).contains(&level), "RMS {level}");
     }
 
     #[test]
-    fn limitador_segura_a_soma_em_um() {
+    fn limiter_caps_sum_at_one() {
         let mut mixer = Mixer::new(&[16_000, 16_000]).unwrap();
         mixer.push(0, &[0.8; FRAME], 16_000).unwrap();
         mixer.push(1, &[0.8; FRAME], 16_000).unwrap();
@@ -279,9 +279,9 @@ mod tests {
     }
 
     #[test]
-    fn faixa_atrasada_vira_silencio_e_depois_desconta_a_divida() {
+    fn late_lane_becomes_silence_then_pays_off_debt() {
         let mut mixer = Mixer::with_max_lag(&[16_000, 16_000], FRAME).unwrap();
-        // Só a faixa 0 entrega: um bloco não basta, dois blocos ultrapassam o atraso tolerado.
+        // Only lane 0 delivers: one block is not enough; two exceed the tolerated lag.
         mixer.push(0, &[0.5; FRAME], 16_000).unwrap();
         assert!(mixer.pop_ready().is_empty());
         mixer.push(0, &[0.5; FRAME], 16_000).unwrap();
@@ -289,7 +289,7 @@ mod tests {
         assert_eq!(out.len(), FRAME);
         assert!(out.iter().all(|s| (*s - 0.5).abs() < 1e-6));
 
-        // A faixa 1 chega atrasada: o primeiro bloco dela paga a dívida e é descartado.
+        // Lane 1 arrives late: its first block pays off the debt and is discarded.
         mixer.push(1, &[0.25; FRAME], 16_000).unwrap();
         mixer.push(1, &[0.25; FRAME], 16_000).unwrap();
         let out = mixer.pop_ready();
@@ -297,16 +297,16 @@ mod tests {
         assert!(out.iter().all(|s| (*s - 0.75).abs() < 1e-6));
     }
 
-    /// Mic contínuo a 48 kHz; a faixa do sistema, a 44,1 kHz, só entrega nos segundos em que
-    /// `sistema_toca` diz, como o loopback do WASAPI. Devolve o RMS de cada segundo da saída.
-    fn rms_por_segundo(segundos: usize, sistema_toca: impl Fn(usize) -> bool) -> Vec<f32> {
+    /// Continuous mic at 48 kHz; the system lane at 44.1 kHz only delivers in seconds indicated
+    /// by `system_plays`, like WASAPI loopback. Returns the RMS of each output second.
+    fn rms_per_second(seconds: usize, system_plays: impl Fn(usize) -> bool) -> Vec<f32> {
         let mut mixer = Mixer::new(&[48_000, 44_100]).unwrap();
         let mic = sine(48_000, 300.0, 0.005, 0.01);
         let sys = sine(44_100, 700.0, 0.3, 0.01);
         let mut out = Vec::new();
-        for tick in 0..segundos * 100 {
+        for tick in 0..seconds * 100 {
             mixer.push(0, &mic, 48_000).unwrap();
-            if sistema_toca(tick / 100) {
+            if system_plays(tick / 100) {
                 mixer.push(1, &sys, 44_100).unwrap();
             }
             out.extend(mixer.pop_ready());
@@ -316,54 +316,44 @@ mod tests {
     }
 
     #[test]
-    fn faixa_que_volta_de_silencio_sem_pacotes_entra_inteira() {
-        let niveis = rms_por_segundo(10, |segundo| segundo >= 3);
-        for (segundo, nivel) in niveis.iter().enumerate().take(10).skip(4) {
-            assert!(
-                (0.15..0.3).contains(nivel),
-                "segundo {segundo}: RMS {nivel}"
-            );
+    fn lane_resuming_after_silence_without_packets_is_preserved() {
+        let levels = rms_per_second(10, |second| second >= 3);
+        for (second, level) in levels.iter().enumerate().take(10).skip(4) {
+            assert!((0.15..0.3).contains(level), "second {second}: RMS {level}");
         }
     }
 
     #[test]
-    fn faixa_intermitente_preserva_todo_trecho_com_sinal() {
-        let niveis = rms_por_segundo(12, |segundo| (segundo / 2) % 2 == 1);
-        for (segundo, nivel) in niveis.iter().enumerate().take(12) {
-            // Um segundo de cada borda mistura sinal e silêncio pelo atraso tolerado; os demais
-            // seguem o que a faixa entregou.
-            let tocando = (segundo / 2) % 2 == 1;
-            let borda = segundo % 2 == 0;
-            if tocando && !borda {
-                assert!(
-                    (0.15..0.3).contains(nivel),
-                    "segundo {segundo}: RMS {nivel}"
-                );
+    fn intermittent_lane_preserves_every_signal_segment() {
+        let levels = rms_per_second(12, |second| (second / 2) % 2 == 1);
+        for (second, level) in levels.iter().enumerate().take(12) {
+            // One second at each edge mixes signal and silence due to tolerated lag; the others
+            // follow what the lane delivered.
+            let playing = (second / 2) % 2 == 1;
+            let edge = second % 2 == 0;
+            if playing && !edge {
+                assert!((0.15..0.3).contains(level), "second {second}: RMS {level}");
             }
         }
-        let com_sinal = niveis.iter().filter(|nivel| **nivel > 0.15).count();
+        let with_signal = levels.iter().filter(|level| **level > 0.15).count();
         assert!(
-            com_sinal >= 5,
-            "só {com_sinal} segundos com o sistema: {niveis:?}"
+            with_signal >= 5,
+            "only {with_signal} seconds with system audio: {levels:?}"
         );
     }
 
     #[test]
-    fn divida_nunca_passa_do_atraso_tolerado() {
+    fn debt_never_exceeds_tolerated_lag() {
         let mut mixer = Mixer::with_max_lag(&[16_000, 16_000], FRAME).unwrap();
         for _ in 0..50 {
             mixer.push(0, &[0.1; FRAME], 16_000).unwrap();
             mixer.pop_ready();
         }
-        assert!(
-            mixer.lanes[1].debt <= FRAME,
-            "dívida {}",
-            mixer.lanes[1].debt
-        );
+        assert!(mixer.lanes[1].debt <= FRAME, "debt {}", mixer.lanes[1].debt);
     }
 
     #[test]
-    fn faixa_encerrada_conta_como_silencio() {
+    fn ended_lane_counts_as_silence() {
         let mut mixer = Mixer::new(&[16_000, 16_000]).unwrap();
         mixer.end(1).unwrap();
         mixer.push(0, &[0.1; FRAME * 2], 16_000).unwrap();
@@ -371,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn troca_de_taxa_no_meio_reconstroi_o_reamostrador() {
+    fn rate_change_midway_rebuilds_resampler() {
         let mut mixer = Mixer::new(&[48_000]).unwrap();
         mixer
             .push(0, &sine(48_000, 440.0, 0.5, 0.5), 48_000)
@@ -382,6 +372,6 @@ mod tests {
         let mut out = mixer.pop_ready();
         out.extend(mixer.drain().unwrap());
         let diff = out.len().abs_diff(TARGET_RATE as usize);
-        assert!(diff <= 3 * FRAME, "saída com {} amostras", out.len());
+        assert!(diff <= 3 * FRAME, "output with {} samples", out.len());
     }
 }

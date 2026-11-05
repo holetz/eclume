@@ -1,8 +1,8 @@
-//! Bandeja do sistema: ícone por estado e o menu de ações rápidas.
+//! System tray: an icon per state and a menu of quick actions.
 //!
-//! No Linux (AppIndicator) o clique no ícone só abre o menu, então toda ação mora no menu —
-//! inclusive a pergunta de reunião detectada, que ganha dois itens enquanto espera resposta, e a
-//! seção Recentes, com as últimas gravações e um submenu de ações para cada uma.
+//! On Linux (AppIndicator), clicking the icon only opens the menu, so every action lives there —
+//! including the detected meeting question, which adds two items while waiting for a response, and
+//! the Recent section, with the latest recordings and an action submenu for each.
 
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -31,27 +31,27 @@ const MENU_SHOW: &str = "show";
 const MENU_QUIT: &str = "quit";
 const MENU_RECENT_HEADER: &str = "recent-header";
 const MENU_RECENT_EMPTY: &str = "recent-empty";
-/// Prefixos dos itens das gravações recentes, seguidos do id que a ação usa.
+/// Prefixes for recent recording items, followed by the id used by the action.
 const RECENT_SUBMENU: &str = "recent:";
 const RECENT_COPY: &str = "recent-copy:";
 const RECENT_OPEN: &str = "recent-open:";
 const RECENT_RETRY: &str = "recent-retry:";
 const RECENT_SHOW: &str = "recent-show:";
 
-/// O menu em uso e os itens que mudam com o estado.
+/// The current menu and items that change with the state.
 struct MenuHandles {
     status: MenuItem<Wry>,
     toggle: MenuItem<Wry>,
-    /// A pergunta que o menu mostra agora.
+    /// The question currently shown in the menu.
     ask: Option<AppKey>,
-    /// O menu tem o item "Adicionar marcador" (só gravando).
+    /// The menu has the Add marker item (only while recording).
     recording: bool,
-    /// Os atalhos mostrados como acelerador.
+    /// The shortcuts shown as accelerators.
     shortcuts: Shortcuts,
-    /// O ícone mostrado agora: trocar grava um PNG no Linux, então só troca quando muda.
+    /// The current icon: replacing it writes a PNG on Linux, so only replace it when it changes.
     icon: Option<TrayIconState>,
-    /// A seção Recentes do menu em uso (`None`: oculta). Reconstruir o menu fecha-o no
-    /// AppIndicator, então só se reconstrói quando ela muda.
+    /// The current menu's Recent section (`None`: hidden). Rebuilding closes the menu in
+    /// AppIndicator, so rebuild only when it changes.
     recent: Option<TraySection>,
 }
 
@@ -60,22 +60,22 @@ struct TrayHandles {
     menu: Mutex<MenuHandles>,
 }
 
-/// A bandeja está de pé: é a indicação visível que a gravação automática exige.
+/// The tray is running: it provides the visible indicator required for automatic recording.
 pub fn is_visible(app: &AppHandle) -> bool {
     app.try_state::<TrayHandles>().is_some()
 }
 
-/// Uma linha do menu da bandeja.
+/// A tray menu line.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuLine {
     Item {
         id: String,
         label: String,
         enabled: bool,
-        /// A combinação mostrada ao lado do item (o atalho global que faz o mesmo).
+        /// The combination shown beside the item (the global shortcut for the same action).
         accelerator: Option<String>,
     },
-    /// Um submenu: uma gravação recente com as ações dela.
+    /// A submenu: a recent recording with its actions.
     Submenu {
         id: String,
         label: String,
@@ -102,9 +102,9 @@ fn disabled(id: &str, label: impl Into<String>) -> MenuLine {
     }
 }
 
-/// A seção Recentes: o cabeçalho desabilitado e uma linha por gravação. Com ação, a linha é um
-/// submenu (Copiar resumo, Abrir no web, Tentar agora); sem ação (gravando, aguardando envio),
-/// um item que abre a janela.
+/// The Recent section: a disabled header and a line per recording. With actions, the line is a
+/// submenu (Copy summary, Open on web, Try now); without actions (recording, awaiting upload),
+/// it is an item that opens the window.
 fn recent_lines(section: &TraySection) -> Vec<MenuLine> {
     let mut lines = vec![disabled(MENU_RECENT_HEADER, section.header.clone())];
     if section.entries.is_empty() {
@@ -139,10 +139,10 @@ fn recent_lines(section: &TraySection) -> Vec<MenuLine> {
     lines
 }
 
-/// As linhas do menu, como o frame "Tray menu" do DS: a linha de status, gravar, nova nota,
-/// marcador (só gravando), importar, a seção Recentes (quando ligada), abrir o eclume, abrir a
-/// biblioteca na web e sair. A pergunta de reunião detectada entra como dois itens logo abaixo
-/// do status. Recentes fica abaixo das ações para não mover "Iniciar gravação".
+/// Menu lines, as in the DS "Tray menu" frame: status line, record, new voice note,
+/// marker (only while recording), import, Recent section (when enabled), open eclume, open the
+/// web library and quit. The detected meeting question adds two items just below the status.
+/// Recent stays below the actions to avoid moving Start recording.
 pub fn menu_lines(
     ask: Option<AppKey>,
     recording: bool,
@@ -196,7 +196,7 @@ pub fn menu_lines(
     lines
 }
 
-/// O submenu nativo de uma linha `Submenu`, com os filhos.
+/// The native submenu for a `Submenu` line, with its children.
 fn submenu(
     app: &AppHandle,
     id: &str,
@@ -263,8 +263,8 @@ fn build_menu(
     Ok((
         menu,
         MenuHandles {
-            status: status.expect("o menu sempre tem a linha de status"),
-            toggle: toggle.expect("o menu sempre tem gravar"),
+            status: status.expect("the menu always has a status line"),
+            toggle: toggle.expect("the menu always has record"),
             ask,
             recording,
             shortcuts: shortcuts.clone(),
@@ -274,7 +274,7 @@ fn build_menu(
     ))
 }
 
-/// Cria o ícone e o menu da bandeja.
+/// Create the tray icon and menu.
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let shortcuts = app.state::<AppState>().shortcuts().unwrap_or_default();
     let (menu, handles) = build_menu(app, None, false, &shortcuts, None)?;
@@ -295,13 +295,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Durante uma nota, atualiza o tempo da bandeja a cada segundo (variante A: nada mais abre). Pede
-/// por `refresh`, que despacha para a thread principal.
+/// During a voice note, update the tray time every second (variant A: nothing else opens).
+/// Request via `refresh`, which dispatches to the main thread.
 fn spawn_note_clock(app: AppHandle) {
     let mut backoff = crate::supervise::Backoff::default();
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(1));
-        crate::supervise::pass(&mut backoff, "relógio da nota", || {
+        crate::supervise::pass(&mut backoff, "voice note clock", || {
             let in_note = app
                 .state::<AppState>()
                 .view()
@@ -323,7 +323,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     match event.id().as_ref() {
         MENU_TOGGLE => crate::spawn_toggle_recording(app),
         MENU_NOTE => {
-            // Abrir o microfone pode levar segundos: fora da thread da UI.
+            // Opening the microphone can take seconds: keep it off the UI thread.
             let app = app.clone();
             std::thread::spawn(move || {
                 let _ = crate::toggle_note(&app);
@@ -341,14 +341,14 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         MENU_SHOW => crate::show_window(app),
         id if id.starts_with("recent") => on_recent_event(app, id),
         MENU_QUIT => {
-            // Fechar a gravação pode levar segundos (join, driver, `fsync`): fora da thread da UI,
-            // e o app sai ao fim.
+            // Closing a recording can take seconds (join, driver, `fsync`): off the UI thread,
+            // and exit the app when done.
             let app = app.clone();
             std::thread::spawn(move || {
                 let state = app.state::<AppState>();
                 if state.status().is_ok_and(|s| s == AppStatus::Recording) {
                     if let Err(err) = state.stop_recording() {
-                        log::error!("falha ao fechar a gravação ao sair: {err:#}");
+                        log::error!("failed to close recording on exit: {err:#}");
                     }
                 }
                 app.exit(0);
@@ -358,8 +358,8 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     }
 }
 
-/// As ações da seção Recentes. Copiar lê a API e Tentar agora mexe na fila: fora da thread da UI.
-/// A bandeja não tem outro retorno, então o copiar avisa por notificação.
+/// Recent actions. Copy reads the API and Try now changes the queue: keep off the UI thread.
+/// The tray has no other feedback, so copying sends a notification.
 fn on_recent_event(app: &AppHandle, id: &str) {
     if let Some(remote) = id.strip_prefix(RECENT_COPY) {
         let (app, remote) = (app.clone(), remote.to_string());
@@ -369,7 +369,7 @@ fn on_recent_event(app: &AppHandle, id: &str) {
                 "O resumo em Markdown está na área de transferência.",
             ),
             Err(err) => {
-                log::error!("falha ao copiar o resumo pela bandeja: {err:#}");
+                log::error!("failed to copy summary from tray: {err:#}");
                 crate::notify::info("Não foi possível copiar o resumo", &format!("{err:#}"));
             }
         });
@@ -390,19 +390,19 @@ fn on_recent_event(app: &AppHandle, id: &str) {
     }
 }
 
-/// Pede a atualização da bandeja, que só é tocada na thread principal: os setters do Tauri
-/// bloqueiam até a thread principal responder, e uma thread de fundo que os chamasse segurando o
-/// mutex do menu travaria o app (#83). Na thread principal roda na hora; de outra thread, só
-/// enfileira e volta. Quem roda lê o estado do momento, então nunca desenha um estado velho.
+/// Request a tray update, which only runs on the main thread: Tauri setters block until the main
+/// thread responds, and a background thread calling them while holding the menu mutex would freeze
+/// the app (#83). On the main thread, run at once; from another thread, just enqueue and return.
+/// The handler reads the current state, so it never draws an old state.
 pub fn refresh(app: &AppHandle) {
     let handle = app.clone();
     if let Err(err) = app.run_on_main_thread(move || apply(&handle)) {
-        log::debug!("bandeja não atualizada (laço de eventos encerrado): {err}");
+        log::debug!("tray not updated (event loop ended): {err}");
     }
 }
 
-/// Atualiza ícone, dica e textos do menu a partir do estado; troca o menu quando a pergunta de
-/// reunião aparece ou some, ou quando a seção Recentes muda. Só na thread principal: chame
+/// Update the icon, tooltip and menu text from state; replace the menu when the meeting question
+/// appears or disappears, or when the Recent section changes. Main thread only: call
 /// `refresh`.
 fn apply(app: &AppHandle) {
     let Some(handles) = app.try_state::<TrayHandles>() else {
@@ -411,7 +411,7 @@ fn apply(app: &AppHandle) {
     let view = match app.state::<AppState>().view() {
         Ok(view) => view,
         Err(err) => {
-            log::error!("falha ao ler o estado para a bandeja: {err:#}");
+            log::error!("failed to read state for tray: {err:#}");
             return;
         }
     };
@@ -423,9 +423,9 @@ fn apply(app: &AppHandle) {
     let ask = view.pending_ask.map(|a| a.app);
     let recording = view.status == AppStatus::Recording;
     let shortcuts = app.state::<AppState>().shortcuts().unwrap_or_default();
-    // A mesma fila local e o mesmo retrato do painel; uma falha mantém a seção que está no menu.
+    // The same local queue and panel snapshot; on failure, keep the section already in the menu.
     let recent = crate::recent::tray_section(app).unwrap_or_else(|err| {
-        log::error!("falha ao ler as recentes para a bandeja: {err:#}");
+        log::error!("failed to read recent recordings for tray: {err:#}");
         menu.recent.clone()
     });
     let result = (|| -> tauri::Result<()> {
@@ -445,8 +445,8 @@ fn apply(app: &AppHandle) {
             handles.tray.set_icon(Some(icon(state)?))?;
             menu.icon = Some(state);
         }
-        // O rótulo ao lado do ícone existe no macOS e no AppIndicator do Linux; no Windows, o
-        // tempo da nota vai só na dica, que já traz a linha de status.
+        // The icon label exists on macOS and Linux AppIndicator; on Windows, the voice note
+        // time only appears in the tooltip, which already includes the status line.
         handles.tray.set_title(note_title(&view, now))?;
         handles
             .tray
@@ -454,7 +454,7 @@ fn apply(app: &AppHandle) {
         Ok(())
     })();
     if let Err(err) = result {
-        log::error!("falha ao atualizar a bandeja: {err}");
+        log::error!("failed to update tray: {err}");
     }
 }
 
@@ -466,7 +466,7 @@ fn toggle_label(status: AppStatus) -> &'static str {
     }
 }
 
-/// O tempo corrido de uma gravação: "0:42" ou "1:02:09".
+/// The elapsed time of a recording: "0:42" or "1:02:09".
 fn elapsed(ms: i64) -> String {
     let s = ms.max(0) / 1000;
     let (h, m, s) = (s / 3600, (s % 3600) / 60, s % 60);
@@ -477,7 +477,7 @@ fn elapsed(ms: i64) -> String {
     }
 }
 
-/// "Nota 0:42" durante uma nota; `None` fora dela.
+/// "Nota 0:42" during a voice note; `None` otherwise.
 pub fn note_title(view: &StatusView, now_ms: i64) -> Option<String> {
     if view.status != AppStatus::Recording || view.recording_kind != Some(Kind::Note) {
         return None;
@@ -486,8 +486,8 @@ pub fn note_title(view: &StatusView, now_ms: i64) -> Option<String> {
     Some(format!("Nota {}", elapsed(now_ms - started)))
 }
 
-/// A linha de status do menu: o estado, o app e o modo da gravação (ou o tempo da nota), a
-/// reunião esperando resposta e quantas gravações faltam sincronizar.
+/// The menu status line: state, app and recording mode (or voice note time), the meeting
+/// awaiting a response and how many recordings still need to sync.
 pub fn status_line(view: &StatusView, now_ms: i64) -> String {
     let mut parts = vec![view.status.label().to_string()];
     if view.mic_lost && view.status == AppStatus::Recording {
@@ -518,7 +518,7 @@ pub fn status_line(view: &StatusView, now_ms: i64) -> String {
     parts.join(" · ")
 }
 
-/// O estado que o ícone da bandeja mostra: a marca, com a reunião e a nota distintas.
+/// The state shown by the tray icon: the brand mark, with distinct meeting and voice note icons.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TrayIconState {
     Idle,
@@ -541,7 +541,7 @@ impl TrayIconState {
     }
 }
 
-/// Os PNG saem de `desktop/scripts/icones_bandeja.py`, a partir da marca.
+/// The PNGs are generated from the brand mark by `desktop/scripts/tray_icons.py`.
 fn icon(state: TrayIconState) -> tauri::Result<Image<'static>> {
     Image::from_bytes(match state {
         TrayIconState::Idle => include_bytes!("../icons/tray-idle.png"),
@@ -588,7 +588,7 @@ mod tests {
     }
 
     #[test]
-    fn bandeja_linha_de_status() {
+    fn tray_status_line() {
         assert_eq!(status_line(&view(AppStatus::Idle, 0), 0), "Ocioso");
         assert_eq!(
             status_line(&view(AppStatus::Recording, 1), 0),
@@ -606,7 +606,7 @@ mod tests {
     }
 
     #[test]
-    fn bandeja_mostra_gravacao_automatica_e_pergunta() {
+    fn tray_shows_automatic_recording_and_question() {
         let mut auto = view(AppStatus::Recording, 0);
         auto.recording_auto = true;
         auto.recording_app = Some(MeetingView::from(AppKey::Teams));
@@ -630,7 +630,7 @@ mod tests {
     }
 
     #[test]
-    fn bandeja_mostra_o_tempo_da_nota() {
+    fn tray_shows_voice_note_time() {
         let mut note = view(AppStatus::Recording, 0);
         note.recording_kind = Some(Kind::Note);
         note.recording_started_at = Some(1_000);
@@ -668,7 +668,7 @@ mod tests {
     }
 
     #[test]
-    fn menu_da_bandeja_como_o_ds() {
+    fn tray_menu_matches_ds() {
         let shortcuts = Shortcuts {
             record: "Ctrl+Alt+R".into(),
             note: "Ctrl+Alt+N".into(),
@@ -715,7 +715,7 @@ mod tests {
     }
 
     #[test]
-    fn menu_da_bandeja_com_a_secao_recentes() {
+    fn tray_menu_with_recent_section() {
         use crate::recent::TrayEntry;
 
         let shortcuts = Shortcuts {
@@ -759,7 +759,7 @@ mod tests {
                 "—",
             ]
         );
-        // O gravar fica onde estava; o cabeçalho é só texto.
+        // Record stays in place; the header is only text.
         assert_eq!(labels(&lines)[2], "Iniciar gravação [Ctrl+Alt+R]");
         assert_eq!(
             lines[6],
@@ -770,9 +770,9 @@ mod tests {
                 accelerator: None,
             }
         );
-        // Os ids levam o que a ação usa, e são únicos no menu.
+        // The ids carry what the action uses, and are unique within the menu.
         let MenuLine::Submenu { id, items, .. } = &lines[7] else {
-            panic!("a gravação com ações é um submenu");
+            panic!("the recording with actions is a submenu");
         };
         assert_eq!(id, "recent:r1");
         let ids: Vec<_> = items
@@ -784,26 +784,26 @@ mod tests {
             .collect();
         assert_eq!(ids, ["recent-copy:r1", "recent-open:r1"]);
         let MenuLine::Item { id, .. } = &lines[9] else {
-            panic!("a gravação sem ação é um item");
+            panic!("the recording without actions is an item");
         };
         assert_eq!(id, "recent-show:local:l2");
 
-        let vazia = TraySection {
+        let empty = TraySection {
             header: "Recentes".into(),
             entries: vec![],
         };
         assert_eq!(
-            labels(&menu_lines(None, false, &shortcuts, Some(&vazia)))[5..8],
+            labels(&menu_lines(None, false, &shortcuts, Some(&empty)))[5..8],
             ["—", "Recentes", "Nenhuma gravação recente"]
         );
-        // Com 0 na configuração, a seção some.
+        // With 0 in the config, the section disappears.
         assert!(!labels(&menu_lines(None, false, &shortcuts, None))
             .iter()
             .any(|label| label.starts_with("Recentes")));
     }
 
     #[test]
-    fn icone_distingue_reuniao_de_nota() {
+    fn icon_distinguishes_meeting_from_voice_note() {
         assert_eq!(
             TrayIconState::of(&view(AppStatus::Idle, 0)),
             TrayIconState::Idle
@@ -812,14 +812,14 @@ mod tests {
             TrayIconState::of(&view(AppStatus::Syncing, 1)),
             TrayIconState::Syncing
         );
-        let mut reuniao = view(AppStatus::Recording, 0);
-        assert_eq!(TrayIconState::of(&reuniao), TrayIconState::Meeting);
-        reuniao.recording_kind = Some(Kind::Note);
-        assert_eq!(TrayIconState::of(&reuniao), TrayIconState::Note);
+        let mut meeting = view(AppStatus::Recording, 0);
+        assert_eq!(TrayIconState::of(&meeting), TrayIconState::Meeting);
+        meeting.recording_kind = Some(Kind::Note);
+        assert_eq!(TrayIconState::of(&meeting), TrayIconState::Note);
     }
 
     #[test]
-    fn bandeja_icones_decodificam() {
+    fn tray_icons_decode() {
         for state in TrayIconState::ALL {
             let image = icon(state).unwrap();
             assert_eq!((image.width(), image.height()), (64, 64));

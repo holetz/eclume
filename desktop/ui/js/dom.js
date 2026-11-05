@@ -1,41 +1,39 @@
-// Montagem de DOM sem innerHTML: texto vindo do servidor ou do disco nunca vira marcação.
+// Build the DOM without innerHTML: text from the server or disk never becomes markup.
 
-/**
- * Cria um elemento. `attrs` aceita atributos comuns, `class`, `dataset` (objeto), `on` (objeto de
- * eventos) e booleanos (`true` põe o atributo vazio, `false`/`null` o omite). Filhos podem ser
- * nós, textos ou listas; `null` e `false` são ignorados.
- */
-export function el(tag, attrs = {}, ...filhos) {
-  const elemento = document.createElement(tag);
-  for (const [nome, valor] of Object.entries(attrs ?? {})) {
-    if (valor == null || valor === false) continue;
-    if (nome === "dataset") Object.assign(elemento.dataset, valor);
-    else if (nome === "on") for (const [evento, fn] of Object.entries(valor)) elemento.addEventListener(evento, fn);
-    else if (nome === "class") elemento.className = valor;
-    else if (nome in elemento && typeof valor !== "string") elemento[nome] = valor;
-    else elemento.setAttribute(nome, valor === true ? "" : valor);
+/** Create an element. `attrs` accepts normal attributes, `class`, `dataset` (an object), `on`
+ * (an event object) and booleans (`true` sets an empty attribute, `false`/`null` omits it).
+ * Children can be nodes, text or lists; `null` and `false` are ignored. */
+export function el(tag, attrs = {}, ...children) {
+  const element = document.createElement(tag);
+  for (const [name, value] of Object.entries(attrs ?? {})) {
+    if (value == null || value === false) continue;
+    if (name === "dataset") Object.assign(element.dataset, value);
+    else if (name === "on") for (const [event, fn] of Object.entries(value)) element.addEventListener(event, fn);
+    else if (name === "class") element.className = value;
+    else if (name in element && typeof value !== "string") element[name] = value;
+    else element.setAttribute(name, value === true ? "" : value);
   }
-  anexar(elemento, filhos);
-  return elemento;
+  append(element, children);
+  return element;
 }
 
-function anexar(pai, filhos) {
-  for (const filho of filhos) {
-    if (filho == null || filho === false) continue;
-    if (Array.isArray(filho)) anexar(pai, filho);
-    else pai.append(filho instanceof Node ? filho : String(filho));
+function append(parent, children) {
+  for (const child of children) {
+    if (child == null || child === false) continue;
+    if (Array.isArray(child)) append(parent, child);
+    else parent.append(child instanceof Node ? child : String(child));
   }
 }
 
-/** Troca os filhos de `pai`. */
-export function trocar(pai, ...filhos) {
-  pai.replaceChildren();
-  anexar(pai, filhos);
+/** Replace the children of `parent`. */
+export function replace(parent, ...children) {
+  parent.replaceChildren();
+  append(parent, children);
 }
 
-/** O elemento de `raiz` que casa com o seletor; falha alto se a marcação mudou. */
-export function $(seletor, raiz = document) {
-  const elemento = raiz.querySelector(seletor);
-  if (!elemento) throw new Error(`elemento ausente: ${seletor}`);
-  return elemento;
+/** The element in `root` matching the selector; fail loudly if the markup changed. */
+export function $(selector, root = document) {
+  const element = root.querySelector(selector);
+  if (!element) throw new Error(`elemento ausente: ${selector}`);
+  return element;
 }

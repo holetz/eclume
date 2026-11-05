@@ -1,10 +1,12 @@
-//! Os sinais reais de cada SO. Só esta parte do crate toca o sistema; o resto é puro.
+//! Real signals from each OS. Only this part of the crate touches the system; the rest is pure.
 //!
-//! | SO | Quem usa o mic | Títulos de janela |
+//! | OS | Mic users | Window titles |
 //! |---|---|---|
-//! | Linux | source-outputs do Pulse/PipeWire-Pulse que não leem um monitor | — (Wayland não deixa) |
-//! | Windows | `ConsentStore\microphone` com `LastUsedTimeStop == 0` | `EnumWindows` |
-//! | macOS | processos Core Audio com entrada ativa (14+); antes, `DeviceIsRunningSomewhere` | — (exige Gravação de Tela) |
+//! | Linux | Pulse/PipeWire-Pulse source-outputs not reading a monitor | — (blocked by Wayland) |
+//! | Windows | `ConsentStore\microphone` with `LastUsedTimeStop == 0` | `EnumWindows` |
+//! | macOS | Core Audio input (14+); else `DeviceIsRunningSomewhere` | — (permission needed) |
+//!
+//! macOS window titles require Screen Recording permission.
 
 use anyhow::Result;
 
@@ -17,7 +19,7 @@ mod macos;
 #[cfg(target_os = "windows")]
 mod windows;
 
-/// A fonte de sinais do SO em que o app roda.
+/// The signal source for the OS running the app.
 pub struct SystemSignals {
     own_pid: u32,
 }
@@ -44,7 +46,7 @@ impl SignalSource for SystemSignals {
     }
 }
 
-/// Tira o próprio eclume e repetições (um app com vários streams abertos) da lista.
+/// Removes eclume itself and duplicates (an app with multiple open streams) from the list.
 fn without_self(clients: Vec<AudioClient>, own_pid: u32) -> Vec<AudioClient> {
     let mut kept: Vec<AudioClient> = Vec::with_capacity(clients.len());
     for client in clients {
@@ -80,7 +82,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tira_o_proprio_app_e_repeticoes() {
+    fn removes_own_app_and_duplicates() {
         let mut own = AudioClient::new("gravador", "gravador");
         own.pid = Some(10);
         let clients = vec![

@@ -1,10 +1,11 @@
-// Adaptado de fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:crates/audio-actual/src/speaker/macos.rs
-// (MIT, Copyright (c) 2023-present Fastrepl, Inc.; ver VENDOR.md e LICENSE neste crate).
-// Mudanças: anel próprio (`RingWriter`) no lugar do leitor assíncrono, conversões de amostra
-// locais, `tracing` → `log`, mensagens em pt-BR.
+// Adapted from fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:
+// crates/audio-actual/src/speaker/macos.rs
+// (MIT, Copyright (c) 2023-present Fastrepl, Inc.; see VENDOR.md and LICENSE in this crate).
+// Changes: own ring buffer (`RingWriter`) instead of the async reader, local sample
+// conversions, `tracing` → `log`, pt-BR messages.
 
-//! macOS: Core Audio process tap global (mono) exposto por um aggregate device privado.
-//! Exige macOS 14.2+ e a permissão de gravação de áudio do sistema.
+//! macOS: global Core Audio process tap (mono) exposed through a private aggregate device.
+//! Requires macOS 14.2+ and system audio recording permission.
 
 use anyhow::{Context, Result};
 use cidre::core_audio::aggregate_device_keys as agg_keys;
@@ -20,25 +21,25 @@ struct Ctx {
     writer: RingWriter,
 }
 
-/// O que precisa ficar vivo enquanto a captura roda.
+/// What must stay alive while capture runs.
 struct Running {
     _device: ca::hardware::StartedDevice<ca::AggregateDevice>,
     _ctx: Box<Ctx>,
     _tap: ca::TapGuard,
 }
 
-// Os handles do Core Audio só são tocados no descarte, e o callback de IO usa apenas o `Ctx`.
+// Core Audio handles are only touched on drop, and the IO callback only uses `Ctx`.
 unsafe impl Send for Running {}
 
-// O tap global pega o que toca na saída em uso; escolher uma saída pediria um tap por dispositivo,
-// que o eclume ainda não tem.
+// The global tap captures the active output; selecting an output would require a per-device tap,
+// which eclume does not yet have.
 pub(super) fn list_output_devices() -> Result<OutputDevices> {
     Ok(OutputDevices::default())
 }
 
 pub(super) fn open(target: Option<&str>) -> Result<(RingSource, bool)> {
     if let Some(target) = target {
-        log::warn!("saída {target:?} ignorada: no macOS a captura segue a saída em uso");
+        log::warn!("output {target:?} ignored: capture on macOS follows the active output");
     }
     Ok((open_tap()?, false))
 }
@@ -87,7 +88,7 @@ fn open_tap() -> Result<RingSource> {
         .context("falha ao registrar o IO proc do tap")?;
     let device = ca::device_start(agg_device, Some(proc_id))
         .context("falha ao iniciar o aggregate device do tap")?;
-    log::info!("captura do sistema por Core Audio tap iniciada a {sample_rate} Hz");
+    log::info!("Core Audio tap system capture started at {sample_rate} Hz");
 
     let running = Running {
         _device: device,
@@ -124,7 +125,7 @@ fn push<T: Copy>(ctx: &mut Ctx, buffer: &cat::AudioBuf, convert: impl Fn(T) -> f
     let Some(samples) = read_samples::<T>(buffer) else {
         return;
     };
-    // O tap é mono: um canal por quadro.
+    // The tap is mono: one channel per frame.
     ctx.writer
         .push_interleaved(samples.len(), 1, |i| convert(samples[i]));
 }
@@ -142,7 +143,7 @@ fn read_samples<T: Copy>(buffer: &cat::AudioBuf) -> Option<&[T]> {
     if sample_count == 0 {
         return None;
     }
-    // SAFETY: o Core Audio garante `data_bytes_size` bytes válidos em `data` durante o callback,
-    // e o alinhamento foi conferido acima.
+    // SAFETY: Core Audio guarantees `data_bytes_size` valid bytes at `data` during the callback,
+    // and alignment was checked above.
     Some(unsafe { std::slice::from_raw_parts(data, sample_count) })
 }

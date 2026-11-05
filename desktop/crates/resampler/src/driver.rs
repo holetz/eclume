@@ -1,12 +1,14 @@
-// Vendorizado de fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:crates/resampler/src/driver.rs
-// sem alterações. Licença MIT; ver LICENSE e VENDOR.md neste crate.
+// Vendored from fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:
+// crates/resampler/src/driver.rs
+// unchanged. MIT license; see LICENSE and VENDOR.md in this crate.
 
 use std::collections::VecDeque;
 
 use audioadapter_buffers::direct::SequentialSliceOfVecs;
 use rubato::Resampler;
 
-/// Wraps a rubato Resampler with queues to enable sample-by-sample input and fixed-size chunk output.
+/// Wraps a rubato Resampler with queues to enable sample-by-sample input and fixed-size chunk
+/// output.
 /// Manages buffering between the streaming input and the block-based resampler requirements.
 pub struct RubatoChunkResampler<R: Resampler<f32>, const CHANNELS: usize> {
     resampler: R,
@@ -111,7 +113,8 @@ impl<R: Resampler<f32>, const CHANNELS: usize> RubatoChunkResampler<R, CHANNELS>
         Ok(produced_output)
     }
 
-    /// Processes an incomplete input block, optionally padding with zeros to meet resampler requirements.
+    /// Processes an incomplete input block, optionally padding with zeros to meet resampler
+    /// requirements.
     /// Used for handling the final partial block at stream end when zero_pad is true.
     pub fn process_partial_block(&mut self, zero_pad: bool) -> Result<bool, crate::Error> {
         if self.input_queue.is_empty() {

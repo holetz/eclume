@@ -5,7 +5,7 @@
   "engines": {
     "node": "22"
   },
-  "description": "Testes de navegador da UI do app desktop do eclume, com o Tauri simulado.",
+  "description": "Browser tests of the eclume desktop app UI, with a simulated Tauri.",
   "scripts": {
     "test": "playwright test"
   },
