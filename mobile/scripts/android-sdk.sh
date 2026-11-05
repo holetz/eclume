@@ -6,7 +6,7 @@
 # targets, the AVD `eclume-35` and the `~/.config/eclume/android-env.sh` that the build commands
 # load. A second run only checks and prints "nothing to do".
 #
-# Usage: ssh holetz@192.168.15.199 'bash -s' < mobile/scripts/android-sdk.sh
+# Usage: ssh <user>@<host> 'bash -s' < mobile/scripts/android-sdk.sh
 set -euo pipefail
 
 SDK="${ANDROID_HOME:-$HOME/android-sdk}"

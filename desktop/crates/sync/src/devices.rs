@@ -205,8 +205,8 @@ mod tests {
             },
             "secret": "eclp_Vb3kQ8rT2wY6uI1oP4aS7dF0gH3jK9lZ5xC",
             "server": {
-                "name": "eclume", "url": "https://192.168.15.199:8443",
-                "mcp_url": "https://192.168.15.199:8443/mcp", "ca_sha256": null,
+                "name": "eclume", "url": "https://192.0.2.10:8443",
+                "mcp_url": "https://192.0.2.10:8443/mcp", "ca_sha256": null,
                 "version": "0.1.0", "contract_version": "2.3.0"
             }
         })
@@ -216,14 +216,14 @@ mod tests {
     fn valid_and_invalid_pairing_qr() {
         let ca = "3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d";
         let pair = parse_pair_url(&format!(
-            "https://192.168.15.199:8443/parear?codigo=k7q-4mx&ca={}",
+            "https://192.0.2.10:8443/parear?codigo=k7q-4mx&ca={}",
             ca.to_ascii_uppercase()
         ))
         .unwrap();
         assert_eq!(
             pair,
             PairUrl {
-                url: "https://192.168.15.199:8443".into(),
+                url: "https://192.0.2.10:8443".into(),
                 code: "K7Q4MX".into(),
                 ca_sha256: Some(ca.into()),
             }
@@ -279,7 +279,7 @@ mod tests {
             .unwrap();
         assert!(cred.secret.starts_with("eclp_"));
         assert_eq!(cred.token.id, "01928f3a-1c00-7a00-8000-000000000703");
-        assert_eq!(cred.server.url, "https://192.168.15.199:8443");
+        assert_eq!(cred.server.url, "https://192.0.2.10:8443");
         assert_eq!(cred.server.ca_sha256, None);
         assert_eq!(
             sent(&script, 0),
@@ -383,6 +383,6 @@ mod tests {
     fn invalid_address() {
         let transport: Arc<dyn Transport> = Arc::new(Script::default());
         assert!(Devices::new(Arc::clone(&transport), "ftp://x").is_err());
-        assert!(Devices::new(transport, "192.168.15.199").is_err());
+        assert!(Devices::new(transport, "192.0.2.10").is_err());
     }
 }

@@ -76,7 +76,7 @@ describe('recording', () => {
   })
 
   it('without a credential mid-recording, keeps recording and asks to sign in again', async () => {
-    const server = { url: 'https://192.168.15.199:8443', nome: 'eclume', ca_sha256: 'ab'.repeat(32) }
+    const server = { url: 'https://192.0.2.10:8443', nome: 'eclume', ca_sha256: 'ab'.repeat(32) }
     const bridge = openApp(baseState({ sessao: session(), conexao: { fase: 'sem_credencial', servidor: server } }))
     expect(await screen.findByText('Entre de novo para sincronizar')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pausar' })).toBeInTheDocument()

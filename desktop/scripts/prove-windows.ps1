@@ -13,12 +13,13 @@
 # Usage: powershell -NoProfile -File desktop/scripts/prove-windows.ps1 [-Server <url>] [-Version <x.y.z>]
 # (-Version defaults to the one in tauri.conf.json)
 param(
-    [string]$Server = "https://192.168.15.199:8443",
+    [string]$Server = $env:ECLUME_PUBLIC_URL,
     [string]$Version = (Get-Content -Raw (Join-Path $PSScriptRoot "..\src-tauri\tauri.conf.json") | ConvertFrom-Json).version,
     [int]$Port = 9229
 )
 
 $ErrorActionPreference = "Stop"
+if (-not $Server) { throw "Give the server with -Server or ECLUME_PUBLIC_URL." }
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $output = Join-Path $root ".logs\prove-windows"
 New-Item -ItemType Directory -Force $output | Out-Null

@@ -76,7 +76,7 @@
         meeting: null,
         pending_ask: null,
         counts: { recording: 0, pending: 0, syncing: 0, synced: 3, failed: 0 },
-        web_url: "https://192.168.15.199:8443",
+        web_url: "https://192.0.2.10:8443",
         notice: null,
         sync_notice: null,
         queue_waits: {},
@@ -90,7 +90,7 @@
         recording("c", { started_at: today(8, 18) - 24 * 60 * MIN + 8 * 60 * MIN, duration_ms: 22 * MIN }),
       ],
       settings: {
-        web_url: "https://192.168.15.199:8443",
+        web_url: "https://192.0.2.10:8443",
         api_url: null,
         ca_path: null,
         detection_enabled: true,
@@ -184,7 +184,7 @@
       },
       version: "0.2.0",
       servers: [
-        { name: "192.168.15.199", url: "https://192.168.15.199:8443", ca_sha256: CA, origin: "installer" },
+        { name: "192.0.2.10", url: "https://192.0.2.10:8443", ca_sha256: CA, origin: "installer" },
         { name: "Escritório", url: "https://10.0.0.2", ca_sha256: CA, origin: "network" },
       ],
       prepared: null,

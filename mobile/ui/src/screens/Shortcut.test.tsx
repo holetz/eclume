@@ -6,7 +6,7 @@ import { baseState, marker, fakeBridge, type FakeBridge } from '../bridge/fake'
 import { BridgeContext } from '../bridge/bridge'
 import type { AppState } from '../bridge/types'
 
-const SERVER = { url: 'https://192.168.15.199:8443', nome: 'eclume', ca_sha256: 'ab'.repeat(32) }
+const SERVER = { url: 'https://192.0.2.10:8443', nome: 'eclume', ca_sha256: 'ab'.repeat(32) }
 
 /** Opens the app with a pending tap on the record-now shortcut (consumed once). */
 function openFromShortcut(state: AppState, route = '/', prepare?: (bridge: FakeBridge) => void) {

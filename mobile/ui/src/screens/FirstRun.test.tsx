@@ -6,7 +6,7 @@ import { baseState, fakeBridge } from '../bridge/fake'
 import { BridgeContext } from '../bridge/bridge'
 import type { AppState } from '../bridge/types'
 
-const SERVER = { url: 'https://192.168.15.199:8443', nome: 'eclume', ca_sha256: 'ab'.repeat(32) }
+const SERVER = { url: 'https://192.0.2.10:8443', nome: 'eclume', ca_sha256: 'ab'.repeat(32) }
 
 function openApp(state: AppState, route = '/') {
   window.location.hash = route
@@ -36,7 +36,7 @@ describe('first run', () => {
       </BridgeContext.Provider>,
     )
     expect(await screen.findByRole('heading', { name: 'Encontre o seu servidor' })).toBeInTheDocument()
-    expect(await screen.findByText('192.168.15.199:8443')).toBeInTheDocument()
+    expect(await screen.findByText('192.0.2.10:8443')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Conectar' }))
     expect(bridge.connectDiscovered).toHaveBeenCalledWith(SERVER.url, SERVER.ca_sha256)
   })
@@ -50,9 +50,9 @@ describe('first run', () => {
 
   it('types the address and checks the fingerprint before trusting', async () => {
     const bridge = openApp(baseState({ conexao: { fase: 'sem_servidor' } }), '/server/address')
-    await userEvent.type(await screen.findByLabelText('Endereço do servidor'), '192.168.15.199:8443')
+    await userEvent.type(await screen.findByLabelText('Endereço do servidor'), '192.0.2.10:8443')
     await userEvent.click(screen.getByRole('button', { name: 'Continuar' }))
-    expect(bridge.connectAddress).toHaveBeenCalledWith('192.168.15.199:8443')
+    expect(bridge.connectAddress).toHaveBeenCalledWith('192.0.2.10:8443')
 
     act(() =>
       bridge.emit(
@@ -80,7 +80,7 @@ describe('first run', () => {
   it('signs in with e-mail and password and shows the server refusal', async () => {
     const bridge = openApp(baseState({ conexao: { fase: 'sem_credencial', servidor: SERVER } }))
     expect(await screen.findByRole('heading', { name: 'Entrar' })).toBeInTheDocument()
-    expect(screen.getByText('192.168.15.199:8443')).toBeInTheDocument()
+    expect(screen.getByText('192.0.2.10:8443')).toBeInTheDocument()
     bridge.signIn = async () => {
       throw 'Aceite o aviso de responsabilidade na web do eclume e entre de novo aqui'
     }

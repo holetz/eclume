@@ -31,7 +31,7 @@ if [[ -z "${ECLUME_SMOKE_PASSWORD:-}" && -r "$ACCOUNT" ]]; then
   export ECLUME_SMOKE_PASSWORD ECLUME_SMOKE_EMAIL
 fi
 URL="${ECLUME_URL:-https://127.0.0.1:18444}"
-for production in https://192.168.15.199:8443 "${ECLUME_PUBLIC_URL:-}"; do
+for production in "${ECLUME_PUBLIC_URL:-}"; do
   [[ -n "$production" && "${URL%/}" == "${production%/}" ]] || continue
   echo "$URL is production: the proof writes; use staging (staging.sh up)" >&2
   exit 2

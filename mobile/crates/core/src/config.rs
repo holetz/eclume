@@ -50,7 +50,7 @@ impl Dirs {
 /// The paired server.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Server {
-    /// Public address (`https://192.168.15.199:8443`), without a trailing slash.
+    /// Public address (`https://192.0.2.10:8443`), without a trailing slash.
     pub url: String,
     #[serde(rename = "nome")]
     pub name: String,

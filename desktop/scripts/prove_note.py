@@ -9,7 +9,7 @@ app at the requested version (`capture.client_version`) and reached `transcribed
 
 Usage:
     python desktop/scripts/prove_note.py --recording <id> --version 0.2.0 \
-        [--server https://192.168.15.199:8443] [--ca <pem>] [--wait 900]
+        [--server <url>] [--ca <pem>] [--wait 900]
 
 Standard library only: runs with any Python 3.12 on the workstation.
 """
@@ -92,7 +92,7 @@ def wait_for_note(
 def main() -> int:
     """Signs in, waits for the transcript and checks the note; 0 when it passes."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--server", default="https://192.168.15.199:8443")
+    parser.add_argument("--server", default=os.environ.get("ECLUME_PUBLIC_URL"), help="default: $ECLUME_PUBLIC_URL")
     parser.add_argument("--recording", required=True, help="the recording id on the server (the queue's remote_id)")
     parser.add_argument("--version", required=True, help="the version of the app that recorded, such as 0.2.0")
     parser.add_argument("--ca", help="PEM of the server CA (the servidor-ca.pem the app pinned)")
@@ -106,6 +106,8 @@ def main() -> int:
         sys.stderr.write("set ECLUME_PROOF_EMAIL and ECLUME_PROOF_PASSWORD\n")
         return 2
 
+    if not args.server:
+        parser.error("give the server through --server or ECLUME_PUBLIC_URL")
     base = args.server.rstrip("/")
     opener = client(args.ca)
     try:

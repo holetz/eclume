@@ -32,12 +32,12 @@ class DeviceTest {
     fun announcementTxtBecomesText() {
         val txt = Discovery.txtAsText(
             mapOf(
-                "url" to "https://192.168.15.199:8443".toByteArray(),
+                "url" to "https://192.0.2.10:8443".toByteArray(),
                 "ca" to "3f9a".toByteArray(),
                 "empty" to null,
             ),
         )
-        assertEquals("https://192.168.15.199:8443", txt["url"])
+        assertEquals("https://192.0.2.10:8443", txt["url"])
         assertEquals("3f9a", txt["ca"])
         assertEquals("", txt["empty"])
     }

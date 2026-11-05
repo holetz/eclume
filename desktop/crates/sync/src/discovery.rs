@@ -102,7 +102,7 @@ mod tests {
         let found = parse(
             "eclume._eclume._tcp.local.",
             &txt(&[
-                ("url", "https://192.168.15.199:8443/"),
+                ("url", "https://192.0.2.10:8443/"),
                 ("ca", ca),
                 ("v", "2.3.0"),
                 ("name", "eclume"),
@@ -113,7 +113,7 @@ mod tests {
             found,
             Found {
                 name: "eclume".into(),
-                url: "https://192.168.15.199:8443".into(),
+                url: "https://192.0.2.10:8443".into(),
                 ca_sha256: Some(ca.to_ascii_lowercase()),
                 contract_version: Some("2.3.0".into()),
             }
