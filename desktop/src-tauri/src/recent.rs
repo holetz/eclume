@@ -28,6 +28,7 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_opener::OpenerExt;
 
+use crate::i18n::{fill, Locale};
 use crate::state::AppState;
 
 /// With the window visible and a row in progress: progress advances on screen.
@@ -656,48 +657,51 @@ pub struct TraySection {
 const TRAY_TITLE_MAX: usize = 40;
 
 /// Pipeline step progress, like `ETAPAS` in `vocabulario.js`.
-fn stage_progress(stage: &str) -> &'static str {
+fn stage_progress(stage: &str, locale: Locale) -> &'static str {
+    let texts = locale.texts();
     match stage {
-        "received" => "Enviando",
-        "preprocessing" => "Pré-processando",
-        "transcription" => "Transcrevendo",
-        "speakers" => "Conferindo locutores",
-        "agenda_type" => "Detectando o tipo",
-        "fields" => "Preenchendo campos",
-        "summary" => "Resumindo",
-        _ => "Em andamento",
+        "received" => texts.busy_received,
+        "preprocessing" => texts.busy_preprocessing,
+        "transcription" => texts.busy_transcription,
+        "speakers" => texts.busy_speakers,
+        "agenda_type" => texts.busy_agenda_type,
+        "fields" => texts.busy_fields,
+        "summary" => texts.busy_summary,
+        _ => texts.in_progress,
     }
 }
 
 /// A row’s state as text, with the labels `recent.js` takes from the vocabulary: the
 /// native menu does not go through the window.
-pub fn state_label(item: &RecentItem) -> &'static str {
+pub fn state_label(item: &RecentItem, locale: Locale) -> &'static str {
+    let texts = locale.texts();
     match item.phase {
-        Phase::Recording => "Gravando",
-        Phase::Pending => "Aguardando envio",
-        Phase::Uploading => "Enviando",
-        Phase::UploadFailed => "Falhou o envio",
-        Phase::Uploaded => "Enviada",
-        Phase::Queued => "Na fila",
-        Phase::Transcribing => "Transcrevendo",
-        Phase::Processing => item.stage.as_deref().map_or("Em andamento", stage_progress),
-        Phase::SummaryReady => "Resumo pronto",
-        Phase::Transcribed => "Pronta",
-        Phase::NoSummary => "Pronta sem resumo",
-        Phase::SummaryFailed => "O resumo falhou",
-        Phase::TranscriptionFailed => "A transcrição falhou",
-        Phase::Cancelled => "Cancelada",
+        Phase::Recording => texts.recording,
+        Phase::Pending => texts.device_pending,
+        Phase::Uploading => texts.busy_received,
+        Phase::UploadFailed => texts.device_failed,
+        Phase::Uploaded => texts.device_uploaded,
+        Phase::Queued => texts.state_queued,
+        Phase::Transcribing => texts.busy_transcription,
+        Phase::Processing => item
+            .stage
+            .as_deref()
+            .map_or(texts.in_progress, |stage| stage_progress(stage, locale)),
+        Phase::SummaryReady => texts.summary_ready,
+        Phase::Transcribed => texts.state_ready,
+        Phase::NoSummary => texts.no_summary,
+        Phase::SummaryFailed => texts.summary_failed,
+        Phase::TranscriptionFailed => texts.transcription_failed,
+        Phase::Cancelled => texts.state_cancelled,
         Phase::Unknown
             if item.stage.as_deref() == Some("speakers")
                 && item.detail.as_deref() == Some("waiting") =>
         {
-            "Aguardando locutores"
+            texts.state_awaiting_speakers
         }
-        Phase::Unknown => NEEDS_YOU,
+        Phase::Unknown => texts.needs_you,
     }
 }
-
-const NEEDS_YOU: &str = "Precisa de você";
 
 /// "05/10 14:02" from a local `YYYY-MM-DDTHH:MM:SS`.
 fn short_date(local: &str) -> Option<String> {
@@ -710,7 +714,8 @@ fn short_date(local: &str) -> Option<String> {
 /// The short row title: add an ellipsis past the limit; without a title, use a short date
 /// in this computer’s time zone, as in the panel; without a date, use Recording. `&` becomes
 /// `&&` because the native menu reads it as a mnemonic on GTK and Windows.
-pub fn tray_title(item: &RecentItem) -> String {
+pub fn tray_title(item: &RecentItem, locale: Locale) -> String {
+    let texts = locale.texts();
     let title = item.title.trim();
     let text = if title.is_empty() {
         item.started_at
@@ -718,7 +723,7 @@ pub fn tray_title(item: &RecentItem) -> String {
             .or_else(|| item.created_at.clone())
             .and_then(|at| eclume_sync::api::local_start(&at))
             .and_then(|local| short_date(&local))
-            .unwrap_or_else(|| "Gravação".to_string())
+            .unwrap_or_else(|| texts.untitled.to_string())
     } else if title.chars().count() > TRAY_TITLE_MAX {
         let cut: String = title.chars().take(TRAY_TITLE_MAX - 1).collect();
         format!("{}…", cut.trim_end())
@@ -728,12 +733,23 @@ pub fn tray_title(item: &RecentItem) -> String {
     text.replace('&', "&&")
 }
 
-fn tray_entry(item: &RecentItem) -> TrayEntry {
-    let state = state_label(item);
-    let label = if item.attention.is_some() && state != NEEDS_YOU {
-        format!("{} · {NEEDS_YOU} ({state})", tray_title(item))
+fn tray_entry(item: &RecentItem, locale: Locale) -> TrayEntry {
+    let texts = locale.texts();
+    let state = state_label(item, locale);
+    let label = if item.attention.is_some() && state != texts.needs_you {
+        fill(
+            texts.recent_attention,
+            &[
+                ("title", &tray_title(item, locale)),
+                ("attention", texts.needs_you),
+                ("state", state),
+            ],
+        )
     } else {
-        format!("{} · {state}", tray_title(item))
+        fill(
+            texts.recent_state,
+            &[("title", &tray_title(item, locale)), ("state", state)],
+        )
     };
     let mut actions = Vec::new();
     if let Some(remote) = &item.remote_id {
@@ -755,15 +771,16 @@ fn tray_entry(item: &RecentItem) -> TrayEntry {
 }
 
 /// The tray section from rows already limited to the tray’s N.
-pub fn tray_section_of(items: &[RecentItem]) -> TraySection {
+pub fn tray_section_of(items: &[RecentItem], locale: Locale) -> TraySection {
+    let texts = locale.texts();
     let header = match items.iter().filter(|item| item.attention.is_some()).count() {
-        0 => "Recentes".to_string(),
-        1 => "Recentes · 1 precisa de você".to_string(),
-        n => format!("Recentes · {n} precisam de você"),
+        0 => texts.recent.to_string(),
+        1 => fill(texts.recent_one, &[("count", "1")]),
+        n => fill(texts.recent_other, &[("count", &n.to_string())]),
     };
     TraySection {
         header,
-        entries: items.iter().map(tray_entry).collect(),
+        entries: items.iter().map(|item| tray_entry(item, locale)).collect(),
     }
 }
 
@@ -788,7 +805,10 @@ pub fn tray_section(app: &AppHandle) -> Result<Option<TraySection>> {
         }
         None => build(&local, None, &waits, count),
     };
-    Ok(Some(tray_section_of(&items)))
+    Ok(Some(tray_section_of(
+        &items,
+        state.locale().unwrap_or(Locale::En),
+    )))
 }
 
 /// Copy summary: put the current summary’s Markdown on the clipboard, as the summary-ready
@@ -1096,7 +1116,7 @@ mod tests {
     }
 
     fn entry(item: RecentItem) -> TrayEntry {
-        tray_section_of(&[item]).entries.remove(0)
+        tray_section_of(&[item], Locale::PtBr).entries.remove(0)
     }
 
     #[test]
@@ -1191,15 +1211,15 @@ mod tests {
         ];
         let rows = build(&queue, None, &BTreeMap::new(), 3);
         assert_eq!(
-            tray_section_of(&rows).header,
+            tray_section_of(&rows, Locale::PtBr).header,
             "Recentes · 2 precisam de você"
         );
         assert_eq!(
-            tray_section_of(&rows[1..]).header,
+            tray_section_of(&rows[1..], Locale::PtBr).header,
             "Recentes · 1 precisa de você"
         );
-        assert_eq!(tray_section_of(&rows[2..]).header, "Recentes");
-        assert!(tray_section_of(&[]).entries.is_empty());
+        assert_eq!(tray_section_of(&rows[2..], Locale::PtBr).header, "Recentes");
+        assert!(tray_section_of(&[], Locale::PtBr).entries.is_empty());
 
         // Progress advances without changing the section: it does not rebuild the menu.
         let in_progress = |progress| {
@@ -1215,7 +1235,59 @@ mod tests {
         let before = build(&[], Some(&[in_progress(100)][..]), &BTreeMap::new(), 1);
         let after = build(&[], Some(&[in_progress(900)][..]), &BTreeMap::new(), 1);
         assert_ne!(before, after);
-        assert_eq!(tray_section_of(&before), tray_section_of(&after));
+        assert_eq!(
+            tray_section_of(&before, Locale::PtBr),
+            tray_section_of(&after, Locale::PtBr)
+        );
+    }
+
+    #[test]
+    fn english_tray_labels_headers_and_fallback() {
+        let mut item = build(
+            &[],
+            Some(&[remote("r", "transcribed")][..]),
+            &BTreeMap::new(),
+            1,
+        )[0]
+        .clone();
+        item.title = "P&D".into();
+        assert_eq!(tray_title(&item, Locale::En), "P&&D");
+        item.title.clear();
+        item.created_at = None;
+        item.started_at = None;
+        assert_eq!(tray_title(&item, Locale::En), "Recording");
+        for (phase, expected) in [
+            (Phase::Pending, "Waiting to upload"),
+            (Phase::UploadFailed, "Upload failed"),
+            (Phase::Queued, "Queued"),
+            (Phase::SummaryReady, "Summary ready"),
+            (Phase::Unknown, "Needs you"),
+        ] {
+            item.phase = phase;
+            assert_eq!(state_label(&item, Locale::En), expected);
+        }
+        for (stage, expected) in [
+            ("preprocessing", "Preprocessing"),
+            ("speakers", "Checking speakers"),
+            ("agenda_type", "Detecting the type"),
+            ("summary", "Summarizing"),
+            ("future_step", "In progress"),
+        ] {
+            assert_eq!(stage_progress(stage, Locale::En), expected);
+        }
+        item.phase = Phase::UploadFailed;
+        item.attention = Some(Attention::UploadFailed);
+        assert_eq!(tray_section_of(&[], Locale::En).header, "Recent");
+        let section = tray_section_of(&[item.clone()], Locale::En);
+        assert_eq!(section.header, "Recent · 1 needs you");
+        assert_eq!(
+            section.entries[0].label,
+            "Recording · Needs you (Upload failed)"
+        );
+        assert_eq!(
+            tray_section_of(&[item.clone(), item], Locale::En).header,
+            "Recent · 2 need you"
+        );
     }
 
     #[test]
@@ -1228,19 +1300,19 @@ mod tests {
         )[0]
         .clone();
         item.title = "P&D · revisão".into();
-        assert_eq!(tray_title(&item), "P&&D · revisão");
+        assert_eq!(tray_title(&item, Locale::PtBr), "P&&D · revisão");
         item.title = "a".repeat(60);
-        let short = tray_title(&item);
+        let short = tray_title(&item, Locale::PtBr);
         assert_eq!(short.chars().count(), TRAY_TITLE_MAX);
         assert!(short.ends_with('…'));
         item.title = "  ".into();
         // Without a title, use the short date in local time, as in the panel ("dd/mm hh:mm").
-        let date = tray_title(&item);
+        let date = tray_title(&item, Locale::PtBr);
         assert_eq!(date.len(), "05/10 12:00".len());
         assert_eq!(&date[2..3], "/");
         item.created_at = None;
         item.started_at = None;
-        assert_eq!(tray_title(&item), "Gravação");
+        assert_eq!(tray_title(&item, Locale::PtBr), "Gravação");
         assert_eq!(
             short_date("2026-10-05T14:02:09").as_deref(),
             Some("05/10 14:02")

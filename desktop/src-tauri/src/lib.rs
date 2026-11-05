@@ -110,7 +110,14 @@ pub(crate) fn toggle_note(app: &AppHandle) -> anyhow::Result<()> {
         Ok(NoteToggle::Started) => {}
         Ok(NoteToggle::Stopped(recording)) => notify::note_saved(recording.duration_ms),
         Err(err) if err.is::<Busy>() => notify::busy(),
-        Err(err) => notify::info("Não deu para gravar a nota", &format!("{err:#}")),
+        Err(err) => notify::info(
+            state
+                .locale()
+                .unwrap_or(i18n::Locale::En)
+                .texts()
+                .note_failed,
+            &format!("{err:#}"),
+        ),
     }
     sync::nudge(app);
     refresh_ui(app);
@@ -333,12 +340,14 @@ pub fn run() {
             app.manage(state);
             tray::build(app.handle())?;
             if let Some(update) = updated {
+                let texts = app
+                    .state::<AppState>()
+                    .locale()
+                    .unwrap_or(i18n::Locale::En)
+                    .texts();
                 notify::info(
-                    &format!("eclume atualizado para {}", update.version),
-                    update
-                        .notes
-                        .as_deref()
-                        .unwrap_or("Veja as novidades na janela do eclume."),
+                    &i18n::fill(texts.updated, &[("version", &update.version)]),
+                    update.notes.as_deref().unwrap_or(texts.update_notes),
                 );
             }
             reconcile_autostart(app.handle());

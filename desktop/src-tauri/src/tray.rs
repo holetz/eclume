@@ -14,6 +14,7 @@ use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::{AppHandle, Manager, Wry};
 
+use crate::i18n::{fill, Locale};
 use crate::recent::{TrayAction, TraySection};
 use crate::shortcuts::Shortcuts;
 use crate::state::{AppState, AppStatus, StatusView};
@@ -40,6 +41,7 @@ const RECENT_SHOW: &str = "recent-show:";
 
 /// The current menu and items that change with the state.
 struct MenuHandles {
+    locale: Locale,
     status: MenuItem<Wry>,
     toggle: MenuItem<Wry>,
     /// The question currently shown in the menu.
@@ -105,10 +107,11 @@ fn disabled(id: &str, label: impl Into<String>) -> MenuLine {
 /// The Recent section: a disabled header and a line per recording. With actions, the line is a
 /// submenu (Copy summary, Open on web, Try now); without actions (recording, awaiting upload),
 /// it is an item that opens the window.
-fn recent_lines(section: &TraySection) -> Vec<MenuLine> {
+fn recent_lines(section: &TraySection, locale: Locale) -> Vec<MenuLine> {
+    let texts = locale.texts();
     let mut lines = vec![disabled(MENU_RECENT_HEADER, section.header.clone())];
     if section.entries.is_empty() {
-        lines.push(disabled(MENU_RECENT_EMPTY, "Nenhuma gravação recente"));
+        lines.push(disabled(MENU_RECENT_EMPTY, texts.recent_empty));
     }
     for entry in &section.entries {
         if entry.actions.is_empty() {
@@ -124,10 +127,10 @@ fn recent_lines(section: &TraySection) -> Vec<MenuLine> {
             .iter()
             .map(|action| match action {
                 TrayAction::CopySummary(id) => {
-                    item(format!("{RECENT_COPY}{id}"), "Copiar resumo", None)
+                    item(format!("{RECENT_COPY}{id}"), texts.copy_summary, None)
                 }
-                TrayAction::OpenWeb(id) => item(format!("{RECENT_OPEN}{id}"), "Abrir no web", None),
-                TrayAction::Retry(id) => item(format!("{RECENT_RETRY}{id}"), "Tentar agora", None),
+                TrayAction::OpenWeb(id) => item(format!("{RECENT_OPEN}{id}"), texts.open_web, None),
+                TrayAction::Retry(id) => item(format!("{RECENT_RETRY}{id}"), texts.retry, None),
             })
             .collect();
         lines.push(MenuLine::Submenu {
@@ -148,10 +151,12 @@ pub fn menu_lines(
     recording: bool,
     shortcuts: &Shortcuts,
     recent: Option<&TraySection>,
+    locale: Locale,
 ) -> Vec<MenuLine> {
+    let texts = locale.texts();
     let mut lines = vec![MenuLine::Item {
         id: MENU_STATUS.into(),
-        label: AppStatus::Idle.label().into(),
+        label: AppStatus::Idle.label(locale).into(),
         enabled: false,
         accelerator: None,
     }];
@@ -159,10 +164,10 @@ pub fn menu_lines(
         lines.push(MenuLine::Separator);
         lines.push(item(
             MENU_ASK_RECORD,
-            format!("Gravar a reunião do {}", key.label()),
+            fill(texts.ask_record, &[("app", key.label())]),
             None,
         ));
-        lines.push(item(MENU_ASK_IGNORE, "Agora não", None));
+        lines.push(item(MENU_ASK_IGNORE, texts.ignore, None));
     }
     lines.push(MenuLine::Separator);
     let status = if recording {
@@ -172,27 +177,23 @@ pub fn menu_lines(
     };
     lines.push(item(
         MENU_TOGGLE,
-        toggle_label(status),
+        toggle_label(status, locale),
         Some(&shortcuts.record),
     ));
-    lines.push(item(MENU_NOTE, "Nova nota", Some(&shortcuts.note)));
+    lines.push(item(MENU_NOTE, texts.new_note, Some(&shortcuts.note)));
     if recording {
-        lines.push(item(
-            MENU_MARKER,
-            "Adicionar marcador",
-            Some(&shortcuts.marker),
-        ));
+        lines.push(item(MENU_MARKER, texts.add_marker, Some(&shortcuts.marker)));
     }
-    lines.push(item(MENU_IMPORT, "Importar arquivo…", None));
+    lines.push(item(MENU_IMPORT, texts.import_file, None));
     if let Some(section) = recent {
         lines.push(MenuLine::Separator);
-        lines.extend(recent_lines(section));
+        lines.extend(recent_lines(section, locale));
     }
     lines.push(MenuLine::Separator);
-    lines.push(item(MENU_SHOW, "Abrir o eclume", None));
-    lines.push(item(MENU_OPEN_WEB, "Abrir a biblioteca na web", None));
+    lines.push(item(MENU_SHOW, texts.show_app, None));
+    lines.push(item(MENU_OPEN_WEB, texts.open_library, None));
     lines.push(MenuLine::Separator);
-    lines.push(item(MENU_QUIT, "Sair", Some("CmdOrCtrl+Q")));
+    lines.push(item(MENU_QUIT, texts.quit, Some("CmdOrCtrl+Q")));
     lines
 }
 
@@ -233,11 +234,12 @@ fn build_menu(
     recording: bool,
     shortcuts: &Shortcuts,
     recent: Option<TraySection>,
+    locale: Locale,
 ) -> tauri::Result<(Menu<Wry>, MenuHandles)> {
     let menu = Menu::new(app)?;
     let mut status = None;
     let mut toggle = None;
-    for line in menu_lines(ask, recording, shortcuts, recent.as_ref()) {
+    for line in menu_lines(ask, recording, shortcuts, recent.as_ref(), locale) {
         match line {
             MenuLine::Separator => menu.append(&PredefinedMenuItem::separator(app)?)?,
             MenuLine::Submenu { id, label, items } => {
@@ -263,6 +265,7 @@ fn build_menu(
     Ok((
         menu,
         MenuHandles {
+            locale,
             status: status.expect("the menu always has a status line"),
             toggle: toggle.expect("the menu always has record"),
             ask,
@@ -277,7 +280,8 @@ fn build_menu(
 /// Create the tray icon and menu.
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let shortcuts = app.state::<AppState>().shortcuts().unwrap_or_default();
-    let (menu, handles) = build_menu(app, None, false, &shortcuts, None)?;
+    let locale = app.state::<AppState>().locale().unwrap_or(Locale::En);
+    let (menu, handles) = build_menu(app, None, false, &shortcuts, None, locale)?;
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon(TrayIconState::Idle)?)
         .tooltip(crate::APP_NAME)
@@ -363,14 +367,18 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 fn on_recent_event(app: &AppHandle, id: &str) {
     if let Some(remote) = id.strip_prefix(RECENT_COPY) {
         let (app, remote) = (app.clone(), remote.to_string());
-        std::thread::spawn(move || match crate::recent::copy_summary(&app, &remote) {
-            Ok(()) => crate::notify::info(
-                "Resumo copiado",
-                "O resumo em Markdown está na área de transferência.",
-            ),
-            Err(err) => {
-                log::error!("failed to copy summary from tray: {err:#}");
-                crate::notify::info("Não foi possível copiar o resumo", &format!("{err:#}"));
+        std::thread::spawn(move || {
+            let texts = app
+                .state::<AppState>()
+                .locale()
+                .unwrap_or(Locale::En)
+                .texts();
+            match crate::recent::copy_summary(&app, &remote) {
+                Ok(()) => crate::notify::info(texts.summary_copied, texts.summary_clipboard),
+                Err(err) => {
+                    log::error!("failed to copy summary from tray: {err:#}");
+                    crate::notify::info(texts.copy_failed, &format!("{err:#}"));
+                }
             }
         });
     } else if let Some(remote) = id.strip_prefix(RECENT_OPEN) {
@@ -433,13 +441,16 @@ fn apply(app: &AppHandle) {
             || menu.recording != recording
             || menu.shortcuts != shortcuts
             || menu.recent != recent
+            || menu.locale != view.locale
         {
-            let (next, next_handles) = build_menu(app, ask, recording, &shortcuts, recent)?;
+            let (next, next_handles) =
+                build_menu(app, ask, recording, &shortcuts, recent, view.locale)?;
             handles.tray.set_menu(Some(next))?;
             *menu = next_handles;
         }
         menu.status.set_text(&line)?;
-        menu.toggle.set_text(toggle_label(view.status))?;
+        menu.toggle
+            .set_text(toggle_label(view.status, view.locale))?;
         let state = TrayIconState::of(&view);
         if menu.icon != Some(state) {
             handles.tray.set_icon(Some(icon(state)?))?;
@@ -448,9 +459,10 @@ fn apply(app: &AppHandle) {
         // The icon label exists on macOS and Linux AppIndicator; on Windows, the voice note
         // time only appears in the tooltip, which already includes the status line.
         handles.tray.set_title(note_title(&view, now))?;
-        handles
-            .tray
-            .set_tooltip(Some(format!("{} — {line}", crate::APP_NAME)))?;
+        handles.tray.set_tooltip(Some(fill(
+            view.locale.texts().tooltip,
+            &[("app", crate::APP_NAME), ("status", &line)],
+        )))?;
         Ok(())
     })();
     if let Err(err) = result {
@@ -458,11 +470,12 @@ fn apply(app: &AppHandle) {
     }
 }
 
-fn toggle_label(status: AppStatus) -> &'static str {
+fn toggle_label(status: AppStatus, locale: Locale) -> &'static str {
+    let texts = locale.texts();
     if status == AppStatus::Recording {
-        "Parar gravação"
+        texts.stop_recording
     } else {
-        "Iniciar gravação"
+        texts.start_recording
     }
 }
 
@@ -483,37 +496,41 @@ pub fn note_title(view: &StatusView, now_ms: i64) -> Option<String> {
         return None;
     }
     let started = view.recording_started_at.unwrap_or(now_ms);
-    Some(format!("Nota {}", elapsed(now_ms - started)))
+    Some(fill(
+        view.locale.texts().note_time,
+        &[("time", &elapsed(now_ms - started))],
+    ))
 }
 
 /// The menu status line: state, app and recording mode (or voice note time), the meeting
 /// awaiting a response and how many recordings still need to sync.
 pub fn status_line(view: &StatusView, now_ms: i64) -> String {
-    let mut parts = vec![view.status.label().to_string()];
+    let texts = view.locale.texts();
+    let mut parts = vec![view.status.label(view.locale).to_string()];
     if view.mic_lost && view.status == AppStatus::Recording {
-        parts.push("sem microfone".into());
+        parts.push(texts.no_microphone.into());
     }
     if let Some(title) = note_title(view, now_ms) {
         parts.push(title);
     } else if view.status == AppStatus::Recording {
         match (view.recording_app, view.recording_auto) {
-            (Some(app), true) => parts.push(format!("{} (automático)", app.label)),
+            (Some(app), true) => parts.push(fill(texts.automatic_app, &[("app", app.label)])),
             (Some(app), false) => parts.push(app.label.to_string()),
-            (None, true) => parts.push("automático".into()),
+            (None, true) => parts.push(texts.automatic.into()),
             (None, false) => {}
         }
         match view.marker_count {
             0 => {}
-            1 => parts.push("1 marcador".into()),
-            n => parts.push(format!("{n} marcadores")),
+            1 => parts.push(fill(texts.markers_one, &[("count", "1")])),
+            n => parts.push(fill(texts.markers_other, &[("count", &n.to_string())])),
         }
     } else if let Some(ask) = view.pending_ask {
-        parts.push(format!("reunião no {} detectada", ask.label));
+        parts.push(fill(texts.meeting_detected, &[("app", ask.label)]));
     }
     match view.counts.unsynced() {
         0 => {}
-        1 => parts.push("1 gravação a sincronizar".into()),
-        n => parts.push(format!("{n} gravações a sincronizar")),
+        1 => parts.push(fill(texts.unsynced_one, &[("count", "1")])),
+        n => parts.push(fill(texts.unsynced_other, &[("count", &n.to_string())])),
     }
     parts.join(" · ")
 }
@@ -560,6 +577,8 @@ mod tests {
 
     fn view(status: AppStatus, pending: u32) -> StatusView {
         StatusView {
+            locale: Locale::PtBr,
+            locale_choice: None,
             status,
             recording_id: None,
             recording_started_at: None,
@@ -588,6 +607,34 @@ mod tests {
     }
 
     #[test]
+    fn english_tray_text_follows_view_locale() {
+        let mut note = view(AppStatus::Recording, 2);
+        note.locale = Locale::En;
+        note.recording_kind = Some(Kind::Note);
+        note.recording_started_at = Some(1_000);
+        assert_eq!(
+            status_line(&note, 43_500),
+            "Recording · Note 0:42 · 2 recordings to sync"
+        );
+        let lines = menu_lines(
+            Some(AppKey::Zoom),
+            false,
+            &Shortcuts::default(),
+            None,
+            Locale::En,
+        );
+        assert_eq!(
+            labels(&lines)[..4],
+            ["Idle", "—", "Record the meeting in Zoom", "Not now"]
+        );
+        assert_eq!(
+            toggle_label(AppStatus::Recording, Locale::En),
+            "Stop recording"
+        );
+        assert_eq!(toggle_label(AppStatus::Idle, Locale::En), "Start recording");
+    }
+
+    #[test]
     fn tray_status_line() {
         assert_eq!(status_line(&view(AppStatus::Idle, 0), 0), "Ocioso");
         assert_eq!(
@@ -601,8 +648,14 @@ mod tests {
         let mut without_mic = view(AppStatus::Recording, 0);
         without_mic.mic_lost = true;
         assert_eq!(status_line(&without_mic, 0), "Gravando · sem microfone");
-        assert_eq!(toggle_label(AppStatus::Recording), "Parar gravação");
-        assert_eq!(toggle_label(AppStatus::Idle), "Iniciar gravação");
+        assert_eq!(
+            toggle_label(AppStatus::Recording, Locale::PtBr),
+            "Parar gravação"
+        );
+        assert_eq!(
+            toggle_label(AppStatus::Idle, Locale::PtBr),
+            "Iniciar gravação"
+        );
     }
 
     #[test]
@@ -675,7 +728,7 @@ mod tests {
             marker: "Ctrl+Alt+M".into(),
         };
         assert_eq!(
-            labels(&menu_lines(None, false, &shortcuts, None)),
+            labels(&menu_lines(None, false, &shortcuts, None, Locale::PtBr)),
             [
                 "Ocioso",
                 "—",
@@ -689,7 +742,7 @@ mod tests {
                 "Sair [CmdOrCtrl+Q]",
             ]
         );
-        let recording = menu_lines(Some(AppKey::Zoom), true, &shortcuts, None);
+        let recording = menu_lines(Some(AppKey::Zoom), true, &shortcuts, None, Locale::PtBr);
         assert_eq!(
             labels(&recording)[..8],
             [
@@ -746,7 +799,7 @@ mod tests {
                 },
             ],
         };
-        let lines = menu_lines(None, false, &shortcuts, Some(&section));
+        let lines = menu_lines(None, false, &shortcuts, Some(&section), Locale::PtBr);
         assert_eq!(
             labels(&lines)[4..11],
             [
@@ -793,13 +846,21 @@ mod tests {
             entries: vec![],
         };
         assert_eq!(
-            labels(&menu_lines(None, false, &shortcuts, Some(&empty)))[5..8],
+            labels(&menu_lines(
+                None,
+                false,
+                &shortcuts,
+                Some(&empty),
+                Locale::PtBr
+            ))[5..8],
             ["—", "Recentes", "Nenhuma gravação recente"]
         );
         // With 0 in the config, the section disappears.
-        assert!(!labels(&menu_lines(None, false, &shortcuts, None))
-            .iter()
-            .any(|label| label.starts_with("Recentes")));
+        assert!(
+            !labels(&menu_lines(None, false, &shortcuts, None, Locale::PtBr))
+                .iter()
+                .any(|label| label.starts_with("Recentes"))
+        );
     }
 
     #[test]

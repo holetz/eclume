@@ -16,18 +16,17 @@ use std::time::Duration;
 use eclume_detect::AppKey;
 use eclume_recorder::session::StopReason;
 use eclume_sync::{Ended, Outcome};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
+
+use crate::i18n::{fill, Locale};
+use crate::state::AppState;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_opener::OpenerExt;
 
 const ACTION_RECORD: &str = "record";
 const ACTION_IGNORE: &str = "ignore";
-const LABEL_RECORD: &str = "Gravar";
-const LABEL_IGNORE: &str = "Agora não";
 const ACTION_COPY: &str = "copy";
 const ACTION_OPEN: &str = "open";
-const LABEL_COPY: &str = "Copiar";
-const LABEL_OPEN: &str = "Abrir";
 /// How long a notification with actions waits for a response on Linux. The question and summary
 /// stay in the tray, window and web, so it can expire.
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -37,8 +36,21 @@ const ACTIONS_DEADLINE: Duration = Duration::from_secs(15 * 60);
 #[cfg(target_os = "windows")]
 static APP_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
+/// App access for notices whose callers do not carry a handle.
+static APP_HANDLE: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
+
+fn locale_for(app: &AppHandle) -> Locale {
+    app.try_state::<AppState>()
+        .and_then(|state| state.locale().ok())
+        .unwrap_or(Locale::En)
+}
+
+fn current_locale() -> Locale {
+    APP_HANDLE.get().map_or(Locale::En, locale_for)
+}
+
 /// Two `(id, label)` actions: the primary one and the other.
-type Actions = &'static [(&'static str, &'static str)];
+type Actions = Vec<(&'static str, &'static str)>;
 /// What to do with the chosen action (its id).
 type OnAction = Arc<dyn Fn(&AppHandle, &str) + Send + Sync>;
 
@@ -63,44 +75,44 @@ pub enum Notice {
 
 impl Notice {
     /// Title and body.
-    pub fn text(self) -> (String, String) {
+    pub fn text(self, locale: Locale) -> (String, String) {
+        let texts = locale.texts();
         let duration = |ms: Option<i64>| short_duration(ms.unwrap_or(0));
         match self {
             Self::Detected(key) => (
-                "Reunião detectada".into(),
-                format!("{} está usando o microfone. Gravar?", key.label()),
+                texts.detected_title.into(),
+                fill(texts.detected_body, &[("app", key.label())]),
             ),
             Self::Recording(key) => (
-                "Gravando".into(),
-                format!("{} · pare pelo ícone da bandeja", key.label()),
+                texts.recording.into(),
+                fill(texts.recording_body, &[("app", key.label())]),
             ),
             Self::MeetingEnded(ms) => (
-                "Reunião encerrada".into(),
-                format!("{} · enviando ao servidor", duration(ms)),
+                texts.meeting_ended.into(),
+                fill(texts.meeting_ended_body, &[("duration", &duration(ms))]),
             ),
             Self::NoteSaved(ms) => (
-                "Nota salva".into(),
-                format!("{} · processando no servidor", duration(ms)),
+                texts.note_saved.into(),
+                fill(texts.note_saved_body, &[("duration", &duration(ms))]),
             ),
-            Self::NoteDiscarded => ("Nota descartada".into(), "não ouvimos voz".into()),
-            Self::Busy => (
-                "Já há uma gravação em andamento".into(),
-                "Pare a gravação atual para gravar uma nota.".into(),
-            ),
-            Self::MicLost => (
-                "Microfone perdido".into(),
-                "gravando sem a sua voz, tentando reconectar".into(),
-            ),
+            Self::NoteDiscarded => (texts.note_discarded.into(), texts.no_speech.into()),
+            Self::Busy => (texts.busy_title.into(), texts.busy_body.into()),
+            Self::MicLost => (texts.mic_lost.into(), texts.mic_lost_body.into()),
             Self::RecordingStopped(ms, reason) => (
-                "A gravação parou".into(),
-                format!(
-                    "{} salvos · {}",
-                    duration(ms),
-                    if reason == StopReason::SourcesEnded {
-                        "as fontes de áudio caíram"
-                    } else {
-                        "falha ao gravar"
-                    }
+                texts.recording_stopped.into(),
+                fill(
+                    texts.stopped_body,
+                    &[
+                        ("duration", &duration(ms)),
+                        (
+                            "reason",
+                            if reason == StopReason::SourcesEnded {
+                                texts.sources_ended
+                            } else {
+                                texts.recording_failed
+                            },
+                        ),
+                    ],
                 ),
             ),
         }
@@ -109,12 +121,13 @@ impl Notice {
 
 /// Show a notice without an action.
 pub fn show(notice: Notice) {
-    let (title, body) = notice.text();
+    let (title, body) = notice.text(current_locale());
     info(&title, &body);
 }
 
 /// Save what notifications need from the app (the Windows AUMID); called during setup.
 pub fn init(app: &AppHandle) {
+    let _ = APP_HANDLE.set(app.clone());
     #[cfg(target_os = "windows")]
     let _ = APP_ID.set(app.config().identifier.clone());
     #[cfg(not(target_os = "windows"))]
@@ -197,12 +210,14 @@ pub fn short_duration(ms: i64) -> String {
 
 /// Ask whether to record the detected meeting (the question also stays in the tray and window).
 pub fn ask(app: &AppHandle, key: AppKey) {
-    let (title, body) = Notice::Detected(key).text();
+    let locale = locale_for(app);
+    let texts = locale.texts();
+    let (title, body) = Notice::Detected(key).text(locale);
     with_actions(
         app.clone(),
         title,
         body,
-        &[(ACTION_RECORD, LABEL_RECORD), (ACTION_IGNORE, LABEL_IGNORE)],
+        vec![(ACTION_RECORD, texts.record), (ACTION_IGNORE, texts.ignore)],
         Arc::new(respond),
     );
 }
@@ -212,12 +227,23 @@ pub const GROUP_ABOVE: usize = 3;
 
 /// The reason text for a skipped summary (the same as `MOTIVOS` in `ui/js/vocabulario.js`); an
 /// unknown code appears as is, just as in the window.
-fn reason_text(reason: Option<&str>) -> String {
+fn reason_text(reason: Option<&str>, locale: Locale) -> String {
+    let texts = locale.texts();
     match reason {
-        Some("no_provider") => "nenhum agente configurado; fale com quem administra".into(),
-        Some("no_agenda_type") => "a gravação não tem tipo de agenda".into(),
+        Some("no_provider") => texts.reason_no_provider.into(),
+        Some("no_auto_fields") => texts.reason_no_auto_fields.into(),
+        Some("no_types") => texts.reason_no_types.into(),
+        Some("set_by_user") => texts.reason_set_by_user.into(),
+        Some("no_agenda_type") => texts.reason_no_agenda_type.into(),
+        Some("before_pipeline") => texts.reason_before_pipeline.into(),
+        Some("worker_without_preprocess") => texts.reason_worker_without_preprocess.into(),
+        Some("summary_deleted") => texts.reason_summary_deleted.into(),
+        Some("cancelled") => texts.reason_cancelled.into(),
+        Some("unnamed_speakers") => texts.reason_unnamed_speakers.into(),
+        Some("continued_by_user") => texts.reason_continued_by_user.into(),
+        Some("naming_not_required") => texts.reason_naming_not_required.into(),
         Some(code) => code.into(),
-        None => "sem motivo informado".into(),
+        None => texts.reason_missing.into(),
     }
 }
 
@@ -226,52 +252,67 @@ pub fn outcome_text(
     outcome: Outcome,
     recording_title: &str,
     reason: Option<&str>,
+    locale: Locale,
 ) -> (String, String) {
+    let texts = locale.texts();
     let name = if recording_title.trim().is_empty() {
-        "Gravação"
+        texts.untitled
     } else {
         recording_title
     };
     match outcome {
         Outcome::SummaryReady => (
-            "Resumo pronto".into(),
-            format!("{name} · copie para compartilhar"),
+            texts.summary_ready.into(),
+            fill(texts.summary_ready_body, &[("name", name)]),
         ),
         Outcome::SummaryFailed => (
-            "O resumo falhou".into(),
-            format!("{name} · abra para gerar de novo"),
+            texts.summary_failed.into(),
+            fill(texts.summary_failed_body, &[("name", name)]),
         ),
         Outcome::NoSummary => (
-            "Pronta sem resumo".into(),
-            format!("{name} · {}", reason_text(reason)),
+            texts.no_summary.into(),
+            fill(
+                texts.no_summary_body,
+                &[("name", name), ("reason", &reason_text(reason, locale))],
+            ),
         ),
         Outcome::TranscriptionFailed => (
-            "A transcrição falhou".into(),
-            format!("{name} · abra para ver o motivo"),
+            texts.transcription_failed.into(),
+            fill(texts.transcription_failed_body, &[("name", name)]),
         ),
         Outcome::AwaitingSpeakers => (
-            "Precisa de você".into(),
-            format!("{name} · nomeie os locutores para seguir com o resumo"),
+            texts.needs_you.into(),
+            fill(texts.needs_you_body, &[("name", name)]),
         ),
     }
 }
 
 /// Title and body of the grouped notice when many recordings finish in the same pass.
-pub fn grouped_text(count: usize) -> (String, String) {
+pub fn grouped_text(count: usize, locale: Locale) -> (String, String) {
+    let texts = locale.texts();
     (
-        format!("{count} gravações processadas"),
-        "Abra a biblioteca para ver os resumos e as falhas".into(),
+        fill(
+            if count == 1 {
+                texts.processed_one
+            } else {
+                texts.processed_other
+            },
+            &[("count", &count.to_string())],
+        ),
+        texts.processed_body.into(),
     )
 }
 
 /// A processing outcome for an account recording. A ready summary with Markdown has Copy
 /// (put the summary on the clipboard) and Open; others have only Open (the recording on the web).
 pub fn outcome(app: &AppHandle, ended: &Ended, markdown: Option<String>, url: String) {
-    let (title, body) = outcome_text(ended.outcome, &ended.title, ended.reason.as_deref());
+    let locale = locale_for(app);
+    let texts = locale.texts();
+    let (title, body) = outcome_text(ended.outcome, &ended.title, ended.reason.as_deref(), locale);
     let actions: Actions = if ended.outcome == Outcome::SummaryReady && markdown.is_some() {
-        &[(ACTION_COPY, LABEL_COPY), (ACTION_OPEN, LABEL_OPEN)]
+        vec![(ACTION_COPY, texts.copy), (ACTION_OPEN, texts.open)]
     } else {
-        &[(ACTION_OPEN, LABEL_OPEN)]
+        vec![(ACTION_OPEN, texts.open)]
     };
     let on_action: OnAction = Arc::new(move |app, action| match action {
         ACTION_COPY => {
@@ -289,7 +330,9 @@ pub fn outcome(app: &AppHandle, ended: &Ended, markdown: Option<String>, url: St
 
 /// Many outcomes at once: a single notice that opens the web library.
 pub fn outcomes_grouped(app: &AppHandle, count: usize, url: String) {
-    let (title, body) = grouped_text(count);
+    let locale = locale_for(app);
+    let texts = locale.texts();
+    let (title, body) = grouped_text(count, locale);
     let on_action: OnAction = Arc::new(move |app, action| {
         if action == ACTION_OPEN {
             open(app, &url);
@@ -299,7 +342,7 @@ pub fn outcomes_grouped(app: &AppHandle, count: usize, url: String) {
         app.clone(),
         title,
         body,
-        &[(ACTION_OPEN, LABEL_OPEN)],
+        vec![(ACTION_OPEN, texts.open)],
         on_action,
     );
 }
@@ -437,8 +480,9 @@ mod tests {
 
     #[test]
     fn notifications_frame_text() {
+        let texts = Locale::PtBr.texts();
         let text = |n: Notice| {
-            let (title, body) = n.text();
+            let (title, body) = n.text(Locale::PtBr);
             format!("{title} · {body}")
         };
         assert_eq!(
@@ -476,14 +520,14 @@ mod tests {
             text(Notice::MicLost),
             "Microfone perdido · gravando sem a sua voz, tentando reconectar"
         );
-        assert_eq!((LABEL_RECORD, LABEL_IGNORE), ("Gravar", "Agora não"));
-        assert_eq!((LABEL_COPY, LABEL_OPEN), ("Copiar", "Abrir"));
+        assert_eq!((texts.record, texts.ignore), ("Gravar", "Agora não"));
+        assert_eq!((texts.copy, texts.open), ("Copiar", "Abrir"));
     }
 
     #[test]
     fn outcome_texts() {
         let text = |outcome, title: &str, reason: Option<&str>| {
-            let (title, body) = outcome_text(outcome, title, reason);
+            let (title, body) = outcome_text(outcome, title, reason, Locale::PtBr);
             format!("{title} · {body}")
         };
         assert_eq!(
@@ -514,11 +558,77 @@ mod tests {
             ),
             "Precisa de você · Kickoff · nomeie os locutores para seguir com o resumo"
         );
-        let (title, body) = grouped_text(5);
+        let (title, body) = grouped_text(5, Locale::PtBr);
         assert_eq!(
             format!("{title} · {body}"),
             "5 gravações processadas · Abra a biblioteca para ver os resumos e as falhas"
         );
+    }
+
+    #[test]
+    fn english_notifications_and_outcomes() {
+        assert_eq!(
+            Notice::Detected(AppKey::Zoom).text(Locale::En),
+            (
+                "Meeting detected".into(),
+                "Zoom is using the microphone. Record?".into()
+            )
+        );
+        assert_eq!(
+            Notice::RecordingStopped(Some(42_000), StopReason::SourcesEnded).text(Locale::En),
+            (
+                "Recording stopped".into(),
+                "42 s saved · the audio sources disconnected".into()
+            )
+        );
+        assert_eq!(
+            Notice::NoteSaved(Some(42_000)).text(Locale::En),
+            (
+                "Note saved".into(),
+                "42 s · processing on the server".into()
+            )
+        );
+        assert_eq!(
+            outcome_text(Outcome::SummaryReady, "", None, Locale::En),
+            ("Summary ready".into(), "Recording · copy to share".into())
+        );
+        assert_eq!(
+            outcome_text(
+                Outcome::NoSummary,
+                "Kickoff",
+                Some("no_agenda_type"),
+                Locale::En
+            ),
+            (
+                "Ready without a summary".into(),
+                "Kickoff · the recording has no agenda type".into()
+            )
+        );
+        assert_eq!(
+            outcome_text(Outcome::AwaitingSpeakers, "Kickoff", None, Locale::En),
+            (
+                "Needs you".into(),
+                "Kickoff · name the speakers to continue with the summary".into()
+            )
+        );
+        assert_eq!(grouped_text(1, Locale::En).0, "1 recording processed");
+        assert_eq!(grouped_text(5, Locale::En).0, "5 recordings processed");
+        assert_eq!(grouped_text(1, Locale::PtBr).0, "1 gravação processada");
+        let texts = Locale::En.texts();
+        assert_eq!(
+            (texts.record, texts.ignore, texts.copy, texts.open),
+            ("Record", "Not now", "Copy", "Open")
+        );
+        assert_eq!(
+            reason_text(Some("no_auto_fields"), Locale::En),
+            "no field is filled automatically"
+        );
+        assert_eq!(
+            reason_text(Some("unnamed_speakers"), Locale::PtBr),
+            "há locutores sem pessoa; nomeie todos para seguir com o tipo, os campos e o resumo"
+        );
+        assert_eq!(reason_text(Some("new_reason"), Locale::En), "new_reason");
+        assert_eq!(reason_text(None, Locale::En), "no reason provided");
     }
 
     #[test]

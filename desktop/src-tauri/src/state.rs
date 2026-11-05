@@ -42,11 +42,12 @@ pub enum AppStatus {
 }
 
 impl AppStatus {
-    pub fn label(self) -> &'static str {
+    pub fn label(self, locale: Locale) -> &'static str {
+        let texts = locale.texts();
         match self {
-            Self::Idle => "Ocioso",
-            Self::Recording => "Gravando",
-            Self::Syncing => "Sincronizando",
+            Self::Idle => texts.idle,
+            Self::Recording => texts.recording,
+            Self::Syncing => texts.syncing,
         }
     }
 }
@@ -1665,6 +1666,18 @@ mod tests {
     }
 
     #[test]
+    fn app_status_labels_follow_locale() {
+        for (status, english, portuguese) in [
+            (AppStatus::Idle, "Idle", "Ocioso"),
+            (AppStatus::Recording, "Recording", "Gravando"),
+            (AppStatus::Syncing, "Syncing", "Sincronizando"),
+        ] {
+            assert_eq!(status.label(Locale::En), english);
+            assert_eq!(status.label(Locale::PtBr), portuguese);
+        }
+    }
+
+    #[test]
     fn locale_choice_is_saved_and_reflected_in_status() {
         let (state, dir) = state("locale-choice");
         state.report_system_locale("en-US").unwrap();
@@ -2769,7 +2782,7 @@ mod tests {
         assert_eq!(state.status().unwrap(), AppStatus::Syncing);
         drop(syncing);
         assert_eq!(state.status().unwrap(), AppStatus::Idle);
-        assert_eq!(AppStatus::Syncing.label(), "Sincronizando");
+        assert_eq!(AppStatus::Syncing.label(Locale::PtBr), "Sincronizando");
         state.set_sync_notice(Some("sem PAT".into())).unwrap();
         assert_eq!(
             state.view().unwrap().sync_notice.as_deref(),
