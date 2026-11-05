@@ -1,5 +1,6 @@
 //! Supported desktop locales, preference resolution and native text catalog.
 
+use eclume_detect::AppKey;
 use serde::Serialize;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -40,10 +41,7 @@ pub fn resolve(choice: Option<&str>, account: Option<&str>, system: Option<&str>
 pub fn env_locale() -> Option<String> {
     #[cfg(unix)]
     {
-        ["LC_ALL", "LC_MESSAGES", "LANG"]
-            .into_iter()
-            .filter_map(|key| std::env::var(key).ok())
-            .find(|tag| normalize(tag).is_some())
+        first_set(|key| std::env::var(key).ok())
     }
     #[cfg(not(unix))]
     {
@@ -51,9 +49,53 @@ pub fn env_locale() -> Option<String> {
     }
 }
 
+/// The first non-empty of `LC_ALL`, `LC_MESSAGES` and `LANG`, as POSIX orders them: a higher one
+/// overrides the rest even when it names an unsupported language (`LC_ALL=C` resolves to `en`).
+#[cfg_attr(not(unix), allow(dead_code))]
+fn first_set(var: impl Fn(&str) -> Option<String>) -> Option<String> {
+    ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .filter_map(var)
+        .find(|tag| !tag.trim().is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn environment_follows_posix_precedence() {
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |key: &str| {
+                pairs
+                    .iter()
+                    .find(|(name, _)| *name == key)
+                    .map(|(_, value)| value.to_string())
+            }
+        };
+        assert_eq!(
+            first_set(env(&[("LC_ALL", "C"), ("LANG", "pt_BR.UTF-8")])).as_deref(),
+            Some("C")
+        );
+        assert_eq!(
+            resolve(None, None, first_set(env(&[("LC_ALL", "C"), ("LANG", "pt_BR.UTF-8")])).as_deref()),
+            Locale::En
+        );
+        assert_eq!(
+            first_set(env(&[("LC_ALL", ""), ("LANG", "pt_BR.UTF-8")])).as_deref(),
+            Some("pt_BR.UTF-8")
+        );
+        assert_eq!(first_set(env(&[])), None);
+    }
+
+    #[test]
+    fn generic_app_names_follow_locale() {
+        assert_eq!(Locale::En.app_label(AppKey::Navegador), "browser");
+        assert_eq!(Locale::En.app_label(AppKey::Outro), "another app");
+        assert_eq!(Locale::PtBr.app_label(AppKey::Navegador), "navegador");
+        assert_eq!(Locale::PtBr.app_label(AppKey::Outro), "outro app");
+        assert_eq!(Locale::En.app_label(AppKey::Teams), "Microsoft Teams");
+    }
 
     #[test]
     fn normalizes_supported_language_subtags() {
@@ -94,6 +136,8 @@ pub struct Texts {
     pub syncing: &'static str,
     pub record: &'static str,
     pub ignore: &'static str,
+    pub app_browser: &'static str,
+    pub app_other: &'static str,
     pub copy: &'static str,
     pub open: &'static str,
     pub recent_empty: &'static str,
@@ -197,6 +241,8 @@ pub const EN: Texts = Texts {
     syncing: "Syncing",
     record: "Record",
     ignore: "Not now",
+    app_browser: "browser",
+    app_other: "another app",
     copy: "Copy",
     open: "Open",
     recent_empty: "No recent recordings",
@@ -300,6 +346,8 @@ pub const PT_BR: Texts = Texts {
     syncing: "Sincronizando",
     record: "Gravar",
     ignore: "Agora não",
+    app_browser: "navegador",
+    app_other: "outro app",
     copy: "Copiar",
     open: "Abrir",
     recent_empty: "Nenhuma gravação recente",
@@ -403,6 +451,15 @@ impl Locale {
         match self {
             Self::En => &EN,
             Self::PtBr => &PT_BR,
+        }
+    }
+
+    /// Name of a meeting app in this locale: brand names stay, the generic ones are translated.
+    pub fn app_label(self, key: AppKey) -> &'static str {
+        match key {
+            AppKey::Navegador => self.texts().app_browser,
+            AppKey::Outro => self.texts().app_other,
+            _ => key.label(),
         }
     }
 }

@@ -153,3 +153,41 @@ test('catalogs have identical flattened keys and nonempty string values', async 
     }
   }
 })
+
+test('a zero count reads as plural in both locales', async ({ open }) => {
+  const page = await open()
+  const texts = await page.evaluate(async () => {
+    const i18n = await import('/js/i18n.js')
+    return ['en', 'pt-BR'].map((locale) => {
+      i18n.setLocale(locale)
+      return [0, 1, 2].map((count) => [
+        i18n.t('settings.storageUsed', { count, size: '0 B' }),
+        i18n.t('settings.folder.recordings', { count }),
+      ])
+    })
+  })
+  expect(texts).toEqual([
+    [
+      ['0 recordings · 0 B on this computer', '0 recordings read'],
+      ['1 recording · 0 B on this computer', '1 recording read'],
+      ['2 recordings · 0 B on this computer', '2 recordings read'],
+    ],
+    [
+      ['0 gravações · 0 B neste computador', '0 gravações lidas'],
+      ['1 gravação · 0 B neste computador', '1 gravação lida'],
+      ['2 gravações · 0 B neste computador', '2 gravações lidas'],
+    ],
+  ])
+})
+
+test.describe('fr-FR first, pt-BR second', () => {
+  test.use({ locale: 'fr-FR' })
+  test('the window reports the first supported system language', async ({ open, page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'languages', { get: () => ['fr-FR', 'pt-BR'] })
+    })
+    await open()
+    const reports = async () => (await calls(page)).filter((call) => call.command === 'report_system_locale')
+    await expect.poll(reports).toEqual([{ command: 'report_system_locale', args: { tag: 'pt-BR' } }])
+  })
+})

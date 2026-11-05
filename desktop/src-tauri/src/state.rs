@@ -142,11 +142,11 @@ pub struct MeetingView {
     pub label: &'static str,
 }
 
-impl From<AppKey> for MeetingView {
-    fn from(app: AppKey) -> Self {
+impl MeetingView {
+    pub fn new(app: AppKey, locale: Locale) -> Self {
         Self {
             app,
-            label: app.label(),
+            label: locale.app_label(app),
         }
     }
 }
@@ -663,8 +663,9 @@ impl AppState {
             Some((id, ..)) => queue.markers(id)?,
             None => Vec::new(),
         };
+        let locale = resolved_locale(&inner.config);
         Ok(StatusView {
-            locale: resolved_locale(&inner.config),
+            locale,
             locale_choice: inner.config.locale.clone(),
             status,
             recording_id: current.map(|(id, ..)| id.to_string()),
@@ -673,9 +674,14 @@ impl AppState {
             note_silence_s: inner.config.note_silence_s,
             theme: inner.config.theme.clone(),
             recording_auto: origin.is_some_and(|o| o.auto),
-            recording_app: origin.and_then(|o| o.app).map(MeetingView::from),
-            meeting: inner.auto.meeting().map(MeetingView::from),
-            pending_ask: inner.auto.pending_ask().map(MeetingView::from),
+            recording_app: origin
+                .and_then(|o| o.app)
+                .map(|app| MeetingView::new(app, locale)),
+            meeting: inner.auto.meeting().map(|app| MeetingView::new(app, locale)),
+            pending_ask: inner
+                .auto
+                .pending_ask()
+                .map(|app| MeetingView::new(app, locale)),
             marker_count: u32::try_from(markers.len()).unwrap_or(u32::MAX),
             last_marker: markers.into_iter().max_by_key(|m| m.created_at),
             counts: queue.counts()?,
@@ -711,14 +717,19 @@ impl AppState {
         Ok(())
     }
 
+    /// Stores the OS language the window reports: a supported one in its canonical tag, an
+    /// unsupported one as reported, so Automatic falls back to `en` instead of an older system
+    /// language. An empty report changes nothing.
     pub fn report_system_locale(&self, tag: &str) -> Result<()> {
-        let Some(locale) = i18n::normalize(tag) else {
+        let tag = tag.trim();
+        if tag.is_empty() {
             return Ok(());
-        };
+        }
+        let stored = i18n::normalize(tag).map_or(tag, Locale::tag);
         let mut inner = self.inner()?;
-        if inner.config.system_locale.as_deref() != Some(locale.tag()) {
+        if inner.config.system_locale.as_deref() != Some(stored) {
             let mut next = inner.config.clone();
-            next.system_locale = Some(locale.tag().to_string());
+            next.system_locale = Some(stored.to_string());
             next.save(&self.config_path)?;
             inner.config = next;
         }
@@ -726,11 +737,16 @@ impl AppState {
     }
 
     /// Stores the canonical account language, clearing an absent or unsupported preference.
-    fn store_account_locale(&self, tag: Option<&str>) -> Result<()> {
+    /// `account` is the account the request was made for: when it signed out or changed while the
+    /// request was in flight, the answer is dropped.
+    fn store_account_locale(&self, account: &Option<Account>, tag: Option<&str>) -> Result<()> {
         let locale = tag
             .and_then(i18n::normalize)
             .map(|locale| locale.tag().to_string());
         let mut inner = self.inner()?;
+        if &inner.config.account != account {
+            return Ok(());
+        }
         if inner.config.account_locale != locale {
             let mut next = inner.config.clone();
             next.account_locale = locale;
@@ -742,6 +758,7 @@ impl AppState {
 
     /// Refreshes the account preference with the stored credential, if one is available.
     pub fn refresh_account_locale(&self, net: &dyn Net) -> Result<()> {
+        let account = self.inner()?.config.account.clone();
         let Some(config) = self.uploader_config()? else {
             return Ok(());
         };
@@ -751,7 +768,7 @@ impl AppState {
         };
         let transport = net.verified(&config.trust)?;
         let me = Client::new(transport, &config.api_url, &config.pat, retry)?.me()?;
-        self.store_account_locale(me.user.locale.as_deref())
+        self.store_account_locale(&account, me.user.locale.as_deref())
     }
 
     /// Starts a manual recording with the sources opened by `open`; the pending prompt for a
@@ -1572,6 +1589,7 @@ impl AppState {
 
     /// "Test connection": `GET /api/v1/me` with the stored credential.
     pub fn test_connection(&self, net: &dyn Net) -> Result<ConnectionTest> {
+        let account = self.inner()?.config.account.clone();
         let Some(config) = self.uploader_config()? else {
             bail!("Entre para testar a conexão");
         };
@@ -1581,7 +1599,7 @@ impl AppState {
         };
         let transport = net.verified(&config.trust)?;
         let me = Client::new(transport, &config.api_url, &config.pat, retry)?.me()?;
-        self.store_account_locale(me.user.locale.as_deref())?;
+        self.store_account_locale(&account, me.user.locale.as_deref())?;
         let last_upload_at = self
             .lock_queue()?
             .list(500)?
@@ -1704,7 +1722,7 @@ mod tests {
     }
 
     #[test]
-    fn system_locale_is_normalized_and_unsupported_tags_are_ignored() {
+    fn system_locale_is_normalized_and_unsupported_tags_fall_back_to_english() {
         let (state, dir) = state("system-locale");
         state.report_system_locale("pt_BR").unwrap();
         assert_eq!(
@@ -1712,11 +1730,19 @@ mod tests {
             Some("pt-BR")
         );
         assert_eq!(state.view().unwrap().locale, Locale::PtBr);
-        // An unchanged or unsupported report must not attempt another save.
+        // An unsupported system language replaces the older one, so Automatic resolves to en.
+        state.report_system_locale(" fr-FR ").unwrap();
+        assert_eq!(
+            Config::load(&state.config_path).system_locale.as_deref(),
+            Some("fr-FR")
+        );
+        assert_eq!(state.locale().unwrap(), Locale::En);
+        state.report_system_locale("pt_BR").unwrap();
+        // An unchanged or empty report must not attempt another save.
         std::fs::remove_file(&state.config_path).unwrap();
         std::fs::create_dir(&state.config_path).unwrap();
         state.report_system_locale("pt-PT").unwrap();
-        state.report_system_locale("fr-FR").unwrap();
+        state.report_system_locale("  ").unwrap();
         assert_eq!(state.locale().unwrap(), Locale::PtBr);
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -1725,7 +1751,7 @@ mod tests {
     fn account_locale_precedes_system_and_follows_desktop_choice() {
         let (state, dir) = state("account-locale");
         state.report_system_locale("en").unwrap();
-        state.store_account_locale(Some("pt-PT")).unwrap();
+        state.store_account_locale(&None, Some("pt-PT")).unwrap();
         assert_eq!(
             Config::load(&state.config_path).account_locale.as_deref(),
             Some("pt-BR")
@@ -1736,12 +1762,21 @@ mod tests {
         assert_eq!(state.locale().unwrap(), Locale::En);
         state.set_locale(None).unwrap();
         assert_eq!(state.locale().unwrap(), Locale::PtBr);
-        state.store_account_locale(Some("fr")).unwrap();
+        state.store_account_locale(&None, Some("fr")).unwrap();
         assert_eq!(Config::load(&state.config_path).account_locale, None);
         assert_eq!(state.locale().unwrap(), Locale::En);
-        state.store_account_locale(Some("pt")).unwrap();
-        state.store_account_locale(None).unwrap();
+        state.store_account_locale(&None, Some("pt")).unwrap();
+        state.store_account_locale(&None, None).unwrap();
         assert_eq!(Config::load(&state.config_path).account_locale, None);
+        // An answer for an account that signed out while the request was in flight is dropped.
+        let gone = Some(Account {
+            email: "user@example.org".into(),
+            token_id: Some("t-1".into()),
+            server_name: None,
+        });
+        state.store_account_locale(&gone, Some("pt-BR")).unwrap();
+        assert_eq!(Config::load(&state.config_path).account_locale, None);
+        assert_eq!(state.locale().unwrap(), Locale::En);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

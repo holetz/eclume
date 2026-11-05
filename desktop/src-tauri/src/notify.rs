@@ -81,11 +81,11 @@ impl Notice {
         match self {
             Self::Detected(key) => (
                 texts.detected_title.into(),
-                fill(texts.detected_body, &[("app", key.label())]),
+                fill(texts.detected_body, &[("app", locale.app_label(key))]),
             ),
             Self::Recording(key) => (
                 texts.recording.into(),
-                fill(texts.recording_body, &[("app", key.label())]),
+                fill(texts.recording_body, &[("app", locale.app_label(key))]),
             ),
             Self::MeetingEnded(ms) => (
                 texts.meeting_ended.into(),

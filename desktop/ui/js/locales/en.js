@@ -328,6 +328,7 @@ export default {
       "waiting": "Waiting for the first cycle",
       "synced": "Synced at {time} · {loaded} in the last cycle",
       "recordings": {
+        "zero": "0 recordings read",
         "one": "1 recording read",
         "other": "{count} recordings read"
       }
@@ -469,6 +470,7 @@ export default {
       "system": "Create the shortcut in the system"
     },
     "storageUsed": {
+      "zero": "0 recordings · {size} on this computer",
       "one": "1 recording · {size} on this computer",
       "other": "{count} recordings · {size} on this computer"
     }

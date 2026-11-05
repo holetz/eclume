@@ -164,7 +164,7 @@ pub fn menu_lines(
         lines.push(MenuLine::Separator);
         lines.push(item(
             MENU_ASK_RECORD,
-            fill(texts.ask_record, &[("app", key.label())]),
+            fill(texts.ask_record, &[("app", locale.app_label(key))]),
             None,
         ));
         lines.push(item(MENU_ASK_IGNORE, texts.ignore, None));
@@ -662,7 +662,7 @@ mod tests {
     fn tray_shows_automatic_recording_and_question() {
         let mut auto = view(AppStatus::Recording, 0);
         auto.recording_auto = true;
-        auto.recording_app = Some(MeetingView::from(AppKey::Teams));
+        auto.recording_app = Some(MeetingView::new(AppKey::Teams, Locale::PtBr));
         assert_eq!(
             status_line(&auto, 0),
             "Gravando · Microsoft Teams (automático)"
@@ -675,7 +675,7 @@ mod tests {
         auto.marker_count = 1;
         assert!(status_line(&auto, 0).ends_with(" · 1 marcador"));
         let mut asking = view(AppStatus::Idle, 2);
-        asking.pending_ask = Some(MeetingView::from(AppKey::Zoom));
+        asking.pending_ask = Some(MeetingView::new(AppKey::Zoom, Locale::PtBr));
         assert_eq!(
             status_line(&asking, 0),
             "Ocioso · reunião no Zoom detectada · 2 gravações a sincronizar"

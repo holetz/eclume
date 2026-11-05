@@ -201,8 +201,14 @@ pub fn set_locale(
 }
 
 #[tauri::command]
-pub fn report_system_locale(state: State<'_, AppState>, tag: String) -> CommandResult<()> {
-    to_js(state.report_system_locale(&tag))
+pub fn report_system_locale(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    tag: String,
+) -> CommandResult<()> {
+    let result = state.report_system_locale(&tag);
+    crate::refresh_ui(&app);
+    to_js(result)
 }
 
 /// "Create GNOME shortcuts" (`install`) or remove them, in Wayland `sistema` mode.

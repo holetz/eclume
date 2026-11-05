@@ -328,6 +328,7 @@ export default {
       "waiting": "Aguardando o primeiro ciclo",
       "synced": "Sincronizada às {time} · {loaded} no último ciclo",
       "recordings": {
+        "zero": "0 gravações lidas",
         "one": "1 gravação lida",
         "other": "{count} gravações lidas"
       }
@@ -469,6 +470,7 @@ export default {
       "system": "Crie o atalho no sistema"
     },
     "storageUsed": {
+      "zero": "0 gravações · {size} neste computador",
       "one": "1 gravação · {size} neste computador",
       "other": "{count} gravações · {size} neste computador"
     }

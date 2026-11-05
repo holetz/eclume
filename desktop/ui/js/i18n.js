@@ -85,6 +85,8 @@ export function startLocale() {
   return DEFAULT_LOCALE;
 }
 
+/** The first supported OS language, as `startLocale` picks it; else the first one, unsupported. */
 export function systemTag() {
-  return navigator.languages?.[0] ?? navigator.language ?? "";
+  const languages = navigator.languages?.length ? navigator.languages : [navigator.language ?? ""];
+  return languages.find((language) => normalize(language)) ?? languages[0] ?? "";
 }
