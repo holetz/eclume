@@ -82,5 +82,116 @@ export default {
       "falhou": "Falhou",
       "cancelada": "Cancelada"
     }
+  },
+  "help": {
+    "title": "Ajuda",
+    "firstSteps": "Primeiros passos",
+    "permissions": "Permissões de microfone",
+    "folder": "Pasta sincronizada",
+    "shortcuts": "Atalhos de teclado",
+    "center": "Abrir a central de ajuda",
+    "problem": "Relatar um problema…",
+    "attachLog": "Anexe o eclume.log",
+    "close": "Fechar",
+    "global": "Em qualquer lugar do computador",
+    "window": "Nesta janela",
+    "change": "Mudar os atalhos nas configurações",
+    "import": "Importar arquivo",
+    "settings": "Configurações",
+    "version": "eclume {version} · atualizado",
+    "shortcut": {
+      "record": "Iniciar ou parar a gravação",
+      "note": "Nova nota",
+      "marker": "Adicionar marcador"
+    }
+  },
+  "home": {
+    "settings": "Configurações",
+    "loading": "Carregando…",
+    "startRecording": "Iniciar gravação",
+    "automatic": "Iniciada automaticamente. Para quando a reunião acabar.",
+    "import": "Importar arquivo…",
+    "policySettings": "Mudar nas configurações",
+    "policy": {
+      "record": "Gravar",
+      "ask": "Confirmar",
+      "ignore": "Ignorar"
+    },
+    "meetingDetected": "Reunião detectada",
+    "notNow": "Agora não",
+    "uploadQueue": "Fila de envio",
+    "today": "Hoje, {time}",
+    "yesterday": "Ontem, {time}",
+    "recording": "Gravando{origin}{elapsed}",
+    "meeting": "Reunião no {app}",
+    "updated": "Atualizado para {version}",
+    "policyTitle": "Reuniões no {app}",
+    "prompt": "{app} está usando o microfone. Gravar?",
+    "detecting": "Ocioso, atento a reuniões",
+    "allUploaded": "Tudo enviado",
+    "interrupted": "interrompida",
+    "gotIt": "Entendi",
+    "error": "Não deu certo",
+    "notice": "Aviso",
+    "upload": "Envio",
+    "stopRecording": "Parar gravação",
+    "tokenAccount": "Conectado com um token pessoal",
+    "signOut": "Sair",
+    "server": "Servidor",
+    "uploading": {
+      "one": "Enviando 1 gravação",
+      "other": "Enviando {count} gravações"
+    },
+    "idleQueue": {
+      "one": "Ocioso · 1 gravação na fila",
+      "other": "Ocioso · {count} gravações na fila"
+    },
+    "queueSummary": {
+      "one": "{uploaded} de {count} enviadas",
+      "other": "{uploaded} de {count} enviadas"
+    }
+  },
+  "recent": {
+    "label": "Gravações recentes",
+    "title": "Recentes",
+    "empty": "Nenhuma gravação ainda.",
+    "summaryReady": "Resumo pronto",
+    "noSummary": "Pronta sem resumo",
+    "summaryFailed": "O resumo falhou",
+    "transcriptionFailed": "A transcrição falhou",
+    "needsYou": "Precisa de você",
+    "uploadFailed": "O envio falhou; o app tenta de novo sozinho.",
+    "retrySummary": "Abra no web para gerar o resumo de novo.",
+    "seeReason": "Abra no web para ver o motivo.",
+    "transientFailure": "Falha passageira; o servidor tenta de novo.",
+    "recording": "Gravação",
+    "summaryCopied": "Resumo copiado em Markdown.",
+    "copied": "Copiado",
+    "copySummary": "Copiar resumo",
+    "uploading": "Enviando…",
+    "tryNow": "Tentar agora",
+    "openWeb": "Abrir no web",
+    "noResponse": "Sem resposta do servidor; tentando de novo.",
+    "alertCount": {
+      "one": "1 precisa de você",
+      "other": "{count} precisam de você"
+    },
+    "resolveWeb": "{stage}{state}{reason} · resolva no web.",
+    "progress": "Transcrição {percent}%"
+  },
+  "note": {
+    "marker": "Marcador",
+    "placeholder": "Nota curta (opcional)",
+    "new": "Nova nota",
+    "stopAfter": " · para depois de {seconds} s de silêncio",
+    "recording": "Gravando uma nota{stop}",
+    "silence": "Silêncio · para em {seconds} s",
+    "stop": "Parar nota · {time}",
+    "markerLabel": "Nota do marcador em {time}",
+    "label": "Nota",
+    "markerCount": {
+      "one": "1 marcador",
+      "other": "{count} marcadores"
+    }
   }
 };

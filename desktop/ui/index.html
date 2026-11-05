@@ -28,97 +28,97 @@
           >
           <div class="row row-tight">
             <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="open-help"
-              data-icon="help" aria-label="Ajuda" aria-haspopup="menu" aria-expanded="false"></button>
+              data-icon="help" aria-label="Help" data-i18n-aria-label="help.title" aria-haspopup="menu" aria-expanded="false"></button>
             <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="open-settings"
-              data-icon="settings" aria-label="Configurações"></button>
+              data-icon="settings" aria-label="Settings" data-i18n-aria-label="home.settings"></button>
           </div>
         </div>
-        <div class="menu help-menu" role="menu" id="menu-help" aria-label="Ajuda" hidden>
-          <button type="button" class="menu-item" role="menuitem" id="help-first-steps">Primeiros passos</button>
-          <button type="button" class="menu-item" role="menuitem" id="help-permissions">Permissões de microfone</button>
-          <button type="button" class="menu-item" role="menuitem" id="help-folder">Pasta sincronizada</button>
+        <div class="menu help-menu" role="menu" id="menu-help" aria-label="Help" data-i18n-aria-label="help.title" hidden>
+          <button type="button" class="menu-item" role="menuitem" id="help-first-steps" data-i18n="help.firstSteps">First steps</button>
+          <button type="button" class="menu-item" role="menuitem" id="help-permissions" data-i18n="help.permissions">Microphone permissions</button>
+          <button type="button" class="menu-item" role="menuitem" id="help-folder" data-i18n="help.folder">Synced folder</button>
           <button type="button" class="menu-item" role="menuitem" id="help-shortcuts">
-            Atalhos de teclado<kbd id="help-shortcuts-tecla"></kbd>
+            <span data-i18n="help.shortcuts">Keyboard shortcuts</span><kbd id="help-shortcuts-tecla"></kbd>
           </button>
           <button type="button" class="menu-item" role="menuitem" id="help-center">
-            Abrir a central de ajuda<kbd>↗</kbd>
+            <span data-i18n="help.center">Open the help center</span><kbd>↗</kbd>
           </button>
           <div class="menu-sep"></div>
           <button type="button" class="menu-item menu-item-hint" role="menuitem" id="help-problem">
-            Relatar um problema…<small>Anexe o eclume.log</small>
+            <span data-i18n="help.problem">Report a problem…</span><small data-i18n="help.attachLog">Attach eclume.log</small>
           </button>
           <div class="menu-sep"></div>
           <span class="menu-item" aria-disabled="true" id="help-version"></span>
         </div>
-        <div class="recent-panel" id="recent" aria-label="Gravações recentes" hidden>
+        <div class="recent-panel" id="recent" aria-label="Recent recordings" data-i18n-aria-label="recent.label" hidden>
           <div class="row row-between">
-            <span class="kicker">Recentes</span>
+            <span class="kicker" data-i18n="recent.title">Recent</span>
             <span class="badge badge-warning" id="recent-alert" role="status" hidden></span>
           </div>
           <ul class="recent-list" id="recent-list"></ul>
-          <span class="text-muted small" id="recent-empty" hidden>Nenhuma gravação ainda.</span>
+          <span class="text-muted small" id="recent-empty" hidden data-i18n="recent.empty">No recordings yet.</span>
         </div>
-        <span class="status-line" id="line-status" role="status">Carregando…</span>
+        <span class="status-line" id="line-status" role="status" data-i18n="home.loading">Loading…</span>
         <div class="row row-meter" id="note" hidden>
           <div class="meter" id="meter" aria-hidden="true"></div>
           <span class="mono tiny" id="note-silence"></span>
         </div>
-        <button type="button" class="btn btn-rec btn-rec-lg" id="record" aria-pressed="false">
-          Iniciar gravação
+        <button type="button" class="btn btn-rec btn-rec-lg" id="record" aria-pressed="false" data-i18n="home.startRecording">
+          Start recording
         </button>
-        <span class="text-muted small" id="recording-automatic" hidden
-          >Iniciada automaticamente. Para quando a reunião acabar.</span
+        <span class="text-muted small" id="recording-automatic" hidden data-i18n="home.automatic"
+          >Started automatically. Stops when the meeting ends.</span
         >
         <div class="stack-tight" id="markers" hidden>
           <div class="row">
             <button type="button" class="btn btn-secondary btn-sm" id="marker">
-              Marcador<kbd id="shortcut-marker"></kbd>
+              <span data-i18n="note.marker">Marker</span><kbd id="shortcut-marker"></kbd>
             </button>
             <span class="marker-count" id="count-markers"></span>
           </div>
           <div class="field" id="note-marker" hidden>
             <label for="note-marker-text" id="note-marker-label"></label>
-            <input class="input" id="note-marker-text" maxlength="500" placeholder="Nota curta (opcional)" />
+            <input class="input" id="note-marker-text" maxlength="500" placeholder="Short note (optional)" data-i18n-placeholder="note.placeholder" />
           </div>
         </div>
         <div class="grid-2">
           <button type="button" class="btn btn-secondary" id="new-note">
-            Nova nota<kbd id="shortcut-note"></kbd>
+            <span data-i18n="note.new">New note</span><kbd id="shortcut-note"></kbd>
           </button>
-          <button type="button" class="btn btn-secondary" id="import">Importar arquivo…</button>
+          <button type="button" class="btn btn-secondary" id="import" data-i18n="home.import">Import file…</button>
         </div>
       </div>
 
       <div class="tray-section" id="policy" hidden>
         <div class="row row-between">
           <span class="kicker" id="policy-title"></span>
-          <a href="#" class="small" id="policy-settings">Mudar nas configurações</a>
+          <a href="#" class="small" id="policy-settings" data-i18n="home.policySettings">Change in settings</a>
         </div>
         <span class="seg" role="radiogroup" id="policy-options">
-          <label class="seg-opt"><input type="radio" name="politica" value="auto" />Gravar</label>
-          <label class="seg-opt"><input type="radio" name="politica" value="ask" />Confirmar</label>
-          <label class="seg-opt"><input type="radio" name="politica" value="ignore" />Ignorar</label>
+          <label class="seg-opt"><input type="radio" name="politica" value="auto" /><span data-i18n="home.policy.record">Record</span></label>
+          <label class="seg-opt"><input type="radio" name="politica" value="ask" /><span data-i18n="home.policy.ask">Ask</span></label>
+          <label class="seg-opt"><input type="radio" name="politica" value="ignore" /><span data-i18n="home.policy.ignore">Ignore</span></label>
         </span>
       </div>
 
       <div class="tray-section" id="prompt" hidden>
         <div class="alert alert-warning">
-          <span class="alert-title">Reunião detectada</span>
+          <span class="alert-title" data-i18n="home.meetingDetected">Meeting detected</span>
           <span id="prompt-text"></span>
         </div>
         <div class="row">
-          <button type="button" class="btn btn-primary" id="prompt-record">Gravar</button>
-          <button type="button" class="btn btn-secondary" id="prompt-now-no">Agora não</button>
+          <button type="button" class="btn btn-primary" id="prompt-record" data-i18n="home.policy.record">Record</button>
+          <button type="button" class="btn btn-secondary" id="prompt-now-no" data-i18n="home.notNow">Not now</button>
         </div>
       </div>
 
       <div class="tray-section">
         <div class="row row-between">
-          <span class="kicker">Fila de envio</span>
+          <span class="kicker" data-i18n="home.uploadQueue">Upload queue</span>
           <span class="text-muted tiny" id="queue-summary"></span>
         </div>
         <ul class="queue" id="queue"></ul>
-        <span class="text-muted small" id="queue-empty" hidden>Nenhuma gravação ainda.</span>
+        <span class="text-muted small" id="queue-empty" hidden data-i18n="recent.empty">No recordings yet.</span>
       </div>
 
       <div class="tray-section stack-tight">
@@ -235,25 +235,25 @@
       </div>
     </section>
 
-    <section class="tray tray-window" data-view="shortcuts" aria-label="Atalhos de teclado" hidden>
+    <section class="tray tray-window" data-view="shortcuts" aria-label="Keyboard shortcuts" data-i18n-aria-label="help.shortcuts" hidden>
       <div class="tray-section">
         <div class="row row-between">
           <div>
-            <span class="kicker">Ajuda</span>
-            <h2 class="flush sheet-title">Atalhos de teclado</h2>
+            <span class="kicker" data-i18n="help.title">Help</span>
+            <h2 class="flush sheet-title" data-i18n="help.shortcuts">Keyboard shortcuts</h2>
           </div>
           <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="shortcuts-close"
-            data-icon="close" aria-label="Fechar"></button>
+            data-icon="close" aria-label="Close" data-i18n-aria-label="help.close"></button>
         </div>
       </div>
       <div class="tray-section">
-        <span class="kicker text-muted">Em qualquer lugar do computador</span>
+        <span class="kicker text-muted" data-i18n="help.global">Anywhere on this computer</span>
         <dl class="shortcuts" id="shortcuts-global"></dl>
-        <span class="kicker text-muted">Nesta janela</span>
+        <span class="kicker text-muted" data-i18n="help.window">In this window</span>
         <dl class="shortcuts" id="shortcuts-window"></dl>
       </div>
       <div class="tray-section">
-        <a href="#" class="small" id="shortcuts-change">Mudar os atalhos nas configurações</a>
+        <a href="#" class="small" id="shortcuts-change" data-i18n="help.change">Change shortcuts in settings</a>
       </div>
     </section>
 

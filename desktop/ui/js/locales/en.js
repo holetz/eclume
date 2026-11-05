@@ -82,5 +82,116 @@ export default {
       "falhou": "Failed",
       "cancelada": "Cancelled"
     }
+  },
+  "help": {
+    "title": "Help",
+    "firstSteps": "First steps",
+    "permissions": "Microphone permissions",
+    "folder": "Synced folder",
+    "shortcuts": "Keyboard shortcuts",
+    "center": "Open the help center",
+    "problem": "Report a problem…",
+    "attachLog": "Attach eclume.log",
+    "close": "Close",
+    "global": "Anywhere on this computer",
+    "window": "In this window",
+    "change": "Change shortcuts in settings",
+    "import": "Import file",
+    "settings": "Settings",
+    "version": "eclume {version} · up to date",
+    "shortcut": {
+      "record": "Start / stop recording",
+      "note": "New voice note",
+      "marker": "Add marker"
+    }
+  },
+  "home": {
+    "settings": "Settings",
+    "loading": "Loading…",
+    "startRecording": "Start recording",
+    "automatic": "Started automatically. Stops when the meeting ends.",
+    "import": "Import file…",
+    "policySettings": "Change in settings",
+    "policy": {
+      "record": "Record",
+      "ask": "Ask",
+      "ignore": "Ignore"
+    },
+    "meetingDetected": "Meeting detected",
+    "notNow": "Not now",
+    "uploadQueue": "Upload queue",
+    "today": "Today, {time}",
+    "yesterday": "Yesterday, {time}",
+    "recording": "Recording{origin}{elapsed}",
+    "meeting": "Meeting in {app}",
+    "updated": "Updated to {version}",
+    "policyTitle": "Meetings in {app}",
+    "prompt": "{app} is using the microphone. Record?",
+    "detecting": "Idle, watching for meetings",
+    "allUploaded": "Everything uploaded",
+    "interrupted": "interrupted",
+    "gotIt": "Got it",
+    "error": "Something went wrong",
+    "notice": "Notice",
+    "upload": "Upload",
+    "stopRecording": "Stop recording",
+    "tokenAccount": "Connected with a personal token",
+    "signOut": "Sign out",
+    "server": "Server",
+    "uploading": {
+      "one": "Uploading 1 recording",
+      "other": "Uploading {count} recordings"
+    },
+    "idleQueue": {
+      "one": "Idle · 1 recording queued",
+      "other": "Idle · {count} recordings queued"
+    },
+    "queueSummary": {
+      "one": "{uploaded} of {count} uploaded",
+      "other": "{uploaded} of {count} uploaded"
+    }
+  },
+  "recent": {
+    "label": "Recent recordings",
+    "title": "Recent",
+    "empty": "No recordings yet.",
+    "summaryReady": "Summary ready",
+    "noSummary": "Ready without a summary",
+    "summaryFailed": "Summary failed",
+    "transcriptionFailed": "Transcription failed",
+    "needsYou": "Needs you",
+    "uploadFailed": "Upload failed; the app will retry automatically.",
+    "retrySummary": "Open on the web to generate the summary again.",
+    "seeReason": "Open on the web to see why.",
+    "transientFailure": "Temporary failure; the server will retry.",
+    "recording": "Recording",
+    "summaryCopied": "Summary copied as Markdown.",
+    "copied": "Copied",
+    "copySummary": "Copy summary",
+    "uploading": "Uploading…",
+    "tryNow": "Try now",
+    "openWeb": "Open on the web",
+    "noResponse": "No response from the server; retrying.",
+    "alertCount": {
+      "one": "1 needs you",
+      "other": "{count} need you"
+    },
+    "resolveWeb": "{stage}{state}{reason} · resolve on the web.",
+    "progress": "Transcription {percent}%"
+  },
+  "note": {
+    "marker": "Marker",
+    "placeholder": "Short note (optional)",
+    "new": "New note",
+    "stopAfter": " · stops after {seconds} s of silence",
+    "recording": "Recording a note{stop}",
+    "silence": "Silence · stops in {seconds} s",
+    "stop": "Stop note · {time}",
+    "markerLabel": "Marker note at {time}",
+    "label": "Note",
+    "markerCount": {
+      "one": "1 marker",
+      "other": "{count} markers"
+    }
   }
 };
