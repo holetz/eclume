@@ -1,0 +1,62 @@
+const importCatalog = {
+  source: {
+    metadata: 'From the file metadata',
+    metadata_day: 'Only the day in the metadata · the time is the modification one, check it',
+    file_date: 'No date in the file · using the modification date, check it',
+    user: 'Edited by you',
+  },
+  announced: {
+    converting: 'converting',
+    uploading: 'uploading',
+    done: 'uploaded',
+    error: 'failed',
+    canceled: 'cancelled',
+  },
+  announce: '{{name}}: {{state}}',
+  notify: {
+    blocked: ' · The browser blocked the notifications of this site',
+    offer: 'Notify me when it is ready',
+  },
+  status: {
+    reading: 'Reading…',
+    ready: 'Ready to upload',
+    converting: 'Converting {{percent}}%',
+    uploadingPart: 'Uploading {{current}} of {{total}}',
+    uploading: 'Uploading…',
+    duplicate: 'Already in the library',
+    done: 'Uploaded',
+    open: 'Open',
+    error: '{{state}}: {{message}}',
+    canceled: 'Cancelled',
+  },
+  row: {
+    start: 'Start of the recording of {{name}}',
+    readingDate: 'Reading the file date…',
+    language: 'Language of {{name}}',
+    cancel: 'Cancel the upload of {{name}}',
+    remove: 'Remove {{name}}',
+  },
+  dialog: {
+    accountDefault: 'Account default',
+    title: 'Import files',
+    kicker: 'Library',
+    close: 'Close',
+    sendNone: 'Upload files',
+    send_one: 'Upload 1 file',
+    send_other: 'Upload {{count}} files',
+    insecure: 'Conversion requires a secure connection. Open eclume at the <b>https://</b> address and install the certificate, if the browser asks.',
+    noWebCodecs: 'This browser has no WebCodecs. Conversion uses the compatible mode, which is slower; prefer an up-to-date Chrome, Edge or Firefox.',
+    drop: 'Drop audio or video here',
+    choose: 'or <choose>choose files</choose> · MP3, M4A, WAV, OGG, MP4, MOV, WebM, MKV and more',
+  },
+  table: {
+    file: 'File',
+    start: 'Start of the recording',
+    language: 'Language',
+    duration: 'Duration',
+    status: 'Status',
+    actions: 'Actions',
+  },
+} as const
+
+export default importCatalog

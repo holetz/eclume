@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { speakerColorIndex, speakerName, type Transcript } from './segments'
 import styles from './SpeakersPanel.module.css'
@@ -18,6 +19,7 @@ interface SpeakersDisclosureProps {
  * rename, link person, voice suggestions and merge.
  */
 export function SpeakersDisclosure({ transcript, open, onOpenChange, children }: SpeakersDisclosureProps) {
+  const { t } = useTranslation('transcript')
   const { speakers } = transcript
   return (
     <details
@@ -28,9 +30,9 @@ export function SpeakersDisclosure({ transcript, open, onOpenChange, children }:
       }}
     >
       <summary>
-        Locutores
+        {t('speakers.title')}
         {open ? (
-          <span className="text-muted">renomeie, ligue a pessoas ou junte</span>
+          <span className="text-muted">{t('speakers.openHint')}</span>
         ) : (
           <span className={styles.inline}>
             {speakers.map((speaker) => (

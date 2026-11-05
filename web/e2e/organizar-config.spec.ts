@@ -84,7 +84,7 @@ test('tags: the catalog with the agent badge and the settings', async ({ page })
   await expect(page.getByRole('heading', { level: 1, name: 'Tags' })).toBeVisible()
   const tags = page.getByRole('list', { name: 'Tags' })
   await expect(tags).toContainText('cliente-metalurgica')
-  await expect(tags).toContainText('Criada pelo agente')
+  await expect(tags.locator('.badge').first()).toHaveText('Criada pelo agente')
 })
 
 test('MCP connection: descriptor address and assistant token', async ({ page }) => {

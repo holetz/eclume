@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { dayKey, dayLabel, eventBox, lanes, monthGrid, monthTitle, parseDayKey, weekRange, weekTitle } from './calendar'
+import { setLocale } from '../../i18n'
+import {
+  dayKey,
+  dayLabel,
+  eventBox,
+  lanes,
+  monthGrid,
+  monthTitle,
+  parseDayKey,
+  recordingTitle,
+  weekRange,
+  weekTitle,
+} from './calendar'
 import { shortDayLabel } from '../../shared/format'
 
 // The tests run in America/Sao_Paulo (vite.config.ts), like the mock fixtures.
@@ -48,6 +60,21 @@ describe('week and month', () => {
     expect(monthTitle(local(2026, 9, 26))).toBe('Setembro de 2026')
     expect(dayLabel(local(2026, 9, 21))).toBe('segunda, 21 de setembro')
     expect(shortDayLabel(local(2026, 9, 26))).toBe('sáb 26 set')
+    expect(recordingTitle({ kind: 'note', title: 'Pauta' })).toBe('Nota · Pauta')
+  })
+
+  it('writes the periods and the days in en after a switch', async () => {
+    await setLocale('en')
+    try {
+      expect(weekTitle(local(2026, 9, 21))).toBe('September 21–27, 2026')
+      expect(weekTitle(local(2026, 9, 28))).toBe('September 28 – October 4, 2026')
+      expect(weekTitle(local(2026, 12, 28))).toBe('December 28, 2026 – January 3, 2027')
+      expect(monthTitle(local(2026, 9, 26))).toBe('September 2026')
+      expect(dayLabel(local(2026, 9, 21))).toBe('Monday, September 21')
+      expect(recordingTitle({ kind: 'note', title: 'Agenda' })).toBe('Note · Agenda')
+    } finally {
+      await setLocale('pt-BR')
+    }
   })
 
   it('reads and writes the day from the URL', () => {

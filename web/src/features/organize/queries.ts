@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { ApiError, unwrap } from '../../api/problem'
+import { i18n } from '../../i18n'
 
 export type Field = Schemas['Field']
 export type FieldDraft = Schemas['FieldDraft']
@@ -11,7 +12,10 @@ export type AgendaType = Schemas['AgendaType']
 export type AgendaTypeDraft = Schemas['AgendaTypeDraft']
 export type Preview = Schemas['Preview']
 
-export const KIND_LABELS: Record<FieldKind, string> = { text: 'Texto', list: 'Lista', choice: 'Escolha' }
+export const FIELD_KINDS: readonly FieldKind[] = ['text', 'list', 'choice']
+
+/** "Text", "List" or "Choice", in the active language. */
+export const kindLabel = (kind: FieldKind): string => i18n.t(`organize:kind.${kind}`)
 
 /** The draft of a field in the contract's shape: name without spaces at the ends, and only Choice carries options. */
 export function cleanDraft(draft: FieldDraft): FieldDraft {

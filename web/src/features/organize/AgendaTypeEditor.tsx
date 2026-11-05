@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { errorMessage } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
 import { HelpHint } from '../../app/HelpHint'
@@ -50,6 +51,7 @@ interface AgendaTypeEditorProps {
 }
 
 export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summaryAddition }: AgendaTypeEditorProps) {
+  const { t } = useTranslation(['organize', 'common'])
   const id = useId()
   const initial = draftOf(type)
   const [draft, setDraft] = useState<AgendaTypeDraft>(() =>
@@ -112,22 +114,22 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
   const invalid = (name: string) => (errors[name] ? true : undefined)
 
   return (
-    <form className="panel" onSubmit={submit} aria-label={type ? `Editar ${type.name}` : 'Novo tipo'}>
+    <form className="panel" onSubmit={submit} aria-label={type ? t('type.editLabel', { name: type.name }) : t('types.new')}>
       <div className={styles.panelHead}>
         <h4>
-          {type ? type.name : 'Novo tipo'}
-          {fallback && <span className={`badge ${styles.badge}`}>Padrão</span>}
+          {type ? type.name : t('types.new')}
+          {fallback && <span className={`badge ${styles.badge}`}>{t('types.default')}</span>}
         </h4>
         {type && !fallback && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(true)}>
-            Excluir tipo
+            {t('type.delete')}
           </button>
         )}
       </div>
 
       <div className={styles.pair}>
         <div className="field">
-          <label htmlFor={`${id}-name`}>Nome</label>
+          <label htmlFor={`${id}-name`}>{t('type.name')}</label>
           <input
             id={`${id}-name`}
             className="input"
@@ -141,9 +143,9 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
         </div>
         <div className="field">
           <div className={styles.labelRow}>
-            <label htmlFor={`${id}-title`}>Título da gravação</label>
-            <HelpHint subject="como montar o título" title="Como montar o título" article="padrao-de-titulo">
-              Monte o título com os marcadores. Um marcador sem valor some junto com o separador ao lado.
+            <label htmlFor={`${id}-title`}>{t('type.recordingTitle')}</label>
+            <HelpHint subject={t('type.titleHintSubject')} title={t('type.titleHintTitle')} article="padrao-de-titulo">
+              {t('type.titleHint')}
             </HelpHint>
           </div>
           <input
@@ -151,6 +153,7 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
             id={`${id}-title`}
             className={`input mono ${styles.mono}`}
             value={draft.title_pattern ?? ''}
+            // i18n-ignore: the placeholders are the server pattern syntax, the same in every language
             placeholder="{tipo} · {assunto}"
             aria-invalid={invalid('title_pattern')}
             aria-describedby={errors.title_pattern ? `${id}-title_pattern-hint` : undefined}
@@ -159,13 +162,13 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
           {hint('title_pattern')}
         </div>
       </div>
-      <div className={styles.markers} role="group" aria-label="Marcadores do título">
+      <div className={styles.markers} role="group" aria-label={t('type.markers')}>
         {markers.map((marker) => (
           <button
             key={marker}
             type="button"
             className={`tag tag-outline mono ${styles.marker}`}
-            aria-label={`Inserir ${marker}`}
+            aria-label={t('type.insert', { marker })}
             onClick={() => insertMarker(marker)}
           >
             {marker}
@@ -175,34 +178,33 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
 
       <div className="field">
         <div className={styles.labelRow}>
-          <label htmlFor={`${id}-title-rule`}>Como escrever o assunto</label>
-          <HelpHint subject="a regra do assunto" title="A regra do assunto" article="padrao-de-titulo">
-            O agente escreve o {'{assunto}'} do título seguindo esta regra. Vazia, vale a do tipo padrão.
+          <label htmlFor={`${id}-title-rule`}>{t('type.subjectRule')}</label>
+          <HelpHint subject={t('type.subjectHintSubject')} title={t('type.subjectHintTitle')} article="padrao-de-titulo">
+            {t('type.subjectHint', { marker: '{assunto}' })}
           </HelpHint>
         </div>
         <textarea
           id={`${id}-title-rule`}
           className={`input ${styles.identify}`}
           value={draft.title_instructions ?? ''}
-          placeholder={fallback ? undefined : 'Vazia: vale a regra do tipo padrão.'}
+          placeholder={fallback ? undefined : t('type.subjectPlaceholder')}
           aria-invalid={invalid('title_instructions')}
           aria-describedby={`${id}-title_instructions-hint`}
           onChange={(event) => set({ title_instructions: event.target.value })}
         />
         {hint(
           'title_instructions',
-          fallback ? 'Vale também para os tipos sem regra própria.' : 'Por exemplo: “o cliente e o assunto principal”.',
+          fallback ? t('type.subjectFallback') : t('type.subjectExample'),
         )}
       </div>
 
       {fallback ? (
         <p className={`field-hint ${styles.fallbackNote}`}>
-          Este é o tipo padrão: a gravação fica com ele quando nenhum outro tipo se encaixa com confiança. Ele não
-          tem “Como identificar” e não pode ser excluído.
+          {t('type.fallbackNote')}
         </p>
       ) : (
         <div className="field">
-          <label htmlFor={`${id}-identify`}>Como identificar</label>
+          <label htmlFor={`${id}-identify`}>{t('type.identify')}</label>
           <textarea
             id={`${id}-identify`}
             className={`input ${styles.identify}`}
@@ -211,26 +213,26 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
             aria-describedby={`${id}-identify-hint`}
             onChange={(event) => set({ identify: event.target.value })}
           />
-          {hint('identify', 'Depois da transcrição, um agente lê isto e escolhe o tipo.')}
+          {hint('identify', t('type.identifyHint'))}
         </div>
       )}
 
       <div className="field">
-        <label htmlFor={`${id}-tags`}>Tags padrão</label>
+        <label htmlFor={`${id}-tags`}>{t('type.tags')}</label>
         <TagInput
           id={`${id}-tags`}
           value={draft.default_tags ?? []}
           onChange={(value) => set({ default_tags: value })}
-          listLabel="Tags padrão"
+          listLabel={t('type.tags')}
           itemLabel="tag"
           invalid={Boolean(errors.default_tags)}
           describedBy={`${id}-default_tags-hint`}
         />
-        {hint('default_tags', 'Somadas às tags automáticas.')}
+        {hint('default_tags', t('type.tagsHint'))}
       </div>
 
       <div className="field">
-        <label htmlFor={`${id}-instructions`}>Instruções do resumo</label>
+        <label htmlFor={`${id}-instructions`}>{t('type.instructions')}</label>
         <textarea
           id={`${id}-instructions`}
           className={`input mono ${styles.mono} ${styles.summaryInstructions}`}
@@ -240,10 +242,10 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
           aria-describedby={`${id}-summary_instructions-hint`}
           onChange={(event) => set({ summary_instructions: event.target.value })}
         />
-        {hint('summary_instructions', 'Em Markdown. O resumo segue estas instruções.')}
+        {hint('summary_instructions', t('type.instructionsHint'))}
         {summaryAddition && (
           <p className="alert alert-info" role="status">
-            O pedido do chat entrou no fim das instruções do resumo. Revise e salve para valer nos próximos resumos.
+            {t('type.chatAdded')}
           </p>
         )}
       </div>
@@ -258,7 +260,7 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
 
       <div className={styles.actions}>
         <button type="submit" className="btn btn-primary" disabled={!canSave}>
-          {save.isPending ? 'Salvando…' : 'Salvar'}
+          {save.isPending ? t('saving') : t('common:save')}
         </button>
         <button
           type="button"
@@ -266,7 +268,7 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
           disabled={!complete || previewing}
           onClick={() => setPicking(true)}
         >
-          Pré-visualizar numa gravação
+          {t('type.preview')}
         </button>
       </div>
 
@@ -296,17 +298,18 @@ function DeleteAgendaTypeDialog({
   onClose: () => void
   onDeleted: () => void
 }) {
+  const { t } = useTranslation('organize')
   const remove = useDeleteAgendaType()
   return (
     <Dialog
       plain
-      title={`Excluir ${type.name}?`}
-      message="As gravações deste tipo passam para o tipo padrão. Os resumos já feitos continuam."
+      title={t('deleteTitle', { name: type.name })}
+      message={t('type.deleteText')}
       onClose={onClose}
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Manter
+            {t('keep')}
           </button>
           <button
             type="button"
@@ -315,7 +318,7 @@ function DeleteAgendaTypeDialog({
             // The list reloads before the mutate ends and unmounts this panel: the promise carries on anyway.
             onClick={() => remove.mutateAsync(type.id).then(onDeleted, () => {})}
           >
-            Excluir tipo
+            {t('type.delete')}
           </button>
         </>
       }

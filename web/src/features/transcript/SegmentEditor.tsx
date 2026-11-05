@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { updateTranscriptCache } from './queries'
@@ -15,6 +16,7 @@ interface SegmentEditorProps {
 
 /** Correction of a segment's text. Saves with Ctrl+Enter and cancels with Esc. */
 export function SegmentEditor({ transcriptId, segment, label, onClose }: SegmentEditorProps) {
+  const { t } = useTranslation(['transcript', 'common'])
   const queryClient = useQueryClient()
   const [text, setText] = useState(segment.text)
   const fieldId = useId()
@@ -27,9 +29,9 @@ export function SegmentEditor({ transcriptId, segment, label, onClose }: Segment
         }),
       ),
     onSuccess: (updated) => {
-      updateTranscriptCache(queryClient, transcriptId, (t) => ({
-        ...t,
-        segments: t.segments.map((s) => (s.id === updated.id ? updated : s)),
+      updateTranscriptCache(queryClient, transcriptId, (transcript) => ({
+        ...transcript,
+        segments: transcript.segments.map((s) => (s.id === updated.id ? updated : s)),
       }))
       onClose()
     },
@@ -65,12 +67,12 @@ export function SegmentEditor({ transcriptId, segment, label, onClose }: Segment
       )}
       <div className={styles.editorActions}>
         <button type="submit" className="btn btn-primary btn-sm" disabled={save.isPending}>
-          {save.isPending ? 'Salvando…' : 'Salvar'}
+          {save.isPending ? t('segment.saving') : t('common:save')}
         </button>
         <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>
-          Cancelar
+          {t('common:cancel')}
         </button>
-        <span className={styles.hint}>Ctrl+Enter salva · Esc cancela</span>
+        <span className={styles.hint}>{t('segment.hint')}</span>
       </div>
     </form>
   )

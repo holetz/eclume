@@ -8,6 +8,7 @@ import { RouterProvider } from 'react-router/dom'
 import { describe, expect, it } from 'vitest'
 import { server } from 'vitest/browser'
 import { createQueryClient } from '../../app/queryClient'
+import { startI18n } from '../../i18n'
 import { fixtures } from '../../test/fixtures'
 import { usePlayback, type PlaybackClock } from './playback'
 import { PlaybackProvider } from './PlaybackProvider'
@@ -34,6 +35,9 @@ describe('long transcript in the browser', () => {
     // The threshold is Chromium's (the engine most users have); the other engines run the list
     // in the render tests and in the E2E smoke.
     skip(server.browser !== 'chromium', 'a medida de commit é contrato só no Chromium')
+    // The browser project has no setup file: start the catalogs, in pt-BR like the unit tests, so the
+    // list carries its label and not the bare key.
+    await startI18n('pt-BR')
     let clock: PlaybackClock | null = null
     let commitMs = 0
     function GrabClock({ children }: { children: ReactNode }) {

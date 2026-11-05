@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
@@ -47,6 +48,7 @@ interface SummaryEditorProps {
  * the person chooses to see the new one or to save over it.
  */
 export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) {
+  const { t } = useTranslation(['transcript', 'common'])
   const { edit, revert } = useSummaryMutations(recording)
   const latest = useSummaryState(recording.id)
   const opened = state.current
@@ -64,8 +66,8 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
   const textRef = useRef<HTMLTextAreaElement>(null)
   const changed = draft !== (opened?.content_md ?? '')
   const leaveDialog = useLeaveGuard(changed, {
-    title: 'Descartar a edição?',
-    message: <p>As mudanças deste rascunho se perdem.</p>,
+    title: t('editor.discardTitle'),
+    message: <p>{t('editor.discardText')}</p>,
     onDiscard: () => writeSummaryDraft(recording.id, null),
   })
 
@@ -115,30 +117,30 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
   }
 
   return (
-    <section className={styles.summary} aria-label="Editando o resumo">
+    <section className={styles.summary} aria-label={t('editor.label')}>
       <div className="doc-bar">
-        <span className="kicker">Editando</span>
-        <span>A versão gerada fica guardada</span>
+        <span className="kicker">{t('editor.kicker')}</span>
+        <span>{t('editor.kept')}</span>
         <span className={styles.spacer} />
         {state.generated && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirm('revert')}>
-            Voltar à gerada
+            {t('editor.revert')}
           </button>
         )}
         <button type="button" className="btn btn-secondary btn-sm" onClick={cancel}>
-          Cancelar
+          {t('common:cancel')}
         </button>
         <button type="button" className="btn btn-primary btn-sm" disabled={edit.isPending} onClick={() => save()}>
-          {edit.isPending ? 'Salvando…' : 'Salvar'}
+          {edit.isPending ? t('segment.saving') : t('common:save')}
         </button>
       </div>
 
       {conflict && (
         <div className="alert alert-warning" role="alert">
-          <span>O resumo mudou enquanto você editava (agora na versão {conflict.version}).</span>
+          <span>{t('editor.conflict', { version: conflict.version })}</span>
           <span className={styles.alertActions}>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowConflict(!showConflict)}>
-              {showConflict ? 'Fechar a comparação' : `Ver a versão ${conflict.version}`}
+              {showConflict ? t('editor.closeCompare') : t('editor.seeVersion', { version: conflict.version })}
             </button>
             <button
               type="button"
@@ -150,7 +152,7 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
                 save(conflict.version)
               }}
             >
-              Salvar sobre a versão {conflict.version}
+              {t('editor.saveOver', { version: conflict.version })}
             </button>
           </span>
         </div>
@@ -161,14 +163,14 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
         </p>
       )}
       {conflict && showConflict && (
-        <SummaryDiff before={draft} after={conflict.content} label={`Seu rascunho e a versão ${conflict.version}`} />
+        <SummaryDiff before={draft} after={conflict.content} label={t('editor.diffLabel', { version: conflict.version })} />
       )}
 
       <div className={`doc doc-editing ${styles.doc}`}>
         <textarea
           ref={textRef}
           className={styles.editor}
-          aria-label="Resumo em Markdown"
+          aria-label={t('editor.markdown')}
           value={draft}
           autoFocus
           onChange={(event) => setDraft(event.target.value)}
@@ -183,27 +185,27 @@ export function SummaryEditor({ recording, state, onDone }: SummaryEditorProps) 
           }}
         />
       </div>
-      <p className={styles.hint}>Ctrl+Enter salva · Esc cancela</p>
+      <p className={styles.hint}>{t('segment.hint')}</p>
 
       {confirm === 'discard' && (
         <ConfirmDialog
-          title="Descartar a edição?"
-          confirmLabel="Descartar"
+          title={t('editor.discardTitle')}
+          confirmLabel={t('editor.discard')}
           onCancel={() => setConfirm(null)}
           onConfirm={finish}
         >
-          <p>As mudanças deste rascunho se perdem.</p>
+          <p>{t('editor.discardText')}</p>
         </ConfirmDialog>
       )}
       {confirm === 'revert' && (
         <ConfirmDialog
-          title="Voltar à versão gerada?"
-          confirmLabel="Voltar à gerada"
+          title={t('editor.revertTitle')}
+          confirmLabel={t('editor.revert')}
           busy={revert.isPending}
           onCancel={() => setConfirm(null)}
           onConfirm={() => revert.mutate(undefined, { onSuccess: finish })}
         >
-          <p>O rascunho é descartado, e a versão gerada volta como uma versão nova. Nada se perde.</p>
+          <p>{t('editor.revertText')}</p>
           {revert.isError && (
             <p className="alert alert-error" role="alert">
               {errorMessage(revert.error)}

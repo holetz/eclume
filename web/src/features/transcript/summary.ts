@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { ApiError, unwrap } from '../../api/problem'
 import { pollWhile } from '../../app/polling'
+import { i18n } from '../../i18n'
 import { recordingKey, summaryKey } from './queries'
 
 type Summary = Schemas['Summary']
@@ -24,9 +25,9 @@ export function useSummaryState(recordingId: string, enabled = true) {
 
 /** "Do tipo de agenda", "Editado por você", "Voltou à gerada" or "Ajustado pelo chat". */
 export function originLabel(summary: Pick<Summary, 'origin' | 'restored_from_id'>): string {
-  if (summary.origin === 'generated') return 'Do tipo de agenda'
-  if (summary.origin === 'chat') return 'Ajustado pelo chat'
-  return summary.restored_from_id ? 'Voltou à gerada' : 'Editado por você'
+  if (summary.origin === 'generated') return i18n.t('transcript:origin.generated')
+  if (summary.origin === 'chat') return i18n.t('transcript:origin.chat')
+  return i18n.t(summary.restored_from_id ? 'transcript:origin.restored' : 'transcript:origin.edited')
 }
 
 /** The 422 of generating with no agenda type (neither the requested one nor the recording's). */

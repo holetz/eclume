@@ -1,5 +1,6 @@
 import { Columns3 } from 'lucide-react'
 import { useDeferredValue, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
@@ -14,6 +15,7 @@ import { formatDate } from '../../shared/format'
 
 export function PeoplePage() {
   useHelpTopic('pessoas')
+  const { t } = useTranslation(['people', 'common'])
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
   const deferredQ = useDeferredValue(q.trim())
@@ -30,19 +32,16 @@ export function PeoplePage() {
   return (
     <section className={styles.page}>
       <PageHead
-        kicker="Organizar"
-        title="Pessoas"
+        kicker={t('list.kicker')}
+        title={t('list.title')}
         hint={
-          <HelpHint subject="as sugestões por voz" title="Sugestões por voz" article="sugestoes-por-voz">
-            O eclume compara a voz de um locutor sem pessoa com as amostras das pessoas que você
-            cadastrou. Abaixo da sua pontuação mínima, a sugestão só vira vínculo quando você aceita; acima dela,
-            o eclume liga sozinho e você pode desfazer.
+          <HelpHint subject={t('list.hintSubject')} title={t('list.hintTitle')} article="sugestoes-por-voz">
+            {t('list.hint')}
           </HelpHint>
         }
       />
       <p className="text-muted">
-        Quem fala nas suas gravações. Ligue os locutores a elas na página da gravação, ou deixe o eclume ligar pela
-        voz depois de cada gravação: veja o passo em <Link to="/config/automacao">Processamento automático</Link>.
+        <Trans t={t} i18nKey="list.intro" components={{ automation: <Link to="/config/automacao" /> }} />
       </p>
       <AutoAssignCard />
 
@@ -50,8 +49,8 @@ export function PeoplePage() {
         <input
           className={`input ${styles.search}`}
           type="search"
-          placeholder="Buscar pessoas"
-          aria-label="Buscar pessoas"
+          placeholder={t('list.search')}
+          aria-label={t('list.search')}
           value={q}
           onChange={(event) => setParams(event.target.value ? { q: event.target.value } : {}, { replace: true })}
         />
@@ -64,10 +63,10 @@ export function PeoplePage() {
         </p>
       )}
       <div className={styles.tableWrap}>
-        <table className="table" aria-label="Pessoas">
+        <table className="table" aria-label={t('list.title')}>
           <thead>
             <tr>
-              <th scope="col">Nome</th>
+              <th scope="col">{t('list.name')}</th>
               {shown.map((column) => (
                 <th key={column.key} scope="col">
                   {column.label}
@@ -83,7 +82,7 @@ export function PeoplePage() {
             {people.isPending && (
               <tr>
                 <td colSpan={shown.length + 1} role="status">
-                  Carregando pessoas…
+                  {t('list.loading')}
                 </td>
               </tr>
             )}
@@ -91,8 +90,8 @@ export function PeoplePage() {
               <tr>
                 <td colSpan={shown.length + 1} className="text-muted">
                   {deferredQ
-                    ? 'Ninguém com esse nome ou e-mail.'
-                    : 'Nenhuma pessoa ainda. As pessoas nascem quando você liga um locutor a alguém na transcrição de uma gravação, ou se cadastram aqui, na linha acima.'}
+                    ? t('list.noMatch')
+                    : t('list.empty')}
                 </td>
               </tr>
             )}
@@ -106,7 +105,7 @@ export function PeoplePage() {
           onClick={() => people.fetchNextPage()}
           disabled={people.isFetchingNextPage}
         >
-          {people.isFetchingNextPage ? 'Carregando…' : 'Carregar mais'}
+          {people.isFetchingNextPage ? t('common:loading') : t('list.loadMore')}
         </button>
       )}
     </section>
@@ -115,6 +114,7 @@ export function PeoplePage() {
 
 /** The first table row: name, company and Adicionar. Enter in one of the fields also submits. */
 function NewPersonRow({ span }: { span: number }) {
+  const { t } = useTranslation('people')
   const create = useCreatePerson()
   const [name, setName] = useState('')
   const [company, setOrganization] = useState('')
@@ -149,8 +149,8 @@ function NewPersonRow({ span }: { span: number }) {
         <input
           ref={nameInput}
           className="input"
-          placeholder="Nome da nova pessoa"
-          aria-label="Nome da nova pessoa"
+          placeholder={t('list.newName')}
+          aria-label={t('list.newName')}
           value={name}
           onChange={(event) => {
             setName(event.target.value)
@@ -170,8 +170,8 @@ function NewPersonRow({ span }: { span: number }) {
         <div className={styles.newRowRest}>
           <input
             className="input"
-            placeholder="Empresa (opcional)"
-            aria-label="Empresa da nova pessoa"
+            placeholder={t('list.newCompany')}
+            aria-label={t('list.newCompanyLabel')}
             autoComplete="off"
             list={listId}
             value={company}
@@ -189,7 +189,7 @@ function NewPersonRow({ span }: { span: number }) {
             disabled={create.isPending || !name.trim()}
             onClick={submit}
           >
-            Adicionar
+            {t('list.add')}
           </button>
         </div>
       </td>
@@ -245,6 +245,7 @@ function PersonCell({ person, column }: { person: Person; column: PersonColumn }
 
 /** The Colunas button: a popover with one box per column; Esc and a click outside close it. */
 function ColumnsMenu({ columns, onChange }: { columns: PersonColumn[]; onChange: (columns: PersonColumn[]) => void }) {
+  const { t } = useTranslation('people')
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -283,11 +284,11 @@ function ColumnsMenu({ columns, onChange }: { columns: PersonColumn[]; onChange:
         onClick={() => setOpen((current) => !current)}
       >
         <Columns3 size={14} aria-hidden="true" />
-        Colunas
+        {t('list.columns')}
       </button>
       {open && (
         <fieldset id={panelId} className={`menu ${styles.columnsPanel}`}>
-          <legend className="kicker">Mostrar colunas</legend>
+          <legend className="kicker">{t('list.showColumns')}</legend>
           {PERSON_COLUMNS.map(({ key, label }) => (
             <label key={key} className="check">
               <input type="checkbox" checked={columns.includes(key)} onChange={() => toggle(key)} />

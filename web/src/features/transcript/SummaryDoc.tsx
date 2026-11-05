@@ -1,8 +1,10 @@
 import { Copy } from 'lucide-react'
 import { useId, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { Link } from 'react-router'
 import { safeMarkdown } from '../../app/markdown'
+import { i18n } from '../../i18n'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
@@ -12,7 +14,7 @@ import { summaryClipboard } from './copy-summary'
 import styles from './RecordingPage.module.css'
 import { isMissingProvider, isMissingType, originLabel, useSummaryMutations, useSummaryState } from './summary'
 import { SummaryDiff, SummaryEditor } from './SummaryEditor'
-import { motivo } from '../../lib/vocabulario.js'
+import { reasonText } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 
@@ -31,16 +33,17 @@ export function ChangeTypeDialog({ recording, onClose }: ChangeTypeDialogProps) 
   const types = useAgendaTypes()
   const { changeType } = useSummaryMutations(recording)
   const [chosen, setChosen] = useState(recording.agenda_type?.id ?? '')
+  const { t } = useTranslation(['transcript', 'common'])
   const selectId = useId()
   return (
     <Dialog
-      title="Trocar o tipo de agenda"
+      title={t('summary.changeTypeTitle')}
       plain
       onClose={onClose}
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Cancelar
+            {t('common:cancel')}
           </button>
           <button
             type="button"
@@ -48,7 +51,7 @@ export function ChangeTypeDialog({ recording, onClose }: ChangeTypeDialogProps) 
             disabled={!chosen || chosen === recording.agenda_type?.id || changeType.isPending}
             onClick={() => changeType.mutate(chosen, { onSuccess: onClose })}
           >
-            {changeType.isPending ? 'Trocando…' : 'Trocar e gerar'}
+            {changeType.isPending ? t('summary.changing') : t('summary.changeAndGenerate')}
           </button>
         </>
       }
@@ -56,11 +59,11 @@ export function ChangeTypeDialog({ recording, onClose }: ChangeTypeDialogProps) 
       <div className={styles.dialogStack}>
         <div className="field">
           <label htmlFor={selectId} className="field-label">
-            Tipo de agenda
+            {t('summary.agendaType')}
           </label>
           <select id={selectId} className="input" value={chosen} onChange={(event) => setChosen(event.target.value)}>
             <option value="" disabled>
-              Escolha um tipo
+              {t('summary.chooseType')}
             </option>
             {types.data?.items.map((type) => (
               <option key={type.id} value={type.id}>
@@ -69,7 +72,7 @@ export function ChangeTypeDialog({ recording, onClose }: ChangeTypeDialogProps) 
             ))}
           </select>
         </div>
-        <p className="text-muted">Trocar o tipo gera um resumo novo pelas instruções do tipo; a versão atual fica guardada.</p>
+        <p className="text-muted">{t('summary.changeTypeText')}</p>
         {changeType.isError && (
           <p className="alert alert-error" role="alert">
             {errorMessage(changeType.error)}
@@ -91,27 +94,26 @@ interface RegenerateDialogProps {
 
 /** Confirms generating another version from the recording's agenda type: the new one becomes the current one. */
 function RegenerateDialog({ typeName, current, busy, error, onConfirm, onClose }: RegenerateDialogProps) {
+  const { t } = useTranslation(['transcript', 'common'])
+  const values = { type: typeName ?? '', version: current.version, origin: originLabel(current) }
   return (
     <Dialog
-      title="Regenerar o resumo?"
+      title={t('summary.regenerateTitle')}
       plain
       onClose={onClose}
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Cancelar
+            {t('common:cancel')}
           </button>
           <button type="button" className="btn btn-primary" disabled={busy} aria-busy={busy} onClick={onConfirm}>
-            {busy ? 'Enfileirando…' : 'Regenerar'}
+            {busy ? t('summary.queueing') : t('summary.regenerate')}
           </button>
         </>
       }
     >
       <div className={styles.dialogStack}>
-        <p>
-          Gera uma versão nova pelas instruções de {typeName ?? 'o tipo de agenda'}. A nova versão passa a ser a atual; a
-          versão {current.version} ({originLabel(current)}) fica guardada.
-        </p>
+        <p>{typeName ? t('summary.regenerateText', values) : t('summary.regenerateTextNoType', values)}</p>
         {error != null && (
           <p className="alert alert-error" role="alert">
             {errorMessage(error)}
@@ -122,7 +124,7 @@ function RegenerateDialog({ typeName, current, busy, error, onConfirm, onClose }
   )
 }
 
-const NO_PROVIDER = `Sem resumo: ${motivo('no_provider')}.`
+const noProviderText = () => i18n.t('transcript:summary.noProvider', { reason: reasonText('no_provider') })
 
 interface SummaryDocProps {
   recording: Recording
@@ -140,9 +142,10 @@ export function SummaryDoc({ recording, transcriptRevision, onChangeType }: Summ
   const [mode, setMode] = useState<'read' | 'edit' | 'compare'>('read')
   const [copied, setCopied] = useState<'ok' | 'error' | null>(null)
   const agendaTypes = useAgendaTypes()
+  const { t } = useTranslation(['transcript', 'common'])
 
   if (recording.transcript_id === null) return null
-  if (state.isPending) return <p role="status">Carregando o resumo…</p>
+  if (state.isPending) return <p role="status">{t('summary.loading')}</p>
   if (state.isError) {
     return (
       <p className="alert alert-error" role="alert">
@@ -204,19 +207,19 @@ export function SummaryDoc({ recording, transcriptRevision, onChangeType }: Summ
 
   if (!current) {
     return (
-      <section className={styles.summary} aria-label="Resumo">
+      <section className={styles.summary} aria-label={t('summary.label')}>
         {pending ? (
           <p className={styles.docState} aria-busy="true" role="status">
-            Resumindo pelas instruções de {typeName ?? 'o tipo de agenda'}…
+            {typeName ? t('summary.summarizing', { type: typeName }) : t('summary.summarizingNoType')}
           </p>
         ) : (
           <div className={styles.docState}>
             {summaryStep?.state === 'failed' ? (
               <p className="alert alert-error" role="alert">
-                {summaryStep.error?.message ?? 'A geração do resumo falhou.'}
+                {summaryStep.error?.message ?? t('summary.failed')}
               </p>
             ) : (
-              <p>{noProvider ? NO_PROVIDER : 'Sem resumo.'}</p>
+              <p>{noProvider ? noProviderText() : t('summary.none')}</p>
             )}
             <button
               type="button"
@@ -224,14 +227,14 @@ export function SummaryDoc({ recording, transcriptRevision, onChangeType }: Summ
               disabled={generate.isPending}
               onClick={startGenerate}
             >
-              {summaryStep?.state === 'failed' || noProvider ? 'Tentar de novo' : 'Gerar resumo'}
+              {summaryStep?.state === 'failed' || noProvider ? t('common:retry') : t('summary.generate')}
             </button>
             {generate.isError && (
               <p className="alert alert-error" role="alert">
                 {isMissingType(generate.error)
-                  ? 'Escolha um tipo de agenda para gerar o resumo.'
+                  ? t('summary.missingType')
                   : isMissingProvider(generate.error)
-                    ? NO_PROVIDER
+                    ? noProviderText()
                     : errorMessage(generate.error)}
               </p>
             )}
@@ -246,18 +249,18 @@ export function SummaryDoc({ recording, transcriptRevision, onChangeType }: Summ
   const { generated } = state.data
   const comparable = generated !== null && generated.id !== current.id
   // The badge is the snapshot of the agenda type in the summary: it only becomes a link if the agenda type still exists.
-  const typeLabel = `Tipo · ${current.agenda_type?.name ?? typeName ?? 'sem tipo'}`
+  const typeLabel = t('summary.typeLabel', { type: current.agenda_type?.name ?? typeName ?? t('summary.noType') })
   const liveTypeId = agendaTypes.data?.items.find((type) => type.id === current.agenda_type?.id)?.id
 
   return (
-    <section className={styles.summary} aria-label="Resumo">
+    <section className={styles.summary} aria-label={t('summary.label')}>
       <div className="doc-bar">
         {liveTypeId ? (
           <Link
             to={`/config/agendas?tipo=${liveTypeId}`}
             className="tag tag-neutral"
-            title="Ajustar o modelo deste tipo"
-            aria-label={`${typeLabel}: ajustar o modelo deste tipo`}
+            title={t('summary.adjustModel')}
+            aria-label={t('summary.adjustModelLabel', { type: typeLabel })}
           >
             {typeLabel}
           </Link>
@@ -265,15 +268,15 @@ export function SummaryDoc({ recording, transcriptRevision, onChangeType }: Summ
           <span className="tag tag-neutral">{typeLabel}</span>
         )}
         <span>
-          {originLabel(current)} · versão {current.version}
+          {t('summary.versionLine', { origin: originLabel(current), version: current.version })}
         </span>
         <span className={styles.spacer} />
-        <button type="button" className="btn btn-secondary btn-sm" title="Copia o título e o resumo" onClick={copy}>
+        <button type="button" className="btn btn-secondary btn-sm" title={t('summary.copyTitle')} onClick={copy}>
           <Copy size={14} aria-hidden />
-          Copiar com título
+          {t('summary.copy')}
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMode('edit')}>
-          Editar
+          {t('summary.edit')}
         </button>
         {comparable && (
           <button
@@ -282,7 +285,7 @@ export function SummaryDoc({ recording, transcriptRevision, onChangeType }: Summ
             aria-pressed={mode === 'compare'}
             onClick={() => setMode(mode === 'compare' ? 'read' : 'compare')}
           >
-            {mode === 'compare' ? 'Fechar comparação' : 'Comparar com a gerada'}
+            {mode === 'compare' ? t('summary.closeCompare') : t('summary.compare')}
           </button>
         )}
         <button
@@ -294,39 +297,39 @@ export function SummaryDoc({ recording, transcriptRevision, onChangeType }: Summ
             setConfirmingRegenerate(true)
           }}
         >
-          Regenerar
+          {t('summary.regenerate')}
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onChangeType}>
-          Trocar tipo
+          {t('summary.changeType')}
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmingDelete(true)}>
-          Excluir resumo
+          {t('summary.delete')}
         </button>
       </div>
       <p className="visually-hidden" role="status">
-        {copied === 'ok' ? 'Copiado' : ''}
+        {copied === 'ok' ? t('summary.copied') : ''}
       </p>
       {copied === 'error' && (
         <p className="alert alert-error" role="alert">
-          Não deu para copiar: o navegador não liberou a área de transferência.
+          {t('summary.copyFailed')}
         </p>
       )}
       {stale && (
         <p className="alert alert-warning" role="status">
-          <span className="alert-title">Resumo de uma versão anterior da transcrição</span>
-          <span>A transcrição foi alterada depois deste resumo. Use Regenerar para refletir as mudanças.</span>
+          <span className="alert-title">{t('summary.staleTitle')}</span>
+          <span>{t('summary.staleText')}</span>
         </p>
       )}
       {pending && (
         <p className={styles.docPending} role="status">
-          Gerando uma versão nova…
+          {t('summary.pending')}
         </p>
       )}
       {mode === 'compare' && comparable ? (
         <SummaryDiff
           before={generated.content_md ?? ''}
           after={current.content_md ?? ''}
-          label={`A gerada (versão ${generated.version}) e a atual (versão ${current.version})`}
+          label={t('summary.compareLabel', { generated: generated.version, current: current.version })}
         />
       ) : (
         <div className={`doc ${styles.doc}`}>
@@ -345,13 +348,13 @@ export function SummaryDoc({ recording, transcriptRevision, onChangeType }: Summ
       )}
       {confirmingDelete && (
         <ConfirmDialog
-          title="Excluir o resumo?"
-          confirmLabel="Excluir resumo"
+          title={t('summary.deleteTitle')}
+          confirmLabel={t('summary.delete')}
           busy={remove.isPending}
           onCancel={() => setConfirmingDelete(false)}
           onConfirm={() => remove.mutate(undefined, { onSuccess: () => setConfirmingDelete(false) })}
         >
-          <p>Todas as versões e o chat de ajuste são apagados. A transcrição fica.</p>
+          <p>{t('summary.deleteText')}</p>
           {remove.isError && (
             <p className="alert alert-error" role="alert">
               {errorMessage(remove.error)}

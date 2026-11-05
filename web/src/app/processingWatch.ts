@@ -11,10 +11,10 @@ import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
 import { api, type Schemas } from '../api/client'
 import { unwrap } from '../api/problem'
-import { motivo } from '../lib/vocabulario'
 import { notifyOutcomesOn } from './preferences'
 import { setTitleCount } from './usePageTitle'
 import { i18n } from '../i18n'
+import { reasonText } from '../shared/format'
 
 type Recording = Schemas['Recording']
 
@@ -124,10 +124,9 @@ export function outcomeText({ outcome, title, reason }: Ended): { title: string;
     case 'summary_failed':
       return { title: t('shell:outcome.summaryFailed'), body: t('shell:outcome.summaryFailedBody', { name }) }
     case 'no_summary':
-      // The skip reasons are the shared vocabulary (lib/vocabulario.js), still pt-BR until #250.
       return {
         title: t('shell:outcome.noSummary'),
-        body: `${name} · ${reason ? motivo(reason) : t('shell:outcome.noReason')}`,
+        body: `${name} · ${reason ? reasonText(reason) : t('shell:outcome.noReason')}`,
       }
     case 'transcription_failed':
       return { title: t('shell:outcome.transcriptionFailed'), body: t('shell:outcome.transcriptionFailedBody', { name }) }

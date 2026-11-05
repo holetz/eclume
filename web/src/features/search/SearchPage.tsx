@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
@@ -27,25 +28,25 @@ import {
 import { groupHits, totalLabel, type HitGroup } from './group'
 import { parseHighlight } from './highlight'
 import styles from './SearchPage.module.css'
+import { activeLocale, i18n } from '../../i18n'
 import { shortDayLabel } from '../../shared/format'
 
-const PERIOD_LABELS: Record<Exclude<Period, ''>, string> = {
-  '7d': 'Últimos 7 dias',
-  '30d': 'Últimos 30 dias',
-  ano: 'Este ano',
-}
+const periodLabel = (period: Exclude<Period, ''>) => i18n.t(`search:period.${period}`)
 
+/** "19/09/2026" in pt-BR, "09/19/2026" in English: the day of a `YYYY-MM-DD` without a time zone shift. */
 function formatDay(day: string): string {
-  const [year, month, date] = day.split('-')
-  return `${date}/${month}/${year}`
+  const [year, month, date] = day.split('-').map(Number)
+  return new Intl.DateTimeFormat(activeLocale(), { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(
+    new Date(Date.UTC(year, month - 1, date)),
+  )
 }
 
 function periodValue(filters: SearchFilters): string {
-  if (filters.period) return PERIOD_LABELS[filters.period]
-  if (filters.from && filters.to) return `${formatDay(filters.from)} a ${formatDay(filters.to)}`
-  if (filters.from) return `desde ${formatDay(filters.from)}`
-  if (filters.to) return `até ${formatDay(filters.to)}`
-  return 'qualquer'
+  if (filters.period) return periodLabel(filters.period)
+  if (filters.from && filters.to) return i18n.t('search:period.range', { from: formatDay(filters.from), to: formatDay(filters.to) })
+  if (filters.from) return i18n.t('search:period.since', { from: formatDay(filters.from) })
+  if (filters.to) return i18n.t('search:period.until', { to: formatDay(filters.to) })
+  return i18n.t('search:any')
 }
 
 function PeriodEditor({
@@ -55,6 +56,7 @@ function PeriodEditor({
   filters: SearchFilters
   onApply: (next: Partial<SearchFilters>) => void
 }) {
+  const { t } = useTranslation('search')
   const name = useId()
   const [choice, setChoice] = useState<Period | 'intervalo'>(
     filters.period || (filters.from || filters.to ? 'intervalo' : ''),
@@ -62,11 +64,11 @@ function PeriodEditor({
   const [from, setFrom] = useState(filters.from)
   const [to, setTo] = useState(filters.to)
   const options: { value: Period | 'intervalo'; label: string }[] = [
-    { value: '', label: 'Qualquer data' },
-    { value: '7d', label: PERIOD_LABELS['7d'] },
-    { value: '30d', label: PERIOD_LABELS['30d'] },
-    { value: 'ano', label: PERIOD_LABELS.ano },
-    { value: 'intervalo', label: 'Intervalo…' },
+    { value: '', label: t('anyDate') },
+    { value: '7d', label: periodLabel('7d') },
+    { value: '30d', label: periodLabel('30d') },
+    { value: 'ano', label: periodLabel('ano') },
+    { value: 'intervalo', label: t('interval') },
   ]
   return (
     <div className={styles.editor}>
@@ -80,11 +82,11 @@ function PeriodEditor({
       {choice === 'intervalo' && (
         <div className={styles.range}>
           <label className="field">
-            <span className="field-label">De</span>
+            <span className="field-label">{t('from')}</span>
             <input className="input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
           </label>
           <label className="field">
-            <span className="field-label">Até</span>
+            <span className="field-label">{t('to')}</span>
             <input className="input" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
           </label>
         </div>
@@ -96,7 +98,7 @@ function PeriodEditor({
           onApply(choice === 'intervalo' ? { period: '', from, to } : { period: choice, from: '', to: '' })
         }
       >
-        Aplicar
+        {t('apply')}
       </button>
     </div>
   )
@@ -113,11 +115,12 @@ function SelectEditor({
   options: { value: string; label: string }[]
   onApply: (value: string) => void
 }) {
+  const { t } = useTranslation('search')
   const [chosen, setChosen] = useState(value)
   return (
     <div className={styles.editor}>
       <select className="input" aria-label={label} value={chosen} onChange={(event) => setChosen(event.target.value)}>
-        <option value="">Qualquer</option>
+        <option value="">{t('anyOption')}</option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
@@ -125,13 +128,14 @@ function SelectEditor({
         ))}
       </select>
       <button type="button" className="btn btn-primary btn-sm" onClick={() => onApply(chosen)}>
-        Aplicar
+        {t('apply')}
       </button>
     </div>
   )
 }
 
 function TextEditor({ label, value, onApply }: { label: string; value: string; onApply: (value: string) => void }) {
+  const { t } = useTranslation('search')
   const [text, setText] = useState(value)
   return (
     <form
@@ -144,13 +148,13 @@ function TextEditor({ label, value, onApply }: { label: string; value: string; o
       <input
         className="input"
         aria-label={label}
-        placeholder="Qualquer valor"
+        placeholder={t('anyValue')}
         value={text}
         autoFocus
         onChange={(event) => setText(event.target.value)}
       />
       <button type="submit" className="btn btn-primary btn-sm">
-        Aplicar
+        {t('apply')}
       </button>
     </form>
   )
@@ -165,6 +169,7 @@ function FieldChip({
   filters: SearchFilters
   onChange: (next: Partial<SearchFilters>) => void
 }) {
+  const { t } = useTranslation('search')
   const prefix = `${field.id}:`
   const current = filters.field.find((value) => value.startsWith(prefix))?.slice(prefix.length) ?? ''
   const apply = (value: string) =>
@@ -172,7 +177,7 @@ function FieldChip({
       field: [...filters.field.filter((item) => !item.startsWith(prefix)), ...(value ? [prefix + value] : [])],
     })
   return (
-    <FilterChip label={field.name} value={current || 'qualquer'} active={current !== ''}>
+    <FilterChip label={field.name} value={current || t('any')} active={current !== ''}>
       {(close) =>
         field.kind === 'choice' ? (
           <SelectEditor
@@ -200,6 +205,7 @@ function FieldChip({
 }
 
 function Chips({ filters, onChange }: { filters: SearchFilters; onChange: (next: Partial<SearchFilters>) => void }) {
+  const { t } = useTranslation('search')
   const people = usePeopleOptions()
   const tags = useTags()
   const collections = useCollections()
@@ -211,7 +217,7 @@ function Chips({ filters, onChange }: { filters: SearchFilters; onChange: (next:
 
   return (
     <>
-      <FilterChip label="Período" value={periodValue(filters)} active={periodActive}>
+      <FilterChip label={t('chip.period')} value={periodValue(filters)} active={periodActive}>
         {(close) => (
           <PeriodEditor
             filters={filters}
@@ -223,15 +229,15 @@ function Chips({ filters, onChange }: { filters: SearchFilters; onChange: (next:
         )}
       </FilterChip>
       <FilterChip
-        label="Pessoa"
-        value={filters.person ? (personName ?? 'escolhida') : 'qualquer'}
+        label={t('chip.person')}
+        value={filters.person ? (personName ?? t('chosen')) : t('any')}
         active={filters.person !== ''}
       >
         {(close) => (
           <div className={styles.editor}>
             <PersonCombobox
-              label="Pessoa"
-              placeholder="Nome ou e-mail"
+              label={t('chip.person')}
+              placeholder={t('personPlaceholder')}
               onSelect={(person) => {
                 onChange({ person: person.id })
                 close()
@@ -246,18 +252,18 @@ function Chips({ filters, onChange }: { filters: SearchFilters; onChange: (next:
                   close()
                 }}
               >
-                Qualquer pessoa
+                {t('anyPerson')}
               </button>
             )}
           </div>
         )}
       </FilterChip>
-      <FilterChip label="Tag" value={filters.tag || 'qualquer'} active={filters.tag !== ''}>
+      <FilterChip label={t('chip.tag')} value={filters.tag || t('any')} active={filters.tag !== ''}>
         {(close) => (
           <SelectEditor
-            label="Tag"
+            label={t('chip.tag')}
             value={filters.tag}
-            options={(tags.data?.items ?? []).map((tag) => ({ value: tag.name, label: `${tag.name} (${tag.count})` }))}
+            options={(tags.data?.items ?? []).map((tag) => ({ value: tag.name, label: t('tagOption', { name: tag.name, count: tag.count }) }))}
             onApply={(tag) => {
               onChange({ tag })
               close()
@@ -266,13 +272,13 @@ function Chips({ filters, onChange }: { filters: SearchFilters; onChange: (next:
         )}
       </FilterChip>
       <FilterChip
-        label="Coleção"
-        value={filters.collection ? (collectionName ?? 'escolhida') : 'qualquer'}
+        label={t('chip.collection')}
+        value={filters.collection ? (collectionName ?? t('chosen')) : t('any')}
         active={filters.collection !== ''}
       >
         {(close) => (
           <SelectEditor
-            label="Coleção"
+            label={t('chip.collection')}
             value={filters.collection}
             options={(collections.data?.items ?? []).map((item) => ({ value: item.id, label: item.name }))}
             onApply={(collection) => {
@@ -290,6 +296,7 @@ function Chips({ filters, onChange }: { filters: SearchFilters; onChange: (next:
 }
 
 function Group({ group }: { group: HitGroup }) {
+  const { t } = useTranslation('search')
   const location = useLocation()
   const from = `${location.pathname}${location.search}`
   const recordingId = group.transcript.recording_id
@@ -304,7 +311,7 @@ function Group({ group }: { group: HitGroup }) {
         </b>
         <span className="text-muted">{shortDayLabel(new Date(group.transcript.recorded_at))}</span>
       </div>
-      <div role="list" aria-label={`Trechos de ${group.transcript.title}`}>
+      <div role="list" aria-label={t('passagesOf', { title: group.transcript.title })}>
         {group.hits.map((hit) => {
           const clock = hms(hit.segment.start_ms)
           const who = speakerName(hit.speaker)
@@ -316,7 +323,7 @@ function Group({ group }: { group: HitGroup }) {
                   to={recordingAt(recordingId, hit.segment.start_ms)}
                   state={{ from }}
                   className="timecode"
-                  aria-label={`Ouvir em ${clock}, fala de ${who} em ${group.transcript.title}`}
+                  aria-label={t('listen', { time: clock, name: who, title: group.transcript.title })}
                 >
                   {clock}
                 </Link>
@@ -336,6 +343,7 @@ function Group({ group }: { group: HitGroup }) {
 
 export function SearchPage() {
   useHelpTopic('busca')
+  const { t } = useTranslation(['search', 'common'])
   const [params, setParams] = useSearchParams()
   const filters = filtersFromParams(params)
   const searchable = isSearchable(filters)
@@ -369,28 +377,28 @@ export function SearchPage() {
 
   return (
     <div className={styles.page}>
-      <PageHead kicker="Gravações" title="Busca" />
+      <PageHead kicker={t('kicker')} title={t('title')} />
       <form className={`toolbar ${styles.searchBar}`} role="search" onSubmit={submit}>
         <input
           className={`input ${styles.terms}`}
           type="search"
-          aria-label="Termos"
+          aria-label={t('terms')}
           value={text}
           onChange={(event) => setText(event.target.value)}
         />
         <button type="submit" className="btn btn-primary">
           <Search size={16} aria-hidden />
-          Buscar
+          {t('submit')}
         </button>
       </form>
-      <div className={`toolbar ${styles.chips}`} role="group" aria-label="Filtros">
+      <div className={`toolbar ${styles.chips}`} role="group" aria-label={t('filters')}>
         <Chips filters={filters} onChange={change} />
         <button
           type="button"
           className="btn btn-ghost btn-sm"
           onClick={() => setParams(paramsFromFilters({ ...EMPTY_FILTERS, q: filters.q }))}
         >
-          Limpar
+          {t('clear')}
         </button>
         {searchable && results.isSuccess && (
           <span className={`text-muted ${styles.total}`} role="status">
@@ -401,20 +409,20 @@ export function SearchPage() {
 
       {!searchable && (
         <p className="text-muted">
-          Digite um termo ou escolha uma pessoa para buscar. Use aspas para frase exata e - para excluir um termo.
+          {t('hint')}
         </p>
       )}
-      {searchable && results.isPending && <p role="status">Buscando…</p>}
+      {searchable && results.isPending && <p role="status">{t('searching')}</p>}
       {results.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(results.error)}
         </p>
       )}
       {searchable && results.isSuccess && hits.length === 0 && (
-        <p className={`card ${styles.empty}`}>Nenhum trecho encontrado com esses filtros.</p>
+        <p className={`card ${styles.empty}`}>{t('empty')}</p>
       )}
       {hits.length > 0 && (
-        <div role="region" aria-label="Resultados">
+        <div role="region" aria-label={t('results')}>
           {groupHits(hits).map((group, index) => (
             <Group key={`${group.transcript.id}-${index}`} group={group} />
           ))}
@@ -427,7 +435,7 @@ export function SearchPage() {
           onClick={() => results.fetchNextPage()}
           disabled={results.isFetchingNextPage}
         >
-          {results.isFetchingNextPage ? 'Carregando…' : 'Mais resultados'}
+          {results.isFetchingNextPage ? t('common:loading') : t('more')}
         </button>
       )}
     </div>

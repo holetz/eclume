@@ -5,6 +5,7 @@ import { createInstance } from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import type en from './en'
 import { DEFAULT_LOCALE, LOCALES, normalize, rememberLocale, startLocale, type Locale } from './locale'
+import { completePlurals } from './plurals'
 
 export type Resources = typeof en
 export const defaultNS = 'common'
@@ -33,7 +34,7 @@ export async function loadLocale(locale: Locale): Promise<void> {
   if (i18n.hasResourceBundle(locale, defaultNS)) return
   const { default: catalogs } = await loaders[locale]()
   for (const [namespace, catalog] of Object.entries(catalogs)) {
-    i18n.addResourceBundle(locale, namespace, catalog, true, true)
+    i18n.addResourceBundle(locale, namespace, completePlurals(catalog as object, locale), true, true)
   }
 }
 

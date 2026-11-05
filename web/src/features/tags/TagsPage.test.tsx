@@ -78,6 +78,22 @@ const card = () => screen.findByRole('region', { name: 'Atribuição automática
 const list = () => screen.findByRole('list', { name: 'Tags' })
 const rowOf = (name: string) => within(screen.getByRole('list', { name: 'Tags' })).getByText(name).closest('li')!
 
+describe('tags in English', () => {
+  it('reads in English when the account chose English', async () => {
+    const me = fixtures.me()
+    mockFetch({
+      'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }),
+      'GET /api/v1/tags': () => fixtures.tagList(),
+      'GET /api/v1/me/tag-assignment': () => ({ ...ASSIGNMENT, mode: 'auto', new_limit: 2 }),
+    })
+    renderApp('/tags')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Tags' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New tag' })).toBeInTheDocument()
+    expect(await screen.findByRole('radio', { name: 'The agent can create tags' })).toBeChecked()
+    expect(screen.getByRole('combobox', { name: 'New tags per recording' })).toHaveDisplayValue('Up to 2 new tags')
+  })
+})
+
 describe('tags: the screen', () => {
   it('opens from the Organizar menu, with the DS header and the text', async () => {
     mockTags()

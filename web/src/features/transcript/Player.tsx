@@ -1,5 +1,6 @@
 import { Pause, Play } from 'lucide-react'
 import type { CSSProperties } from 'react'
+import { useTranslation } from 'react-i18next'
 import { currentMarkerId, hms, type Marker } from './markers'
 import { rateLabel, usePlayback, usePlaybackTime } from './playback'
 import styles from './RecordingPage.module.css'
@@ -9,6 +10,7 @@ import styles from './RecordingPage.module.css'
  * tick per marker, the duration and the speed.
  */
 export function Player({ markers }: { markers: Marker[] }) {
+  const { t } = useTranslation(['transcript', 'common'])
   const { durationMs, playing, rate, seek, toggle, cycleRate, error, retry } = usePlayback()
   const currentMs = usePlaybackTime()
   const current = currentMarkerId(markers, currentMs)
@@ -16,11 +18,11 @@ export function Player({ markers }: { markers: Marker[] }) {
 
   return (
     <>
-      <div className="player" role="group" aria-label="Player">
+      <div className="player" role="group" aria-label={t('player.label')}>
         <button
           type="button"
           className="btn btn-primary btn-icon"
-          aria-label={playing ? 'Pausar' : 'Tocar'}
+          aria-label={playing ? t('player.pause') : t('player.play')}
           onClick={toggle}
           disabled={error !== null}
         >
@@ -36,7 +38,7 @@ export function Player({ markers }: { markers: Marker[] }) {
             max={Math.max(durationMs, 1)}
             step={1000}
             value={Math.min(currentMs, durationMs)}
-            aria-label="Posição no áudio"
+            aria-label={t('player.position')}
             aria-valuetext={hms(currentMs)}
             onChange={(event) => seek(Number(event.target.value))}
           />
@@ -46,7 +48,11 @@ export function Player({ markers }: { markers: Marker[] }) {
               type="button"
               className="player-tick"
               style={{ '--at': `${percent(marker.at_ms)}%` } as CSSProperties}
-              aria-label={`Marcador em ${hms(marker.at_ms)}${marker.note ? `: ${marker.note}` : ''}`}
+              aria-label={
+                marker.note
+                  ? t('player.markerNote', { time: hms(marker.at_ms), note: marker.note })
+                  : t('player.marker', { time: hms(marker.at_ms) })
+              }
               aria-current={marker.id === current ? 'true' : undefined}
               onClick={() => seek(marker.at_ms, true)}
             />
@@ -56,7 +62,7 @@ export function Player({ markers }: { markers: Marker[] }) {
         <button
           type="button"
           className="btn btn-ghost btn-sm"
-          aria-label={`Velocidade ${rateLabel(rate)}`}
+          aria-label={t('player.speed', { rate: rateLabel(rate) })}
           onClick={cycleRate}
         >
           {rateLabel(rate)}
@@ -64,15 +70,15 @@ export function Player({ markers }: { markers: Marker[] }) {
       </div>
       {error === 'network' && (
         <p className="alert alert-error" role="alert">
-          <span>O áudio não carregou.</span>
+          <span>{t('player.loadFailed')}</span>
           <button type="button" className="btn btn-secondary btn-sm" onClick={retry}>
-            Tentar de novo
+            {t('common:retry')}
           </button>
         </p>
       )}
       {error === 'format' && (
         <p className="alert alert-warning" role="alert">
-          Este navegador não toca o áudio do eclume (Ogg Opus). Abra a gravação no Chrome, no Edge ou no Firefox.
+          {t('player.format')}
         </p>
       )}
     </>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { placeMarkers, type Marker } from './markers'
 import { usePlayback, usePlaybackSelect } from './playback'
@@ -7,8 +8,6 @@ import { SegmentMarker, SegmentRow } from './SegmentRow'
 import { findSegmentAt, speakerColorIndex, speakerName, type Transcript } from './segments'
 import styles from './TranscriptView.module.css'
 import { markersLabel } from '../../shared/format'
-
-const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
 const NO_MARKERS: Marker[] = []
 
@@ -23,6 +22,7 @@ function Segments({
   recordingId: string
   anchorMs: number | null
 }) {
+  const { t } = useTranslation('transcript')
   const { seek } = usePlayback()
   const listRef = useRef<HTMLDivElement>(null)
   const [follow, setFollow] = useState(true)
@@ -74,12 +74,12 @@ function Segments({
       <label className={`check ${styles.follow}`}>
         <input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} />
         <span className="box" />
-        <span>Acompanhar o áudio</span>
+        <span>{t('disclosure.follow')}</span>
       </label>
       {segments.length === 0 ? (
-        <p className="text-muted">A transcrição não tem falas.</p>
+        <p className="text-muted">{t('disclosure.empty')}</p>
       ) : (
-        <div ref={listRef} role="list" aria-label="Falas" className={styles.scroller}>
+        <div ref={listRef} role="list" aria-label={t('disclosure.list')} className={styles.scroller}>
           {segments.map((segment, index) => (
             <SegmentRow
               key={segment.id}
@@ -127,6 +127,7 @@ export function TranscriptDisclosure({
   open,
   onOpenChange,
 }: TranscriptDisclosureProps) {
+  const { t } = useTranslation('transcript')
   return (
     <details
       className={`disclosure ${styles.disclosure}`}
@@ -136,17 +137,17 @@ export function TranscriptDisclosure({
       }}
     >
       <summary>
-        Transcrição
+        {t('disclosure.title')}
         <span className="text-muted">
-          {plural(transcript.speakers.length, 'locutor', 'locutores')} ·{' '}
-          {plural(transcript.segments.length, 'fala', 'falas')}
+          {t('disclosure.speakers', { count: transcript.speakers.length })} ·{' '}
+          {t('disclosure.segments', { count: transcript.segments.length })}
           {markers.length > 0 && (
             <>
               {' '}
               · <span className="marker-count">{markersLabel(markers.length)}</span>
             </>
           )}{' '}
-          · abra para conferir ou corrigir
+          · {t('disclosure.openHint')}
         </span>
       </summary>
       {open && (

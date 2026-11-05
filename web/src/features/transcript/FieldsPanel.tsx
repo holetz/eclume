@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
@@ -12,15 +13,14 @@ type Recording = Schemas['Recording']
 
 const MAX_TEXT = 300
 
-const METADATA_LABELS: Record<string, string> = {
-  tipo_reuniao: 'Tipo de reunião',
-  cliente: 'Cliente',
-  projeto: 'Projeto',
-}
+const METADATA_KEYS = ['tipo_reuniao', 'cliente', 'projeto'] as const
+type MetadataKey = (typeof METADATA_KEYS)[number]
+const isMetadataKey = (key: string): key is MetadataKey => (METADATA_KEYS as readonly string[]).includes(key)
 
 function Origin({ origin }: { origin: 'auto' | 'edited' | 'accepted' | null }) {
-  if (origin === 'auto') return <span className="origin">Automático</span>
-  if (origin === 'edited') return <span className="origin origin-edited">Editado</span>
+  const { t } = useTranslation('transcript')
+  if (origin === 'auto') return <span className="origin">{t('fields.auto')}</span>
+  if (origin === 'edited') return <span className="origin origin-edited">{t('fields.edited')}</span>
   return null
 }
 
@@ -35,9 +35,10 @@ function Prop({ label, children, actions }: { label: string; children: ReactNode
 }
 
 function Value({ item }: { item: FieldValue }) {
+  const { t } = useTranslation('transcript')
   const { value } = item
   if (value === null || (Array.isArray(value) && value.length === 0)) {
-    return <span className="text-muted">Nada encontrado</span>
+    return <span className="text-muted">{t('fields.nothing')}</span>
   }
   if (Array.isArray(value)) {
     return value.map((tag) => (
@@ -67,6 +68,7 @@ function ruleLink(field: FieldValue['field'], agendaTypeId: string | undefined):
 
 function FieldProp({ item, recording }: { item: FieldValue; recording: Recording }) {
   const recordingId = recording.id
+  const { t } = useTranslation(['transcript', 'common'])
   const { put, accept } = useFieldMutations(recordingId)
   const [draft, setDraft] = useState<string | null>(null)
   const inputId = useId()
@@ -91,7 +93,7 @@ function FieldProp({ item, recording }: { item: FieldValue; recording: Recording
           </label>
           {field.kind === 'choice' ? (
             <select id={inputId} className="input" value={draft} onChange={(event) => setDraft(event.target.value)}>
-              <option value="">Nenhum</option>
+              <option value="">{t('fields.noneM')}</option>
               {field.options.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -104,7 +106,7 @@ function FieldProp({ item, recording }: { item: FieldValue; recording: Recording
               className="input"
               value={draft}
               maxLength={field.kind === 'text' ? MAX_TEXT : undefined}
-              placeholder={field.kind === 'list' ? 'Separe por vírgula' : undefined}
+              placeholder={field.kind === 'list' ? t('fields.commaHint') : undefined}
               autoFocus
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -114,10 +116,10 @@ function FieldProp({ item, recording }: { item: FieldValue; recording: Recording
           )}
           <span className={styles.propFormActions}>
             <button type="submit" className="btn btn-primary btn-sm" disabled={put.isPending}>
-              Salvar
+              {t('common:save')}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDraft(null)}>
-              Cancelar
+              {t('common:cancel')}
             </button>
           </span>
           {put.isError && (
@@ -139,27 +141,27 @@ function FieldProp({ item, recording }: { item: FieldValue; recording: Recording
             <button
               type="button"
               className="btn btn-ghost btn-sm"
-              aria-label={`Aceitar ${field.name}`}
+              aria-label={t('fields.acceptLabel', { name: field.name })}
               disabled={accept.isPending}
               onClick={() => accept.mutate(field)}
             >
-              Aceitar
+              {t('fields.accept')}
             </button>
           )}
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            aria-label={`Editar ${field.name}`}
+            aria-label={t('fields.editLabel', { name: field.name })}
             onClick={() => setDraft(draftOf(item))}
           >
-            Editar
+            {t('fields.edit')}
           </button>
           <Link
             to={ruleLink(field, recording.agenda_type?.id)}
             className="btn btn-ghost btn-sm"
-            aria-label={`Editar a regra de ${field.name}`}
+            aria-label={t('fields.ruleLabel', { name: field.name })}
           >
-            Editar a regra
+            {t('fields.rule')}
           </Link>
         </>
       }
@@ -171,6 +173,7 @@ function FieldProp({ item, recording }: { item: FieldValue; recording: Recording
 }
 
 function CollectionsProp({ recording }: { recording: Recording }) {
+  const { t } = useTranslation(['transcript', 'common'])
   const queryClient = useQueryClient()
   const collections = useCollections()
   const [chosen, setChosen] = useState<string[] | null>(null)
@@ -203,7 +206,7 @@ function CollectionsProp({ recording }: { recording: Recording }) {
 
   if (chosen !== null) {
     return (
-      <Prop label="Coleções">
+      <Prop label={t('fields.collections')}>
         <div className={styles.propForm}>
           {collections.data?.items.map((collection) => (
             <label key={collection.id} className="check">
@@ -224,12 +227,12 @@ function CollectionsProp({ recording }: { recording: Recording }) {
           ))}
           <span className={styles.propFormActions}>
             <label htmlFor={newId} className="visually-hidden">
-              Nova coleção
+              {t('fields.newCollection')}
             </label>
             <input
               id={newId}
               className="input"
-              placeholder="Nova coleção…"
+              placeholder={t('fields.newCollectionPlaceholder')}
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
               onKeyDown={(event) => {
@@ -245,7 +248,7 @@ function CollectionsProp({ recording }: { recording: Recording }) {
               disabled={!newName.trim() || create.isPending}
               onClick={() => create.mutate(newName.trim())}
             >
-              Criar
+              {t('fields.create')}
             </button>
           </span>
           <span className={styles.propFormActions}>
@@ -255,10 +258,10 @@ function CollectionsProp({ recording }: { recording: Recording }) {
               disabled={save.isPending}
               onClick={() => save.mutate(chosen)}
             >
-              Salvar
+              {t('common:save')}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setChosen(null)}>
-              Cancelar
+              {t('common:cancel')}
             </button>
           </span>
           {(save.isError || create.isError) && (
@@ -273,24 +276,24 @@ function CollectionsProp({ recording }: { recording: Recording }) {
 
   return (
     <Prop
-      label="Coleções"
+      label={t('fields.collections')}
       actions={
         <button
           type="button"
           className="btn btn-ghost btn-sm"
-          aria-label="Editar Coleções"
+          aria-label={t('fields.editLabel', { name: t('fields.collections') })}
           onClick={() => setChosen(recording.collection_ids)}
         >
-          Editar
+          {t('fields.edit')}
         </button>
       }
     >
       {recording.collection_ids.length === 0 ? (
-        <span className="text-muted">Nenhuma</span>
+        <span className="text-muted">{t('fields.noneF')}</span>
       ) : (
         recording.collection_ids.map((id) => (
           <span key={id} className="tag tag-neutral">
-            {byId.get(id) ?? 'Coleção'}
+            {byId.get(id) ?? t('fields.collection')}
           </span>
         ))
       )}
@@ -309,6 +312,7 @@ interface FieldsPanelProps {
  * stay in their own block, above the transcript.
  */
 export function FieldsPanel({ recording, onChangeType }: FieldsPanelProps) {
+  const { t } = useTranslation('transcript')
   const fields = useRecordingFields(recording.id)
   const { acceptAll } = useFieldMutations(recording.id)
   const titleId = useId()
@@ -319,14 +323,14 @@ export function FieldsPanel({ recording, onChangeType }: FieldsPanelProps) {
   return (
     <section className={styles.fields} aria-labelledby={titleId}>
       <div className={styles.fieldsHead}>
-        <h6 id={titleId}>Campos</h6>
+        <h6 id={titleId}>{t('fields.title')}</h6>
         <button
           type="button"
           className="btn btn-ghost btn-sm"
           disabled={!anyAuto || acceptAll.isPending}
           onClick={() => acceptAll.mutate()}
         >
-          Aceitar tudo
+          {t('fields.acceptAll')}
         </button>
       </div>
       {fields.isError && (
@@ -339,15 +343,15 @@ export function FieldsPanel({ recording, onChangeType }: FieldsPanelProps) {
           <FieldProp key={item.field.id} item={item} recording={recording} />
         ))}
         <Prop
-          label="Tipo de agenda"
+          label={t('fields.agendaType')}
           actions={
             <button
               type="button"
               className="btn btn-ghost btn-sm"
-              aria-label="Trocar o tipo de agenda"
+              aria-label={t('fields.changeTypeLabel')}
               onClick={onChangeType}
             >
-              Trocar
+              {t('fields.change')}
             </button>
           }
         >
@@ -357,21 +361,19 @@ export function FieldsPanel({ recording, onChangeType }: FieldsPanelProps) {
               <Origin origin={recording.agenda_type.origin} />
             </>
           ) : (
-            <span className="text-muted">Nenhum</span>
+            <span className="text-muted">{t('fields.noneM')}</span>
           )}
         </Prop>
         <CollectionsProp recording={recording} />
         {metadata.length > 0 && (
-          <Prop label="Dados anteriores">
+          <Prop label={t('fields.legacy')}>
             <span className={styles.legacy}>
               {metadata.map(([key, value]) => (
                 <span key={key}>
-                  {METADATA_LABELS[key] ?? key}: {value}
+                  {isMetadataKey(key) ? t(`fields.meta.${key}`) : key}: {value}
                 </span>
               ))}
-              <span className="text-muted">
-                Da organização antiga; crie um campo em Campos personalizados para usar de novo.
-              </span>
+              <span className="text-muted">{t('fields.legacyHint')}</span>
             </span>
           </Prop>
         )}

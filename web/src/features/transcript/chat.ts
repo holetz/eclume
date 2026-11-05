@@ -5,6 +5,7 @@ import { useEffect } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { ApiError, unwrap } from '../../api/problem'
 import { pollWhile } from '../../app/polling'
+import { i18n } from '../../i18n'
 import { hms } from './markers'
 import { chatKey, summaryKey } from './queries'
 
@@ -22,10 +23,10 @@ export function isOpen(message: Pick<ChatMessage, 'status'>): boolean {
 export function readNote(read: Schemas['ChatRead']): string {
   if (read.tool === 'search_transcript') {
     const hits = read.hits ?? 0
-    return `Buscou “${read.query ?? ''}” na transcrição · ${hits === 1 ? '1 trecho' : `${hits} trechos`}`
+    return i18n.t('transcript:chat.searched', { query: read.query ?? '', count: hits })
   }
   const range = `${hms(read.from_ms ?? 0)}–${hms(read.to_ms ?? 0)}`
-  return `Leu a transcrição, ${range}${read.clipped ? ' (cortado)' : ''}`
+  return i18n.t(read.clipped ? 'transcript:chat.readClipped' : 'transcript:chat.read', { range })
 }
 
 export function useChat(recordingId: string, enabled = true) {
