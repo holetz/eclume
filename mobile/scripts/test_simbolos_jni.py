@@ -22,24 +22,24 @@ object EclumeCore {
     }
 
     @JvmStatic
-    external fun acao(nome: String): String
+    external fun action(name: String): String
 
     @JvmStatic
-    external fun syncPendentes(base: String): String
+    external fun syncPending(base: String): String
 
     fun naoNativa(): Int = 1
 }
 """
 PREFIXO = "Java_io_github_holetz_eclume_movel_gravador_EclumeCore_"
-NM = f"""0000000000123456 T {PREFIXO}acao
-0000000000123999 T {PREFIXO}syncPendentes
+NM = f"""0000000000123456 T {PREFIXO}action
+0000000000123999 T {PREFIXO}syncPending
 0000000000200000 T JNI_OnLoad
 """
 # Formato real do apkanalyzer: tipo e estado separados por espaço, o resto por tabulação.
 DEX = """P d 3\t3\t300\tio.github.holetz.eclume.movel.gravador
 C d 1\t2\t120\tio.github.holetz.eclume.movel.gravador.EclumeCore
-M d 0\t1\t10\tio.github.holetz.eclume.movel.gravador.EclumeCore java.lang.String acao(java.lang.String)
-M d 0\t1\t10\tio.github.holetz.eclume.movel.gravador.EclumeCore java.lang.String syncPendentes(java.lang.String)
+M d 0\t1\t10\tio.github.holetz.eclume.movel.gravador.EclumeCore java.lang.String action(java.lang.String)
+M d 0\t1\t10\tio.github.holetz.eclume.movel.gravador.EclumeCore java.lang.String syncPending(java.lang.String)
 """
 
 
@@ -54,7 +54,7 @@ def test_le_pacote_classe_e_so_as_external_fun() -> None:
     assert simbolos_jni.ler_kotlin(KOTLIN) == (
         "io.github.holetz.eclume.movel.gravador",
         "EclumeCore",
-        ["acao", "syncPendentes"],
+        ["action", "syncPending"],
     )
 
 
@@ -65,35 +65,35 @@ def test_ponte_que_confere() -> None:
 
 def test_funcao_nova_sem_simbolo_e_pacote_renomeado() -> None:
     """Uma função nova sem Rust e o renome da #17 aparecem."""
-    nova = KOTLIN.replace("fun naoNativa", "external fun rede(wifi: Boolean): String\n\n    fun naoNativa")
-    assert simbolos_jni.conferir(nova, NM, None) == [f"símbolo ausente na .so: {PREFIXO}rede"]
+    nova = KOTLIN.replace("fun naoNativa", "external fun network(wifi: Boolean): String\n\n    fun naoNativa")
+    assert simbolos_jni.conferir(nova, NM, None) == [f"símbolo ausente na .so: {PREFIXO}network"]
     renomeado = KOTLIN.replace("io.github.holetz.eclume.movel", "br.com.eclume.movel")
     novo = "Java_br_com_eclume_movel_gravador_EclumeCore_"
     assert simbolos_jni.conferir(renomeado, NM, None) == [
-        f"símbolo ausente na .so: {novo}acao",
-        f"símbolo ausente na .so: {novo}syncPendentes",
+        f"símbolo ausente na .so: {novo}action",
+        f"símbolo ausente na .so: {novo}syncPending",
     ]
 
 
 def test_r8_que_renomeia_a_classe_ou_tira_um_metodo() -> None:
     """O R8 sem a regra -keep aparece pelo dex."""
-    sem_metodo = "\n".join(linha for linha in DEX.splitlines() if "syncPendentes" not in linha)
+    sem_metodo = "\n".join(linha for linha in DEX.splitlines() if "syncPending" not in linha)
     assert simbolos_jni.conferir(KOTLIN, NM, sem_metodo) == [
-        "ausente no dex (R8): io.github.holetz.eclume.movel.gravador.EclumeCore.syncPendentes"
+        "ausente no dex (R8): io.github.holetz.eclume.movel.gravador.EclumeCore.syncPending"
     ]
     renomeada = DEX.replace("gravador.EclumeCore", "gravador.a")
     classe = "io.github.holetz.eclume.movel.gravador.EclumeCore"
     assert simbolos_jni.conferir(KOTLIN, NM, renomeada) == [
         f"ausente no dex (R8): {classe}",
-        f"ausente no dex (R8): {classe}.acao",
-        f"ausente no dex (R8): {classe}.syncPendentes",
+        f"ausente no dex (R8): {classe}.action",
+        f"ausente no dex (R8): {classe}.syncPending",
     ]
 
 
 def test_simbolo_so_importado_nao_conta() -> None:
     """Um símbolo indefinido (`U`) não vale."""
-    importado = f"                 U {PREFIXO}acao\n0000000000123999 T {PREFIXO}syncPendentes\n"
-    assert simbolos_jni.conferir(KOTLIN, importado, None) == [f"símbolo ausente na .so: {PREFIXO}acao"]
+    importado = f"                 U {PREFIXO}action\n0000000000123999 T {PREFIXO}syncPending\n"
+    assert simbolos_jni.conferir(KOTLIN, importado, None) == [f"símbolo ausente na .so: {PREFIXO}action"]
 
 
 def test_kotlin_sem_ponte_e_erro() -> None:

@@ -8,7 +8,7 @@ import android.net.NetworkCapabilities
 /**
  * "Wi-Fi não medido": a rede padrão é Wi-Fi e não é cobrada. É a primeira metade de "na rede do
  * eclume" (a outra é a sonda do `/server`, no núcleo); nos dados móveis, nada sobe. Cada mudança
- * vai ao núcleo na hora (`EclumeCore.rede`): sem o Wi-Fi não medido, o sync em curso para na
+ * vai ao núcleo na hora (`EclumeCore.network`): sem o Wi-Fi não medido, o sync em curso para na
  * próxima requisição. O app e o `SyncWorker` registram o mesmo callback.
  */
 object Conectividade {
@@ -50,6 +50,6 @@ object Conectividade {
 
     private fun definir(naoMedido: Boolean) {
         wifiNaoMedido = naoMedido
-        runCatching { EclumeCore.rede(naoMedido) }
+        runCatching { EclumeCore.network(naoMedido) }
     }
 }

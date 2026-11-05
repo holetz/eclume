@@ -1,10 +1,10 @@
-//! Eclume's mobile app: the Tauri shell over `eclume-mobile-core`. The commands ([`comandos`]) and
-//! the `estado` event ([`eventos`]) link the UI to the process's core; on Android, the JNI bridge
+//! Eclume's mobile app: the Tauri shell over `eclume-mobile-core`. The commands ([`commands`]) and
+//! the `estado` event ([`events`]) link the UI to the process's core; on Android, the JNI bridge
 //! (`jni`) links the native plugin (recording service, notification, WorkManager) to the same
 //! core, without depending on the WebView.
 
-mod comandos;
-mod eventos;
+mod commands;
+mod events;
 #[cfg(target_os = "android")]
 mod jni;
 
@@ -21,7 +21,7 @@ pub(crate) fn microphone() -> anyhow::Result<Box<dyn AudioSource>> {
 }
 
 /// The reply of a JNI bridge call, isolated from panics: an error becomes `{"erro": …}` and a panic
-/// becomes `{"erro": "pânico: …"}`, without aborting the process (the workspace does not use
+/// becomes `{"erro": "<panic prefix>: …"}`, without aborting the process (the workspace does not use
 /// `panic = "abort"`). It stays outside `cfg(android)` so it is tested on the host. The `erro` key
 /// is the bridge's wire format with the Kotlin side and is kept.
 // Used only by the Android bridge; the tests exercise it on the host.
@@ -191,7 +191,7 @@ fn watch_device<R: Runtime>(app: tauri::AppHandle<R>) {
                         })
                         .unwrap_or(false);
                     if changed {
-                        eventos::cycle_in_background(&app, false);
+                        events::cycle_in_background(&app, false);
                     }
                 }
                 Err(err) => log::warn!("device state: {err}"),
@@ -231,39 +231,39 @@ pub fn run() {
         .setup(|app| {
             open_core(app.handle())?;
             watch_device(app.handle().clone());
-            eventos::start_loop(app.handle().clone());
+            events::start_loop(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             descobrir,
-            comandos::estado,
-            comandos::conectar_descoberto,
-            comandos::conectar_endereco,
-            comandos::confiar_ca,
-            comandos::cancelar_ca,
-            comandos::entrar,
-            comandos::parear,
-            comandos::gravar,
-            comandos::pausar,
-            comandos::continuar,
-            comandos::marcar,
-            comandos::anotar_marcador,
-            comandos::parar,
-            comandos::salvar,
-            comandos::sincronizar_agora,
-            comandos::gravacoes,
-            comandos::gravacao,
-            comandos::excluir_local,
-            comandos::excluir_sincronizadas,
-            comandos::tipos_de_agenda,
-            comandos::idiomas,
-            comandos::configuracoes,
-            comandos::salvar_configuracoes,
-            comandos::sair,
-            comandos::visibilidade,
-            comandos::verificar_atualizacao,
-            comandos::atualizar,
-            comandos::abrir_na_web,
+            commands::estado,
+            commands::conectar_descoberto,
+            commands::conectar_endereco,
+            commands::confiar_ca,
+            commands::cancelar_ca,
+            commands::entrar,
+            commands::parear,
+            commands::gravar,
+            commands::pausar,
+            commands::continuar,
+            commands::marcar,
+            commands::anotar_marcador,
+            commands::parar,
+            commands::salvar,
+            commands::sincronizar_agora,
+            commands::gravacoes,
+            commands::gravacao,
+            commands::excluir_local,
+            commands::excluir_sincronizadas,
+            commands::tipos_de_agenda,
+            commands::idiomas,
+            commands::configuracoes,
+            commands::salvar_configuracoes,
+            commands::sair,
+            commands::visibilidade,
+            commands::verificar_atualizacao,
+            commands::atualizar,
+            commands::abrir_na_web,
         ])
         .run(tauri::generate_context!())
         .expect("failed to start eclume's mobile app");

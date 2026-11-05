@@ -13,7 +13,7 @@ use eclume_recorder::Marker;
 use serde::Serialize;
 use tauri::{AppHandle, Runtime};
 
-use crate::eventos;
+use crate::events;
 
 /// The saved-recording sheet's deadline (`DETAILS_WAIT_MS`), which holds the stopped recording's
 /// sync.
@@ -40,7 +40,7 @@ fn with_core<R: Runtime, T>(
         let mut core = lock(the_core()?).map_err(text)?;
         f(&mut core).map_err(text)
     };
-    eventos::notify(app);
+    events::notify(app);
     result
 }
 
@@ -97,14 +97,14 @@ pub async fn entrar<R: Runtime>(
     senha: String,
 ) -> CommandResult<()> {
     with_core_on_network(app.clone(), move |c| c.sign_in(&email, &senha)).await?;
-    eventos::cycle_in_background(&app, true);
+    events::cycle_in_background(&app, true);
     Ok(())
 }
 
 #[tauri::command]
 pub async fn parear<R: Runtime>(app: AppHandle<R>, texto: String) -> CommandResult<()> {
     with_core_on_network(app.clone(), move |c| c.pair(&texto)).await?;
-    eventos::cycle_in_background(&app, true);
+    events::cycle_in_background(&app, true);
     Ok(())
 }
 
@@ -187,14 +187,14 @@ pub fn salvar<R: Runtime>(
     })?;
     // On stopping, the probe runs again: the recording may upload right away, or with the app
     // closed through the sync work, on eclume's next Wi-Fi.
-    eventos::cycle_in_background(&app, false);
+    events::cycle_in_background(&app, false);
     crate::service::schedule_sync(&app, std::time::Duration::ZERO);
     Ok(())
 }
 
 #[tauri::command]
 pub fn sincronizar_agora<R: Runtime>(app: AppHandle<R>) -> CommandResult<()> {
-    eventos::cycle_in_background(&app, true);
+    events::cycle_in_background(&app, true);
     Ok(())
 }
 
@@ -284,7 +284,7 @@ pub fn visibilidade<R: Runtime>(app: AppHandle<R>, visivel: bool) -> CommandResu
         Ok(())
     })?;
     if visivel {
-        eventos::cycle_in_background(&app, false);
+        events::cycle_in_background(&app, false);
     }
     Ok(())
 }

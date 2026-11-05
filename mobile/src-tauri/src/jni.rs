@@ -1,7 +1,7 @@
 //! The Kotlin → Rust bridge of the Android plugin (`EclumeCore`): the path that does not depend on
-//! the WebView being alive. The notification (Pausar, Marcador, Parar) arrives through `acao`, and
-//! WorkManager's `SyncWorker`, with no Activity, opens the core through `syncPendentes`. The
-//! service reports the silence the system imposes through `acao("silenciado" | "audivel")`. Each
+//! the WebView being alive. The notification (Pausar, Marcador, Parar) arrives through `action`, and
+//! WorkManager's `SyncWorker`, with no Activity, opens the core through `syncPending`. The
+//! service reports the silence the system imposes through `action("silenciado" | "audivel")`. Each
 //! function returns JSON, and every reply goes through `crate::reply`: errors and panics become
 //! `{"erro": …}`, without aborting the process.
 //!
@@ -52,9 +52,9 @@ fn run_action(name: &str) -> anyhow::Result<serde_json::Value> {
     state_json()
 }
 
-/// `EclumeCore.acao(nome)`: a notification action; returns the state after it.
+/// `EclumeCore.action(name)`: a notification action; returns the state after it.
 #[no_mangle]
-pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_acao<'l>(
+pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_action<'l>(
     mut env: JNIEnv<'l>,
     _class: JClass<'l>,
     name: JString<'l>,
@@ -64,9 +64,9 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_ac
     give_back(&mut env, &reply)
 }
 
-/// `EclumeCore.estado()`: the current state, for the notification to redraw itself.
+/// `EclumeCore.state()`: the current state, for the notification to redraw itself.
 #[no_mangle]
-pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_estado<'l>(
+pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_state<'l>(
     mut env: JNIEnv<'l>,
     _class: JClass<'l>,
 ) -> jstring {
@@ -74,13 +74,11 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_es
     give_back(&mut env, &reply)
 }
 
-/// `EclumeCore.syncPendentes(base)`: the WorkManager sync. Opens the core with the app's data
+/// `EclumeCore.syncPending(base)`: the WorkManager sync. Opens the core with the app's data
 /// folder (the same one Tauri uses), runs the probe and uploads what is pending, only on eclume's
 /// network.
 #[no_mangle]
-pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_syncPendentes<
-    'l,
->(
+pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_syncPending<'l>(
     mut env: JNIEnv<'l>,
     _class: JClass<'l>,
     base: JString<'l>,
@@ -105,10 +103,10 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_sy
     give_back(&mut env, &reply)
 }
 
-/// `EclumeCore.sondarPendentes(base)`: before the worker's sync, whether the phone is on eclume's
+/// `EclumeCore.probePending(base)`: before the worker's sync, whether the phone is on eclume's
 /// network and how many recordings (and bytes) wait, to decide on the foreground.
 #[no_mangle]
-pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_sondarPendentes<
+pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_probePending<
     'l,
 >(
     mut env: JNIEnv<'l>,
@@ -126,11 +124,11 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_so
     give_back(&mut env, &reply)
 }
 
-/// `EclumeCore.rede(wifiNaoMedido)`: the system's network callback, right away; without the
+/// `EclumeCore.network(unmeteredWifi)`: the system's network callback, right away; without the
 /// unmetered Wi-Fi, the running sync stops at the next request. With no core open, there is
 /// nothing to report.
 #[no_mangle]
-pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_rede<'l>(
+pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_network<'l>(
     mut env: JNIEnv<'l>,
     _class: JClass<'l>,
     unmetered_wifi: jboolean,
@@ -144,10 +142,10 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_re
     give_back(&mut env, &reply)
 }
 
-/// `EclumeCore.interromperSync()`: the worker's `onStopped`; the upload stops at the next request
+/// `EclumeCore.interruptSync()`: the worker's `onStopped`; the upload stops at the next request
 /// and the recording goes back to the queue without spending an attempt.
 #[no_mangle]
-pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_interromperSync<
+pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_interruptSync<
     'l,
 >(
     mut env: JNIEnv<'l>,

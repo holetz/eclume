@@ -1,39 +1,40 @@
 package io.github.holetz.eclume.movel.gravador
 
 /**
- * A ponte Kotlin → Rust (`src-tauri/src/jni.rs`): o caminho que não depende do WebView estar vivo.
- * A notificação chega ao núcleo por [acao], e o WorkManager sobe as gravações por [syncPendentes].
- * Cada função devolve o JSON do núcleo; um erro vem como `{"erro": "..."}`.
+ * The Kotlin → Rust bridge (`src-tauri/src/jni.rs`): the path that does not depend on the WebView
+ * being alive. The notification reaches the core through [action], and WorkManager uploads the
+ * recordings through [syncPending]. Each function returns the core's JSON; an error comes as
+ * `{"erro": "..."}`.
  */
 object EclumeCore {
     init {
         System.loadLibrary("eclume_mobile_lib")
     }
 
-    /** `pausar`, `continuar`, `marcar` ou `parar`; devolve o `EstadoApp` depois da ação. */
+    /** `pausar`, `continuar`, `marcar` or `parar`; returns the `AppState` after the action. */
     @JvmStatic
-    external fun acao(nome: String): String
+    external fun action(name: String): String
 
-    /** O `EstadoApp` atual. */
+    /** The current `AppState`. */
     @JvmStatic
-    external fun estado(): String
+    external fun state(): String
 
     /**
-     * Abre o núcleo com a pasta de dados do app (se preciso), sonda e sobe o que estiver pendente;
-     * o JSON diz `sincronizadas`, `falhas` e `interrompido`.
+     * Opens the core with the app's data folder (if needed), probes and uploads what is pending;
+     * the JSON carries `sincronizadas`, `falhas` and `interrompido`.
      */
     @JvmStatic
-    external fun syncPendentes(base: String): String
+    external fun syncPending(base: String): String
 
-    /** Antes do sync do worker: `na_rede`, `pendentes` e `bytes`. */
+    /** Before the worker's sync: `na_rede`, `pendentes` and `bytes`. */
     @JvmStatic
-    external fun sondarPendentes(base: String): String
+    external fun probePending(base: String): String
 
-    /** O callback de rede do sistema: sem o Wi-Fi não medido, o sync em curso para. */
+    /** The system's network callback: without the unmetered Wi-Fi, the running sync stops. */
     @JvmStatic
-    external fun rede(wifiNaoMedido: Boolean): String
+    external fun network(unmeteredWifi: Boolean): String
 
-    /** O worker foi parado: o upload para na próxima requisição. */
+    /** The worker was stopped: the upload stops at the next request. */
     @JvmStatic
-    external fun interromperSync(): String
+    external fun interruptSync(): String
 }

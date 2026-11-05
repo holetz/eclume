@@ -127,7 +127,7 @@ class ServicoDeGravacao : Service() {
             return START_NOT_STICKY
         }
         val nucleo = acaoDoNucleo(acao)
-        val resposta = RespostaDoNucleo.ler(if (nucleo != null) EclumeCore.acao(nucleo) else EclumeCore.estado())
+        val resposta = RespostaDoNucleo.ler(if (nucleo != null) EclumeCore.action(nucleo) else EclumeCore.state())
         when (resposta) {
             is RespostaDoNucleo.ComSessao -> mostrar(resposta.sessao)
             RespostaDoNucleo.SemSessao -> {
@@ -204,7 +204,7 @@ class ServicoDeGravacao : Service() {
                 val agora = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && configs.any { it.isClientSilenced }
                 if (agora == silenciada) return
                 silenciada = agora
-                val resposta = RespostaDoNucleo.ler(EclumeCore.acao(if (agora) "silenciado" else "audivel"))
+                val resposta = RespostaDoNucleo.ler(EclumeCore.action(if (agora) "silenciado" else "audivel"))
                 if (resposta is RespostaDoNucleo.ComSessao) mostrar(resposta.sessao)
             }
         }
@@ -232,10 +232,10 @@ class ServicoDeGravacao : Service() {
 
     override fun onDestroy() {
         // O sistema derrubou o serviço com a gravação em curso: o núcleo fecha o arquivo e avisa.
-        val sessao = SessaoNaNotificacao.doEstado(EclumeCore.estado())
+        val sessao = SessaoNaNotificacao.doEstado(EclumeCore.state())
         if (sessao != null) {
             Log.w(TAG, "serviço destruído gravando; parando a gravação")
-            EclumeCore.acao("parar")
+            EclumeCore.action("parar")
             Notificacao.avisar(
                 this,
                 TextosDaNotificacao.PAROU,

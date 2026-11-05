@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit
  * do `/server` e só sobe na rede do eclume. Com algo a subir, o worker roda em primeiro plano
  * (`dataSync`, "Enviando N gravações"), fora do limite de 10 min; se o Android recusar, roda como
  * trabalho comum e o próximo retoma das partes que faltam. Parado pelo sistema, o upload para na
- * próxima requisição (`EclumeCore.interromperSync`).
+ * próxima requisição (`EclumeCore.interruptSync`).
  */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     /** O que fazer depois de uma passada. */
@@ -111,16 +111,16 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val base = applicationContext.dataDir.absolutePath
         // O callback de rede avisa o núcleo na hora, também neste processo aberto só pelo worker.
         Conectividade.acompanhar(applicationContext)
-        val pendentes = aSubir(withContext(Dispatchers.IO) { EclumeCore.sondarPendentes(base) })
+        val pendentes = aSubir(withContext(Dispatchers.IO) { EclumeCore.probePending(base) })
         if (pendentes > 0) entrarEmPrimeiroPlano(pendentes)
         val resposta = coroutineScope {
-            val sync = async(Dispatchers.IO) { EclumeCore.syncPendentes(base) }
+            val sync = async(Dispatchers.IO) { EclumeCore.syncPending(base) }
             try {
                 sync.await()
             } catch (parado: CancellationException) {
                 // O WorkManager parou o worker (perdeu a rede, prazo, cancelamento): a chamada JNI
                 // não é interrompível, então o núcleo para o upload na próxima requisição.
-                EclumeCore.interromperSync()
+                EclumeCore.interruptSync()
                 throw parado
             }
         }
