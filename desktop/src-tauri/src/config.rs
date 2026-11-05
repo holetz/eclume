@@ -3,10 +3,11 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use eclume_detect::DetectionConfig;
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::i18n::Msg;
 use crate::shortcuts::Shortcuts;
 
 /// Environment variable that overrides `web_url` without changing the file.
@@ -222,21 +223,21 @@ impl MirrorConfig {
             return Ok(());
         }
         let Some(dir) = &self.dir else {
-            bail!("Escolha a pasta dos resumos para ligar a sincronização");
+            bail!(Msg::new(|t| t.err_choose_mirror_dir));
         };
         if !dir.is_absolute() {
-            bail!("A pasta dos resumos precisa ser um caminho completo");
+            bail!(Msg::new(|t| t.err_mirror_dir_not_absolute));
         }
         if dir.parent().is_none() {
-            bail!("Escolha uma pasta, não a raiz do disco");
+            bail!(Msg::new(|t| t.err_mirror_dir_root));
         }
         if dir.is_file() {
-            bail!("A pasta dos resumos é um arquivo");
+            bail!(Msg::new(|t| t.err_mirror_dir_is_file));
         }
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
         if home.is_some_and(|home| Path::new(&home) == dir.as_path()) {
             // A collection named "Documents" would write to ~/Documents.
-            bail!("Escolha uma subpasta, não a pasta pessoal");
+            bail!(Msg::new(|t| t.err_mirror_dir_home));
         }
         Ok(())
     }
@@ -389,8 +390,13 @@ impl Config {
     /// renames: a crash never leaves a partial file. On failure, the temporary file is deleted.
     pub fn save(&self, path: &Path) -> Result<()> {
         if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)
-                .with_context(|| format!("falha ao criar {}", dir.display()))?;
+            std::fs::create_dir_all(dir).map_err(|err| {
+                anyhow::Error::new(
+                    Msg::new(|t| t.err_create_dir)
+                        .arg("path", dir.display())
+                        .cause("cause", err),
+                )
+            })?;
         }
         let text = serde_json::to_string_pretty(self)?;
         let tmp = path.with_file_name(format!(".{}.tmp", file_name(path)));
@@ -402,7 +408,11 @@ impl Config {
         })();
         if let Err(err) = written {
             let _ = std::fs::remove_file(&tmp);
-            return Err(err).with_context(|| format!("falha ao gravar {}", path.display()));
+            return Err(anyhow::Error::new(
+                Msg::new(|t| t.err_write_file)
+                    .arg("path", path.display())
+                    .cause("cause", err),
+            ));
         }
         Ok(())
     }
@@ -427,7 +437,9 @@ impl Config {
             validate_web_url(&self.web_url)?;
         }
         if let Some(api_url) = &self.api_url {
-            validate_web_url(api_url).context("endereço da API")?;
+            validate_web_url(api_url).map_err(|err| {
+                anyhow::Error::new(Msg::new(|t| t.err_api_address).cause("cause", err))
+            })?;
         }
         if let Some(ca_path) = &self.ca_path {
             eclume_sync::transport::read_pem_certs(ca_path)?;
@@ -436,30 +448,30 @@ impl Config {
             .retention_days
             .is_some_and(|days| days > MAX_RETENTION_DAYS)
         {
-            bail!("retenção acima de {MAX_RETENTION_DAYS} dias");
+            bail!(Msg::new(|t| t.err_retention).arg("days", MAX_RETENTION_DAYS));
         }
         if let Some(seconds) = self.note_silence_s {
             if !NOTE_SILENCE_CHOICES.contains(&seconds) {
-                bail!("parada por silêncio da nota: use 2, 4 ou 8 s, ou Nunca");
+                bail!(Msg::new(|t| t.err_note_silence));
             }
         }
         if !THEMES.contains(&self.theme.as_str()) {
-            bail!("tema: use system, light ou dark");
+            bail!(Msg::new(|t| t.err_theme));
         }
         if self.recent_count > MAX_RECENT_COUNT {
-            bail!("gravações recentes na janela: no máximo {MAX_RECENT_COUNT}");
+            bail!(Msg::new(|t| t.err_recent_window).arg("max", MAX_RECENT_COUNT));
         }
         if self.tray_recent_count > MAX_RECENT_COUNT {
-            bail!("gravações recentes no menu da bandeja: no máximo {MAX_RECENT_COUNT}");
+            bail!(Msg::new(|t| t.err_recent_tray).arg("max", MAX_RECENT_COUNT));
         }
         if let Some(language) = &self.language {
             if !LANGUAGES.contains(&language.as_str()) {
-                bail!("idioma da transcrição: use pt, es, en ou auto, ou o padrão da conta");
+                bail!(Msg::new(|t| t.err_transcription_language));
             }
         }
         self.mirror.validate()?;
         if self.mic.as_deref() == Some(SOURCE_NONE) && self.system_source == SOURCE_NONE {
-            bail!("Escolha ao menos uma fonte de áudio");
+            bail!(Msg::new(|t| t.err_choose_source));
         }
         self.shortcuts.validate()
     }
@@ -478,7 +490,7 @@ pub fn validate_web_url(url: &str) -> Result<()> {
         {
             Ok(())
         }
-        _ => bail!("endereço inválido: use http:// ou https:// seguido do host"),
+        _ => bail!(Msg::new(|t| t.err_invalid_url)),
     }
 }
 
@@ -833,7 +845,11 @@ mod tests {
         config.validate().unwrap();
         config.system_source = SOURCE_NONE.into();
         let err = config.validate().unwrap_err();
-        assert_eq!(err.to_string(), "Escolha ao menos uma fonte de áudio");
+        assert_eq!(err.to_string(), "Choose at least one audio source");
+        assert_eq!(
+            crate::i18n::render(&err, crate::i18n::Locale::PtBr),
+            "Escolha ao menos uma fonte de áudio"
+        );
         config.mic = None;
         config.ca_path = Some("/nao/existe.pem".into());
         let err = config.validate().unwrap_err();
