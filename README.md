@@ -58,4 +58,7 @@ commands of each pillar are in [docs/standards/code/monorepo.md](docs/standards/
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Copyright (C) 2026 eclume contributors. eclume is free software, licensed under the GNU General
+Public License, version 3 or (at your option) any later version (SPDX `GPL-3.0-or-later`). See
+[LICENSE](LICENSE). Third-party components keep their own licences, listed in [NOTICE.md](NOTICE.md);
+the desktop crates vendored from Anarlog stay MIT.
