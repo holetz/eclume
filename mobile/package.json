@@ -6,7 +6,7 @@
   "engines": {
     "node": "22"
   },
-  "description": "App móvel do eclume: gravador portátil com marcadores e sincronização pelo Wi-Fi do servidor.",
+  "description": "eclume's mobile app: a portable recorder with markers and sync over the server's Wi-Fi.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

@@ -3,5 +3,5 @@ dist
 target
 coverage
 *.log
-# Esquemas gerados pelo tauri-build a cada compilação
+# Schemas tauri-build generates on every build
 src-tauri/gen/schemas/

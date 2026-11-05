@@ -1,5 +1,5 @@
-# Rust do app móvel: versão exata, a mesma de desktop/rust-toolchain.toml (deploy/test_fixacoes.py
-# confere), com os alvos Android do APK universal. Atualização: PR do Dependabot (rust-toolchain).
+# The mobile app's Rust: an exact version, the same as desktop/rust-toolchain.toml (deploy/test_pins.py
+# checks it), with the universal APK's Android targets. Update: a Dependabot PR (rust-toolchain).
 [toolchain]
 channel = "1.98.1"
 components = ["clippy", "rustfmt"]
