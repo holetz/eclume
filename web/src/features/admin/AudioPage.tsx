@@ -1,9 +1,11 @@
 import { Fragment, useId, useState, type FormEvent, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { AdminPageHead } from './AdminPageHead'
 import styles from './Admin.module.css'
-import { DENOISE_METHODS, fieldErrorsOf, labelOf, lastChangeText } from './labels'
+import { activeLocale } from '../../i18n'
+import { DENOISE_METHODS, fieldErrorsOf, labelOf, lastChangeText, numberFormat } from './labels'
 import { useAdminSettings, useUpdateSettings } from './queries'
 import { Switch } from '../../shared/Switch'
 
@@ -12,17 +14,16 @@ type Preprocessing = Schemas['PreprocessingSettings']
 type Step = 'split_channels' | 'denoise' | 'loudnorm' | 'trim_silence'
 
 const FORM_ID = 'admin-audio'
-const TITLE = 'Pré-processamento de áudio'
-const decimal = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 })
+const decimal = { format: (value: number) => numberFormat('decimal', { maximumFractionDigits: 2 }).format(value) }
 
 // The numeric parameters, within the contract's `PreprocessingSettings` limits. The field keeps the
 // typed text, so the admin can delete and retype; the number comes out at save time.
 const LIMITS = {
-  'loudnorm.target_lufs': { label: 'Alvo (LUFS)', min: -30, max: -10, step: 0.5 },
-  'loudnorm.true_peak_db': { label: 'Pico verdadeiro (dB)', min: -9, max: 0, step: 0.1 },
-  'loudnorm.lra': { label: 'Faixa de loudness (LRA)', min: 1, max: 20, step: 0.5 },
-  'trim_silence.min_silence_s': { label: 'Silêncio mínimo (s)', min: 1, max: 30, step: 0.5 },
-  'trim_silence.threshold_db': { label: 'Limiar (dB)', min: -80, max: -20, step: 1 },
+  'loudnorm.target_lufs': { key: 'targetLufs', min: -30, max: -10, step: 0.5 },
+  'loudnorm.true_peak_db': { key: 'truePeak', min: -9, max: 0, step: 0.1 },
+  'loudnorm.lra': { key: 'lra', min: 1, max: 20, step: 0.5 },
+  'trim_silence.min_silence_s': { key: 'minSilence', min: 1, max: 30, step: 0.5 },
+  'trim_silence.threshold_db': { key: 'threshold', min: -80, max: -20, step: 1 },
 } as const
 type NumberField = keyof typeof LIMITS
 
@@ -44,23 +45,25 @@ function inLimits(field: NumberField, value: string): boolean {
 
 /** The audio treatment steps before transcription; the order is fixed (holetz/eclume#33). */
 export function AudioPage() {
+  const { t } = useTranslation('admin')
   const settings = useAdminSettings()
   if (settings.data) return <AudioForm settings={settings.data} />
   return (
     <>
-      <AdminPageHead title={TITLE} />
+      <AdminPageHead title={t('audio.title')} />
       {settings.isError ? (
         <p className="alert alert-error" role="alert">
           {errorMessage(settings.error)}
         </p>
       ) : (
-        <p role="status">Carregando a configuração…</p>
+        <p role="status">{t('settings.loading')}</p>
       )}
     </>
   )
 }
 
 function AudioForm({ settings }: { settings: Settings }) {
+  const { t } = useTranslation('admin')
   const update = useUpdateSettings()
   const saved = settings.preprocessing
   const [enabled, setEnabled] = useState<Record<Step, boolean>>({
@@ -109,11 +112,11 @@ function AudioForm({ settings }: { settings: Settings }) {
     const limits = LIMITS[field]
     const id = `${ids.fields}-${field}`
     const error = !inLimits(field, numbers[field])
-      ? `Entre ${decimal.format(limits.min)} e ${decimal.format(limits.max)}.`
+      ? t('audio.between', { min: decimal.format(limits.min), max: decimal.format(limits.max) })
       : serverErrors[`preprocessing.${field}`]
     return (
       <div className="field" key={field}>
-        <label htmlFor={id}>{limits.label}</label>
+        <label htmlFor={id}>{t(`audio.limit.${limits.key}`)}</label>
         <input
           id={id}
           className="input"
@@ -142,10 +145,10 @@ function AudioForm({ settings }: { settings: Settings }) {
       className="btn btn-ghost btn-sm"
       aria-expanded={open === step}
       aria-controls={`${FORM_ID}-${step}`}
-      aria-label={`Ajustes de ${title.toLocaleLowerCase('pt-BR')}`}
+      aria-label={t('audio.settingsOf', { title: title.toLocaleLowerCase(activeLocale()) })}
       onClick={() => setOpen(open === step ? null : step)}
     >
-      Ajustes
+      {t('audio.settings')}
     </button>
   )
 
@@ -153,18 +156,18 @@ function AudioForm({ settings }: { settings: Settings }) {
   const steps: { key: Step | 'resample'; title: string; summary: string; panel?: ReactNode }[] = [
     {
       key: 'split_channels',
-      title: 'Separar canais estéreo',
-      summary: 'Quando cada canal é uma pessoa; canais iguais (mono gravado como estéreo) são ignorados',
+      title: t('audio.split'),
+      summary: t('audio.splitSummary'),
     },
     {
       key: 'denoise',
-      title: 'Redução de ruído',
-      summary: `${labelOf(DENOISE_METHODS, method)} · força ${decimal.format(strength)}`,
+      title: t('audio.denoise'),
+      summary: t('audio.denoiseSummary', { method: labelOf(DENOISE_METHODS, method), strength: decimal.format(strength) }),
       panel: (
         <>
           <div className="field">
             <span id={ids.method} className={styles.label}>
-              Método
+              {t('audio.method')}
             </span>
             <div className="seg" role="radiogroup" aria-labelledby={ids.method}>
               {DENOISE_METHODS.map((option) => (
@@ -180,10 +183,10 @@ function AudioForm({ settings }: { settings: Settings }) {
                 </label>
               ))}
             </div>
-            <span className="field-hint">RNNoise é o padrão; afftdn serve quando o RNNoise come sílabas.</span>
+            <span className="field-hint">{t('audio.methodHint')}</span>
           </div>
           <div className="field">
-            <label htmlFor={ids.strength}>Força · {decimal.format(strength)}</label>
+            <label htmlFor={ids.strength}>{t('audio.strength', { value: decimal.format(strength) })}</label>
             <input
               id={ids.strength}
               className={styles.range}
@@ -200,8 +203,8 @@ function AudioForm({ settings }: { settings: Settings }) {
     },
     {
       key: 'loudnorm',
-      title: 'Normalização de loudness',
-      summary: `Alvo ${decimal.format(body.loudnorm.target_lufs)} LUFS`,
+      title: t('audio.loudnorm'),
+      summary: t('audio.loudnormSummary', { value: decimal.format(body.loudnorm.target_lufs) }),
       panel: (
         <div className={styles.fields3}>
           {numberField('loudnorm.target_lufs')}
@@ -210,18 +213,18 @@ function AudioForm({ settings }: { settings: Settings }) {
         </div>
       ),
     },
-    { key: 'resample', title: 'Converter para 16 kHz mono', summary: 'Exigido pelo modelo de transcrição' },
+    { key: 'resample', title: t('audio.resample'), summary: t('audio.resampleSummary') },
     {
       key: 'trim_silence',
-      title: 'Cortar silêncio',
-      summary: `Mais de ${decimal.format(body.trim_silence.min_silence_s)} s no início e no fim`,
+      title: t('audio.trim'),
+      summary: t('audio.trimSummary', { value: decimal.format(body.trim_silence.min_silence_s) }),
       panel: (
         <>
           <div className={styles.fields3}>
             {numberField('trim_silence.min_silence_s')}
             {numberField('trim_silence.threshold_db')}
           </div>
-          <span className="field-hint">Só as pontas: cortar no meio desalinharia a transcrição do áudio.</span>
+          <span className="field-hint">{t('audio.trimHint')}</span>
         </>
       ),
     },
@@ -230,18 +233,18 @@ function AudioForm({ settings }: { settings: Settings }) {
   return (
     <>
       <AdminPageHead
-        title={TITLE}
+        title={t('audio.title')}
         actions={
           <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={!canSave}>
-            {update.isPending ? 'Salvando…' : 'Salvar'}
+            {update.isPending ? t('settings.saving') : t('settings.save')}
           </button>
         }
       />
-      <form id={FORM_ID} className={styles.audioForm} onSubmit={submit} aria-label="Pré-processamento de áudio">
+      <form id={FORM_ID} className={styles.audioForm} onSubmit={submit} aria-label={t('audio.title')}>
         <p className={`text-muted ${styles.lede}`}>
-          Roda em toda gravação antes da transcrição, de cima para baixo. Os usuários não mudam isso.
+          {t('audio.lede')}
         </p>
-        <ol className={`order-list ${styles.orderList}`} aria-label="Etapas do pré-processamento">
+        <ol className={`order-list ${styles.orderList}`} aria-label={t('audio.steps')}>
           {steps.map((step, index) => (
             <Fragment key={step.key}>
               <li>
@@ -253,7 +256,7 @@ function AudioForm({ settings }: { settings: Settings }) {
                 </span>
                 <span className={styles.row}>
                   {step.key === 'resample' ? (
-                    <span className={`text-muted ${styles.small}`}>Sempre ligada</span>
+                    <span className={`text-muted ${styles.small}`}>{t('audio.alwaysOn')}</span>
                   ) : (
                     <>
                       {step.panel && settingsButton(step.key, step.title)}
@@ -278,7 +281,7 @@ function AudioForm({ settings }: { settings: Settings }) {
           </p>
         )}
         <p role="status" className="text-muted">
-          {sent === json ? 'Configuração salva.' : ''}
+          {sent === json ? t('settings.saved') : ''}
         </p>
         <p className={styles.meta}>{lastChangeText(settings)}</p>
       </form>
@@ -291,6 +294,7 @@ const MAX_RETENTION_DAYS = 3650
 
 /** The audio retention ceiling: limits what each account chooses and never deletes the audio of anyone who did not turn retention on. */
 function RetentionCeiling({ settings }: { settings: Settings }) {
+  const { t } = useTranslation('admin')
   const update = useUpdateSettings()
   const id = useId()
   const saved = settings.retention.audio_max_days
@@ -309,19 +313,17 @@ function RetentionCeiling({ settings }: { settings: Settings }) {
   }
 
   return (
-    <form className={`panel ${styles.audioForm}`} onSubmit={submit} aria-label="Retenção do áudio no servidor">
-      <h2 className={styles.note}>Retenção do áudio no servidor</h2>
+    <form className={`panel ${styles.audioForm}`} onSubmit={submit} aria-label={t('audio.retention')}>
+      <h2 className={styles.note}>{t('audio.retention')}</h2>
       <p className={`text-muted ${styles.lede}`}>
-        Cada conta escolhe por quantos dias o servidor guarda o áudio das suas gravações; este teto limita essa
-        escolha. Ele não apaga nada de quem deixou a retenção desligada. A transcrição e o resumo nunca são
-        apagados. Cópias de segurança podem guardar o áudio por até 14 dias depois de apagado.
+        {t('audio.retentionLede')}
       </p>
       <Switch checked={enabled} onChange={setEnabled}>
-        Limitar a retenção do áudio
+        {t('audio.limitRetention')}
       </Switch>
       {enabled && (
         <div className="field">
-          <label htmlFor={id}>Teto, em dias</label>
+          <label htmlFor={id}>{t('audio.ceiling')}</label>
           <input
             id={id}
             className="input"
@@ -334,7 +336,7 @@ function RetentionCeiling({ settings }: { settings: Settings }) {
             onChange={(e) => setValue(e.target.value)}
           />
           {(!valid || serverError) && (
-            <span className={`field-hint ${styles.error}`}>{serverError ?? `Entre 1 e ${MAX_RETENTION_DAYS}.`}</span>
+            <span className={`field-hint ${styles.error}`}>{serverError ?? t('audio.ceilingBetween', { max: MAX_RETENTION_DAYS })}</span>
           )}
         </div>
       )}
@@ -345,12 +347,12 @@ function RetentionCeiling({ settings }: { settings: Settings }) {
       )}
       {update.isSuccess && chosen === saved && (
         <p role="status" className="text-muted">
-          Teto salvo.
+          {t('audio.ceilingSaved')}
         </p>
       )}
       <div>
         <button type="submit" className="btn btn-primary" disabled={!canSave}>
-          Aplicar o teto
+          {t('audio.apply')}
         </button>
       </div>
     </form>

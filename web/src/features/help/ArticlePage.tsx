@@ -8,7 +8,6 @@ import { ArticleBody } from './ArticleBody'
 import { getArticle, useHelpCatalog, type Article, type HelpCatalog } from './catalog'
 import styles from './Help.module.css'
 
-
 export function ArticlePage() {
   useHelpTopic('ajuda')
   const { slug = '' } = useParams()
@@ -19,19 +18,19 @@ export function ArticlePage() {
 }
 
 function ArticleNotFound() {
-  const { t } = useTranslation('shell')
+  const { t } = useTranslation('help')
   return (
     <section className={styles.page}>
-      <PageHead kicker={t('helpCenter.kicker')} title={t('helpCenter.notFoundTitle')} />
+      <PageHead kicker={t('kicker')} title={t('article.notFound')} />
       <p>
-        <Trans t={t} i18nKey="helpCenter.notFoundText" components={{ center: <Link to="/ajuda" /> }} />
+        <Trans t={t} i18nKey="article.notFoundBody" components={{ center: <Link to="/ajuda" /> }} />
       </p>
     </section>
   )
 }
 
 function ArticleView({ article, catalog }: { article: Article; catalog: HelpCatalog }) {
-  const { t, i18n } = useTranslation('shell')
+  const { t, i18n } = useTranslation('help')
   usePageTitle(article.title)
   const updatedFormat = new Intl.DateTimeFormat(i18n.language, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
   const body = useRef<HTMLDivElement>(null)
@@ -42,18 +41,18 @@ function ArticleView({ article, catalog }: { article: Article; catalog: HelpCata
     <section className={styles.article}>
       <ol className="crumbs">
         <li>
-          <Link to="/ajuda">{t('helpCenter.kicker')}</Link>
+          <Link to="/ajuda">{t('kicker')}</Link>
         </li>
         <li>
-          <Link to={`/ajuda?topico=${article.topic}`}>{t(`helpCenter.topics.${article.topic}.title`)}</Link>
+          <Link to={`/ajuda?topico=${article.topic}`}>{t(`topic.${article.topic}.title`)}</Link>
         </li>
         <li aria-current="page">{article.title}</li>
       </ol>
       <div className={`page-head ${styles.articleHead}`}>
         <h1>{article.title}</h1>
         <div className="article-meta">
-          <span>{t('helpCenter.minutes', { count: article.minutes })}</span>
-          <span>{t('helpCenter.updatedOn', { date: updatedFormat.format(new Date(`${article.updated}T00:00:00Z`)) })}</span>
+          <span>{t('minutes', { n: article.minutes })}</span>
+          <span>{t('article.updated', { date: updatedFormat.format(new Date(`${article.updated}T00:00:00Z`)) })}</span>
         </div>
       </div>
       <div className="help-article">
@@ -62,7 +61,7 @@ function ArticleView({ article, catalog }: { article: Article; catalog: HelpCata
           {related.length > 0 && (
             <nav className={styles.related} aria-labelledby="artigos-relacionados">
               <span className="kicker" id="artigos-relacionados">
-                {t('helpCenter.related')}
+                {t('article.related')}
               </span>
               <ul className="help-links">
                 {related.map((item) => (
@@ -75,8 +74,8 @@ function ArticleView({ article, catalog }: { article: Article; catalog: HelpCata
           )}
         </div>
         {article.headings.length > 0 && (
-          <nav className="toc" aria-label={t('helpCenter.onThisPage')}>
-            <span className="toc-title">{t('helpCenter.onThisPage')}</span>
+          <nav className="toc" aria-label={t('article.onThisPage')}>
+            <span className="toc-title">{t('article.onThisPage')}</span>
             {article.headings.map((heading) => (
               <a key={heading.id} href={`#${heading.id}`} aria-current={heading.id === current ? 'true' : undefined}>
                 {heading.text}

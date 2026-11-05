@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
@@ -10,6 +11,7 @@ import { labelOf, MODEL_PLACEHOLDERS, NEEDS_BASE_URL, PROVIDER_KINDS, providerSe
 import { PROVIDERS_KEY, usePlatformSecret, useProviders, useSecrets } from './queries'
 import { SecretField } from './SecretField'
 import { Switch } from '../../shared/Switch'
+import { activeLocale } from '../../i18n'
 
 type Provider = Schemas['AgentProvider']
 type ProviderKind = Schemas['AgentProviderKind']
@@ -17,7 +19,7 @@ type Purpose = Schemas['AgentPurpose']
 
 const ANTHROPIC_KEY = 'anthropic_api_key'
 
-const purposeLabel = (purpose: string) => labelOf(PURPOSES, purpose).toLocaleLowerCase('pt-BR')
+const purposeLabel = (purpose: string) => labelOf(PURPOSES, purpose).toLocaleLowerCase(activeLocale())
 
 /** The missing-secret notice; `anthropic` without its own key uses the shared one. */
 function missingSecret(provider: Provider, sharedKeySet: boolean): string | null {
@@ -28,6 +30,7 @@ function missingSecret(provider: Provider, sharedKeySet: boolean): string | null
 
 /** The platform's agent providers, what each one serves and the secrets they use. */
 export function AgentsPage() {
+  const { t } = useTranslation(['admin', 'common'])
   const providers = useProviders()
   const secrets = useSecrets()
   const shared = usePlatformSecret(ANTHROPIC_KEY)
@@ -43,18 +46,17 @@ export function AgentsPage() {
   return (
     <>
       <AdminPageHead
-        title="Agentes"
+        title={t('agents.title')}
         actions={
           <button type="button" className="btn btn-primary" onClick={() => setEditing('new')}>
-            Cadastrar provider
+            {t('agents.add')}
           </button>
         }
       />
       <p className={`text-muted ${styles.lede}`}>
-        Providers de IA usados nos resumos, no preenchimento de campos, na detecção do tipo de agenda e no chat do
-        resumo.
+        {t('agents.lede')}
       </p>
-      {providers.isPending && <p role="status">Carregando providers…</p>}
+      {providers.isPending && <p role="status">{t('agents.loading')}</p>}
       {providers.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(providers.error)}
@@ -62,16 +64,16 @@ export function AgentsPage() {
       )}
       {providers.isSuccess && orphans.length > 0 && (
         <p className="alert alert-warning">
-          Sem provider para: {orphans.map((purpose) => purpose.label.toLocaleLowerCase('pt-BR')).join(', ')}.
+          {t('agents.orphans', { list: orphans.map((purpose) => purpose.label.toLocaleLowerCase(activeLocale())).join(', ') })}
         </p>
       )}
       <ExternalDataNotice
         purposes={['summaries', 'fields', 'chat', 'agenda_detection']}
         revision={providers.dataUpdatedAt}
       />
-      {providers.isSuccess && items.length === 0 && <p className="text-muted">Nenhum provider cadastrado.</p>}
+      {providers.isSuccess && items.length === 0 && <p className="text-muted">{t('agents.none')}</p>}
       {items.length > 0 && (
-        <div className="list" aria-label="Providers cadastrados" role="list">
+        <div className="list" aria-label={t('agents.list')} role="list">
           {items.map((provider) => (
             <ProviderRow
               key={provider.id}
@@ -92,7 +94,7 @@ export function AgentsPage() {
       )}
       <section className={`${styles.stack} ${styles.sharedKey}`} aria-labelledby="agentes-chave-anthropic">
         <h2 id="agentes-chave-anthropic" className={styles.sectionTitle}>
-          Chave compartilhada da API da Anthropic
+          {t('agents.sharedKey')}
         </h2>
         {anthropic ? (
           <SecretField
@@ -108,7 +110,7 @@ export function AgentsPage() {
             {errorMessage(secrets.error)}
           </p>
         ) : (
-          <p role="status">Carregando…</p>
+          <p role="status">{t('common:loading')}</p>
         )}
       </section>
     </>
@@ -116,7 +118,8 @@ export function AgentsPage() {
 }
 
 function ProviderRow({ provider, missing, onEdit }: { provider: Provider; missing: string | null; onEdit: () => void }) {
-  const purposes = provider.used_for.length > 0 ? provider.used_for.map(purposeLabel).join(', ') : 'sem uso'
+  const { t } = useTranslation('admin')
+  const purposes = provider.used_for.length > 0 ? provider.used_for.map(purposeLabel).join(', ') : t('agents.unused')
   const sub = [labelOf(PROVIDER_KINDS, provider.kind), provider.base_url, purposes].filter(Boolean).join(' · ')
   return (
     <div className="list-row" role="listitem">
@@ -124,13 +127,13 @@ function ProviderRow({ provider, missing, onEdit }: { provider: Provider; missin
       <span className="list-row-sub">{sub}</span>
       <span className="list-row-actions">
         {provider.enabled ? (
-          <span className="badge badge-success">Habilitado</span>
+          <span className="badge badge-success">{t('agents.enabled')}</span>
         ) : (
-          <span className="badge">Desligado</span>
+          <span className="badge">{t('agents.disabled')}</span>
         )}
         {missing && <span className="badge badge-warning">{missing}</span>}
-        <button type="button" className="btn btn-secondary btn-sm" onClick={onEdit} aria-label={`Editar ${provider.name}`}>
-          Editar
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onEdit} aria-label={t('agents.editName', { name: provider.name })}>
+          {t('agents.edit')}
         </button>
       </span>
     </div>
@@ -144,6 +147,7 @@ interface ProviderPanelProps {
 }
 
 function ProviderPanel({ provider, owners, onDone }: ProviderPanelProps) {
+  const { t } = useTranslation(['admin', 'common'])
   const queryClient = useQueryClient()
   const [name, setName] = useState(provider?.name ?? '')
   const [kind, setKind] = useState<ProviderKind>(provider?.kind ?? (PROVIDER_KINDS[0].value as ProviderKind))
@@ -206,17 +210,17 @@ function ProviderPanel({ provider, owners, onDone }: ProviderPanelProps) {
     save.mutate()
   }
 
-  const title = provider?.name ?? 'Novo provider'
+  const title = provider?.name ?? t('agents.new')
   const canSave = !save.isPending && name.trim() !== '' && model.trim() !== '' && (!needsUrl || baseUrl.trim() !== '')
   return (
-    <form className={`panel ${styles.providerPanel}`} onSubmit={submit} aria-label={provider ? `Editar ${title}` : title}>
+    <form className={`panel ${styles.providerPanel}`} onSubmit={submit} aria-label={provider ? t('agents.editName', { name: title }) : title}>
       <h4>{title}</h4>
       <div className="field">
-        <label htmlFor={ids.name}>Nome</label>
+        <label htmlFor={ids.name}>{t('agents.name')}</label>
         <input id={ids.name} className="input" required value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <div className="field">
-        <label htmlFor={ids.kind}>Tipo</label>
+        <label htmlFor={ids.kind}>{t('agents.kind')}</label>
         {provider ? (
           <input id={ids.kind} className="input" readOnly value={labelOf(PROVIDER_KINDS, kind)} />
         ) : (
@@ -231,7 +235,7 @@ function ProviderPanel({ provider, owners, onDone }: ProviderPanelProps) {
         <span className="field-hint">{PROVIDER_KINDS.find((option) => option.value === kind)?.hint}</span>
       </div>
       <div className="field">
-        <label htmlFor={ids.model}>Modelo</label>
+        <label htmlFor={ids.model}>{t('agents.model')}</label>
         <input
           id={ids.model}
           className="input"
@@ -243,7 +247,7 @@ function ProviderPanel({ provider, owners, onDone }: ProviderPanelProps) {
       </div>
       {needsUrl && (
         <div className="field">
-          <label htmlFor={ids.url}>Endereço da API</label>
+          <label htmlFor={ids.url}>{t('agents.url')}</label>
           <input
             id={ids.url}
             className="input"
@@ -251,7 +255,7 @@ function ProviderPanel({ provider, owners, onDone }: ProviderPanelProps) {
             required
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://api.deepseek.com/v1"
+            placeholder="https://api.deepseek.com/v1" // i18n-ignore: a sample address
           />
         </div>
       )}
@@ -275,7 +279,7 @@ function ProviderPanel({ provider, owners, onDone }: ProviderPanelProps) {
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             aria-describedby={secret.help ? ids.help : undefined}
-            placeholder="Opcional"
+            placeholder={t('agents.optional')}
           />
           {secret.help && (
             <span id={ids.help} className="field-hint">
@@ -285,7 +289,7 @@ function ProviderPanel({ provider, owners, onDone }: ProviderPanelProps) {
         </div>
       )}
       <fieldset className={styles.fieldset} aria-describedby={ids.used}>
-        <legend className={styles.label}>Usado para</legend>
+        <legend className={styles.label}>{t('agents.usedFor')}</legend>
         <div className={styles.checks}>
           {PURPOSES.map((option) => {
             const purpose = option.value as Purpose
@@ -301,18 +305,18 @@ function ProviderPanel({ provider, owners, onDone }: ProviderPanelProps) {
                 <span className="box" />
                 <span>
                   {option.label}
-                  {elsewhere && <span className={`text-muted ${styles.small}`}> · hoje com {elsewhere.name}</span>}
+                  {elsewhere && <span className={`text-muted ${styles.small}`}>{t('agents.elsewhere', { name: elsewhere.name })}</span>}
                 </span>
               </label>
             )
           })}
         </div>
         <span id={ids.used} className="field-hint">
-          Cada finalidade tem um provider só: marcar aqui tira do outro.
+          {t('agents.usedForHint')}
         </span>
       </fieldset>
       <Switch checked={enabled} onChange={setEnabled}>
-        Habilitado
+        {t('agents.enabled')}
       </Switch>
       {(save.isError || remove.isError) && (
         <p className="alert alert-error" role="alert">
@@ -321,26 +325,26 @@ function ProviderPanel({ provider, owners, onDone }: ProviderPanelProps) {
       )}
       <div className={styles.row}>
         <button type="submit" className="btn btn-primary" disabled={!canSave}>
-          {save.isPending ? 'Salvando…' : 'Salvar'}
+          {save.isPending ? t('settings.saving') : t('settings.save')}
         </button>
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Cancelar
+          {t('common:cancel')}
         </button>
         {provider && (
           <button type="button" className="btn btn-ghost" onClick={() => setConfirmingDelete(true)}>
-            Excluir provider
+            {t('agents.delete')}
           </button>
         )}
       </div>
       {confirmingDelete && (
         <ConfirmDialog
-          title={`Excluir ${title}?`}
-          confirmLabel="Excluir"
+          title={t('agents.deleteTitle', { name: title })}
+          confirmLabel={t('agents.deleteConfirm')}
           busy={remove.isPending}
           onConfirm={() => remove.mutate()}
           onCancel={() => setConfirmingDelete(false)}
         >
-          Os resumos já gerados continuam.
+          {t('agents.deleteBody')}
         </ConfirmDialog>
       )}
     </form>

@@ -1,6 +1,10 @@
 // Every namespace of this locale, in one chunk loaded on demand (`loadLocale` in ../index.ts).
 // Add a new namespace as one import and one entry here, in both locales.
 import account from './account'
+import admin from './admin'
+import agent from './agent'
+import automation from './automation'
+import help from './help'
 import auth from './auth'
 import common from './common'
 import connect from './connect'
@@ -39,6 +43,10 @@ const catalogs: { [K in keyof typeof en]: unknown } = {
   organize,
   collections,
   tags,
+  admin,
+  agent,
+  automation,
+  help,
 }
 
 export default catalogs

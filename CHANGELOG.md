@@ -12,6 +12,7 @@ v1) has its own line and each entry cites it.
 
 ### Added
 
+- Community files for the public repository: `SECURITY.md`, project rules in `CONTRIBUTING.md` and issue forms (#255).
 - Required speaker naming: with the account preference turned on, the agent chain waits for every
   speaker to have a name, with the `speakers` step and the "Aguardando locutores" notice (contract
   2.22.0, #144).
@@ -33,6 +34,9 @@ v1) has its own line and each entry cites it.
 - The library, the recording page, import, search, people, custom fields and agenda types,
   collections and tags in English and Portuguese, with the pipeline steps and reasons shared with
   the apps (#250).
+- The administration panel, the Agent, the automatic processing overview and the help center
+  (its frame, search and topic names; the articles are still Portuguese) in English and Portuguese
+  (#251).
 
 ### Fixed
 

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { useEffect, useId, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Schemas } from '../../api/client'
 import { ApiError, errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
@@ -13,6 +14,7 @@ import {
   useToggleDefaultAgendaType,
 } from './queries'
 import { Switch } from '../../shared/Switch'
+import { activeLocale, i18n } from '../../i18n'
 
 type AgendaType = Schemas['DefaultAgendaType']
 type Draft = Pick<
@@ -22,7 +24,6 @@ type Draft = Pick<
   include_for_new_users: boolean
 }
 
-const TITLE = 'Tipos de agenda padrão'
 const NEW = 'novo'
 const EMPTY: Draft = {
   name: '',
@@ -51,6 +52,7 @@ function changesOf(draft: Draft, saved: Draft): Partial<Draft> {
 
 /** The initial set of agenda types, copied to each new account. */
 export function DefaultAgendaTypesPage() {
+  const { t } = useTranslation('admin')
   const types = useDefaultAgendaTypes()
   const toggle = useToggleDefaultAgendaType()
   const [selected, setSelected] = useState<string | null>(null)
@@ -76,17 +78,17 @@ export function DefaultAgendaTypesPage() {
   return (
     <>
       <AdminPageHead
-        title={TITLE}
+        title={t('agendaTypes.title')}
         actions={
           <button type="button" className="btn btn-primary" onClick={() => open(NEW)}>
-            Novo tipo
+            {t('agendaTypes.new')}
           </button>
         }
       />
       <p className={`text-muted ${styles.lede}`}>
-        Toda conta nova começa com estes e pode mudar a própria cópia. Os campos são sempre do usuário.
+        {t('agendaTypes.lede')}
       </p>
-      {types.isPending && <p role="status">Carregando os tipos…</p>}
+      {types.isPending && <p role="status">{t('agendaTypes.loading')}</p>}
       {types.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(types.error)}
@@ -101,9 +103,9 @@ export function DefaultAgendaTypesPage() {
         <div className={`split ${styles.split}`}>
           <div>
             {items.length === 0 ? (
-              <p className="text-muted">Nenhum tipo padrão: as contas novas começam sem tipos de agenda.</p>
+              <p className="text-muted">{t('agendaTypes.none')}</p>
             ) : (
-              <div className="list" role="list" aria-label="Tipos de agenda padrão">
+              <div className="list" role="list" aria-label={t('agendaTypes.title')}>
                 {items.map((type) => (
                   <div
                     key={type.id}
@@ -115,12 +117,12 @@ export function DefaultAgendaTypesPage() {
                     <button type="button" className={`list-row-title ${styles.rowButton}`}>
                       {type.name}
                     </button>
-                    <span className="list-row-sub">Resumo: {summaryOf(type.summary_instructions)}</span>
+                    <span className="list-row-sub">{t('agendaTypes.summary', { summary: summaryOf(type.summary_instructions) })}</span>
                     <span className="list-row-actions" onClick={(e) => e.stopPropagation()}>
                       <Switch
                         checked={type.include_for_new_users}
                         onChange={(include) => toggle.mutate({ id: type.id, include })}
-                        label={`Incluir ${type.name} para novos usuários`}
+                        label={t('agendaTypes.includeName', { name: type.name })}
                       />
                     </span>
                   </div>
@@ -147,8 +149,8 @@ export function DefaultAgendaTypesPage() {
       )}
       {leavingTo !== null && (
         <ConfirmDialog
-          title={`Descartar as mudanças em ${current?.name ?? 'Novo tipo'}?`}
-          confirmLabel="Descartar"
+          title={t('agendaTypes.discardTitle', { name: current?.name ?? t('agendaTypes.new') })}
+          confirmLabel={t('agendaTypes.discard')}
           onConfirm={discard}
           onCancel={() => setLeavingTo(null)}
         />
@@ -165,6 +167,7 @@ interface TypePanelProps {
 }
 
 function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
+  const { t } = useTranslation('admin')
   const save = useSaveDefaultAgendaType()
   const toggle = useToggleDefaultAgendaType()
   const remove = useDeleteDefaultAgendaType()
@@ -191,7 +194,7 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }))
 
   function addTag() {
-    const value = tag.trim().toLocaleLowerCase('pt-BR')
+    const value = tag.trim().toLocaleLowerCase(activeLocale())
     if (value && !draft.default_tags.includes(value)) set('default_tags', [...draft.default_tags, value])
     setTag('')
   }
@@ -212,7 +215,7 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
     save.mutate({ id: type?.id ?? null, body }, { onSuccess: (result) => onSaved(result.id) })
   }
 
-  const title = type?.name ?? 'Novo tipo'
+  const title = type?.name ?? t('agendaTypes.new')
   return (
     <form className={`panel ${styles.typePanel}`} onSubmit={submit} aria-label={title}>
       <div className={styles.panelHead}>
@@ -224,18 +227,18 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
               type ? toggle.mutate({ id: type.id, include }) : set('include_for_new_users', include)
             }
           >
-            <span className={styles.small}>Incluir para novos usuários</span>
+            <span className={styles.small}>{t('agendaTypes.include')}</span>
           </Switch>
           {type && (
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmingDelete(true)}>
-              Excluir tipo
+              {t('agendaTypes.delete')}
             </button>
           )}
         </div>
       </div>
       <div className={styles.twoCols}>
         <div className="field">
-          <label htmlFor={ids.name}>Nome</label>
+          <label htmlFor={ids.name}>{t('agendaTypes.name')}</label>
           <input
             id={ids.name}
             className="input"
@@ -253,7 +256,7 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
           )}
         </div>
         <div className="field">
-          <label htmlFor={ids.title}>Título da gravação</label>
+          <label htmlFor={ids.title}>{t('agendaTypes.recordingTitle')}</label>
           <input
             id={ids.title}
             className={`input mono ${styles.monoInput}`}
@@ -263,12 +266,12 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
             onChange={(e) => set('title_pattern', e.target.value || null)}
           />
           <span id={`${ids.title}-dica`} className="field-hint">
-            Marcadores: {'{assunto}'}, {'{data}'}, {'{tipo}'}. Vazio: o título automático.
+            {t('agendaTypes.titleHint', { placeholders: '{assunto}, {data}, {tipo}' })}
           </span>
         </div>
       </div>
       <div className="field">
-        <label htmlFor={ids.titleRule}>Como escrever o assunto</label>
+        <label htmlFor={ids.titleRule}>{t('agendaTypes.titleRule')}</label>
         <textarea
           id={ids.titleRule}
           className={`input ${styles.identify}`}
@@ -278,11 +281,11 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
           onChange={(e) => set('title_instructions', e.target.value)}
         />
         <span id={`${ids.titleRule}-dica`} className="field-hint">
-          A regra do {'{assunto}'} do título. Vazia, vale a do tipo padrão da conta.
+          {t('agendaTypes.titleRuleHint', { subject: '{assunto}' })}
         </span>
       </div>
       <div className="field">
-        <label htmlFor={ids.identify}>Como identificar</label>
+        <label htmlFor={ids.identify}>{t('agendaTypes.identify')}</label>
         <textarea
           id={ids.identify}
           className={`input ${styles.identify}`}
@@ -292,12 +295,12 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
           onChange={(e) => set('identify', e.target.value)}
         />
         <span id={`${ids.identify}-dica`} className="field-hint">
-          Depois da transcrição, um agente lê isto e aplica o tipo.
+          {t('agendaTypes.identifyHint')}
         </span>
       </div>
       <div className="field" role="group" aria-labelledby={ids.tags}>
         <span id={ids.tags} className={styles.label}>
-          Tags padrão
+          {t('agendaTypes.tags')}
         </span>
         <div className={styles.row}>
           {draft.default_tags.map((value) => (
@@ -306,8 +309,8 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
               <button
                 type="button"
                 className={styles.tagRemove}
-                aria-label={`Remover ${value}`}
-                onClick={() => set('default_tags', draft.default_tags.filter((t) => t !== value))}
+                aria-label={t('agendaTypes.removeTag', { tag: value })}
+                onClick={() => set('default_tags', draft.default_tags.filter((item) => item !== value))}
               >
                 <X size={12} aria-hidden="true" />
               </button>
@@ -315,8 +318,8 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
           ))}
           <input
             className={`input ${styles.tagInput}`}
-            aria-label="Adicionar tag"
-            placeholder="Adicionar tag"
+            aria-label={t('agendaTypes.addTag')}
+            placeholder={t('agendaTypes.addTag')}
             maxLength={64}
             value={tag}
             disabled={draft.default_tags.length >= 20}
@@ -327,7 +330,7 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
         </div>
       </div>
       <div className="field">
-        <label htmlFor={ids.instructions}>Instruções do resumo</label>
+        <label htmlFor={ids.instructions}>{t('agendaTypes.instructions')}</label>
         <textarea
           id={ids.instructions}
           className={`input mono ${styles.instructionsInput}`}
@@ -353,19 +356,19 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
           className="btn btn-primary"
           disabled={!changed || save.isPending || !draft.name.trim() || !draft.summary_instructions.trim()}
         >
-          {save.isPending ? 'Salvando…' : 'Salvar'}
+          {save.isPending ? t('settings.saving') : t('settings.save')}
         </button>
-        <span className={`text-muted ${styles.small}`}>Vale para as contas criadas depois de salvar.</span>
+        <span className={`text-muted ${styles.small}`}>{t('agendaTypes.appliesLater')}</span>
       </div>
       {confirmingDelete && type && (
         <ConfirmDialog
-          title={`Excluir ${type.name}?`}
-          confirmLabel="Excluir tipo"
+          title={t('agendaTypes.deleteTitle', { name: type.name })}
+          confirmLabel={t('agendaTypes.delete')}
           busy={remove.isPending}
           onConfirm={() => remove.mutate(type.id, { onSuccess: onDeleted })}
           onCancel={() => setConfirmingDelete(false)}
         >
-          As contas que já têm a cópia continuam com ela.
+          {t('agendaTypes.deleteBody')}
         </ConfirmDialog>
       )}
     </form>
@@ -375,6 +378,6 @@ function TypePanel({ type, onDirty, onSaved, onDeleted }: TypePanelProps) {
 /** A repeated name (409) or a refused one (422 on `name`) shows on the Nome field. */
 function nameErrorOf(error: unknown): string | null {
   if (!(error instanceof ApiError)) return null
-  if (error.status === 409) return 'Já existe um tipo padrão com esse nome.'
+  if (error.status === 409) return i18n.t('admin:agendaTypes.duplicate')
   return fieldErrorsOf(error).name ?? null
 }

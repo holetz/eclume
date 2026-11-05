@@ -1,9 +1,11 @@
 import type { UseQueryResult } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
+import { activeLocale, i18n } from '../../i18n'
 import { useCollections } from '../collections/queries'
 import {
   useSpeakerNaming,
@@ -17,9 +19,18 @@ import { useTagAssignment, type TagAssignment } from '../tags/queries'
 import styles from './Automation.module.css'
 import { useAgendaTypes, useFields } from '../organize/queries'
 
-const percent = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 0 })
+const percents = new Map<string, Intl.NumberFormat>()
 
-const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
+/** The voice threshold as a percentage, in the active locale (one formatter per locale). */
+function formatPercent(value: number): string {
+  const locale = activeLocale()
+  let format = percents.get(locale)
+  if (!format) {
+    format = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 })
+    percents.set(locale, format)
+  }
+  return format.format(value)
+}
 
 interface Step {
   title: string
@@ -35,28 +46,28 @@ interface Step {
 
 /** The state of a step coming from a query: loading, error or the computed text. */
 function stateOf<T>(query: UseQueryResult<T>, describe: (data: T) => string): ReactNode {
-  if (query.isPending) return 'Carregando…'
+  if (query.isPending) return i18n.t('automation:loading')
   if (query.isError) return <span role="alert">{errorMessage(query.error)}</span>
   return describe(query.data)
 }
 
 function voiceState(voice: VoiceAssignment): string {
-  if (!voice.platform_enabled) return 'Voz: desligada na plataforma'
-  if (!voice.keep_samples) return 'Voz: a conta não guarda amostras de voz'
-  if (!voice.enabled) return 'Voz: só sugere, não liga sozinho'
-  return `Voz: liga sozinho a partir de ${percent.format(voice.threshold)}`
+  if (!voice.platform_enabled) return i18n.t('automation:voice.platformOff')
+  if (!voice.keep_samples) return i18n.t('automation:voice.noSamples')
+  if (!voice.enabled) return i18n.t('automation:voice.suggestOnly')
+  return i18n.t('automation:voice.auto', { threshold: formatPercent(voice.threshold) })
 }
 
 function namingState(naming: SpeakerNaming): string {
-  if (!naming.required) return 'Não exigida: a gravação segue com "Locutor N"'
-  if (naming.waiting_count === 0) return 'Exigida'
-  return `Exigida · ${plural(naming.waiting_count, 'gravação esperando você', 'gravações esperando você')}`
+  if (!naming.required) return i18n.t('automation:naming.optional')
+  if (naming.waiting_count === 0) return i18n.t('automation:naming.required')
+  return i18n.t('automation:naming.waiting', { count: naming.waiting_count })
 }
 
 function tagState(tags: TagAssignment): string {
-  if (!tags.auto_fill) return 'Tags: desligadas'
-  if (tags.mode === 'fixed') return `Tags: só as cadastradas (${tags.catalog_count})`
-  return 'Tags: o agente pode criar tags'
+  if (!tags.auto_fill) return i18n.t('automation:tags.off')
+  if (tags.mode === 'fixed') return i18n.t('automation:tags.fixed', { n: tags.catalog_count })
+  return i18n.t('automation:tags.free')
 }
 
 /**
@@ -67,6 +78,7 @@ function tagState(tags: TagAssignment): string {
  */
 export function AutomationPage() {
   useHelpTopic('automacao')
+  const { t } = useTranslation('automation')
   const voice = useVoiceAssignment()
   const naming = useSpeakerNaming()
   const updateNaming = useUpdateSpeakerNaming()
@@ -77,20 +89,20 @@ export function AutomationPage() {
 
   const steps: Step[] = [
     {
-      title: 'Pré-processamento e transcrição',
-      what: 'O áudio é limpo, transcrito e separado por locutor. Quem configura é o administrador.',
-      state: 'Da plataforma',
+      title: t('transcription.title'),
+      what: t('transcription.what'),
+      state: t('transcription.state'),
     },
     {
-      title: 'Locutores pela voz',
-      what: 'Cada locutor é comparado com as vozes das pessoas cadastradas.',
+      title: t('voice.title'),
+      what: t('voice.what'),
       to: '/pessoas',
-      linkLabel: 'Configurar em Pessoas',
+      linkLabel: t('voice.link'),
       state: stateOf(voice, voiceState),
     },
     {
-      title: 'Marcação dos locutores',
-      what: 'Exigida, a gravação com algum locutor sem pessoa espera você nomeá-lo antes do tipo, dos campos, das coleções e do resumo.',
+      title: t('naming.title'),
+      what: t('naming.what'),
       state: updateNaming.isError ? (
         <span role="alert">{errorMessage(updateNaming.error)}</span>
       ) : (
@@ -98,7 +110,7 @@ export function AutomationPage() {
       ),
       control: naming.data && (
         <Switch
-          label="Exigir a marcação dos locutores"
+          label={t('naming.switch')}
           checked={naming.data.required}
           disabled={updateNaming.isPending}
           onChange={(required) => updateNaming.mutate({ required })}
@@ -106,59 +118,58 @@ export function AutomationPage() {
       ),
     },
     {
-      title: 'Tipo de agenda',
-      what: 'O agente escolhe o tipo da reunião, que dá o título e as tags padrão.',
+      title: t('agendaType.title'),
+      what: t('agendaType.what'),
       to: '/config/agendas',
-      linkLabel: 'Configurar em Tipos de agenda',
-      state: stateOf(agendaTypes, (data) => plural(data.items.length, 'tipo de agenda', 'tipos de agenda')),
+      linkLabel: t('agendaType.link'),
+      state: stateOf(agendaTypes, (data) => t('agendaType.count', { count: data.items.length })),
     },
     {
-      title: 'Campos personalizados',
-      what: 'O agente preenche os campos marcados para preenchimento automático.',
+      title: t('fields.title'),
+      what: t('fields.what'),
       to: '/config/campos',
-      linkLabel: 'Configurar em Campos personalizados',
+      linkLabel: t('fields.link'),
       state: stateOf(fields, (data) => {
         const auto = data.items.filter((field) => field.auto_fill && !field.builtin).length
-        return auto === 0 ? 'Nenhum campo preenchido pelo agente' : plural(auto, 'campo preenchido pelo agente', 'campos preenchidos pelo agente')
+        return auto === 0 ? t('fields.none') : t('fields.count', { count: auto })
       }),
     },
     {
-      title: 'Tags',
-      what: 'O agente marca os assuntos da gravação junto com os campos.',
+      title: t('tags.title'),
+      what: t('tags.what'),
       to: '/tags',
-      linkLabel: 'Configurar em Tags',
+      linkLabel: t('tags.link'),
       state: stateOf(tags, tagState),
     },
     {
-      title: 'Coleções com regra',
-      what: 'A gravação entra nas coleções cuja regra ela cumpre.',
+      title: t('collections.title'),
+      what: t('collections.what'),
       to: '/colecoes',
-      linkLabel: 'Configurar em Coleções',
+      linkLabel: t('collections.link'),
       state: stateOf(collections, (data) => {
         const ruled = data.items.filter((collection) => collection.auto_assign).length
-        return ruled === 0 ? 'Nenhuma coleção com regra' : plural(ruled, 'coleção com regra', 'coleções com regra')
+        return ruled === 0 ? t('collections.none') : t('collections.count', { count: ruled })
       }),
     },
     {
-      title: 'Resumo',
-      what: 'O resumo segue as instruções do tipo de agenda escolhido.',
+      title: t('summary.title'),
+      what: t('summary.what'),
       to: '/config/agendas',
-      linkLabel: 'Configurar o resumo em Tipos de agenda',
+      linkLabel: t('summary.link'),
       state: stateOf(agendaTypes, (data) => {
         const own = data.items.filter((type) => type.summary_instructions.trim()).length
-        return own === 0 ? 'Resumo padrão em todos os tipos' : plural(own, 'tipo com instruções de resumo', 'tipos com instruções de resumo')
+        return own === 0 ? t('summary.none') : t('summary.count', { count: own })
       }),
     },
   ]
 
   return (
     <section className={styles.page}>
-      <PageHead kicker="Regras" title="Processamento automático" />
+      <PageHead kicker={t('kicker')} title={t('title')} />
       <p className="text-muted">
-        Depois de cada gravação, o eclume segue estas etapas sozinho, nesta ordem. Cada uma mostra como está agora e
-        leva à tela que a configura. <Link to="/ajuda/after-the-recording">Saiba como funciona</Link>.
+        <Trans t={t} i18nKey="lede" components={{ how: <Link to="/ajuda/after-the-recording" /> }} />
       </p>
-      <ol className={`list ${styles.list}`} aria-label="Etapas do processamento automático">
+      <ol className={`list ${styles.list}`} aria-label={t('steps')}>
         {steps.map((step, index) => (
           <li key={step.title} className="list-row">
             <span className="list-row-title">
@@ -171,7 +182,7 @@ export function AutomationPage() {
             {step.to && (
               <span className="list-row-actions">
                 <Link to={step.to} aria-label={step.linkLabel}>
-                  Configurar
+                  {t('configure')}
                 </Link>
               </span>
             )}

@@ -1,32 +1,22 @@
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { isRunning, useAgentAction, useDecideAction, type AgentAction } from './agent'
 import styles from './AgentPage.module.css'
+import { i18n } from '../../i18n'
 
 const SHOWN = 10
 
-const STATUS: Record<AgentAction['status'], string> = {
-  proposed: 'Aguardando a sua confirmação',
-  queued: 'Na fila',
-  running: 'Executando',
-  done: 'Concluída',
-  failed: 'Falhou',
-  cancelled: 'Descartada',
-  expired: 'Venceu sem confirmação',
-}
+const statusLabel = (status: AgentAction['status']) => i18n.t(`agent:action.status.${status}`)
 
-const RESULT: Record<'done' | 'skipped' | 'failed', string> = {
-  done: 'feito',
-  skipped: 'sem mudança',
-  failed: 'falhou',
-}
+const resultLabel = (status: 'done' | 'skipped' | 'failed') => i18n.t(`agent:action.result.${status}`)
 
 function countsNote(action: AgentAction): string {
   const { done, skipped, failed, pending } = action.counts
-  const parts = [`${done} feita(s)`]
-  if (skipped) parts.push(`${skipped} sem mudança`)
-  if (failed) parts.push(`${failed} com falha`)
-  if (pending) parts.push(`${pending} pendente(s)`)
+  const parts: string[] = [i18n.t('agent:action.counts.done', { n: done })]
+  if (skipped) parts.push(i18n.t('agent:action.counts.skipped', { n: skipped }))
+  if (failed) parts.push(i18n.t('agent:action.counts.failed', { n: failed }))
+  if (pending) parts.push(i18n.t('agent:action.counts.pending', { n: pending }))
   return parts.join(', ')
 }
 
@@ -35,6 +25,7 @@ function countsNote(action: AgentAction): string {
  * Nothing changes before Confirmar; afterwards, the card follows the run and shows each target's result.
  */
 export function ActionCard({ action }: { action: AgentAction }) {
+  const { t } = useTranslation('agent')
   const query = useAgentAction(action)
   const decide = useDecideAction()
   const current = query.data ?? action
@@ -42,26 +33,26 @@ export function ActionCard({ action }: { action: AgentAction }) {
   const finished = current.status === 'done' || current.status === 'failed'
 
   return (
-    <section className={`card ${styles.action}`} aria-label="Ação proposta">
+    <section className={`card ${styles.action}`} aria-label={t('action.label')}>
       <p className={styles.actionSummary}>{current.summary}</p>
       <p className="text-muted" role="status">
-        {STATUS[current.status]}
+        {statusLabel(current.status)}
         {finished && ` · ${countsNote(current)}`}
       </p>
-      <ul className={styles.actionTargets} aria-label="Gravações afetadas">
+      <ul className={styles.actionTargets} aria-label={t('action.targets')}>
         {targets.slice(0, SHOWN).map((target) => (
           <li key={target.recording_id}>
             <Link to={`/gravacoes/${target.recording_id}`}>{target.title}</Link>
             {target.result && (
               <span className={target.result.status === 'failed' ? styles.warn : 'text-muted'}>
                 {' '}
-                · {RESULT[target.result.status]}
+                · {resultLabel(target.result.status)}
                 {target.result.status !== 'done' && target.result.detail ? `: ${target.result.detail}` : ''}
               </span>
             )}
           </li>
         ))}
-        {targets.length > SHOWN && <li className="text-muted">e mais {targets.length - SHOWN}</li>}
+        {targets.length > SHOWN && <li className="text-muted">{t('action.more', { n: targets.length - SHOWN })}</li>}
       </ul>
       {current.status === 'proposed' && (
         <div className={styles.actionButtons}>
@@ -71,7 +62,7 @@ export function ActionCard({ action }: { action: AgentAction }) {
             disabled={decide.isPending}
             onClick={() => decide.mutate({ id: current.id, decision: 'confirm' })}
           >
-            Confirmar
+            {t('action.confirm')}
           </button>
           <button
             type="button"
@@ -79,11 +70,11 @@ export function ActionCard({ action }: { action: AgentAction }) {
             disabled={decide.isPending}
             onClick={() => decide.mutate({ id: current.id, decision: 'cancel' })}
           >
-            Descartar
+            {t('action.discard')}
           </button>
         </div>
       )}
-      {isRunning(current) && <span className={styles.working}>Executando a ação</span>}
+      {isRunning(current) && <span className={styles.working}>{t('action.running')}</span>}
       {(decide.isError || query.isError) && (
         <p className="alert alert-error" role="alert">
           {errorMessage(decide.error ?? query.error)}

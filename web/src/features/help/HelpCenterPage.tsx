@@ -13,7 +13,7 @@ const PREVIEW = 3
 
 export function HelpCenterPage() {
   useHelpTopic('ajuda')
-  const { t } = useTranslation('shell')
+  const { t } = useTranslation('help')
   const catalog = useHelpCatalog()
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
@@ -32,7 +32,7 @@ export function HelpCenterPage() {
 
   return (
     <section className={styles.page}>
-      <PageHead kicker={t('helpCenter.kicker')} title={t('helpCenter.title')} />
+      <PageHead kicker={t('kicker')} title={t('center')} />
       <HelpSearch
         className={styles.search}
         inputRef={searchInput}
@@ -50,39 +50,34 @@ export function HelpCenterPage() {
           <Questions catalog={catalog} />
         </>
       )}
-      <p className={`text-muted ${styles.footer}`}>{t('helpCenter.stillStuck')}</p>
+      <p className={`text-muted ${styles.footer}`}>{t('footer')}</p>
     </section>
   )
 }
 
 function SearchResults({ query, catalog }: { query: string; catalog: HelpCatalog }) {
-  const { t } = useTranslation('shell')
+  const { t } = useTranslation('help')
   const hits = useMemo(() => searchArticles(query, catalog.articles), [query, catalog])
   if (hits.length === 0) {
     return (
       <p className={styles.empty} role="status">
-        <Trans
-          t={t}
-          i18nKey="helpCenter.nothingFound"
-          values={{ query: query.trim() }}
-          components={{ topics: <Link to="/ajuda" /> }}
-        />
+        <Trans t={t} i18nKey="noResults" values={{ query: query.trim() }} components={{ topics: <Link to="/ajuda" /> }} />
       </p>
     )
   }
   return (
     <>
       <p className="visually-hidden" role="status">
-        {t('helpCenter.found', { count: hits.length })}
+        {t('found', { count: hits.length })}
       </p>
-      <ul className={`list ${styles.plainList}`} aria-label={t('helpCenter.results')}>
+      <ul className={`list ${styles.plainList}`} aria-label={t('results')}>
         {hits.map(({ article, snippet }) => (
           <li key={article.slug} className="list-row">
             <Link className={`list-row-title ${styles.rowLink}`} to={`/ajuda/${article.slug}`}>
               {article.title}
             </Link>
             <span className="list-row-sub">
-              <span className={styles.resultTopic}>{t(`helpCenter.topics.${article.topic}.title`)}</span>
+              <span className={styles.resultTopic}>{t(`topic.${article.topic}.title`)}</span>
               {snippet && (
                 <>
                   {' · '}
@@ -98,16 +93,16 @@ function SearchResults({ query, catalog }: { query: string; catalog: HelpCatalog
 }
 
 function TopicGrid({ catalog }: { catalog: HelpCatalog }) {
-  const { t } = useTranslation('shell')
+  const { t } = useTranslation('help')
   return (
     <div className="topic-grid">
       {TOPIC_KEYS.map((key) => {
         const articles = articlesByTopic(catalog, key)
         return (
           <section key={key} className="topic" aria-labelledby={`topico-${key}`}>
-            <span className="kicker">{t(`helpCenter.topics.${key}.kicker`)}</span>
+            <span className="kicker">{t(`topic.${key}.kicker`)}</span>
             <h2 className="topic-title" id={`topico-${key}`}>
-              {t(`helpCenter.topics.${key}.title`)}
+              {t(`topic.${key}.title`)}
             </h2>
             <ul>
               {articles.slice(0, PREVIEW).map((article) => (
@@ -125,30 +120,30 @@ function TopicGrid({ catalog }: { catalog: HelpCatalog }) {
 }
 
 function TopicMore({ topic, count }: { topic: TopicKey; count: number }) {
-  const { t } = useTranslation('shell')
+  const { t } = useTranslation('help')
   return (
     <Link className="topic-more" to={`/ajuda?topico=${topic}`}>
-      {t('helpCenter.allArticles', { count })}
+      {t('allArticles', { n: count })}
     </Link>
   )
 }
 
 function TopicList({ topic, catalog }: { topic: TopicKey; catalog: HelpCatalog }) {
-  const { t } = useTranslation('shell')
+  const { t } = useTranslation('help')
   return (
     <div className={styles.topicList}>
       <Link to="/ajuda" className={styles.back}>
-        {t('helpCenter.allTopics')}
+        {t('allTopics')}
       </Link>
-      <span className="kicker">{t(`helpCenter.topics.${topic}.kicker`)}</span>
-      <h2 className={styles.sectionTitle}>{t(`helpCenter.topics.${topic}.title`)}</h2>
-      <ul className={`list ${styles.plainList}`} aria-label={t(`helpCenter.topics.${topic}.title`)}>
+      <span className="kicker">{t(`topic.${topic}.kicker`)}</span>
+      <h2 className={styles.sectionTitle}>{t(`topic.${topic}.title`)}</h2>
+      <ul className={`list ${styles.plainList}`} aria-label={t(`topic.${topic}.title`)}>
         {articlesByTopic(catalog, topic).map((article) => (
           <li key={article.slug} className="list-row">
             <Link className={`list-row-title ${styles.rowLink}`} to={`/ajuda/${article.slug}`}>
               {article.title}
             </Link>
-            <span className="list-row-sub">{t('helpCenter.minutes', { count: article.minutes })}</span>
+            <span className="list-row-sub">{t('minutes', { n: article.minutes })}</span>
           </li>
         ))}
       </ul>
@@ -157,11 +152,11 @@ function TopicList({ topic, catalog }: { topic: TopicKey; catalog: HelpCatalog }
 }
 
 function Questions({ catalog }: { catalog: HelpCatalog }) {
-  const { t } = useTranslation('shell')
+  const { t } = useTranslation('help')
   return (
     <section aria-labelledby="perguntas-frequentes" className={styles.questions}>
       <h2 id="perguntas-frequentes" className={styles.sectionTitle}>
-        {t('helpCenter.faq')}
+        {t('questions')}
       </h2>
       <div className="faq">
         {catalog.questions.map((item, index) => (

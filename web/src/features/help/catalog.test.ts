@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import en from '../../i18n/en'
 import { LOCALES, type Locale } from '../../i18n/locale'
 import ptBR from '../../i18n/pt-BR'
-import enShell from '../../i18n/en/shell'
-import ptBRShell from '../../i18n/pt-BR/shell'
+import enHelp from '../../i18n/en/help'
+import ptBRHelp from '../../i18n/pt-BR/help'
 import {
   articlesByTopic,
   articlesForPage,
@@ -322,10 +322,10 @@ describe('the two locales', () => {
     expect(helpCatalog(null)).toBe(CATALOGS.en)
   })
 
-  it('every topic and page key has a label in both shell catalogs', () => {
-    for (const shell of [enShell, ptBRShell]) {
-      for (const key of TOPIC_KEYS) expect(shell.helpCenter.topics[key].title.length, key).toBeGreaterThan(0)
-      for (const key of HELP_PAGES) expect(shell.helpCenter.pages[key].length, key).toBeGreaterThan(0)
+  it('every topic and page key has a label in both help catalogs', () => {
+    for (const help of [enHelp, ptBRHelp]) {
+      for (const key of TOPIC_KEYS) expect(help.topic[key].title.length, key).toBeGreaterThan(0)
+      for (const key of HELP_PAGES) expect(help.page[key].length, key).toBeGreaterThan(0)
     }
   })
 

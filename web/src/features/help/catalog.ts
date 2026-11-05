@@ -9,7 +9,7 @@ import faqEn from './faq/en.md?raw'
 import faqPtBR from './faq/pt-BR.md?raw'
 import { normalize } from './search'
 
-/** The topic keys, in display order. The kicker and title of each are `shell:helpCenter.topics.<key>`. */
+/** The topic keys, in display order. The kicker and title of each are `help:topic.<key>`. */
 export const TOPIC_KEYS = ['comecar', 'processamento', 'transcricao', 'resumos', 'organizar', 'conectar'] as const
 
 export type TopicKey = (typeof TOPIC_KEYS)[number]

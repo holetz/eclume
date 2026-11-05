@@ -1,7 +1,9 @@
 import { useId, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
 import styles from './Admin.module.css'
+import { formatShortDay } from './labels'
 
 interface SecretFieldProps {
   label: string
@@ -12,13 +14,12 @@ interface SecretFieldProps {
   onClear: () => Promise<unknown>
 }
 
-const updated = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' })
-
 /**
  * Write-only secret: stored, it shows only that it exists (the API never returns any part of it)
  * and is replaced or deleted; empty, it asks for the value. Saves at once, apart from Salvar.
  */
 export function SecretField({ label, isSet, updatedAt, hint, onSave, onClear }: SecretFieldProps) {
+  const { t } = useTranslation('admin')
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
   const [pending, setPending] = useState(false)
@@ -90,28 +91,28 @@ export function SecretField({ label, isSet, updatedAt, hint, onSave, onClear }: 
             }}
           />
           <button type="button" className="btn btn-primary btn-sm" disabled={pending || !value.trim()} onClick={save}>
-            {pending ? 'Salvando…' : 'Salvar'}
+            {pending ? t('secret.saving') : t('secret.save')}
           </button>
           {isSet && (
             <button type="button" className="btn btn-ghost btn-sm" onClick={cancel}>
-              Cancelar
+              {t('secret.cancel')}
             </button>
           )}
         </div>
       ) : (
         <div className="code-block">
-          <span>•••••••• guardado</span>
+          <span>{t('secret.stored')}</span>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>
-            Substituir
+            {t('secret.replace')}
           </button>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirming(true)}>
-            Apagar
+            {t('secret.delete')}
           </button>
         </div>
       )}
       {(hint || isSet) && (
         <span id={hintId} className="field-hint">
-          {isSet && `Só escrita${updatedAt ? ` · atualizado em ${updated.format(new Date(updatedAt))}` : ''}. `}
+          {isSet && (updatedAt ? t('secret.writeOnlyUpdated', { date: formatShortDay(updatedAt) }) : t('secret.writeOnly'))}
           {hint}
         </span>
       )}
@@ -122,13 +123,13 @@ export function SecretField({ label, isSet, updatedAt, hint, onSave, onClear }: 
       )}
       {confirming && (
         <ConfirmDialog
-          title={`Apagar ${label}?`}
-          confirmLabel="Apagar"
+          title={t('secret.confirmTitle', { label })}
+          confirmLabel={t('secret.delete')}
           busy={pending}
           onConfirm={() => void run(onClear, () => setConfirming(false))}
           onCancel={() => setConfirming(false)}
         >
-          O valor guardado some do servidor e não volta.
+          {t('secret.confirmBody')}
         </ConfirmDialog>
       )}
     </div>

@@ -11,7 +11,7 @@ const MAX_RESULTS = 6
 
 /** The help drawer body: search, the page's articles ("On this page") and the shortcuts. */
 export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | null }) {
-  const { t } = useTranslation('shell')
+  const { t } = useTranslation('help')
   const catalog = useHelpCatalog()
   const [query, setQuery] = useState('')
   const input = useRef<HTMLInputElement>(null)
@@ -30,13 +30,13 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
 
   return (
     <>
-      <HelpSearch value={query} onChange={setQuery} inputRef={input} placeholder={t('helpCenter.search')} />
+      <HelpSearch value={query} onChange={setQuery} inputRef={input} placeholder={t('search.label')} />
       <div className="help-drawer-body">
         {query.trim() ? (
           <div className="help-section">
-            <span className="kicker">{t('helpCenter.resultsKicker')}</span>
+            <span className="kicker">{t('drawer.results')}</span>
             {results.length > 0 ? (
-              <ul className="help-links" aria-label={t('helpCenter.resultsInHelp')}>
+              <ul className="help-links" aria-label={t('drawer.resultsLabel')}>
                 {results.map(({ article }) => (
                   <li key={article.slug}>
                     <Link to={`/ajuda/${article.slug}`}>{article.title}</Link>
@@ -45,7 +45,7 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
               </ul>
             ) : (
               <p className="text-muted" role="status">
-                {t('helpCenter.nothingFoundShort')}
+                {t('drawer.none')}
               </p>
             )}
           </div>
@@ -53,8 +53,8 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
           pageKey &&
           pageArticles.length > 0 && (
             <div className="help-section">
-              <span className="kicker">{t('helpCenter.onThisPageIn', { page: t(`helpCenter.pages.${pageKey}`) })}</span>
-              <ul className="help-links" aria-label={t('helpCenter.articlesAbout', { page: t(`helpCenter.pages.${pageKey}`) })}>
+              <span className="kicker">{t('drawer.onThisPage', { page: t(`page.${pageKey}`) })}</span>
+              <ul className="help-links" aria-label={t('drawer.articlesAbout', { page: t(`page.${pageKey}`) })}>
                 {pageArticles.map((article) => (
                   <li key={article.slug}>
                     <Link to={`/ajuda/${article.slug}`}>{article.title}</Link>
@@ -65,24 +65,24 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
           )
         )}
         <div className="help-section">
-          <span className="kicker">{t('helpCenter.shortcuts')}</span>
+          <span className="kicker">{t('drawer.shortcuts')}</span>
           <dl className="shortcuts">
             <div>
-              <dt>{t('helpCenter.openHelp')}</dt>
+              <dt>{t('drawer.open')}</dt>
               <dd>
                 <kbd className="kbd">?</kbd>
               </dd>
             </div>
             <div>
-              <dt>{t('helpCenter.searchHelp')}</dt>
+              <dt>{t('drawer.search')}</dt>
               <dd>
                 <kbd className="kbd">/</kbd>
               </dd>
             </div>
             <div>
-              <dt>{t('helpCenter.closeHelp')}</dt>
+              <dt>{t('drawer.close')}</dt>
               <dd>
-                <kbd className="kbd">Esc</kbd>
+                <kbd className="kbd">{t('drawer.esc')}</kbd>
               </dd>
             </div>
           </dl>
