@@ -1,19 +1,18 @@
-// The Gravar button's flow, which the launcher icon's record-now shortcut also uses: the
+// The Record button's flow, which the launcher icon's record-now shortcut also uses: the
 // permissions, the battery explanation before the first recording without the exemption, and
 // `record`, which only confirms after the microphone service enters the foreground. The screen (Home)
 // shows what the flow asks for.
 
+import { t } from '../i18n'
 import { errorMessage, type Bridge } from '../bridge/bridge'
 import type { DeviceStatus } from '../bridge/types'
 
 /** What the flow asks of the screen after a step. */
 export type RecordStep =
   | { step: 'recording' }
-  | { step: 'no_microphone' }
+  | { step: 'no_microphone'; message: string }
   | { step: 'explain_battery' }
   | { step: 'error'; message: string }
-
-export const NO_MICROPHONE = 'Sem o microfone, o eclume não grava. Permita o microfone nas configurações do app.'
 
 /**
  * Asks for the microphone and the notifications; without the microphone, stops; before the first
@@ -28,7 +27,7 @@ export async function record(
   try {
     const granted = await bridge.permissions()
     onPermit?.(granted.notifications)
-    if (!granted.microphone) return { step: 'no_microphone' }
+    if (!granted.microphone) return { step: 'no_microphone', message: t('home.noMicrophone') }
     if (device?.batteryExemption === 'pedir') return { step: 'explain_battery' }
     await bridge.record()
     return { step: 'recording' }

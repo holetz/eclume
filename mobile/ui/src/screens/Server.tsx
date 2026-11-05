@@ -1,3 +1,4 @@
+import { useT } from '../i18n'
 import { useEffect, useState } from 'react'
 import { Brand } from '../app/Brand'
 import { errorMessage, useBridge } from '../bridge/bridge'
@@ -8,6 +9,7 @@ export const SEARCH_SECONDS = 10
 
 /** First run: finds the server on the Wi-Fi network through mDNS. */
 export function Server({ go }: { go: (route: string) => void }) {
+  const t = useT()
   const bridge = useBridge()
   const [found, setFound] = useState<Found[]>([])
   const [searching, setSearching] = useState(true)
@@ -50,19 +52,17 @@ export function Server({ go }: { go: (route: string) => void }) {
     <div className="m-body">
       <div className="m-section top-7 gap-2">
         <Brand large />
-        <h1 className="m-title margin-top-5">
-          Encontre o seu servidor
-        </h1>
-        <p className="no-margin text-15">O celular procura o eclume nesta rede Wi‑Fi.</p>
+        <h1 className="m-title margin-top-5">{t('server.title')}</h1>
+        <p className="no-margin text-15">{t('server.help')}</p>
       </div>
       <div className="m-section m-fill">
         <div className="row-between">
-          <span className="kicker">Encontrado nesta rede</span>
+          <span className="kicker">{t('server.found')}</span>
           {searching ? (
-            <span className="badge badge-progress">Procurando…</span>
+            <span className="badge badge-progress">{t('server.searching')}</span>
           ) : (
             <button type="button" className="btn btn-ghost btn-sm" onClick={search}>
-              Procurar de novo
+              {t('server.searchAgain')}
             </button>
           )}
         </div>
@@ -79,7 +79,7 @@ export function Server({ go }: { go: (route: string) => void }) {
                     disabled={connecting !== null}
                     onClick={() => connect(server)}
                   >
-                    {connecting === server.url ? 'Conectando…' : 'Conectar'}
+                    {connecting === server.url ? t('server.connecting') : t('server.connect')}
                   </button>
                 </span>
               </li>
@@ -87,10 +87,7 @@ export function Server({ go }: { go: (route: string) => void }) {
           </ul>
         ) : (
           !searching && (
-            <p className="text-muted no-margin text-14">
-              Nenhum servidor respondeu. Confira se o celular está no Wi‑Fi do servidor, leia o código
-              da web ou digite o endereço.
-            </p>
+            <p className="text-muted no-margin text-14">{t('server.empty')}</p>
           )
         )}
         {error && (
@@ -105,14 +102,14 @@ export function Server({ go }: { go: (route: string) => void }) {
           className="btn btn-secondary button-start"
           onClick={() => go('/scan-code')}
         >
-          Ler um código da web
+          {t('server.scan')}
         </button>
         <button
           type="button"
           className="btn btn-ghost button-start"
           onClick={() => go('/server/address')}
         >
-          Digitar o endereço
+          {t('server.address')}
         </button>
       </div>
     </div>

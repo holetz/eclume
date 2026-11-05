@@ -1,3 +1,4 @@
+import { useT } from '../i18n'
 import { useState } from 'react'
 import { clock } from '../app/formats'
 import { MarkerIcon, PauseIcon, PlayIcon, StopIcon } from '../app/Icons'
@@ -9,10 +10,11 @@ import { RecordingSaved } from './RecordingSaved'
 
 /**
  * Recording and Paused: the clock is the audio time, the meter is the level, and the markers stay in
- * the list. Marcador marks right away; the note comes after, optional. After Parar, the saved-recording
+ * the list. Marker marks right away; the note comes after, optional. After Stop, the saved-recording
  * sheet asks for the title and the agenda type.
  */
 export function Recording({ state }: { state: AppState }) {
+  const t = useT()
   const bridge = useBridge()
   const [annotating, setAnnotating] = useState<Marker | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -44,51 +46,50 @@ export function Recording({ state }: { state: AppState }) {
     <div className="m-body no-bottom">
       <div className="m-top">
         <span className="status-line" data-status={paused ? 'paused' : 'recording'}>
-          {paused ? 'Pausado' : 'Gravando'}
+          {paused ? t('recording.paused') : t('recording.active')}
         </span>
         {state.espaco_livre && (
           <span className="text-muted text-13">
-            Espaço livre: {state.espaco_livre}
+            {t('recording.freeSpace', { remaining: state.espaco_livre })}
           </span>
         )}
       </div>
       {state.conexao.fase === 'sem_credencial' && (
         <div className="alert alert-warning margin-x" role="status">
-          <span className="alert-title">Entre de novo para sincronizar</span>
-          <span>A gravação segue no celular; ela sobe depois que você entrar.</span>
+          <span className="alert-title">{t('recording.signIn')}</span>
+          <span>{t('recording.signInHelp')}</span>
         </div>
       )}
       {session?.silenciada ? (
         <div className="alert alert-warning margin-x" role="status">
-          <span className="alert-title">Silenciado pelo sistema</span>
-          <span>Uma chamada ou o sistema tomou o microfone. A gravação segue e volta sozinha.</span>
+          <span className="alert-title">{t('recording.muted')}</span>
+          <span>{t('recording.mutedHelp')}</span>
         </div>
       ) : (
         session?.microfone === 'reconectando' && (
           <div className="alert alert-warning margin-x" role="status">
-            <span className="alert-title">Microfone reconectando</span>
-            <span>O microfone caiu. A gravação segue no mesmo arquivo enquanto ele volta.</span>
+            <span className="alert-title">{t('recording.reconnecting')}</span>
+            <span>{t('recording.reconnectingHelp')}</span>
           </div>
         )
       )}
       {battery && (
         <div className="alert alert-warning margin-x" role="status">
-          <span className="alert-title">Bateria em {battery.pct} %</span>
+          <span className="alert-title">{t('recording.battery', { percent: battery.pct })}</span>
           <span>
-            {battery.restante ? `Dá para ${battery.restante}. ` : ''}A gravação fica salva se o celular
-            desligar.
+            {battery.restante ? t('recording.batteryRemaining', { remaining: battery.restante }) : ''}{t('recording.batteryHelp')}
           </span>
         </div>
       )}
       <div className="m-section gap-5 top-6">
-        <span className="m-timer" aria-label="Tempo de áudio">
+        <span className="m-timer" aria-label={t('recording.audioTime')}>
           {clock(audioMs)}
         </span>
         <Meter level={session?.nivel ?? 0} paused={paused || !session} />
       </div>
       <div className="m-section m-fill m-scroll">
         <div className="row-between">
-          <span className="kicker">Marcadores</span>
+          <span className="kicker">{t('recording.markers')}</span>
           <span className="text-muted text-12">
             {markers.length}
           </span>
@@ -97,7 +98,7 @@ export function Recording({ state }: { state: AppState }) {
           {markers.map((m) => (
             <li key={m.client_id} data-empty={m.note ? undefined : ''}>
               <span className="timecode">{clock(m.at_ms)}</span>
-              <span>{m.note ?? 'Marcador'}</span>
+              <span>{m.note ?? t('common.marker')}</span>
             </li>
           ))}
         </ul>
@@ -112,21 +113,21 @@ export function Recording({ state }: { state: AppState }) {
         {paused ? (
           <button type="button" className="m-cell" aria-pressed="true" onClick={() => run(() => bridge.resume())}>
             <PlayIcon />
-            Continuar
+            {t('recording.resume')}
           </button>
         ) : (
           <button type="button" className="m-cell" aria-pressed="false" onClick={() => run(() => bridge.pause())}>
             <PauseIcon />
-            Pausar
+            {t('recording.pause')}
           </button>
         )}
         <button type="button" className="m-cell" disabled={!session} onClick={mark}>
           <MarkerIcon />
-          Marcador
+          {t('common.marker')}
         </button>
         <button type="button" className="m-cell m-cell-stop" disabled={!session} onClick={stop}>
           <StopIcon />
-          Parar
+          {t('recording.stop')}
         </button>
       </div>
       <div className="m-footer" />

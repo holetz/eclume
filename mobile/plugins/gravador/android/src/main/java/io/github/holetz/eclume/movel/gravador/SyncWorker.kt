@@ -104,17 +104,18 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             return json.optInt("pendentes").coerceAtLeast(0)
         }
 
-        /** The foreground notification's text, singular or plural (UI copy, pt-BR). */
-        fun uploadText(pending: Int): String =
-            if (pending == 1) "Enviando 1 gravação" else "Enviando $pending gravações"
+        /** The foreground notification's text, singular or plural, in the core's locale. */
+        fun uploadText(strings: Strings, pending: Int): String = strings.count("sync_uploading", pending)
     }
 
     override suspend fun doWork(): Result {
         val base = applicationContext.dataDir.absolutePath
         // The network callback tells the core right away, also in this process opened only by the worker.
         Connectivity.follow(applicationContext)
-        val pending = toUpload(withContext(Dispatchers.IO) { EclumeCore.probePending(base) })
-        if (pending > 0) enterForeground(pending)
+        val probe = withContext(Dispatchers.IO) { EclumeCore.probePending(base) }
+        val pending = toUpload(probe)
+        // The probe carries the core's resolved locale: the notification speaks the app's language.
+        if (pending > 0) enterForeground(Localized.strings(applicationContext, Localized.localeOf(probe)), pending)
         val reply = coroutineScope {
             val sync = async(Dispatchers.IO) { EclumeCore.syncPending(base) }
             try {
@@ -133,8 +134,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         }
     }
 
-    private suspend fun enterForeground(pending: Int) {
-        val notification = RecordingNotification.syncing(applicationContext, uploadText(pending))
+    private suspend fun enterForeground(strings: Strings, pending: Int) {
+        val notification = RecordingNotification.syncing(applicationContext, strings, uploadText(strings, pending))
         val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ForegroundInfo(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {

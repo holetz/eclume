@@ -257,6 +257,7 @@ pub fn run() {
             commands::salvar_configuracoes,
             commands::sair,
             commands::visibilidade,
+            commands::report_device_locale,
             commands::verificar_atualizacao,
             commands::atualizar,
             commands::abrir_na_web,

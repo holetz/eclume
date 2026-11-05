@@ -276,6 +276,16 @@ pub fn sair<R: Runtime>(app: AppHandle<R>) -> CommandResult<()> {
     with_core(&app, Core::sign_out)
 }
 
+/// The device language the UI reads from `navigator.languages`: the core resolves the locale from
+/// the account's, then this one, then `en`.
+#[tauri::command]
+pub fn report_device_locale<R: Runtime>(
+    app: AppHandle<R>,
+    tag: Option<String>,
+) -> CommandResult<()> {
+    with_core(&app, |c| c.store_device_locale(tag))
+}
+
 /// The UI became visible or went to the background (the periodic probe only runs when visible).
 #[tauri::command]
 pub fn visibilidade<R: Runtime>(app: AppHandle<R>, visivel: bool) -> CommandResult<()> {

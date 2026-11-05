@@ -9,6 +9,7 @@ import { ScanCode } from '../screens/ScanCode'
 import { Server } from '../screens/Server'
 import { Settings } from '../screens/Settings'
 import { SignIn } from '../screens/SignIn'
+import { deviceTag, setLocale } from '../i18n'
 import { Brand } from './Brand'
 import { useRoute } from './routes'
 import { useAppState } from './state'
@@ -17,7 +18,7 @@ import { applyInsets, followSystemTheme } from './theme'
 /**
  * The app's shell: the screen comes from the `AppState` (connection, session) and the hash route.
  * The launcher icon's record-now shortcut is consumed on open and every time the app becomes visible
- * again: in the `conectado` phase, with no recording nor sheet, it goes to Home and runs the Gravar
+ * again: in the `conectado` phase, with no recording nor sheet, it goes to Home and runs the Record
  * button's flow; with a recording running, its screen is already there; in another phase, it is
  * dropped (the phase's screen says what is missing).
  */
@@ -32,6 +33,17 @@ export default function App() {
     latest.current = { state, go }
   })
   const opened = state !== null
+
+  useEffect(() => {
+    const report = () => { void bridge.reportDeviceLocale(deviceTag()).catch(() => {}) }
+    report()
+    window.addEventListener('languagechange', report)
+    return () => window.removeEventListener('languagechange', report)
+  }, [bridge])
+
+  useEffect(() => {
+    if (state?.locale) setLocale(state.locale)
+  }, [state?.locale])
 
   useEffect(() => {
     if (!opened) return
@@ -84,7 +96,7 @@ function Screen({
   recordRequest: number
 }) {
   // A recording (or the saved-recording sheet) in progress stays on screen, whatever the
-  // connection phase: a 401 in the middle of the recording does not take Pausar, Marcador and Parar away.
+  // connection phase: a 401 in the middle of the recording does not take Pause, Marker and Stop away.
   if (state.sessao || state.folha) return <Recording state={state} />
   const connection = state.conexao
   switch (connection.fase) {

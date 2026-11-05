@@ -345,6 +345,27 @@ pub fn fetch_account_language(
     Ok(preference.effective().to_string())
 }
 
+#[derive(Deserialize)]
+struct AccountLocale {
+    locale: Option<String>,
+}
+
+/// The account's stored UI locale: `GET /me/locale` (contract 2.30.0).
+pub fn fetch_account_locale(
+    transport: &dyn Transport,
+    server: &Server,
+    token: &str,
+) -> Result<Option<String>> {
+    let preference: AccountLocale = get_json(
+        transport,
+        server,
+        token,
+        "/me/locale",
+        "failed to read the account locale",
+    )?;
+    Ok(preference.locale)
+}
+
 /// One processing step on the server (`PipelineStep`), with the reason code of a skipped step
 /// (`reason`) and the error of a failed one; a server without those fields gives `None`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

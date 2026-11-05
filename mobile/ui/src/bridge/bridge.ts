@@ -2,6 +2,7 @@
 // `gravador` plugin. In the tests, the fake bridge (fake.ts) scripts the same contract.
 
 import { createContext, useContext } from 'react'
+import { t } from '../i18n'
 import type {
   AgendaType,
   AppSettings,
@@ -18,6 +19,7 @@ import type {
 } from './types'
 
 export interface Bridge {
+  reportDeviceLocale(tag: string | null): Promise<void>
   state(): Promise<AppState>
   /** Subscribes to the `estado` event; returns the function that cancels. */
   onState(onChange: (state: AppState) => void): Promise<() => void>
@@ -83,5 +85,5 @@ export function useBridge(): Bridge {
 export function errorMessage(error: unknown): string {
   if (typeof error === 'string') return error
   if (error instanceof Error) return error.message
-  return 'Algo deu errado. Tente de novo.'
+  return t('common.error')
 }

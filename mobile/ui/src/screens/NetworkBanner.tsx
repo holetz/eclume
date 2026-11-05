@@ -1,3 +1,4 @@
+import { useT } from '../i18n'
 import { useState } from 'react'
 import { rate } from '../app/formats'
 import { errorMessage, useBridge } from '../bridge/bridge'
@@ -5,6 +6,7 @@ import type { NetworkState } from '../bridge/types'
 
 /** The `.m-net` banner: on eclume's network, off it or syncing. */
 export function NetworkBanner({ network, pending }: { network: NetworkState; pending: number }) {
+  const t = useT()
   const bridge = useBridge()
   const [error, setError] = useState<string | null>(null)
 
@@ -23,23 +25,23 @@ export function NetworkBanner({ network, pending }: { network: NetworkState; pen
         <div className="m-net m-net-detail">
           <div className="row-between">
             <span className="status-line" data-status="syncing">
-              Sincronizando {network.i} de {network.n}
+              {t('network.syncing', { current: network.i, total: network.n })}
             </span>
             <span className="text-muted mono text-12">
               {network.pct} %{network.bytes_s > 0 ? ` · ${rate(network.bytes_s)}` : ''}
             </span>
           </div>
-          <progress className="progress" value={network.pct} max={100} aria-label="Andamento do envio" />
+          <progress className="progress" value={network.pct} max={100} aria-label={t('network.progress')} />
         </div>
       )
     case 'on_network':
       return (
         <div className="m-net">
           <span className="status-line" data-status="synced">
-            Na rede do eclume
+            {t('network.onNetwork')}
           </span>
           <button type="button" className="btn btn-ghost btn-sm" onClick={sync}>
-            Sincronizar agora
+            {t('network.syncNow')}
           </button>
           {error && <span className="error-text">{error}</span>}
         </div>
@@ -48,10 +50,10 @@ export function NetworkBanner({ network, pending }: { network: NetworkState; pen
       return (
         <div className="m-net">
           <span className="status-line" data-status="away">
-            O certificado do servidor mudou
+            {t('network.certificateChanged')}
           </span>
           <span className="text-muted text-13">
-            Nada sobe até parear de novo
+            {t('network.pairAgain')}
           </span>
         </div>
       )
@@ -59,11 +61,11 @@ export function NetworkBanner({ network, pending }: { network: NetworkState; pen
       return (
         <div className="m-net">
           <span className="status-line" data-status="away">
-            Fora da rede do eclume
+            {t('network.away')}
           </span>
           {pending > 0 && (
             <span className="text-muted text-13">
-              {pending} aguardando
+              {t('network.waiting', { count: pending })}
             </span>
           )}
         </div>
