@@ -1,5 +1,5 @@
 //! The native plugin of eclume's mobile app (`eclume-gravador`). On Android, the Kotlin class
-//! `GravadorPlugin` handles what only the system does: the microphone-type foreground service, with
+//! `RecorderPlugin` handles what only the system does: the microphone-type foreground service, with
 //! the ongoing notification that records with the screen locked. Off Android (the development build
 //! and the tests on Linux), the methods do nothing.
 //!
@@ -225,7 +225,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .setup(|app, api| {
             #[cfg(target_os = "android")]
             let recorder = Recorder {
-                handle: api.register_android_plugin(ANDROID_PACKAGE, "GravadorPlugin")?,
+                handle: api.register_android_plugin(ANDROID_PACKAGE, "RecorderPlugin")?,
             };
             #[cfg(target_os = "ios")]
             let recorder: Recorder<R> = {

@@ -16,8 +16,11 @@ import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 
+// The `@Command` method names, the `@InvokeArg` property names, the permission aliases and the
+// JSON keys are the plugin's IPC contract with the Rust side and the UI, and keep their names.
+
 @InvokeArg
-class DescobrirArgs {
+class DiscoverArgs {
     var segundos: Int = 10
 }
 
@@ -27,25 +30,25 @@ class UrlArgs {
 }
 
 @InvokeArg
-class InstaladorArgs {
+class InstallerArgs {
     lateinit var caminho: String
 }
 
 @InvokeArg
-class AgendarSyncArgs {
+class ScheduleSyncArgs {
     var atrasoMs: Long = 0
 }
 
 @InvokeArg
-class PararArgs {
+class StopArgs {
     var motivo: String? = null
     var duracaoMs: Long? = null
 }
 
 /**
- * O plugin `eclume-gravador`: o que só o sistema faz, pedido pelo Rust do app (`run_mobile_plugin`) ou
- * pela UI (`plugin:eclume-gravador|…`). As permissões `microfone` e `notificacoes` são pedidas pela UI
- * antes de gravar (`request_permissions`).
+ * The `eclume-gravador` plugin: what only the system does, asked by the app's Rust
+ * (`run_mobile_plugin`) or by the UI (`plugin:eclume-gravador|…`). The `microfone` and
+ * `notificacoes` permissions are requested by the UI before recording (`request_permissions`).
  */
 @TauriPlugin(
     permissions = [
@@ -53,68 +56,68 @@ class PararArgs {
         Permission(strings = [Manifest.permission.POST_NOTIFICATIONS], alias = "notificacoes"),
     ],
 )
-class GravadorPlugin(private val activity: Activity) : Plugin(activity) {
-    /** Um toque no atalho "Gravar agora" esperando a UI (`consumirAtalho`). */
-    private val atalhoPendente = AtomicBoolean(false)
+class RecorderPlugin(private val activity: Activity) : Plugin(activity) {
+    /** A tap on the "Gravar agora" shortcut waiting for the UI (`consumirAtalho`). */
+    private val pendingShortcut = AtomicBoolean(false)
 
     override fun load(webView: WebView) {
-        Conectividade.acompanhar(activity)
-        SyncWorker.agendar(activity)
-        // Partida a frio pelo atalho: o intent é o da Activity.
-        notarAtalho(activity.intent)
+        Connectivity.follow(activity)
+        SyncWorker.schedule(activity)
+        // Cold start through the shortcut: the intent is the Activity's.
+        noteShortcut(activity.intent)
     }
 
-    /** O app já aberto (a MainActivity é `singleTask`): o atalho chega aqui. */
+    /** The app already open (the MainActivity is `singleTask`): the shortcut arrives here. */
     override fun onNewIntent(intent: Intent) {
-        notarAtalho(intent)
+        noteShortcut(intent)
     }
 
     /**
-     * Guarda o toque no atalho e troca a ação do intent por `MAIN`: a recriação da Activity e a volta
-     * pelos recentes não disparam outra gravação.
+     * Keeps the tap on the shortcut and swaps the intent's action for `MAIN`: recreating the
+     * Activity and coming back from the recents do not fire another recording.
      */
-    private fun notarAtalho(intent: Intent?) {
-        if (intent == null || !Atalho.ehGravarAgora(intent.action, intent.flags)) return
-        atalhoPendente.set(true)
+    private fun noteShortcut(intent: Intent?) {
+        if (intent == null || !Shortcut.isRecordNow(intent.action, intent.flags)) return
+        pendingShortcut.set(true)
         intent.action = Intent.ACTION_MAIN
         activity.intent = intent
     }
 
-    /** `true` uma vez por toque no atalho; a UI decide gravar com a regra do botão Gravar. */
+    /** `true` once per tap on the shortcut; the UI decides to record by the Gravar button's rule. */
     @Command
     fun consumirAtalho(invoke: Invoke) {
-        invoke.resolve(JSObject().apply { put("gravar", atalhoPendente.getAndSet(false)) })
+        invoke.resolve(JSObject().apply { put("gravar", pendingShortcut.getAndSet(false)) })
     }
 
-    /** Sobe o serviço; o `invoke` é respondido pelo serviço depois do `startForeground`. */
+    /** Starts the service; the `invoke` is answered by the service after `startForeground`. */
     @Command
     fun iniciarServico(invoke: Invoke) {
-        ServicoDeGravacao.iniciar(activity, invoke)
+        RecordingService.start(activity, invoke)
     }
 
     @Command
     fun atualizarServico(invoke: Invoke) {
-        ServicoDeGravacao.atualizar(activity)
+        RecordingService.update(activity)
         invoke.resolve()
     }
 
-    /** Tira a notificação; com `motivo` (parada sem pedido), avisa "A gravação parou". */
+    /** Removes the notification; with `motivo` (a stop nobody asked for), shows the stop notice. */
     @Command
     fun pararServico(invoke: Invoke) {
-        val args = invoke.parseArgs(PararArgs::class.java)
-        ServicoDeGravacao.encerrar(activity, args.motivo, args.duracaoMs)
+        val args = invoke.parseArgs(StopArgs::class.java)
+        RecordingService.end(activity, args.motivo, args.duracaoMs)
         invoke.resolve()
     }
 
-    /** Agenda uma passada do `SyncWorker` no próximo Wi-Fi não medido (Parar, Salvar e Pular). */
+    /** Schedules a `SyncWorker` pass on the next unmetered Wi-Fi (Parar, Salvar and Pular). */
     @Command
     fun agendarSync(invoke: Invoke) {
-        val args = invoke.parseArgs(AgendarSyncArgs::class.java)
-        SyncWorker.agendarAgora(activity, args.atrasoMs)
+        val args = invoke.parseArgs(ScheduleSyncArgs::class.java)
+        SyncWorker.scheduleNow(activity, args.atrasoMs)
         invoke.resolve()
     }
 
-    /** "Abrir configurações do app": a tela do sistema com as permissões do eclume. */
+    /** The app-settings shortcut: the system screen with eclume's permissions. */
     @Command
     fun abrirConfiguracoesDoApp(invoke: Invoke) {
         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", activity.packageName, null))
@@ -122,61 +125,61 @@ class GravadorPlugin(private val activity: Activity) : Plugin(activity) {
         invoke.resolve()
     }
 
-    /** Pede a isenção da otimização de bateria (o diálogo do sistema). */
+    /** Asks for the battery-optimization exemption (the system dialog). */
     @Command
     fun pedirIsencaoDeBateria(invoke: Invoke) {
-        Dispositivo.marcarIsencaoPedida(activity)
+        Device.markExemptionAsked(activity)
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${activity.packageName}"))
         activity.startActivity(intent)
         invoke.resolve()
     }
 
-    /** Procura o servidor por mDNS; devolve os anúncios crus, que o núcleo interpreta. */
+    /** Looks for the server through mDNS; returns the raw announcements, which the core parses. */
     @Command
     fun descobrir(invoke: Invoke) {
-        val args = invoke.parseArgs(DescobrirArgs::class.java)
-        val servicos = JSArray()
-        for (anuncio in Descoberta(activity).procurar(args.segundos)) {
+        val args = invoke.parseArgs(DiscoverArgs::class.java)
+        val services = JSArray()
+        for (announcement in Discovery(activity).search(args.segundos)) {
             val txt = JSObject()
-            anuncio.txt.forEach { (chave, valor) -> txt.put(chave, valor) }
-            servicos.put(JSObject().apply {
-                put("nome", anuncio.nome)
+            announcement.txt.forEach { (key, value) -> txt.put(key, value) }
+            services.put(JSObject().apply {
+                put("nome", announcement.name)
                 put("txt", txt)
             })
         }
-        invoke.resolve(JSObject().apply { put("servicos", servicos) })
+        invoke.resolve(JSObject().apply { put("servicos", services) })
     }
 
     /**
-     * Bateria, espaço livre, Wi-Fi não medido, modelo, os recortes de borda a borda (dp), as
-     * notificações liberadas e a isenção da otimização de bateria.
+     * Battery, free space, unmetered Wi-Fi, model, the edge-to-edge insets (dp), whether
+     * notifications are allowed and the battery-optimization exemption.
      */
     @Command
     fun estadoDoDispositivo(invoke: Invoke) {
-        val estado = Dispositivo.ler(activity)
+        val state = Device.read(activity)
         invoke.resolve(JSObject().apply {
-            put("bateria", estado.bateria)
-            put("carregando", estado.carregando)
-            put("espacoLivre", estado.espacoLivre)
-            put("wifiNaoMedido", estado.wifiNaoMedido)
-            put("modelo", estado.modelo)
-            put("insetTopo", estado.insetTopo.toDouble())
-            put("insetBase", estado.insetBase.toDouble())
-            put("notificacoes", estado.notificacoes)
-            put("isencaoDeBateria", estado.isencaoDeBateria)
+            put("bateria", state.battery)
+            put("carregando", state.charging)
+            put("espacoLivre", state.freeSpace)
+            put("wifiNaoMedido", state.unmeteredWifi)
+            put("modelo", state.model)
+            put("insetTopo", state.insetTop.toDouble())
+            put("insetBase", state.insetBottom.toDouble())
+            put("notificacoes", state.notifications)
+            put("isencaoDeBateria", state.batteryExemption)
         })
     }
 
-    /** Abre o instalador do sistema para o APK baixado (`aberto: false` quando antes foi pedir a
-     * permissão de instalar de fontes desconhecidas). */
+    /** Opens the system installer for the downloaded APK (`aberto: false` when it first went to
+     * ask for the permission to install from unknown sources). */
     @Command
     fun abrirInstalador(invoke: Invoke) {
-        val args = invoke.parseArgs(InstaladorArgs::class.java)
-        val aberto = Atualizador.abrir(activity, args.caminho)
-        invoke.resolve(JSObject().apply { put("aberto", aberto) })
+        val args = invoke.parseArgs(InstallerArgs::class.java)
+        val opened = Updater.open(activity, args.caminho)
+        invoke.resolve(JSObject().apply { put("aberto", opened) })
     }
 
-    /** Abre `url` no navegador do sistema ("Abrir na web" do detalhe), como o instalador abre o APK. */
+    /** Opens `url` in the system browser (the detail's "Abrir na web"), as the installer opens the APK. */
     @Command
     fun abrirUrl(invoke: Invoke) {
         val args = invoke.parseArgs(UrlArgs::class.java)

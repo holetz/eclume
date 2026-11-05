@@ -10,191 +10,193 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import org.json.JSONObject
 
-/** O que a notificação mostra, tirado do `EstadoApp` do núcleo. */
-data class SessaoNaNotificacao(
+/** What the notification shows, taken from the core's `AppState`. */
+data class NotificationSession(
     val audioMs: Long,
-    val pausada: Boolean,
-    val marcadores: Int,
-    val espacoLivre: String?,
-    /** O microfone caiu e o núcleo tenta reabri-lo (fone plugado ou tirado, Bluetooth). */
-    val reconectando: Boolean = false,
-    /** O sistema silenciou a captura (chamada, assistente de voz, bloqueio do microfone). */
-    val silenciada: Boolean = false,
+    val paused: Boolean,
+    val markers: Int,
+    val freeSpace: String?,
+    /** The microphone dropped and the core tries to reopen it (headset in or out, Bluetooth). */
+    val reconnecting: Boolean = false,
+    /** The system silenced the capture (a call, the voice assistant, the microphone block). */
+    val silenced: Boolean = false,
 ) {
     companion object {
-        /** A notificação de quem ainda não sabe a sessão (um `INICIAR` com erro do núcleo). */
-        val NEUTRA = SessaoNaNotificacao(0, true, 0, null)
+        /** The notification of one who does not know the session yet (a `INICIAR` with a core error). */
+        val NEUTRAL = NotificationSession(0, true, 0, null)
 
-        /** A sessão do `EstadoApp`; `null` sem gravação em curso (ou com erro do núcleo). */
-        fun doEstado(json: String): SessaoNaNotificacao? =
-            (RespostaDoNucleo.ler(json) as? RespostaDoNucleo.ComSessao)?.sessao
+        /** The session of the `AppState`; `null` with no recording running (or with a core error). */
+        fun fromState(json: String): NotificationSession? =
+            (CoreReply.read(json) as? CoreReply.WithSession)?.session
 
-        internal fun daSessao(estado: JSONObject, sessao: JSONObject): SessaoNaNotificacao =
-            SessaoNaNotificacao(
-                audioMs = sessao.optLong("audio_ms"),
-                pausada = sessao.optBoolean("pausada"),
-                marcadores = sessao.optJSONArray("marcadores")?.length() ?: 0,
-                espacoLivre = estado.optString("espaco_livre").takeIf { it.isNotEmpty() && it != "null" },
-                reconectando = sessao.optString("microfone") == "reconectando",
-                silenciada = sessao.optBoolean("silenciada"),
+        // The JSON keys are the core's `AppState` serialization and keep their names.
+        internal fun fromSession(state: JSONObject, session: JSONObject): NotificationSession =
+            NotificationSession(
+                audioMs = session.optLong("audio_ms"),
+                paused = session.optBoolean("pausada"),
+                markers = session.optJSONArray("marcadores")?.length() ?: 0,
+                freeSpace = state.optString("espaco_livre").takeIf { it.isNotEmpty() && it != "null" },
+                reconnecting = session.optString("microfone") == "reconectando",
+                silenced = session.optBoolean("silenciada"),
             )
     }
 }
 
 /**
- * Como o serviço lê a resposta da ponte: há sessão, não há sessão (`"sessao": null`), ou o núcleo
- * respondeu erro (`{"erro": …}`, também um pânico do Rust). Erro nunca encerra o serviço, a não ser
- * em Parar: a gravação pode seguir viva no núcleo.
+ * How the service reads the bridge's reply: there is a session, there is none (`"sessao": null`),
+ * or the core answered an error (`{"erro": …}`, also a Rust panic). An error never ends the
+ * service, except on Parar: the recording may still be alive in the core.
  */
-sealed class RespostaDoNucleo {
-    data class ComSessao(val sessao: SessaoNaNotificacao) : RespostaDoNucleo()
-    object SemSessao : RespostaDoNucleo()
-    data class Erro(val mensagem: String) : RespostaDoNucleo()
+sealed class CoreReply {
+    data class WithSession(val session: NotificationSession) : CoreReply()
+    object NoSession : CoreReply()
+    data class Failure(val message: String) : CoreReply()
 
     companion object {
-        fun ler(json: String?): RespostaDoNucleo {
-            val estado = json?.let { runCatching { JSONObject(it) }.getOrNull() }
-                ?: return Erro("resposta inválida do núcleo: $json")
-            if (estado.has("erro")) return Erro(estado.optString("erro"))
-            val sessao = estado.optJSONObject("sessao") ?: return SemSessao
-            return ComSessao(SessaoNaNotificacao.daSessao(estado, sessao))
+        fun read(json: String?): CoreReply {
+            val state = json?.let { runCatching { JSONObject(it) }.getOrNull() }
+                ?: return Failure("resposta inválida do núcleo: $json")
+            if (state.has("erro")) return Failure(state.optString("erro"))
+            val session = state.optJSONObject("sessao") ?: return NoSession
+            return WithSession(NotificationSession.fromSession(state, session))
         }
     }
 }
 
-/** Os textos da notificação, puros (testados sem Android). */
-object TextosDaNotificacao {
-    fun relogio(ms: Long): String {
+/** The notification's texts, pure (tested without Android). They are UI copy and stay pt-BR. */
+object NotificationTexts {
+    fun clock(ms: Long): String {
         val s = (ms / 1000).coerceAtLeast(0)
         return "%02d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60)
     }
 
-    /** "Gravando" ou "Pausado · 00:42:10" (gravando, o relógio é o cronômetro do sistema). */
-    fun titulo(sessao: SessaoNaNotificacao): String =
-        if (sessao.pausada) "Pausado · ${relogio(sessao.audioMs)}" else "Gravando"
+    /** "Gravando" or "Pausado · 00:42:10" (while recording, the clock is the system chronometer). */
+    fun title(session: NotificationSession): String =
+        if (session.paused) "Pausado · ${clock(session.audioMs)}" else "Gravando"
 
     /**
-     * "2 marcadores · espaço para cerca de 9 h"; com o microfone fora, "Microfone desconectado ·
-     * reconectando"; com a captura silenciada pelo sistema, "Silenciado pelo sistema".
+     * The marker count and the space left; with the microphone gone, the reconnecting line; with
+     * the capture silenced by the system, the silenced line.
      */
-    fun texto(sessao: SessaoNaNotificacao): String {
-        if (sessao.silenciada) return "Silenciado pelo sistema"
-        if (sessao.reconectando) return "Microfone desconectado · reconectando"
-        val marcadores = if (sessao.marcadores == 1) "1 marcador" else "${sessao.marcadores} marcadores"
-        return sessao.espacoLivre?.let { "$marcadores · espaço para $it" } ?: marcadores
+    fun text(session: NotificationSession): String {
+        if (session.silenced) return "Silenciado pelo sistema"
+        if (session.reconnecting) return "Microfone desconectado · reconectando"
+        val markers = if (session.markers == 1) "1 marcador" else "${session.markers} marcadores"
+        return session.freeSpace?.let { "$markers · espaço para $it" } ?: markers
     }
 
-    /** O instante de início do cronômetro: agora menos o tempo de áudio. */
-    fun inicioDoCronometro(agoraMs: Long, sessao: SessaoNaNotificacao): Long = agoraMs - sessao.audioMs
+    /** The chronometer's start instant: now minus the audio time. */
+    fun chronometerStart(nowMs: Long, session: NotificationSession): Long = nowMs - session.audioMs
 
-    const val PAROU = "A gravação parou"
-    const val PAROU_COM_ERRO = "A gravação parou com erro"
-    const val INTERROMPIDA = "A gravação foi interrompida"
+    const val STOPPED = "A gravação parou"
+    const val STOPPED_WITH_ERROR = "A gravação parou com erro"
+    const val INTERRUPTED = "A gravação foi interrompida"
 
-    /** "pouco espaço livre · 00:12:30 salvos" (o motivo vem do núcleo). */
-    fun parou(motivo: String, duracaoMs: Long?): String =
-        duracaoMs?.let { "$motivo · ${relogio(it)} salvos" } ?: motivo
+    /** The reason (from the core) and the saved time. */
+    fun stopped(reason: String, durationMs: Long?): String =
+        durationMs?.let { "$reason · ${clock(it)} salvos" } ?: reason
 }
 
 /**
- * A notificação contínua da gravação (canal `gravacao`, sem som, visível na tela bloqueada) e os
- * avisos de quando ela para sem pedido (canal `avisos`, que toca).
+ * The ongoing recording notification (`gravacao` channel, silent, visible on the lock screen) and
+ * the warnings of when it stops without being asked (`avisos` channel, which rings). The channel
+ * ids are registered on the device and keep their names.
  */
-object Notificacao {
+object RecordingNotification {
     const val ID = 4201
-    const val ID_AVISO = 4202
-    const val CANAL = "gravacao"
-    const val CANAL_AVISOS = "avisos"
-    const val CANAL_SYNC = "sync"
+    const val WARNING_ID = 4202
+    const val CHANNEL = "gravacao"
+    const val WARNINGS_CHANNEL = "avisos"
+    const val SYNC_CHANNEL = "sync"
 
-    fun criarCanal(context: Context) {
+    fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val gerente = context.getSystemService(NotificationManager::class.java)
-        val canal = NotificationChannel(CANAL, "Gravação", NotificationManager.IMPORTANCE_LOW).apply {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val channel = NotificationChannel(CHANNEL, "Gravação", NotificationManager.IMPORTANCE_LOW).apply {
             description = "Mostra a gravação em curso, com Pausar, Marcador e Parar."
             setSound(null, null)
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
-        gerente.createNotificationChannel(canal)
-        val avisos = NotificationChannel(CANAL_AVISOS, "Avisos da gravação", NotificationManager.IMPORTANCE_DEFAULT).apply {
+        manager.createNotificationChannel(channel)
+        val warnings = NotificationChannel(WARNINGS_CHANNEL, "Avisos da gravação", NotificationManager.IMPORTANCE_DEFAULT).apply {
             description = "Avisa quando a gravação para sem pedido ou é interrompida."
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
-        gerente.createNotificationChannel(avisos)
-        val sync = NotificationChannel(CANAL_SYNC, "Envio das gravações", NotificationManager.IMPORTANCE_LOW).apply {
+        manager.createNotificationChannel(warnings)
+        val sync = NotificationChannel(SYNC_CHANNEL, "Envio das gravações", NotificationManager.IMPORTANCE_LOW).apply {
             description = "Mostra o envio das gravações ao servidor em segundo plano."
             setSound(null, null)
         }
-        gerente.createNotificationChannel(sync)
+        manager.createNotificationChannel(sync)
     }
 
-    /** A notificação do `SyncWorker` em primeiro plano ("Enviando 2 gravações"). */
-    fun sincronizando(context: Context, texto: String): Notification {
-        criarCanal(context)
-        return NotificationCompat.Builder(context, CANAL_SYNC)
+    /** The notification of the `SyncWorker` in the foreground (the upload count). */
+    fun syncing(context: Context, text: String): Notification {
+        createChannels(context)
+        return NotificationCompat.Builder(context, SYNC_CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle(texto)
+            .setContentTitle(text)
             .setContentText("No Wi‑Fi do servidor eclume")
             .setOngoing(true)
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            .setContentIntent(abrirApp(context))
+            .setContentIntent(openApp(context))
             .build()
     }
 
-    /** Posta um aviso no canal `avisos` (toca), que abre o app ao toque. */
-    fun avisar(context: Context, titulo: String, texto: String, id: Int = ID_AVISO) {
-        criarCanal(context)
-        val aviso = NotificationCompat.Builder(context, CANAL_AVISOS)
+    /** Posts a warning on the `avisos` channel (it rings), which opens the app on tap. */
+    fun warn(context: Context, title: String, text: String, id: Int = WARNING_ID) {
+        createChannels(context)
+        val warning = NotificationCompat.Builder(context, WARNINGS_CHANNEL)
             .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle(titulo)
-            .setContentText(texto)
+            .setContentTitle(title)
+            .setContentText(text)
             .setAutoCancel(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setContentIntent(abrirApp(context))
+            .setContentIntent(openApp(context))
             .build()
-        runCatching { context.getSystemService(NotificationManager::class.java).notify(id, aviso) }
+        runCatching { context.getSystemService(NotificationManager::class.java).notify(id, warning) }
     }
 
-    private fun acao(context: Context, nome: String, codigo: Int): PendingIntent {
-        val intent = Intent(context, ServicoDeGravacao::class.java).setAction(nome)
+    private fun action(context: Context, name: String, code: Int): PendingIntent {
+        val intent = Intent(context, RecordingService::class.java).setAction(name)
         return PendingIntent.getService(
             context,
-            codigo,
+            code,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
 
-    private fun abrirApp(context: Context): PendingIntent? {
+    private fun openApp(context: Context): PendingIntent? {
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
         return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
     }
 
-    fun montar(context: Context, sessao: SessaoNaNotificacao, agoraMs: Long): Notification {
-        val builder = NotificationCompat.Builder(context, CANAL)
+    fun build(context: Context, session: NotificationSession, nowMs: Long): Notification {
+        val builder = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle(TextosDaNotificacao.titulo(sessao))
-            .setContentText(TextosDaNotificacao.texto(sessao))
+            .setContentTitle(NotificationTexts.title(session))
+            .setContentText(NotificationTexts.text(session))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .setContentIntent(abrirApp(context))
-        if (sessao.pausada) {
+            .setContentIntent(openApp(context))
+        if (session.paused) {
             builder.setShowWhen(false)
-            builder.addAction(0, "Continuar", acao(context, ServicoDeGravacao.CONTINUAR, 1))
+            builder.addAction(0, "Continuar", action(context, RecordingService.RESUME, 1))
         } else {
             builder.setUsesChronometer(true)
                 .setShowWhen(true)
-                .setWhen(TextosDaNotificacao.inicioDoCronometro(agoraMs, sessao))
-            builder.addAction(0, "Pausar", acao(context, ServicoDeGravacao.PAUSAR, 1))
+                .setWhen(NotificationTexts.chronometerStart(nowMs, session))
+            builder.addAction(0, "Pausar", action(context, RecordingService.PAUSE, 1))
         }
-        builder.addAction(0, "Marcador", acao(context, ServicoDeGravacao.MARCAR, 2))
-        builder.addAction(0, "Parar", acao(context, ServicoDeGravacao.PARAR, 3))
+        builder.addAction(0, "Marcador", action(context, RecordingService.MARK, 2))
+        builder.addAction(0, "Parar", action(context, RecordingService.STOP, 3))
         return builder.build()
     }
 }

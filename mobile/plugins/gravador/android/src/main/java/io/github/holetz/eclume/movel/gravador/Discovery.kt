@@ -8,62 +8,62 @@ import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
-/** Um anúncio `_eclume._tcp` achado: o nome da instância e o TXT cru (o núcleo o interpreta). */
-data class Anuncio(val nome: String, val txt: Map<String, String>)
+/** A found `_eclume._tcp` announcement: the instance name and the raw TXT (the core parses it). */
+data class Announcement(val name: String, val txt: Map<String, String>)
 
 /**
- * A descoberta do servidor pelo `NsdManager`: procura `_eclume._tcp` por alguns segundos e resolve
- * cada instância para ler o TXT (`url`, `ca`, `v`, `name`). O TXT não é autenticado: o núcleo
- * confere a CA e a pessoa confere a impressão digital antes de mandar a senha.
+ * Server discovery through `NsdManager`: looks for `_eclume._tcp` for a few seconds and resolves
+ * each instance to read the TXT (`url`, `ca`, `v`, `name`). The TXT is not authenticated: the
+ * core checks the CA and the person checks the fingerprint before sending the password.
  */
-class Descoberta(context: Context) {
+class Discovery(context: Context) {
     companion object {
         private const val TAG = "eclume"
-        const val TIPO = "_eclume._tcp"
+        const val TYPE = "_eclume._tcp"
 
-        /** Os bytes de cada chave do TXT em texto (chave sem valor fica vazia). */
-        fun txtEmTexto(atributos: Map<String, ByteArray?>): Map<String, String> =
-            atributos.mapValues { (_, valor) -> valor?.toString(Charsets.UTF_8) ?: "" }
+        /** The bytes of each TXT key as text (a key without a value is empty). */
+        fun txtAsText(attributes: Map<String, ByteArray?>): Map<String, String> =
+            attributes.mapValues { (_, value) -> value?.toString(Charsets.UTF_8) ?: "" }
     }
 
     private val nsd = context.getSystemService(NsdManager::class.java)
     private val executor = Executors.newSingleThreadExecutor()
 
-    /** Procura por [segundos] e devolve os anúncios resolvidos (bloqueia; chame fora da UI). */
-    fun procurar(segundos: Int): List<Anuncio> {
-        val achados = ConcurrentHashMap<String, Anuncio>()
-        val ouvinte = object : NsdManager.DiscoveryListener {
-            override fun onDiscoveryStarted(tipo: String) {}
-            override fun onDiscoveryStopped(tipo: String) {}
-            override fun onStartDiscoveryFailed(tipo: String, erro: Int) {
-                Log.w(TAG, "mDNS não começou: $erro")
+    /** Searches for [seconds] and returns the resolved announcements (blocks; call off the UI). */
+    fun search(seconds: Int): List<Announcement> {
+        val found = ConcurrentHashMap<String, Announcement>()
+        val listener = object : NsdManager.DiscoveryListener {
+            override fun onDiscoveryStarted(type: String) {}
+            override fun onDiscoveryStopped(type: String) {}
+            override fun onStartDiscoveryFailed(type: String, error: Int) {
+                Log.w(TAG, "mDNS did not start: $error")
             }
-            override fun onStopDiscoveryFailed(tipo: String, erro: Int) {}
+            override fun onStopDiscoveryFailed(type: String, error: Int) {}
             override fun onServiceLost(info: NsdServiceInfo) {}
             override fun onServiceFound(info: NsdServiceInfo) {
-                resolver(info) { resolvido ->
-                    achados[resolvido.serviceName] =
-                        Anuncio(resolvido.serviceName, txtEmTexto(resolvido.attributes))
+                resolve(info) { resolved ->
+                    found[resolved.serviceName] =
+                        Announcement(resolved.serviceName, txtAsText(resolved.attributes))
                 }
             }
         }
-        nsd.discoverServices(TIPO, NsdManager.PROTOCOL_DNS_SD, ouvinte)
+        nsd.discoverServices(TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
         try {
-            Thread.sleep(segundos.coerceIn(1, 30) * 1000L)
+            Thread.sleep(seconds.coerceIn(1, 30) * 1000L)
         } finally {
-            runCatching { nsd.stopServiceDiscovery(ouvinte) }
-            // Cada procura cria uma Descoberta: a thread do executor sai com ela.
+            runCatching { nsd.stopServiceDiscovery(listener) }
+            // Each search creates a Discovery: the executor's thread exits with it.
             executor.shutdown()
         }
-        return achados.values.toList()
+        return found.values.toList()
     }
 
-    private fun resolver(info: NsdServiceInfo, aoResolver: (NsdServiceInfo) -> Unit) {
+    private fun resolve(info: NsdServiceInfo, onResolved: (NsdServiceInfo) -> Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             val callback = object : NsdManager.ServiceInfoCallback {
-                override fun onServiceInfoCallbackRegistrationFailed(erro: Int) {}
-                override fun onServiceUpdated(atualizado: NsdServiceInfo) {
-                    aoResolver(atualizado)
+                override fun onServiceInfoCallbackRegistrationFailed(error: Int) {}
+                override fun onServiceUpdated(updated: NsdServiceInfo) {
+                    onResolved(updated)
                     runCatching { nsd.unregisterServiceInfoCallback(this) }
                 }
                 override fun onServiceLost() {}
@@ -75,10 +75,10 @@ class Descoberta(context: Context) {
             nsd.resolveService(
                 info,
                 object : NsdManager.ResolveListener {
-                    override fun onResolveFailed(info: NsdServiceInfo, erro: Int) {
-                        Log.w(TAG, "mDNS não resolveu ${info.serviceName}: $erro")
+                    override fun onResolveFailed(info: NsdServiceInfo, error: Int) {
+                        Log.w(TAG, "mDNS did not resolve ${info.serviceName}: $error")
                     }
-                    override fun onServiceResolved(resolvido: NsdServiceInfo) = aoResolver(resolvido)
+                    override fun onServiceResolved(resolved: NsdServiceInfo) = onResolved(resolved)
                 },
             )
         }

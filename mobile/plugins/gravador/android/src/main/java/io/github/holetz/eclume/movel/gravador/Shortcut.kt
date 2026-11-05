@@ -1,17 +1,19 @@
 package io.github.holetz.eclume.movel.gravador
 
 /**
- * O atalho "Gravar agora" do ícone (`res/xml/shortcuts.xml` do app): abre a MainActivity com a ação
- * [GRAVAR_AGORA]. Cada toque vale uma vez: a UI o consome por `consumirAtalho`, e um intent que volta
- * pelos recentes (`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`) não conta.
+ * The launcher icon's "Gravar agora" shortcut (the app's `res/xml/shortcuts.xml`): opens the
+ * MainActivity with the [RECORD_NOW] action. Each tap counts once: the UI consumes it through
+ * `consumirAtalho`, and an intent that comes back from the recents
+ * (`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`) does not count.
  */
-object Atalho {
-    const val GRAVAR_AGORA = "io.github.holetz.eclume.movel.GRAVAR_AGORA"
+object Shortcut {
+    /** The intent action; its value is registered in the app's `shortcuts.xml` and is kept. */
+    const val RECORD_NOW = "io.github.holetz.eclume.movel.GRAVAR_AGORA"
 
-    /** O `Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`. */
-    private const val VEIO_DOS_RECENTES = 0x00100000
+    /** The `Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`. */
+    private const val FROM_RECENTS = 0x00100000
 
-    /** Um toque novo no atalho: a ação dele, sem vir dos recentes. */
-    fun ehGravarAgora(acao: String?, flags: Int): Boolean =
-        acao == GRAVAR_AGORA && (flags and VEIO_DOS_RECENTES) == 0
+    /** A new tap on the shortcut: its action, not coming from the recents. */
+    fun isRecordNow(action: String?, flags: Int): Boolean =
+        action == RECORD_NOW && (flags and FROM_RECENTS) == 0
 }

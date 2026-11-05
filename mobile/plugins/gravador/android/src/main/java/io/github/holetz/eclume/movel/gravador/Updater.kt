@@ -9,21 +9,21 @@ import androidx.core.content.FileProvider
 import java.io.File
 
 /**
- * Abre o instalador do sistema para o APK que o núcleo baixou pela CA fixada e conferiu pelo
- * SHA-256 do `movel.json`. A mesma keystore garante a instalação por cima; o sistema pede a
- * confirmação da pessoa.
+ * Opens the system installer for the APK the core downloaded through the pinned CA and checked
+ * against the SHA-256 in `movel.json`. The same keystore guarantees the install over the old one;
+ * the system asks the person to confirm.
  */
-object Atualizador {
-    const val TIPO_APK = "application/vnd.android.package-archive"
+object Updater {
+    const val APK_TYPE = "application/vnd.android.package-archive"
 
-    /** A autoridade do `FileProvider` do app (`${applicationId}.fileprovider`). */
-    fun autoridade(pacote: String): String = "$pacote.fileprovider"
+    /** The authority of the app's `FileProvider` (`${applicationId}.fileprovider`). */
+    fun authority(packageName: String): String = "$packageName.fileprovider"
 
     /**
-     * Abre o instalador; sem a permissão de instalar de fontes desconhecidas, abre antes a tela do
-     * sistema que a concede. Devolve se o instalador abriu.
+     * Opens the installer; without the permission to install from unknown sources, first opens the
+     * system screen that grants it. Returns whether the installer opened.
      */
-    fun abrir(activity: Activity, caminho: String): Boolean {
+    fun open(activity: Activity, path: String): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !activity.packageManager.canRequestPackageInstalls()
         ) {
@@ -32,9 +32,9 @@ object Atualizador {
             )
             return false
         }
-        val uri = FileProvider.getUriForFile(activity, autoridade(activity.packageName), File(caminho))
+        val uri = FileProvider.getUriForFile(activity, authority(activity.packageName), File(path))
         val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, TIPO_APK)
+            .setDataAndType(uri, APK_TYPE)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         activity.startActivity(intent)
         return true
