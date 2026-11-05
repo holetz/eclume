@@ -193,5 +193,57 @@ export default {
       "one": "1 marcador",
       "other": "{count} marcadores"
     }
+  },
+  "firstRun": {
+    "title": "Bem-vindo",
+    "back": "Voltar",
+    "searching": "Procurando o servidor na rede…",
+    "server": "Servidor",
+    "trustTitle": "Confira com quem administra o servidor",
+    "fingerprintPrefix": "A impressão digital do certificado de ",
+    "fingerprintSuffix": " é:",
+    "trustContinue": "Confiar e continuar",
+    "email": "E-mail",
+    "password": "Senha",
+    "signIn": "Entrar",
+    "noAccount": "Sem conta?",
+    "signUp": "Crie uma na web",
+    "advanced": "Avançado",
+    "advancedHint": "Entrar com um código ou digitar o endereço",
+    "pairingCode": "Código de pareamento",
+    "pairingPlaceholder": "K7Q-4MX",
+    "pair": "Entrar com o código",
+    "pairingHint": "Gere o código na web, em Minhas configurações › App desktop. Vale por 10 minutos.",
+    "address": "Endereço do servidor",
+    "addressPlaceholder": "servidor.local:8443",
+    "useAddress": "Usar este endereço",
+    "searchAgain": "Procurar na rede de novo",
+    "serverLabel": "{name} em {host}",
+    "origins": {
+      "installer": "Veio com este instalador",
+      "network": "Encontrado na rede",
+      "typed": "Endereço digitado"
+    },
+    "useAnother": "Usar outro",
+    "noServers": "Nenhum servidor na rede. Digite o endereço em Avançado.",
+    "missingCode": "Digite o código de 6 caracteres mostrado na web.",
+    "invalidAddress": "Endereço inválido: digite o host do servidor, com ou sem https.",
+    "chooseServer": "Escolha o servidor antes de criar a conta."
+  },
+  "import": {
+    "title": "Importar um arquivo",
+    "close": "Fechar",
+    "drop": "Solte o áudio ou o vídeo aqui",
+    "or": "ou",
+    "choose": "escolha um arquivo",
+    "converting": "Convertendo para Opus…",
+    "confirm": "Pôr na fila de envio",
+    "cancel": "Cancelar",
+    "errorTitle": "Não deu para importar",
+    "dateOrigin": {
+      "fileMtime": "Gravado em · data de modificação do arquivo; confira.",
+      "metadata": "Gravado em · lida do arquivo. Mude se estiver errada."
+    },
+    "noAudio": "{name} não tem áudio."
   }
 };

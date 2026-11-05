@@ -193,5 +193,57 @@ export default {
       "one": "1 marker",
       "other": "{count} markers"
     }
+  },
+  "firstRun": {
+    "title": "Welcome",
+    "back": "Back",
+    "searching": "Looking for the server on the network…",
+    "server": "Server",
+    "trustTitle": "Check with your server administrator",
+    "fingerprintPrefix": "The certificate fingerprint for ",
+    "fingerprintSuffix": " is:",
+    "trustContinue": "Trust and continue",
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign in",
+    "noAccount": "No account?",
+    "signUp": "Create one on the web",
+    "advanced": "Advanced",
+    "advancedHint": "Sign in with a code or enter the address",
+    "pairingCode": "Pairing code",
+    "pairingPlaceholder": "K7Q-4MX",
+    "pair": "Sign in with the code",
+    "pairingHint": "Generate the code on the web, under My settings › Desktop app. Valid for 10 minutes.",
+    "address": "Server address",
+    "addressPlaceholder": "server.local:8443",
+    "useAddress": "Use this address",
+    "searchAgain": "Search the network again",
+    "serverLabel": "{name} on {host}",
+    "origins": {
+      "installer": "Came with this installer",
+      "network": "Found on the network",
+      "typed": "Entered address"
+    },
+    "useAnother": "Use another",
+    "noServers": "No server on the network. Enter the address under Advanced.",
+    "missingCode": "Enter the 6-character code shown on the web.",
+    "invalidAddress": "Invalid address: enter the server host, with or without https.",
+    "chooseServer": "Choose the server before creating an account."
+  },
+  "import": {
+    "title": "Import a file",
+    "close": "Close",
+    "drop": "Drop audio or video here",
+    "or": "or",
+    "choose": "choose a file",
+    "converting": "Converting to Opus…",
+    "confirm": "Add to upload queue",
+    "cancel": "Cancel",
+    "errorTitle": "Could not import",
+    "dateOrigin": {
+      "fileMtime": "Recorded on · file modification date; please check.",
+      "metadata": "Recorded on · read from the file. Change it if incorrect."
+    },
+    "noAudio": "{name} has no audio."
   }
 };

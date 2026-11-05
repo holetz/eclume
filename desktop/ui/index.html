@@ -130,7 +130,7 @@
       </div>
     </section>
 
-    <section class="tray tray-window" data-view="first-run" aria-label="Bem-vindo" hidden>
+    <section class="tray tray-window" data-view="first-run" aria-label="Welcome" data-i18n-aria-label="firstRun.title" hidden>
       <div class="tray-section">
         <div class="row row-between">
           <span class="brand brand-sm"
@@ -143,71 +143,71 @@
             >eclume</span
           >
           <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="first-run-back"
-            data-icon="close" aria-label="Voltar" hidden></button>
+            data-icon="close" aria-label="Back" data-i18n-aria-label="firstRun.back" hidden></button>
         </div>
-        <h4 class="flush">Bem-vindo</h4>
+        <h4 class="flush" data-i18n="firstRun.title">Welcome</h4>
         <div class="alert alert-error" id="first-run-notice" role="alert" hidden>
           <span id="first-run-notice-text"></span>
         </div>
-        <span class="text-muted small" id="first-run-searching">Procurando o servidor na rede…</span>
-        <div class="stack stack-tight" id="first-run-servers" role="radiogroup" aria-label="Servidor"></div>
+        <span class="text-muted small" id="first-run-searching" data-i18n="firstRun.searching">Looking for the server on the network…</span>
+        <div class="stack stack-tight" id="first-run-servers" role="radiogroup" aria-label="Server" data-i18n-aria-label="firstRun.server"></div>
         <div class="alert alert-warning" id="first-run-trust" hidden>
-          <span class="alert-title">Confira com quem administra o servidor</span>
-          <span>A impressão digital do certificado de <span id="first-run-trust-server"></span> é:</span>
+          <span class="alert-title" data-i18n="firstRun.trustTitle">Check with your server administrator</span>
+          <span><span data-i18n="firstRun.fingerprintPrefix">The certificate fingerprint for </span><span id="first-run-trust-server"></span><span data-i18n="firstRun.fingerprintSuffix"> is:</span></span>
           <span class="code-block"><span id="first-run-fingerprint"></span></span>
           <div class="row">
-            <button type="button" class="btn btn-primary btn-sm" id="first-run-trust-continue">Confiar e continuar</button>
+            <button type="button" class="btn btn-primary btn-sm" id="first-run-trust-continue" data-i18n="firstRun.trustContinue">Trust and continue</button>
           </div>
         </div>
       </div>
       <form class="tray-section" id="first-run-sign-in-form">
         <div class="field">
-          <label for="first-run-email">E-mail</label>
+          <label for="first-run-email" data-i18n="firstRun.email">Email</label>
           <input class="input" type="email" id="first-run-email" autocomplete="username" required />
         </div>
         <div class="field">
-          <label for="first-run-password">Senha</label>
+          <label for="first-run-password" data-i18n="firstRun.password">Password</label>
           <input class="input" type="password" id="first-run-password" autocomplete="current-password" required />
         </div>
-        <button type="submit" class="btn btn-primary btn-block" id="first-run-sign-in">Entrar</button>
-        <span class="text-muted small">Sem conta? <a href="#" id="first-run-signup">Crie uma na web</a></span>
+        <button type="submit" class="btn btn-primary btn-block" id="first-run-sign-in" data-i18n="firstRun.signIn">Sign in</button>
+        <span class="text-muted small"><span data-i18n="firstRun.noAccount">No account?</span> <a href="#" id="first-run-signup" data-i18n="firstRun.signUp">Create one on the web</a></span>
       </form>
       <div class="tray-section">
         <details class="disclosure" id="first-run-advanced">
-          <summary>Avançado<span class="text-muted">Entrar com um código ou digitar o endereço</span></summary>
+          <summary><span data-i18n="firstRun.advanced">Advanced</span><span class="text-muted" data-i18n="firstRun.advancedHint">Sign in with a code or enter the address</span></summary>
           <div class="stack">
             <div class="field">
-              <label for="first-run-code">Código de pareamento</label>
+              <label for="first-run-code" data-i18n="firstRun.pairingCode">Pairing code</label>
               <div class="row">
                 <input class="input mono input-code" id="first-run-code" maxlength="7" autocomplete="off"
-                  placeholder="K7Q-4MX" />
-                <button type="button" class="btn btn-secondary" id="first-run-pair">Entrar com o código</button>
+                  placeholder="K7Q-4MX" data-i18n-placeholder="firstRun.pairingPlaceholder" />
+                <button type="button" class="btn btn-secondary" id="first-run-pair" data-i18n="firstRun.pair">Sign in with the code</button>
               </div>
-              <span class="text-muted tiny">Gere o código na web, em Minhas configurações › App desktop. Vale por 10 minutos.</span>
+              <span class="text-muted tiny" data-i18n="firstRun.pairingHint">Generate the code on the web, under My settings › Desktop app. Valid for 10 minutes.</span>
             </div>
             <div class="field">
-              <label for="first-run-address">Endereço do servidor</label>
+              <label for="first-run-address" data-i18n="firstRun.address">Server address</label>
               <div class="row">
-                <input class="input mono input-address" id="first-run-address" placeholder="servidor.local:8443" />
-                <button type="button" class="btn btn-secondary" id="first-run-use-address">Usar este endereço</button>
+                <input class="input mono input-address" id="first-run-address" placeholder="server.local:8443" data-i18n-placeholder="firstRun.addressPlaceholder" />
+                <button type="button" class="btn btn-secondary" id="first-run-use-address" data-i18n="firstRun.useAddress">Use this address</button>
               </div>
-              <a href="#" class="small" id="first-run-search">Procurar na rede de novo</a>
+              <a href="#" class="small" id="first-run-search" data-i18n="firstRun.searchAgain">Search the network again</a>
             </div>
           </div>
         </details>
       </div>
     </section>
 
-    <section class="tray tray-window" data-view="import" aria-label="Importar um arquivo" hidden>
+    <section class="tray tray-window" data-view="import" aria-label="Import a file" data-i18n-aria-label="import.title" hidden>
       <div class="tray-section">
         <div class="row row-between">
-          <h4 class="flush">Importar um arquivo</h4>
+          <h4 class="flush" data-i18n="import.title">Import a file</h4>
           <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="import-close"
-            data-icon="close" aria-label="Fechar"></button>
+            data-icon="close" aria-label="Close" data-i18n-aria-label="import.close"></button>
         </div>
         <label class="dropzone" id="import-target">
-          <strong>Solte o áudio ou o vídeo aqui</strong>
-          <span class="text-muted">ou <a href="#" id="import-choose">escolha um arquivo</a></span>
+          <strong data-i18n="import.drop">Drop audio or video here</strong>
+          <span class="text-muted"><span data-i18n="import.or">or</span> <a href="#" id="import-choose" data-i18n="import.choose">choose a file</a></span>
         </label>
       </div>
 
@@ -219,17 +219,17 @@
         </div>
         <div class="stack-tight" id="import-conversion" hidden>
           <progress class="progress" id="import-progress" max="1" value="0"></progress>
-          <span class="progress-row"><span>Convertendo para Opus…</span><span id="import-percent"></span></span>
+          <span class="progress-row"><span data-i18n="import.converting">Converting to Opus…</span><span id="import-percent"></span></span>
         </div>
         <div class="row">
-          <button type="button" class="btn btn-primary" id="import-confirm">Pôr na fila de envio</button>
-          <button type="button" class="btn btn-secondary" id="import-cancel">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="import-confirm" data-i18n="import.confirm">Add to upload queue</button>
+          <button type="button" class="btn btn-secondary" id="import-cancel" data-i18n="import.cancel">Cancel</button>
         </div>
       </div>
 
       <div class="tray-section" id="import-error" hidden>
         <div class="alert alert-error" role="alert">
-          <span class="alert-title">Não deu para importar</span>
+          <span class="alert-title" data-i18n="import.errorTitle">Could not import</span>
           <span id="import-error-text"></span>
         </div>
       </div>
