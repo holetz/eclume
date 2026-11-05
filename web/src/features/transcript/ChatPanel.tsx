@@ -1,15 +1,16 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import type { InstructionsRequestState } from '../organize/queries'
 import { ApiError, errorMessage } from '../../api/problem'
 import { isOpen, MAX_MESSAGE, readNote, useChat, useChatReply, useSendChat, type ChatMessage } from './chat'
 import styles from './RecordingPage.module.css'
 
-const CHANGED_NOTE = 'O resumo mudou enquanto eu trabalhava; nada foi alterado. Peça de novo.'
-
 function AgentMessage({ message, onRetry }: { message: ChatMessage; onRetry: () => void }) {
+  const { t } = useTranslation(['transcript', 'common'])
   return (
     <div className="msg msg-agent">
+      {/* i18n-ignore: the brand */}
       <span className="msg-who">eclume</span>
       {message.reads.map((read, index) => (
         <span key={index} className="msg-note">
@@ -17,20 +18,20 @@ function AgentMessage({ message, onRetry }: { message: ChatMessage; onRetry: () 
         </span>
       ))}
       {isOpen(message) ? (
-        <span className={styles.working} aria-label="Trabalhando">
-          Trabalhando
+        <span className={styles.working} aria-label={t('chat.working')}>
+          {t('chat.working')}
         </span>
       ) : message.status === 'failed' ? (
         <span className={styles.chatError}>
-          {message.error?.message ?? 'O ajuste falhou.'}{' '}
+          {message.error?.message ?? t('chat.failed')}{' '}
           <button type="button" className="btn btn-ghost btn-sm" onClick={onRetry}>
-            Tentar de novo
+            {t('common:retry')}
           </button>
         </span>
       ) : (
         <>
           {message.content && <span>{message.content}</span>}
-          {message.error?.code === 'summary_changed' && <span className="msg-note">{CHANGED_NOTE}</span>}
+          {message.error?.code === 'summary_changed' && <span className="msg-note">{t('chat.changed')}</span>}
         </>
       )}
     </div>
@@ -50,6 +51,7 @@ interface ChatPanelProps {
 
 /** The `aside.chat` "Ajustar o resumo": history, transcript reading notes and the composer. */
 export function ChatPanel({ recordingId, hasTranscript, hasSummary, agendaTypeId = null, className = '' }: ChatPanelProps) {
+  const { t } = useTranslation('transcript')
   const chat = useChat(recordingId, hasTranscript)
   const send = useSendChat(recordingId)
   const [text, setText] = useState('')
@@ -84,14 +86,14 @@ export function ChatPanel({ recordingId, hasTranscript, hasSummary, agendaTypeId
   const adjustmentRequest = lastAdjustment ? request(lastAdjustment) : ''
 
   return (
-    <aside className={`chat ${className}`} aria-label="Ajustar o resumo">
+    <aside className={`chat ${className}`} aria-label={t('chat.title')}>
       <div className="chat-head">
-        <strong>Ajustar o resumo</strong>
+        <strong>{t('chat.title')}</strong>
         <span className={`text-muted ${styles.chatSub}`}>
-          Trabalha sobre o resumo. Só lê a transcrição quando o pedido precisa.
+          {t('chat.sub')}
         </span>
       </div>
-      <div ref={logRef} className="chat-log" role="log" aria-live="polite" aria-label="Conversa">
+      <div ref={logRef} className="chat-log" role="log" aria-live="polite" aria-label={t('chat.log')}>
         {chat.isError && (
           <p className="alert alert-error" role="alert">
             {errorMessage(chat.error)}
@@ -100,7 +102,7 @@ export function ChatPanel({ recordingId, hasTranscript, hasSummary, agendaTypeId
         {messages.map((message) =>
           message.role === 'user' ? (
             <div key={message.id} className="msg msg-user">
-              <span className="msg-who">Você</span>
+              <span className="msg-who">{t('chat.you')}</span>
               {message.content}
             </div>
           ) : (
@@ -113,18 +115,18 @@ export function ChatPanel({ recordingId, hasTranscript, hasSummary, agendaTypeId
             state={{ instructionsRequest: adjustmentRequest } satisfies InstructionsRequestState}
             className="btn btn-ghost btn-sm"
           >
-            Levar este pedido para as instruções do tipo
+            {t('chat.toInstructions')}
           </Link>
         )}
       </div>
       <form className="composer" onSubmit={onSubmit}>
         <label htmlFor={fieldId} className="visually-hidden">
-          Pedido de ajuste
+          {t('chat.requestLabel')}
         </label>
         <textarea
           id={fieldId}
           className="input"
-          placeholder="Peça uma mudança, por exemplo: liste as decisões em tabela"
+          placeholder={t('chat.placeholder')}
           maxLength={MAX_MESSAGE}
           value={text}
           disabled={!hasSummary}
@@ -136,17 +138,17 @@ export function ChatPanel({ recordingId, hasTranscript, hasSummary, agendaTypeId
             }
           }}
         />
-        {!hasSummary && <p className={styles.chatSub}>O chat fica disponível quando houver um resumo.</p>}
-        {busy && hasSummary && <p className={styles.chatSub}>Há um pedido em andamento; espere a resposta.</p>}
+        {!hasSummary && <p className={styles.chatSub}>{t('chat.unavailable')}</p>}
+        {busy && hasSummary && <p className={styles.chatSub}>{t('chat.busy')}</p>}
         {send.isError && !(send.error instanceof ApiError && send.error.code === 'chat_busy') && (
           <p className="alert alert-error" role="alert">
             {errorMessage(send.error)}
           </p>
         )}
         <div className="composer-row">
-          <span>Cada mudança vira uma versão</span>
+          <span>{t('chat.versions')}</span>
           <button type="submit" className="btn btn-primary btn-sm" disabled={disabled || !text.trim()}>
-            Enviar
+            {t('chat.send')}
           </button>
         </div>
       </form>

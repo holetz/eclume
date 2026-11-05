@@ -1,10 +1,13 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { setLocale } from '../../i18n'
 import { fixtures } from '../../test/fixtures'
 import { json } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
 import { mockTranscriptApi, RECORDING_ID as RECORDING } from '../../test/transcriptApi'
+import { readNote } from './chat'
+import { originLabel } from './summary'
 
 beforeAll(() => preloadRoute('/gravacoes/x', '/config/agendas'))
 
@@ -167,5 +170,22 @@ describe('summary adjustment chat', () => {
     const aside = await chat()
     expect(await within(aside).findByText('O chat fica disponível quando houver um resumo.')).toBeInTheDocument()
     expect(composer(aside)).toBeDisabled()
+  })
+})
+
+describe('the summary chat in English', () => {
+  it('reads its notes and the summary origin from the transcript catalog', async () => {
+    await setLocale('en')
+    try {
+      expect(readNote({ tool: 'search_transcript', query: 'budget', hits: 3 } as never)).toBe(
+        'Searched “budget” in the transcript · 3 passages',
+      )
+      expect(readNote({ tool: 'read_transcript', from_ms: 0, to_ms: 60_000, clipped: true } as never)).toMatch(
+        /^Read the transcript, .+ \(clipped\)$/,
+      )
+      expect(originLabel({ origin: 'chat', restored_from_id: null })).toBe('Adjusted by the chat')
+    } finally {
+      await setLocale('pt-BR')
+    }
   })
 })

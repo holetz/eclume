@@ -1,9 +1,11 @@
 import { useMutation } from '@tanstack/react-query'
 import { useId, useState, type FormEvent } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { api } from '../../api/client'
 import { ApiError, errorMessage, unwrap } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
+import { i18n } from '../../i18n'
 import { useHelpTopic } from '../../app/help'
 import { HelpHint } from '../../app/HelpHint'
 import { PageHead } from '../../app/PageHead'
@@ -25,13 +27,14 @@ type Editing =
 /** The error of a tag save: the duplicate name gets the right way out, which is merging. */
 function tagError(error: unknown): string {
   if (error instanceof ApiError && error.code === 'tag_exists') {
-    return 'Já existe uma tag com esse nome. Para juntar as duas, use Mesclar.'
+    return i18n.t('tags:exists')
   }
   return errorMessage(error)
 }
 
 export function TagsPage() {
   useHelpTopic('tags')
+  const { t } = useTranslation('tags')
   const tags = useTags()
   const [editing, setEditing] = useState<Editing | null>(null)
   const items = tags.data?.items ?? []
@@ -40,34 +43,35 @@ export function TagsPage() {
   return (
     <section className={styles.page}>
       <PageHead
-        kicker="Organizar"
-        title="Tags"
+        kicker={t('kicker')}
+        title={t('title')}
         actions={
           <button type="button" className="btn btn-primary" onClick={() => setEditing({ mode: 'nova' })}>
-            Nova tag
+            {t('new')}
           </button>
         }
       />
       <p className="text-muted">
-        As tags marcam assuntos. Por padrão, o agente só usa as tags cadastradas aqui, e a descrição de cada uma
-        (quando usar) vai junto para ele decidir. A tag que você escreve numa gravação entra no cadastro sozinha.{' '}
-        <Link to="/ajuda/tags-cadastradas">Saiba como funciona</Link>. Veja em que ponto as tags entram em{' '}
-        <Link to="/config/automacao">Processamento automático</Link>.
+        <Trans
+          t={t}
+          i18nKey="intro"
+          components={{ how: <Link to="/ajuda/tags-cadastradas" />, automation: <Link to="/config/automacao" /> }}
+        />
       </p>
 
       <TagAssignmentCard />
 
-      {tags.isPending && <p role="status">Carregando tags…</p>}
+      {tags.isPending && <p role="status">{t('loading')}</p>}
       {tags.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(tags.error)}
         </p>
       )}
       {tags.isSuccess && items.length === 0 && (
-        <p className={styles.empty}>Nenhuma tag ainda. Crie uma com Nova tag, ou escreva tags numa gravação.</p>
+        <p className={styles.empty}>{t('empty')}</p>
       )}
       {items.length > 0 && (
-        <ul className={`list ${styles.list}`} aria-label="Tags">
+        <ul className={`list ${styles.list}`} aria-label={t('title')}>
           {items.map((tag) => (
             <TagRow
               key={tag.id}
@@ -102,35 +106,36 @@ function TagRow({
   onMerge?: () => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation('tags')
   return (
     <li className="list-row">
       <span className="list-row-title">
         {tag.name}
-        {tag.origin === 'auto' && <span className={`badge ${styles.badge}`}>Criada pelo agente</span>}
+        {tag.origin === 'auto' && <span className={`badge ${styles.badge}`}>{t('byAgent')}</span>}
       </span>
       <span className="list-row-sub">
         {tag.description && <span className={styles.description}>{tag.description}</span>}
         <span className={styles.meta}>
-          <span className="tabular">{tag.count === 1 ? '1 gravação' : `${tag.count} gravações`}</span>
-          <Link to={`/?tag=${encodeURIComponent(tag.name)}`}>Ver gravações</Link>
+          <span className="tabular">{t('count', { count: tag.count })}</span>
+          <Link to={`/?tag=${encodeURIComponent(tag.name)}`}>{t('see')}</Link>
         </span>
       </span>
       <span className="list-row-actions">
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit} aria-label={`Editar ${tag.name}`}>
-          Editar
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit} aria-label={t('editLabel', { name: tag.name })}>
+          {t('edit')}
         </button>
         {onMerge && (
           <button
             type="button"
             className="btn btn-ghost btn-sm"
             onClick={onMerge}
-            aria-label={`Mesclar ${tag.name} em outra tag`}
+            aria-label={t('mergeLabel', { name: tag.name })}
           >
-            Mesclar em…
+            {t('mergeInto')}
           </button>
         )}
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onDelete} aria-label={`Excluir ${tag.name}`}>
-          Excluir
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onDelete} aria-label={t('deleteLabel', { name: tag.name })}>
+          {t('delete')}
         </button>
       </span>
     </li>
@@ -138,6 +143,7 @@ function TagRow({
 }
 
 function CreateDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation('tags')
   const refresh = useRefreshTags()
   const create = useMutation({
     mutationFn: (values: TagValues) => unwrap(api.POST('/api/v1/tags', { body: values })),
@@ -147,9 +153,9 @@ function CreateDialog({ onClose }: { onClose: () => void }) {
     },
   })
   return (
-    <Dialog title="Nova tag" onClose={onClose} plain>
+    <Dialog title={t('new')} onClose={onClose} plain>
       <TagForm
-        submitLabel="Criar tag"
+        submitLabel={t('create')}
         pending={create.isPending}
         error={create.error}
         onSubmit={(values) => create.mutate(values)}
@@ -160,6 +166,7 @@ function CreateDialog({ onClose }: { onClose: () => void }) {
 }
 
 function EditDialog({ tag, onClose }: { tag: Tag; onClose: () => void }) {
+  const { t } = useTranslation(['tags', 'common'])
   const refresh = useRefreshTags()
   const save = useMutation({
     // Only what changed; renaming also changes the name in the recordings.
@@ -176,10 +183,10 @@ function EditDialog({ tag, onClose }: { tag: Tag; onClose: () => void }) {
     },
   })
   return (
-    <Dialog title="Editar tag" onClose={onClose} plain>
+    <Dialog title={t('editTitle')} onClose={onClose} plain>
       <TagForm
         initial={tag}
-        submitLabel="Salvar"
+        submitLabel={t('common:save')}
         pending={save.isPending}
         error={save.error}
         onSubmit={(values) => save.mutate(values)}
@@ -190,6 +197,7 @@ function EditDialog({ tag, onClose }: { tag: Tag; onClose: () => void }) {
 }
 
 function MergeDialog({ tag, targets, onClose }: { tag: Tag; targets: Tag[]; onClose: () => void }) {
+  const { t } = useTranslation(['tags', 'common'])
   const refresh = useRefreshTags()
   const [into, setInto] = useState(targets[0]?.id ?? '')
   const id = useId()
@@ -205,13 +213,13 @@ function MergeDialog({ tag, targets, onClose }: { tag: Tag; targets: Tag[]; onCl
   return (
     <Dialog
       plain
-      title={`Mesclar ${tag.name}`}
-      message={`Onde havia ${tag.name}, passa a haver a tag escolhida, nas gravações e nas tags padrão dos tipos de agenda. ${tag.name} sai do cadastro, e a tag escolhida fica com o nome e a descrição dela.`}
+      title={t('mergeTitle', { name: tag.name })}
+      message={t('mergeText', { name: tag.name })}
       onClose={onClose}
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Cancelar
+            {t('common:cancel')}
           </button>
           <button
             type="button"
@@ -219,13 +227,13 @@ function MergeDialog({ tag, targets, onClose }: { tag: Tag; targets: Tag[]; onCl
             onClick={() => merge.mutate()}
             disabled={merge.isPending || !target}
           >
-            {target ? `Mesclar em ${target.name}` : 'Mesclar'}
+            {target ? t('mergeTo', { name: target.name }) : t('merge')}
           </button>
         </>
       }
     >
       <div className="field">
-        <label htmlFor={`${id}-destino`}>Mesclar em</label>
+        <label htmlFor={`${id}-destino`}>{t('mergeField')}</label>
         <select id={`${id}-destino`} className="input" value={into} onChange={(e) => setInto(e.target.value)}>
           {targets.map((item) => (
             <option key={item.id} value={item.id}>
@@ -244,6 +252,7 @@ function MergeDialog({ tag, targets, onClose }: { tag: Tag; targets: Tag[]; onCl
 }
 
 function DeleteDialog({ tag, onClose }: { tag: Tag; onClose: () => void }) {
+  const { t } = useTranslation('tags')
   const refresh = useRefreshTags()
   const remove = useMutation({
     mutationFn: () => unwrap(api.DELETE('/api/v1/tags/{tag_id}', { params: { path: { tag_id: tag.id } } })),
@@ -255,16 +264,16 @@ function DeleteDialog({ tag, onClose }: { tag: Tag; onClose: () => void }) {
   return (
     <Dialog
       plain
-      title={`Excluir ${tag.name}?`}
-      message="A tag sai do cadastro, de todas as gravações e das tags padrão dos tipos de agenda. As gravações continuam na biblioteca."
+      title={t('deleteTitle', { name: tag.name })}
+      message={t('deleteText')}
       onClose={onClose}
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Manter
+            {t('keep')}
           </button>
           <button type="button" className="btn btn-danger" onClick={() => remove.mutate()} disabled={remove.isPending}>
-            Excluir tag
+            {t('deleteConfirm')}
           </button>
         </>
       }
@@ -288,6 +297,7 @@ interface TagFormProps {
 }
 
 function TagForm({ initial, submitLabel, pending, error, onSubmit, onCancel }: TagFormProps) {
+  const { t } = useTranslation(['tags', 'common'])
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const id = useId()
@@ -303,7 +313,7 @@ function TagForm({ initial, submitLabel, pending, error, onSubmit, onCancel }: T
   return (
     <form className={styles.form} onSubmit={submit}>
       <div className="field">
-        <label htmlFor={`${id}-nome`}>Nome da tag</label>
+        <label htmlFor={`${id}-nome`}>{t('form.name')}</label>
         <input
           id={`${id}-nome`}
           className="input"
@@ -315,10 +325,9 @@ function TagForm({ initial, submitLabel, pending, error, onSubmit, onCancel }: T
       </div>
       <div className="field">
         <div className={styles.labelRow}>
-          <label htmlFor={`${id}-quando`}>Quando usar</label>
-          <HelpHint subject="as tags cadastradas" title="Quando usar" article="tags-cadastradas">
-            O agente lê o nome e esta descrição de cada tag antes de escolher. Diga em que tipo de conversa a tag
-            serve, e quando ela não serve.
+          <label htmlFor={`${id}-quando`}>{t('form.when')}</label>
+          <HelpHint subject={t('form.hintSubject')} title={t('form.when')} article="tags-cadastradas">
+            {t('form.hint')}
           </HelpHint>
         </div>
         <textarea
@@ -326,7 +335,7 @@ function TagForm({ initial, submitLabel, pending, error, onSubmit, onCancel }: T
           className={`input ${styles.when}`}
           value={description}
           maxLength={4000}
-          placeholder="Por exemplo: conversas sobre contratos ou prazos com a Metalúrgica Serra Azul."
+          placeholder={t('form.placeholder')}
           onChange={(e) => setDescription(e.target.value)}
         />
       </div>
@@ -337,7 +346,7 @@ function TagForm({ initial, submitLabel, pending, error, onSubmit, onCancel }: T
       )}
       <div className="dialog-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel}>
-          Cancelar
+          {t('common:cancel')}
         </button>
         <button type="submit" className="btn btn-primary" disabled={pending || !cleanName || !changed}>
           {submitLabel}

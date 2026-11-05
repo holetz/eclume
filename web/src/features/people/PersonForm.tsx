@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { errorMessage } from '../../api/problem'
 import { TagInput } from '../organize/TagInput'
 import styles from './People.module.css'
@@ -27,12 +28,12 @@ interface PersonFormProps {
 
 type TextKey = Exclude<keyof PersonFields, 'tags'>
 
-const TEXTS: { key: Exclude<TextKey, 'name' | 'notes'>; label: string; type?: string; suggest?: 'companies' | 'departments' }[] = [
-  { key: 'company', label: 'Empresa', suggest: 'companies' },
-  { key: 'department', label: 'Área', suggest: 'departments' },
-  { key: 'job_title', label: 'Cargo' },
-  { key: 'email', label: 'E-mail', type: 'email' },
-  { key: 'phone', label: 'Telefone', type: 'tel' },
+const TEXTS: { key: Exclude<TextKey, 'name' | 'notes'>; type?: string; suggest?: 'companies' | 'departments' }[] = [
+  { key: 'company', suggest: 'companies' },
+  { key: 'department', suggest: 'departments' },
+  { key: 'job_title' },
+  { key: 'email', type: 'email' },
+  { key: 'phone', type: 'tel' },
 ]
 
 /**
@@ -50,6 +51,7 @@ export function PersonForm({ initial, pending, error, onSubmit, onCancel, danger
     job_title: initial.job_title ?? '',
     phone: initial.phone ?? '',
   }))
+  const { t } = useTranslation(['people', 'common'])
   const [tags, setTags] = useState(initial.tags)
   const facets = usePersonFacets()
   const id = useId()
@@ -74,7 +76,7 @@ export function PersonForm({ initial, pending, error, onSubmit, onCancel, danger
   return (
     <form className={styles.form} onSubmit={submit}>
       <div className="field">
-        <label htmlFor={`${id}-name`}>Nome</label>
+        <label htmlFor={`${id}-name`}>{t('form.name')}</label>
         <input
           id={`${id}-name`}
           className="input"
@@ -84,9 +86,9 @@ export function PersonForm({ initial, pending, error, onSubmit, onCancel, danger
         />
       </div>
       <div className={styles.formGrid}>
-        {TEXTS.map(({ key, label, type, suggest }) => (
+        {TEXTS.map(({ key, type, suggest }) => (
           <div key={key} className="field">
-            <label htmlFor={`${id}-${key}`}>{label}</label>
+            <label htmlFor={`${id}-${key}`}>{t(`column.${key}`)}</label>
             <input
               id={`${id}-${key}`}
               className="input"
@@ -107,21 +109,21 @@ export function PersonForm({ initial, pending, error, onSubmit, onCancel, danger
         ))}
       </div>
       <div className="field">
-        <label htmlFor={`${id}-tags`}>Tags da pessoa</label>
+        <label htmlFor={`${id}-tags`}>{t('form.tags')}</label>
         <TagInput
           id={`${id}-tags`}
           value={tags}
           onChange={setTags}
-          listLabel="Tags da pessoa"
+          listLabel={t('form.tags')}
           itemLabel="tag"
           describedBy={`${id}-tags-hint`}
         />
         <span id={`${id}-tags-hint`} className="field-hint">
-          Rótulos da pessoa, como “cliente” ou “diretoria”. Servem para filtrar a biblioteca pelos participantes.
+          {t('form.tagsHint')}
         </span>
       </div>
       <div className="field">
-        <label htmlFor={`${id}-notes`}>Notas</label>
+        <label htmlFor={`${id}-notes`}>{t('form.notes')}</label>
         <textarea id={`${id}-notes`} className="input" value={draft.notes} onChange={(e) => set('notes', e.target.value)} />
       </div>
       {error != null && (
@@ -132,10 +134,10 @@ export function PersonForm({ initial, pending, error, onSubmit, onCancel, danger
       <div className="dialog-actions">
         {danger}
         <button type="button" className="btn btn-secondary" onClick={onCancel}>
-          Cancelar
+          {t('common:cancel')}
         </button>
         <button type="submit" className="btn btn-primary" disabled={pending || !draft.name.trim()}>
-          Salvar
+          {t('common:save')}
         </button>
       </div>
     </form>

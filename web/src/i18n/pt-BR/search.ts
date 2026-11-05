@@ -1,0 +1,58 @@
+import type en from '../en/search'
+import type { Catalog } from '../locale'
+
+const search: Catalog<typeof en> = {
+  period: {
+    '7d': 'Últimos 7 dias',
+    '30d': 'Últimos 30 dias',
+    ano: 'Este ano',
+    range: '{{from}} a {{to}}',
+    since: 'desde {{from}}',
+    until: 'até {{to}}',
+  },
+  any: 'qualquer',
+  anyDate: 'Qualquer data',
+  interval: 'Intervalo…',
+  from: 'De',
+  to: 'Até',
+  apply: 'Aplicar',
+  anyOption: 'Qualquer',
+  anyValue: 'Qualquer valor',
+  chosen: 'escolhida',
+  chip: {
+    period: 'Período',
+    person: 'Pessoa',
+    tag: 'Tag',
+    collection: 'Coleção',
+    filter: 'Filtro {{label}}',
+    label: '{{label}}: {{value}}',
+  },
+  personPlaceholder: 'Nome ou e-mail',
+  anyPerson: 'Qualquer pessoa',
+  tagOption: '{{name}} ({{count}})',
+  passagesOf: 'Trechos de {{title}}',
+  listen: 'Ouvir em {{time}}, fala de {{name}} em {{title}}',
+  kicker: 'Gravações',
+  title: 'Busca',
+  terms: 'Termos',
+  submit: 'Buscar',
+  filters: 'Filtros',
+  clear: 'Limpar',
+  hint: 'Digite um termo ou escolha uma pessoa para buscar. Use aspas para frase exata e - para excluir um termo.',
+  searching: 'Buscando…',
+  empty: 'Nenhum trecho encontrado com esses filtros.',
+  results: 'Resultados',
+  more: 'Mais resultados',
+  total: {
+    passages_zero: '{{count}} trechos',
+    passages_one: '1 trecho',
+    passages_other: '{{count}} trechos',
+    recordings_zero: '{{count}} gravações',
+    recordings_one: '1 gravação',
+    recordings_other: '{{count}} gravações',
+    line: '{{passages}} em {{where}}',
+    lineMore: '{{passages}} em {{where}} ou mais',
+  },
+}
+
+export default search

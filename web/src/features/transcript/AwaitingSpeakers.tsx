@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
@@ -19,6 +20,7 @@ function linksOf(speakers: { id: string; person?: { id: string } | null }[] | un
  * speaker got a name.
  */
 export function AwaitingSpeakers({ recording }: { recording: Recording }) {
+  const { t } = useTranslation('transcript')
   const waiting = recording.pipeline.some((step) => step.step === 'speakers' && step.state === 'waiting')
   const queryClient = useQueryClient()
   const transcript = useTranscript(waiting ? recording.transcript_id : null)
@@ -36,15 +38,13 @@ export function AwaitingSpeakers({ recording }: { recording: Recording }) {
 
   if (!waiting) return null
   return (
-    <div className="alert alert-warning" role="status" aria-label="Aguardando locutores">
-      <p className="alert-title">Aguardando locutores</p>
+    <div className="alert alert-warning" role="status" aria-label={t('awaiting.title')}>
+      <p className="alert-title">{t('awaiting.title')}</p>
       <p>
-        Sua conta exige que cada locutor tenha uma pessoa antes do tipo de agenda, dos campos, das coleções e do
-        resumo. Ligue os locutores sem pessoa em <a href="#locutores">Locutores</a>: quando o último tiver nome, o
-        processamento segue sozinho.
+        <Trans t={t} i18nKey="awaiting.text" components={{ speakers: <a href="#locutores" /> }} />
       </p>
       <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirming(true)}>
-        Seguir sem nomear
+        {t('awaiting.continue')}
       </button>
       {resume.isError && (
         <p className="alert alert-error" role="alert">
@@ -53,14 +53,13 @@ export function AwaitingSpeakers({ recording }: { recording: Recording }) {
       )}
       {confirming && (
         <ConfirmDialog
-          title="Seguir sem nomear os locutores?"
-          confirmLabel="Seguir sem nomear"
+          title={t('awaiting.confirmTitle')}
+          confirmLabel={t('awaiting.continue')}
           busy={resume.isPending}
           onCancel={() => setConfirming(false)}
           onConfirm={() => resume.mutate(undefined, { onSettled: () => setConfirming(false) })}
         >
-          O tipo, os campos, as coleções e o resumo seguem agora, com &ldquo;Locutor N&rdquo; no lugar de quem ainda não
-          tem pessoa. Você pode nomear os locutores depois e gerar o resumo de novo.
+          {t('awaiting.confirmText')}
         </ConfirmDialog>
       )}
     </div>

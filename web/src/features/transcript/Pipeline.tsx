@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
@@ -7,19 +8,19 @@ import { stepLabel, stepNote } from './steps'
 import { RetryTranscription } from './RetryTranscription'
 import { AwaitingSpeakers } from './AwaitingSpeakers'
 import styles from './RecordingPage.module.css'
-import { stageLabel } from '../../shared/format'
-import { fraseDaEspera } from '../../lib/vocabulario.js'
+import { stageLabel, waitingPhrase } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 
 /** "Cancelar transcrição", with confirmation: the GPU stops and the recording is left without text. */
 function CancelTranscription({ recording }: { recording: Recording }) {
+  const { t } = useTranslation('transcript')
   const cancel = useCancelTranscription(recording.id)
   const [confirming, setConfirming] = useState(false)
   return (
     <>
       <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirming(true)}>
-        Cancelar transcrição
+        {t('pipeline.cancel')}
       </button>
       {cancel.isError && (
         <p className="alert alert-error" role="alert">
@@ -28,13 +29,13 @@ function CancelTranscription({ recording }: { recording: Recording }) {
       )}
       {confirming && (
         <ConfirmDialog
-          title="Cancelar a transcrição?"
-          confirmLabel="Parar a transcrição"
+          title={t('pipeline.cancelTitle')}
+          confirmLabel={t('pipeline.cancelConfirm')}
           busy={cancel.isPending}
           onCancel={() => setConfirming(false)}
           onConfirm={() => cancel.mutate(undefined, { onSettled: () => setConfirming(false) })}
         >
-          A transcrição para e a gravação fica sem texto. Você pode transcrever de novo quando quiser.
+          {t('pipeline.cancelText')}
         </ConfirmDialog>
       )}
     </>
@@ -46,12 +47,13 @@ function CancelTranscription({ recording }: { recording: Recording }) {
  * the DS `.progress-row`.
  */
 function TranscriptionProgress({ recording }: { recording: Recording }) {
+  const { t } = useTranslation(['transcript', 'shared'])
   const job = recording.job
   if (recording.status === 'queued') {
     return (
       <>
         <p className={styles.pipelineNote} role="status">
-          {fraseDaEspera(job?.queue) ?? 'Aguardando a vez na fila de transcrição.'}
+          {waitingPhrase(job?.queue) ?? t('shared:queue.waiting')}
         </p>
         <CancelTranscription recording={recording} />
       </>
@@ -59,10 +61,10 @@ function TranscriptionProgress({ recording }: { recording: Recording }) {
   }
   if (recording.status !== 'processing' || !job) return null
   const percent = Math.round(job.progress * 100)
-  const stage = stageLabel(job.stage) ?? 'Transcrevendo'
+  const stage = stageLabel(job.stage) ?? t('pipeline.transcribing')
   return (
     <div className={styles.progress}>
-      <progress className="progress" max={100} value={percent} aria-label={`${stage}: ${percent}%`} />
+      <progress className="progress" max={100} value={percent} aria-label={t('pipeline.progress', { stage, percent })} />
       <div className="progress-row">
         <span>{stage}</span>
         <span>{percent}%</span>
@@ -78,12 +80,13 @@ function TranscriptionProgress({ recording }: { recording: Recording }) {
  * transcription progress or the failure with the retry.
  */
 export function Pipeline({ recording }: { recording: Recording }) {
+  const { t } = useTranslation('transcript')
   const notes = recording.pipeline
     .map((step) => ({ step, note: stepNote(step) }))
     .filter((item): item is { step: Recording['pipeline'][number]; note: string } => item.note !== null)
   return (
     <div className={styles.pipeline}>
-      <ol className="pipeline" aria-label="Processamento">
+      <ol className="pipeline" aria-label={t('pipeline.label')}>
         {recording.pipeline.map((step) => (
           <li
             key={step.step}
@@ -96,7 +99,7 @@ export function Pipeline({ recording }: { recording: Recording }) {
         ))}
       </ol>
       {notes.length > 0 && (
-        <ul className={styles.pipelineReasons} aria-label="Motivos das etapas">
+        <ul className={styles.pipelineReasons} aria-label={t('pipeline.reasons')}>
           {notes.map(({ step, note }) => (
             <li key={step.step}>
               {stepLabel(step)}: {note}
@@ -108,7 +111,7 @@ export function Pipeline({ recording }: { recording: Recording }) {
       <TranscriptionProgress recording={recording} />
       {recording.status === 'failed' && (
         <p className="alert alert-error" role="alert">
-          {recording.job?.error?.message ?? 'A transcrição falhou.'}
+          {recording.job?.error?.message ?? t('pipeline.failed')}
         </p>
       )}
       <RetryTranscription recording={recording} />

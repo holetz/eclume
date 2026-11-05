@@ -181,8 +181,8 @@ which does not find it in its `PATH`. The release APK comes out of the host, thr
 
 ## Support services — `deploy/docker-compose.dev.yml`
 
-Postgres with pgvector (`pgvector/pgvector:pg16`), Redis and MinIO, **every port published only on
-`127.0.0.1`**: Docker publishes outside ufw.
+Postgres with pgvector (`pgvector/pgvector:pg16`), Redis (the Valkey image, `valkey/valkey`) and
+MinIO, **every port published only on `127.0.0.1`**: Docker publishes outside ufw.
 
 ```bash
 docker compose -f deploy/docker-compose.dev.yml up -d

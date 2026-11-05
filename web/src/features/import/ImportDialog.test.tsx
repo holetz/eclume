@@ -200,4 +200,27 @@ describe('modal Importar', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
+
+  it('reads in English when the account chose English', async () => {
+    const me = fixtures.me()
+    mockFetch({
+      'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }),
+      'GET /api/v1/recordings': () => fixtures.recordingWeekPage(),
+      'GET /api/v1/tags': () => fixtures.tagList(),
+      'GET /api/v1/collections': () => fixtures.collectionPage(),
+      'GET /api/v1/fields': () => fixtures.fieldPage(),
+      'GET /api/v1/people': () => fixtures.personPage(),
+      'GET /api/v1/me/transcription': () => fixtures.transcriptionPreference(),
+    })
+    const user = userEvent.setup()
+    renderApp('/?importar=1')
+    const dialog = await screen.findByRole('dialog', { name: 'Import files' })
+    await user.upload(within(dialog).getByLabelText(/Drop audio or video here/), files())
+    await waitFor(() => expect(within(dialog).getAllByText('Ready to upload')).toHaveLength(2))
+    expect(within(dialog).getByLabelText('Start of the recording of kickoff-guion.m4a')).toHaveAccessibleDescription(
+      'From the file metadata',
+    )
+    expect(within(dialog).getByRole('button', { name: 'Upload 2 files' })).toBeEnabled()
+    expect(within(dialog).getByRole('columnheader', { name: 'Status' })).toBeInTheDocument()
+  })
 })

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { i18n } from '../../i18n'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
@@ -23,7 +25,7 @@ function recordingKicker(
   const parts = [`${shortDayLabel(start)} ${start.getFullYear()}`, timeLabel(start)]
   if (recording.duration_ms) parts.push(formatDuration(recording.duration_ms))
   if (recording.language && recording.language !== AUTO_LANGUAGE) parts.push(languageLabel(recording.language))
-  if (recording.recorded_at_source === 'upload') parts.push('data do envio')
+  if (recording.recorded_at_source === 'upload') parts.push(i18n.t('transcript:header.uploadDate'))
   return parts.join(' · ')
 }
 
@@ -35,6 +37,7 @@ interface RecordingHeaderProps {
 
 /** Date, time, duration and language in the kicker, the title and the Transcrever de novo em…, Exportar and Excluir actions (frame "Recording"). */
 export function RecordingHeader({ recording, hasSummary, onDeleted }: RecordingHeaderProps) {
+  const { t } = useTranslation('transcript')
   const [confirming, setConfirming] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const remove = useDeleteRecording(recording)
@@ -44,15 +47,15 @@ export function RecordingHeader({ recording, hasSummary, onDeleted }: RecordingH
       <div className={styles.titleBlock}>
         <span className="kicker">{recordingKicker(recording)}</span>
         <h1 className={styles.title}>{recording.title}</h1>
-        <span className={styles.ref} title={`ID completo: ${recording.id}`}>
-          ref. {shortRef(recording.id)}
+        <span className={styles.ref} title={t('header.fullId', { id: recording.id })}>
+          {t('header.ref', { ref: shortRef(recording.id) })}
         </span>
       </div>
       <div className={styles.actions}>
         <RetranscribeAction recording={recording} />
         <ExportMenu recordingId={recording.id} hasSummary={hasSummary} onError={setExportError} />
         <button type="button" className="btn btn-danger btn-secondary" onClick={() => setConfirming(true)}>
-          Excluir
+          {t('header.delete')}
         </button>
       </div>
       {exportError && (
@@ -62,15 +65,13 @@ export function RecordingHeader({ recording, hasSummary, onDeleted }: RecordingH
       )}
       {confirming && (
         <ConfirmDialog
-          title="Excluir a gravação?"
-          confirmLabel="Excluir"
+          title={t('header.deleteTitle')}
+          confirmLabel={t('header.delete')}
           busy={remove.isPending}
           onCancel={() => setConfirming(false)}
           onConfirm={() => remove.mutate(undefined, { onSuccess: onDeleted })}
         >
-          <p>
-            O áudio, a transcrição, o resumo com as versões, o chat e os marcadores são apagados. Não dá para desfazer.
-          </p>
+          <p>{t('header.deleteText')}</p>
           {remove.isError && (
             <p className="alert alert-error" role="alert">
               {errorMessage(remove.error)}

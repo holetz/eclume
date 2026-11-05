@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { i18n } from '../../i18n'
 import { createPlaybackClock, PlaybackContext, RATES, type Playback, type PlaybackError } from './playback'
 
 interface PlaybackProviderProps {
@@ -117,7 +118,7 @@ export function PlaybackProvider({ recordingId, durationMs, startMs = null, audi
           ref={audioRef}
           preload="metadata"
           src={src}
-          aria-label="Áudio da gravação"
+          aria-label={i18n.t('transcript:audio')}
           onTimeUpdate={(event) => clock.set(event.currentTarget.currentTime * 1000)}
           onPlay={() => setPlaying(true)}
           onPlaying={() => {

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+import { activeLocale } from '../../i18n'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDeferredValue, useId, useState, type KeyboardEvent } from 'react'
 import { api, type Schemas } from '../../api/client'
@@ -20,7 +22,8 @@ interface PersonComboboxProps {
  * Combobox (ARIA 1.2, popup list) to choose a person from the directory by name or e-mail,
  * with the option of registering on the spot someone who does not exist yet. Arrows navigate, Enter chooses, Esc cancels.
  */
-export function PersonCombobox({ label, onSelect, onCancel, placeholder = 'Nome ou e-mail' }: PersonComboboxProps) {
+export function PersonCombobox({ label, onSelect, onCancel, placeholder }: PersonComboboxProps) {
+  const { t } = useTranslation(['people', 'common'])
   const inline = onCancel === undefined
   const queryClient = useQueryClient()
   const [text, setText] = useState('')
@@ -44,7 +47,7 @@ export function PersonCombobox({ label, onSelect, onCancel, placeholder = 'Nome 
 
   const name = text.trim()
   const matches = people.data?.items ?? []
-  const exists = matches.some((p) => p.name.toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'))
+  const exists = matches.some((p) => p.name.toLocaleLowerCase(activeLocale()) === name.toLocaleLowerCase(activeLocale()))
   // In the filter, the list only opens when there is text, and it does not register a new person.
   const options: Option[] =
     inline && !name
@@ -92,7 +95,7 @@ export function PersonCombobox({ label, onSelect, onCancel, placeholder = 'Nome 
         aria-expanded={options.length > 0}
         aria-controls={listId}
         aria-activedescendant={current >= 0 ? optionId(current) : undefined}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t('combobox.placeholder')}
         value={text}
         onChange={(event) => {
           setText(event.target.value)
@@ -120,7 +123,7 @@ export function PersonCombobox({ label, onSelect, onCancel, placeholder = 'Nome 
                 {option.person.email && <span className={styles.detail}>{option.person.email}</span>}
               </>
             ) : (
-              <span>Cadastrar “{option.name}”</span>
+              <span>{t('combobox.create', { name: option.name })}</span>
             )}
           </li>
         ))}
@@ -132,7 +135,7 @@ export function PersonCombobox({ label, onSelect, onCancel, placeholder = 'Nome 
       )}
       {onCancel && (
         <button type="button" className="btn btn-secondary btn-sm" onClick={onCancel}>
-          Cancelar
+          {t('common:cancel')}
         </button>
       )}
     </div>

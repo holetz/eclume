@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import styles from './Organize.module.css'
 
 interface TagInputProps {
@@ -15,6 +16,7 @@ interface TagInputProps {
 
 /** A list of short values as `.tag`: Enter appends, and the × on each one removes it. */
 export function TagInput({ id, value, onChange, listLabel, itemLabel, invalid, describedBy }: TagInputProps) {
+  const { t } = useTranslation('organize')
   const [text, setText] = useState('')
 
   function add() {
@@ -39,7 +41,7 @@ export function TagInput({ id, value, onChange, listLabel, itemLabel, invalid, d
               <button
                 type="button"
                 className={styles.tagRemove}
-                aria-label={`Remover ${itemLabel} ${item}`}
+                aria-label={t('tagInput.remove', { item: itemLabel, value: item })}
                 onClick={() => onChange(value.filter((other) => other !== item))}
               >
                 ×
@@ -52,7 +54,7 @@ export function TagInput({ id, value, onChange, listLabel, itemLabel, invalid, d
         id={id}
         className={`input ${styles.tagText}`}
         value={text}
-        placeholder={`Nova ${itemLabel} e Enter`}
+        placeholder={t('tagInput.placeholder', { item: itemLabel })}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         onChange={(event) => setText(event.target.value)}

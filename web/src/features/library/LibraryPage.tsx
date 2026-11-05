@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
 import { lazy, Suspense, useEffect, useId, useState, useSyncExternalStore } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
@@ -31,11 +32,7 @@ import { useHasAnyRecording } from './anyRecording'
 import { useLibraryList, useLibraryRange } from './queries'
 import { RecordingList } from './RecordingList'
 
-const VIEWS: { value: LibraryView; label: string }[] = [
-  { value: 'mes', label: 'Mês' },
-  { value: 'semana', label: 'Semana' },
-  { value: 'lista', label: 'Lista' },
-]
+const VIEWS: LibraryView[] = ['mes', 'semana', 'lista']
 
 // The modal (and the media converter it pulls in) loads only when it opens.
 const ImportDialog = lazy(() => import('../import/ImportDialog').then((module) => ({ default: module.ImportDialog })))
@@ -57,6 +54,7 @@ function useNarrow(): boolean {
 
 export function LibraryPage() {
   useHelpTopic('biblioteca')
+  const { t } = useTranslation(['library', 'common'])
   const [params, setParams] = useSearchParams()
   const segId = useId()
   const filtersId = useId()
@@ -131,22 +129,25 @@ export function LibraryPage() {
 
   const step = (direction: 1 | -1) =>
     update({ data: dayKey(view === 'mes' ? addMonths(day, direction) : addDays(week.from, 7 * direction)) })
-  const unit = view === 'mes' ? { previous: 'Mês anterior', next: 'Próximo mês' } : { previous: 'Semana anterior', next: 'Próxima semana' }
+  const unit =
+    view === 'mes'
+      ? { previous: t('page.previousMonth'), next: t('page.nextMonth') }
+      : { previous: t('page.previousWeek'), next: t('page.nextWeek') }
 
   return (
     <div className={`bleed ${narrow ? '' : 'with-filters'} ${styles.layout}`} data-collapsed={(!narrow && collapsed) || undefined}>
       <div className={`${styles.content} ${view === 'lista' ? '' : styles.fill}`}>
         <PageHead
-          kicker="Gravações"
-          title="Biblioteca"
+          kicker={t('page.kicker')}
+          title={t('page.title')}
           actions={
             <>
               <Link to="/busca" className="btn btn-secondary">
                 <Search size={16} aria-hidden />
-                Buscar
+                {t('page.search')}
               </Link>
               <button type="button" className="btn btn-primary" onClick={() => setImporting(true)}>
-                Importar arquivos
+                {t('page.import')}
               </button>
             </>
           }
@@ -171,7 +172,7 @@ export function LibraryPage() {
 
         <div className={`toolbar ${styles.toolbar}`}>
           <span className="toolbar-title" aria-live="polite">
-            {view === 'lista' ? 'Todas as gravações' : view === 'mes' ? monthTitle(day) : weekTitle(week.from)}
+            {view === 'lista' ? t('page.allRecordings') : view === 'mes' ? monthTitle(day) : weekTitle(week.from)}
           </span>
           {view !== 'lista' && (
             <>
@@ -184,7 +185,7 @@ export function LibraryPage() {
                 <ChevronLeft size={16} aria-hidden />
               </button>
               <button type="button" className="btn btn-secondary" onClick={() => update({ data: dayKey(new Date()) })}>
-                Hoje
+                {t('page.today')}
               </button>
               <button type="button" className="btn btn-secondary btn-icon" aria-label={unit.next} onClick={() => step(1)}>
                 <ChevronRight size={16} aria-hidden />
@@ -194,20 +195,20 @@ export function LibraryPage() {
           {narrow && (
             <button type="button" className="btn btn-secondary" onClick={() => setFiltersOpen(true)}>
               <SlidersHorizontal size={16} aria-hidden />
-              Filtros ({filterCount})
+              {t('page.filtersCount', { count: filterCount })}
             </button>
           )}
-          <div className="seg" role="radiogroup" aria-label="Visão">
+          <div className="seg" role="radiogroup" aria-label={t('page.view')}>
             {VIEWS.map((option) => (
-              <label key={option.value} className="seg-opt">
+              <label key={option} className="seg-opt">
                 <input
                   type="radio"
                   name={segId}
-                  value={option.value}
-                  checked={view === option.value}
-                  onChange={() => update({ visao: option.value })}
+                  value={option}
+                  checked={view === option}
+                  onChange={() => update({ visao: option })}
                 />
-                {option.label}
+                {t(`views.${option}`)}
               </label>
             ))}
           </div>
@@ -217,18 +218,18 @@ export function LibraryPage() {
           <div className="alert alert-error" role="alert">
             {errorMessage(current.error)}{' '}
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => current.refetch()}>
-              Tentar de novo
+              {t('common:retry')}
             </button>
           </div>
         )}
         {current.isPending && (
           <p role="status" className={styles.status}>
-            Carregando gravações…
+            {t('page.loading')}
           </p>
         )}
         {view !== 'lista' && range.data?.truncated && (
           <p role="status" className={styles.status}>
-            Mostrando as primeiras 1000 gravações deste período.
+            {t('page.truncated')}
           </p>
         )}
 
@@ -248,7 +249,7 @@ export function LibraryPage() {
             {view === 'lista' && <RecordingList recordings={items} />}
             {emptyPeriod && (
               <p className={`text-muted ${styles.status}`}>
-                {view === 'lista' ? 'Nada gravado.' : 'Nada gravado neste período.'}
+                {view === 'lista' ? t('page.emptyList') : t('page.emptyPeriod')}
               </p>
             )}
             {view === 'lista' && list.hasNextPage && (
@@ -258,7 +259,7 @@ export function LibraryPage() {
                 onClick={() => list.fetchNextPage()}
                 disabled={list.isFetchingNextPage}
               >
-                {list.isFetchingNextPage ? 'Carregando…' : 'Carregar mais'}
+                {list.isFetchingNextPage ? t('common:loading') : t('page.more')}
               </button>
             )}
           </>
@@ -281,17 +282,17 @@ export function LibraryPage() {
       )}
       {narrow && filtersOpen && (
         <Dialog
-          title="Filtros"
-          kicker="Biblioteca"
+          title={t('page.filters')}
+          kicker={t('page.title')}
           plain
           onClose={() => setFiltersOpen(false)}
           actions={
             <>
               <button type="button" className="btn btn-ghost" onClick={clearFilters} disabled={filterCount === 0}>
-                Limpar filtros
+                {t('page.clearFilters')}
               </button>
               <button type="button" className="btn btn-primary" onClick={() => setFiltersOpen(false)}>
-                Ver gravações
+                {t('page.showRecordings')}
               </button>
             </>
           }
@@ -307,15 +308,16 @@ export function LibraryPage() {
 
 /** The import queue strip, while a file is converting or uploading. */
 function ImportBand({ items, onOpen }: { items: ImportItem[]; onOpen: () => void }) {
+  const { t } = useTranslation('library')
   const active = items.filter((item) => item.state.kind !== 'canceled')
   const current = active.findIndex((item) => item.state.kind === 'converting' || item.state.kind === 'uploading')
   if (current === -1) return null
   return (
     <div className={`alert alert-info ${styles.band}`} role="status">
       <span>
-        Enviando {current + 1} de {active.length} {active.length === 1 ? 'arquivo' : 'arquivos'} ·{' '}
+        {t('importBand', { current: current + 1, count: active.length })}
         <button type="button" className={styles.linkButton} onClick={onOpen}>
-          Abrir
+          {t('open')}
         </button>
       </span>
     </div>
@@ -327,18 +329,16 @@ function ImportBand({ items, onOpen }: { items: ImportItem[]; onOpen: () => void
  * shortcut that turns the filter on in the list.
  */
 function NeedsYouBand({ onShow }: { onShow: () => void }) {
+  const { t } = useTranslation('library')
   const naming = useSpeakerNaming()
   const count = naming.data?.waiting_count ?? 0
   if (count === 0) return null
   return (
-    <div className={`alert alert-warning ${styles.band}`} role="status" aria-label="Precisam de você">
+    <div className={`alert alert-warning ${styles.band}`} role="status" aria-label={t('needsYou.label')}>
       <span>
-        {count === 1
-          ? '1 gravação aguarda você nomear os locutores para seguir com o tipo, os campos e o resumo'
-          : `${count} gravações aguardam você nomear os locutores para seguir com o tipo, os campos e o resumo`}{' '}
-        ·{' '}
+        {t('needsYou.text', { count })} ·{' '}
         <button type="button" className={styles.linkButton} onClick={onShow}>
-          Ver
+          {t('needsYou.show')}
         </button>
       </span>
     </div>
@@ -346,17 +346,23 @@ function NeedsYouBand({ onShow }: { onShow: () => void }) {
 }
 
 function EmptyLibrary({ onImport }: { onImport: () => void }) {
+  const { t } = useTranslation('library')
   return (
     <div className={`card ${styles.empty}`}>
-      <h2>Nenhuma gravação ainda</h2>
+      <h2>{t('empty.title')}</h2>
       <p className="text-muted">
-        Importe um arquivo de áudio ou vídeo, grave reuniões automaticamente com o{' '}
-        <Link to="/app-desktop">app desktop</Link> ou grave pelo <Link to="/app-movel">app do celular</Link>. Cada
-        gravação é transcrita, ganha título e resumo pelo seu{' '}
-        <Link to="/config/agendas">tipo de agenda</Link>.
+        <Trans
+          t={t}
+          i18nKey="empty.text"
+          components={{
+            desktop: <Link to="/app-desktop" />,
+            mobile: <Link to="/app-movel" />,
+            agendas: <Link to="/config/agendas" />,
+          }}
+        />
       </p>
       <button type="button" className="btn btn-primary" onClick={onImport}>
-        Importar arquivos
+        {t('page.import')}
       </button>
     </div>
   )

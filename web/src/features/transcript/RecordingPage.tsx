@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
@@ -29,6 +30,7 @@ function useBackTo(): string {
 
 export function RecordingPage() {
   useHelpTopic('gravacao')
+  const { t } = useTranslation('transcript')
   const { id = '' } = useParams()
   const [params] = useSearchParams()
   const navigate = useNavigate()
@@ -60,15 +62,15 @@ export function RecordingPage() {
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
-  usePageTitle(recording.data?.title ?? 'Gravação')
+  usePageTitle(recording.data?.title ?? t('page.title'))
 
   const back = (
     <Link to={backTo} className={styles.back}>
-      ← Biblioteca
+      {t('page.back')}
     </Link>
   )
 
-  if (recording.isPending) return <p role="status">Carregando gravação…</p>
+  if (recording.isPending) return <p role="status">{t('page.loading')}</p>
   if (recording.isError) {
     return (
       <div className={styles.content}>
@@ -88,7 +90,7 @@ export function RecordingPage() {
         <RecordingHeader
           recording={data}
           hasSummary={Boolean(summary.data?.current)}
-          onDeleted={() => navigate(backTo, { state: { notice: 'Gravação excluída.' } })}
+          onDeleted={() => navigate(backTo, { state: { notice: t('page.deleted') } })}
         />
         <Pipeline recording={data} />
 
@@ -110,11 +112,11 @@ export function RecordingPage() {
           {data.transcript_id === null ? (
             <p className={styles.pending}>
               {data.status === 'failed'
-                ? 'Não há transcrição: o job falhou.'
-                : 'A transcrição aparece aqui assim que o processamento terminar.'}
+                ? t('page.noTranscriptFailed')
+                : t('page.transcriptPending')}
             </p>
           ) : transcript.isPending ? (
-            <p role="status">Carregando transcrição…</p>
+            <p role="status">{t('page.loadingTranscript')}</p>
           ) : transcript.isError ? (
             <p className="alert alert-error" role="alert">
               {errorMessage(transcript.error)}

@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router'
 import { errorMessage } from '../../api/problem'
+import { i18n } from '../../i18n'
 import { useHelpTopic } from '../../app/help'
 import { markAgendaTypesSeen } from '../../app/preferences'
 import { PageHead } from '../../app/PageHead'
@@ -14,20 +16,21 @@ const SUMMARY_LINE_MAX = 60
 /** "Resumo: " with the `##` headings of the instructions, in lowercase; with no headings, the first line, cut at a word. */
 function summaryLabel(instructions: string): string {
   const headings = [...instructions.matchAll(/^##\s+(.+?)\s*$/gm)].map((match) => match[1].toLowerCase())
-  if (headings.length) return `Resumo: ${headings.join(', ')}`
+  if (headings.length) return i18n.t('organize:types.summaryLine', { text: headings.join(', ') })
   const first = instructions.split('\n').find((line) => line.trim())?.trim() ?? ''
-  if (first.length <= SUMMARY_LINE_MAX) return `Resumo: ${first}`
+  if (first.length <= SUMMARY_LINE_MAX) return i18n.t('organize:types.summaryLine', { text: first })
   // Cuts at the last whole word, without the stray punctuation at the end.
   const cut = first
     .slice(0, SUMMARY_LINE_MAX + 1)
     .replace(/\s+\S*$/, '')
     .replace(/[\s,;:.]+$/, '')
-  return `Resumo: ${cut}…`
+  return i18n.t('organize:types.summaryCut', { text: cut })
 }
 
 export function AgendaTypesPage() {
   useHelpTopic('agendas')
   useEffect(markAgendaTypesSeen, [])
+  const { t } = useTranslation('organize')
   const types = useAgendaTypes()
   // The fallback agenda type stays on top, with the badge; the others in the user's order.
   const items = [...(types.data?.items ?? [])].sort(
@@ -37,26 +40,24 @@ export function AgendaTypesPage() {
   // The request the summary chat sent for this agenda type, in the navigation `state`.
   const location = useLocation()
   const instructionsRequest = (location.state as Partial<InstructionsRequestState> | null)?.instructionsRequest
-  const current = selected === NEW ? null : (items.find((t) => t.id === selected) ?? (selected ? undefined : items[0]))
+  const current = selected === NEW ? null : (items.find((item) => item.id === selected) ?? (selected ? undefined : items[0]))
 
   return (
     <section className={styles.page}>
       <PageHead
-        kicker="Regras"
-        title="Tipos de agenda"
+        kicker={t('types.kicker')}
+        title={t('types.title')}
         actions={
           <button type="button" className="btn btn-primary" onClick={() => select(NEW)}>
-            Novo tipo
+            {t('types.new')}
           </button>
         }
       />
       <p className="text-muted">
-        Depois da transcrição, o eclume escolhe um destes tipos para a gravação, dá o título pelo padrão
-        dele e faz o resumo pelas instruções dele. Quando nenhum se encaixa com confiança, fica o tipo
-        padrão.
+        {t('types.intro')}
       </p>
 
-      {types.isPending && <p role="status">Carregando tipos de agenda…</p>}
+      {types.isPending && <p role="status">{t('types.loading')}</p>}
       {types.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(types.error)}
@@ -64,7 +65,7 @@ export function AgendaTypesPage() {
       )}
       {types.isSuccess && (
         <div className={`split ${styles.split}`}>
-          <ul className={`list ${styles.list}`} aria-label="Tipos de agenda">
+          <ul className={`list ${styles.list}`} aria-label={t('types.title')}>
             {items.map((type) => (
               <AgendaTypeRow
                 key={type.id}
@@ -75,7 +76,7 @@ export function AgendaTypesPage() {
             ))}
           </ul>
           {current === undefined ? (
-            !types.isFetching && <p className="text-muted">Este tipo não existe mais. Escolha outro na lista.</p>
+            !types.isFetching && <p className="text-muted">{t('types.gone')}</p>
           ) : (
             <AgendaTypeEditor
               key={current?.id ?? NEW}
@@ -94,6 +95,7 @@ export function AgendaTypesPage() {
 }
 
 function AgendaTypeRow({ type, selected, onSelect }: { type: AgendaType; selected: boolean; onSelect: () => void }) {
+  const { t } = useTranslation('organize')
   return (
     <li className={selected ? `list-row ${styles.selected}` : 'list-row'}>
       <button
@@ -103,7 +105,7 @@ function AgendaTypeRow({ type, selected, onSelect }: { type: AgendaType; selecte
         onClick={onSelect}
       >
         {type.name}
-        {type.fallback && <span className={`badge ${styles.badge}`}>Padrão</span>}
+        {type.fallback && <span className={`badge ${styles.badge}`}>{t('types.default')}</span>}
       </button>
       <span className="list-row-sub">{summaryLabel(type.summary_instructions)}</span>
     </li>

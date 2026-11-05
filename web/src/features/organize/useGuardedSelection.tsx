@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
 import { Dialog } from '../../app/Dialog'
 import { useLeaveGuard } from '../../app/useLeaveGuard'
@@ -11,6 +12,7 @@ export const NEW = 'novo'
  * for confirmation, and so does leaving the route or closing the tab (the exit guard).
  */
 export function useGuardedSelection(param: string) {
+  const { t } = useTranslation('organize')
   const [params, setParams] = useSearchParams()
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState<string | null | undefined>(undefined)
@@ -36,16 +38,16 @@ export function useGuardedSelection(param: string) {
   const discardDialog =
     pending === undefined ? leaveDialog : (
       <Dialog
-        title="Descartar alterações?"
-        message="As alterações ainda não foram salvas."
+        title={t('discard.title')}
+        message={t('discard.text')}
         onClose={() => setPending(undefined)}
         actions={
           <>
             <button type="button" className="btn btn-secondary" onClick={() => setPending(undefined)}>
-              Continuar editando
+              {t('discard.keepEditing')}
             </button>
             <button type="button" className="btn btn-danger" onClick={() => apply(pending)}>
-              Descartar
+              {t('discard.discard')}
             </button>
           </>
         }

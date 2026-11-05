@@ -1,6 +1,7 @@
 // The People table columns the user chooses to show. The name is fixed; the choice stays in this
 // browser, in localStorage, like the Ambiente preferences.
 import { readStored, STORAGE_KEYS, writeStored } from '../../app/storage'
+import { i18n } from '../../i18n'
 
 export type PersonColumn =
   | 'company'
@@ -14,16 +15,23 @@ export type PersonColumn =
   | 'last_seen_at'
 
 /** All the columns, in table order, with the label of the header and of the Colunas menu. */
-export const PERSON_COLUMNS: readonly { key: PersonColumn; label: string }[] = [
-  { key: 'company', label: 'Empresa' },
-  { key: 'department', label: 'Área' },
-  { key: 'job_title', label: 'Cargo' },
-  { key: 'tags', label: 'Tags' },
-  { key: 'email', label: 'E-mail' },
-  { key: 'phone', label: 'Telefone' },
-  { key: 'transcript_count', label: 'Gravações' },
-  { key: 'voice_sample_count', label: 'Amostras de voz' },
-  { key: 'last_seen_at', label: 'Última gravação' },
+const column = (key: PersonColumn) => ({
+  key,
+  get label() {
+    return i18n.t(`people:column.${key}`)
+  },
+})
+
+export const PERSON_COLUMNS: readonly { key: PersonColumn; readonly label: string }[] = [
+  column('company'),
+  column('department'),
+  column('job_title'),
+  column('tags'),
+  column('email'),
+  column('phone'),
+  column('transcript_count'),
+  column('voice_sample_count'),
+  column('last_seen_at'),
 ]
 
 /** The default hides e-mail, phone, role and the last recording: the e-mail hardly ever matters. */

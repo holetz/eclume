@@ -1,5 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { i18n } from "../../i18n";
 import type { Schemas } from "../../api/client";
 import { api } from "../../api/client";
 import { ApiError, errorMessage, unwrap } from "../../api/problem";
@@ -32,7 +34,7 @@ function useRetranscribe(recording: Recording) {
 /** The duplicate-request 409 put into words; the rest through `errorMessage`. */
 function retranscribeError(error: unknown): string {
   return error instanceof ApiError && error.status === 409
-    ? "Já há uma transcrição em andamento."
+    ? i18n.t("transcript:retry.busy")
     : errorMessage(error);
 }
 
@@ -42,19 +44,20 @@ function retranscribeError(error: unknown): string {
  * lack of VRAM) is stated as such, and a 403/404 from the route shows through `errorMessage`.
  */
 export function RetryTranscription({ recording }: { recording: Recording }) {
+  const { t } = useTranslation(["transcript", "common"]);
   const retry = useRetranscribe(recording);
 
   if (recording.status !== "failed" || recording.audio_deleted_at) return null;
   const cancelled = recording.job?.error?.code === "cancelled";
   const retryable = recording.job?.error?.retryable === true;
   return (
-    <div role="group" aria-label="Retentar a transcrição">
+    <div role="group" aria-label={t("retry.label")}>
       <p className="text-muted">
         {cancelled
-          ? "Você cancelou a transcrição: pode transcrever de novo quando quiser."
+          ? t("retry.cancelled")
           : retryable
-            ? "A falha foi passageira: tentar de novo costuma resolver."
-            : "Você pode tentar de novo com a configuração atual."}
+            ? t("retry.transient")
+            : t("retry.again")}
       </p>
       <button
         type="button"
@@ -63,10 +66,10 @@ export function RetryTranscription({ recording }: { recording: Recording }) {
         onClick={() => retry.mutate()}
       >
         {retry.isPending
-          ? "Enfileirando…"
+          ? t("retry.queueing")
           : cancelled
-            ? "Transcrever de novo"
-            : "Tentar de novo"}
+            ? t("retry.transcribeAgain")
+            : t("common:retry")}
       </button>
       {retry.isError && (
         <p className="alert alert-error" role="alert">
@@ -82,6 +85,7 @@ export function RetryTranscription({ recording }: { recording: Recording }) {
  * confirmation says what changes in the new revision.
  */
 export function RetranscribeAction({ recording }: { recording: Recording }) {
+  const { t } = useTranslation("transcript");
   const id = useId();
   const [open, setOpen] = useState(false);
   const [language, setLanguage] = useState(
@@ -103,12 +107,12 @@ export function RetranscribeAction({ recording }: { recording: Recording }) {
         className="btn btn-secondary"
         onClick={() => setOpen(true)}
       >
-        Transcrever de novo em…
+        {t("retry.transcribeAgainIn")}
       </button>
       {open && (
         <ConfirmDialog
-          title="Transcrever de novo?"
-          confirmLabel="Transcrever de novo"
+          title={t("retry.confirmTitle")}
+          confirmLabel={t("retry.transcribeAgain")}
           busy={retranscribe.isPending}
           onCancel={() => setOpen(false)}
           onConfirm={() =>
@@ -123,7 +127,7 @@ export function RetranscribeAction({ recording }: { recording: Recording }) {
           }
         >
           <div className="field">
-            <label htmlFor={id}>Idioma</label>
+            <label htmlFor={id}>{t("retry.language")}</label>
             <LanguageSelect
               id={id}
               value={language}
@@ -132,7 +136,7 @@ export function RetranscribeAction({ recording }: { recording: Recording }) {
             />
           </div>
           <div className="field">
-            <label htmlFor={`${id}-min`}>Mínimo de locutores</label>
+            <label htmlFor={`${id}-min`}>{t("retry.minSpeakers")}</label>
             <input
               id={`${id}-min`}
               className="input"
@@ -144,7 +148,7 @@ export function RetranscribeAction({ recording }: { recording: Recording }) {
             />
           </div>
           <div className="field">
-            <label htmlFor={`${id}-max`}>Máximo de locutores</label>
+            <label htmlFor={`${id}-max`}>{t("retry.maxSpeakers")}</label>
             <input
               id={`${id}-max`}
               className="input"
@@ -154,16 +158,9 @@ export function RetranscribeAction({ recording }: { recording: Recording }) {
               onChange={(e) => setMaxSpeakers(e.target.value)}
               disabled={retranscribe.isPending}
             />
-            <span className="field-hint">
-              Vazios, valem os limites da plataforma; a nota de voz usa um
-              locutor.
-            </span>
+            <span className="field-hint">{t("retry.speakersHint")}</span>
           </div>
-          <p>
-            A transcrição é refeita numa revisão nova: as correções de texto
-            feitas à mão se perdem, as pessoas ligadas aos locutores voltam e os
-            campos, o tipo de agenda e o resumo são refeitos.
-          </p>
+          <p>{t("retry.text")}</p>
           {retranscribe.isError && (
             <p className="alert alert-error" role="alert">
               {retranscribeError(retranscribe.error)}
@@ -180,10 +177,10 @@ export function RetranscribeAction({ recording }: { recording: Recording }) {
  * transcript, the summary and the chat remain, and the notice says what ceased to exist.
  */
 export function AudioDeletedNotice() {
+  const { t } = useTranslation("transcript");
   return (
     <p className="alert alert-warning" role="status">
-      O áudio desta gravação foi apagado pela política de retenção. A transcrição e o resumo continuam aqui, mas não
-      dá para ouvir a gravação nem transcrever de novo.
+      {t("retry.audioDeleted")}
     </p>
   );
 }

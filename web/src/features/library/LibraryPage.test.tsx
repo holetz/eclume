@@ -50,6 +50,30 @@ function saturdayMorning() {
 }
 
 describe('library in the week', () => {
+  it('reads in English when the account chose English', async () => {
+    saturdayMorning()
+    const me = fixtures.me()
+    mockFetch({
+      'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }),
+      'GET /api/v1/me/speaker-naming': () => ({ required: true, waiting_count: 2 }),
+      'GET /api/v1/recordings': () => fixtures.recordingWeekPage(),
+      'GET /api/v1/tags': () => fixtures.tagList(),
+      'GET /api/v1/collections': () => fixtures.collectionPage(),
+      'GET /api/v1/fields': () => fixtures.fieldPage(),
+      'GET /api/v1/people': () => fixtures.personPage(),
+    })
+    renderApp(WEEK)
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Import files' })).toBeInTheDocument()
+    expect(screen.getByText('September 21–27, 2026')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Previous week' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'View' })).toHaveTextContent('MonthWeekList')
+    const filters = screen.getByRole('complementary', { name: 'Filters' })
+    expect(within(filters).getByRole('group', { name: 'Type' })).toHaveTextContent('MeetingsNotes')
+    expect(await screen.findByText(/2 recordings are waiting for you to name the speakers/)).toBeInTheDocument()
+  })
+
   it('shows the requested week, with header, bar and the recordings on their day and time', async () => {
     saturdayMorning()
     const http = mockLibrary()

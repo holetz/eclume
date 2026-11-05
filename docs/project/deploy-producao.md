@@ -40,7 +40,7 @@ long-running services (there were ten before holetz/eclume#151, with `web` and t
 | `worker` | `eclume-server:prod` | `eclume-server worker`: the queues `eclume:default` (ingestion, purges, reaper, resume and upload expiry) and `eclume:agents` (agenda type, fields, summaries, chats and previews, with `ECLUME_AGENT_MAX_JOBS` slots, default 2, and `claude -p`) in a single process |
 | `worker-gpu` | `eclume-worker-gpu:prod` (`worker-gpu/Dockerfile`, ~8 GB) | ASR and diarization, `max_jobs=1`; exits on its own (code 0) after the idle unload and `restart` brings it back ([worker-gpu.md](worker-gpu.md)) |
 | `postgres` | `pgvector/pgvector:pg16` | database; server and CPU worker connect as `eclume_server` (no superuser, DML only) and requests drop to `eclume_app`; the `eclume` superuser is left for `migrate`, the bootstrap and the backup ([server-nucleo.md](../standards/code/server-nucleo.md#database-roles)) |
-| `redis` | `redis:7-alpine` | queues and progress, with `appendonly` |
+| `redis` | `valkey/valkey:9.1.3-alpine` | Valkey (BSD-3-Clause), which speaks the Redis protocol: queues and progress, with `appendonly`. The service keeps the `redis` name and the `redis://` URLs; it replaced `redis:7-alpine` in holetz/eclume#324 ([cutover](#one-time-cutover-from-redis-to-valkey)) |
 | `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | audio and artifacts (MinIO stopped publishing images); `MINIO_API_STALE_UPLOADS_EXPIRY=192h` keeps an incomplete multipart for 8 days, above the upload's 7, so resumption really works |
 
 One-shots of the `tools` profile, run by `compose run --rm`: `minio-init` (bucket, users and per-service policies), `migrate`
@@ -84,7 +84,7 @@ One-shots of the `tools` profile, run by `compose run --rm`: `minio-init` (bucke
   GPU worker uses `eclume-gpu`, which only reads the audio and writes the artifacts. The MinIO root stays in
   MinIO, in `minio-init` and in the backup; the Redis `default` user is disabled
   ([server-nucleo.md](../standards/code/server-nucleo.md#redis-and-minio-credentials)). To
-  debug Redis: `compose exec redis sh -c 'redis-cli --user eclume-server --pass "$ECLUME_REDIS_SERVER_PASSWORD"'`.
+  debug Redis: `compose exec redis sh -c 'valkey-cli --user eclume-server --pass "$ECLUME_REDIS_SERVER_PASSWORD"'`.
 - **Least privilege:** the Python containers (server, workers, `migrate`, `mdns`) run with
   `cap_drop: [ALL]` and `no-new-privileges`; Caddy is left as is, because it listens on a low port.
 - **Memory limits** on caddy, server, worker, worker-gpu, redis and minio: the `mem_limit` by
@@ -180,6 +180,34 @@ context's `ssh://` endpoint) for what belongs to the host. In order:
    `/srv/eclume/deploys.log`, applies the retention, prunes the BuildKit cache older than 7 days
    (`docker builder prune --filter until=168h`) and checks the health (with the SHA's `commit`) through the published
    CA.
+
+### One-time cutover from Redis to Valkey
+
+The first deploy of a SHA that carries holetz/eclume#324 replaces the `redis:7-alpine` container
+(Redis 7.4.11, RSALv2/SSPLv1) with Valkey. Valkey 9.1 cannot read the data Redis 7.4 left in
+`/srv/eclume/redis` (it stops with `Can't handle RDB format version 12`), and that data is
+transient: the queues, job progress, the 1-hour chat and preview state and the attempt and quota
+windows. So the queue is **drained first, then the old data is set aside**, and only then the deploy
+runs:
+
+```bash
+P=(docker --context gpu-host compose -p eclume -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod)
+bash deploy/deploy.sh --plan --context gpu-host      # the target SHA, the gate and the busy GPU
+"${P[@]}" stop caddy                                  # no new uploads or agent requests
+# Wait until the three queues are empty and nothing is in progress (repeat until it prints 0 0 0 0):
+"${P[@]}" exec redis sh -c 'c() { redis-cli --no-auth-warning --user eclume-server --pass "$ECLUME_REDIS_SERVER_PASSWORD" "$@"; };
+  echo $(c zcard eclume:gpu) $(c zcard eclume:default) $(c zcard eclume:agents) $(c --scan --pattern "arq:in-progress:*" | wc -l)'
+"${P[@]}" stop redis
+ssh <host> 'sudo mv /srv/eclume/redis /srv/eclume/redis.pre-valkey && sudo mkdir /srv/eclume/redis'
+bash deploy/deploy.sh --context gpu-host              # brings caddy back with the rest
+```
+
+Once the deploy reports healthy, `sudo rm -rf /srv/eclume/redis.pre-valkey` on the host. If the
+deploy stops with Valkey unhealthy, `"${P[@]}" logs redis` names the cause; a format error means the
+old data is still in place. A `--rollback` to a SHA before holetz/eclume#324 brings Redis 7.4 back on
+data it did not write: drain and set `/srv/eclume/redis` aside the same way first (or move
+`redis.pre-valkey` back while it still exists). The workers and the server need no change: the
+protocol, arq, the ACL users and every key stay the same.
 
 ### Tracing, retention and rollback
 

@@ -2,18 +2,19 @@
 // tags and summary), without saving anything.
 import { useQuery } from '@tanstack/react-query'
 import { useId, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import Markdown from 'react-markdown'
 import { SAFE_MARKDOWN } from '../../app/markdown'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
+import { i18n } from '../../i18n'
 
 import styles from './Organize.module.css'
 import { agendaPreviewResult, type PreviewRun } from './usePreview'
 import { formatDate } from '../../shared/format'
 
 const RECENT = 20
-const NO_PROVIDER = 'Nenhum agente está configurado para esta pré-visualização. Peça a quem administra o servidor.'
 
 function useTranscribedRecordings() {
   return useQuery({
@@ -24,6 +25,7 @@ function useTranscribedRecordings() {
 
 /** The dialog that chooses among the 20 most recent transcribed recordings. */
 export function RecordingPicker({ onPick, onClose }: { onPick: (recordingId: string) => void; onClose: () => void }) {
+  const { t } = useTranslation(['organize', 'common'])
   const id = useId()
   const recordings = useTranscribedRecordings()
   const items = recordings.data?.items ?? []
@@ -33,30 +35,30 @@ export function RecordingPicker({ onPick, onClose }: { onPick: (recordingId: str
   return (
     <Dialog
       plain
-      title="Pré-visualizar numa gravação"
+      title={t('preview.title')}
       onClose={onClose}
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Cancelar
+            {t('common:cancel')}
           </button>
           <button type="button" className="btn btn-primary" disabled={!value} onClick={() => onPick(value)}>
-            Pré-visualizar
+            {t('preview.submit')}
           </button>
         </>
       }
     >
       <div className={styles.pickerBody}>
-        {recordings.isPending && <p role="status">Carregando gravações…</p>}
+        {recordings.isPending && <p role="status">{t('preview.loading')}</p>}
         {recordings.isError && (
           <p className="alert alert-error" role="alert">
             {errorMessage(recordings.error)}
           </p>
         )}
-        {recordings.isSuccess && items.length === 0 && <p>Você ainda não tem gravações transcritas para pré-visualizar.</p>}
+        {recordings.isSuccess && items.length === 0 && <p>{t('preview.none')}</p>}
         {items.length > 0 && (
           <div className="field">
-            <label htmlFor={`${id}-gravacao`}>Gravação</label>
+            <label htmlFor={`${id}-gravacao`}>{t('preview.recording')}</label>
             <select
               id={`${id}-gravacao`}
               className="input"
@@ -65,11 +67,11 @@ export function RecordingPicker({ onPick, onClose }: { onPick: (recordingId: str
             >
               {items.map((recording) => (
                 <option key={recording.id} value={recording.id}>
-                  {recording.title} · {formatDate(recording.recorded_at)}
+                  {t('preview.option', { title: recording.title, date: formatDate(recording.recorded_at) })}
                 </option>
               ))}
             </select>
-            <span className="field-hint">Nada é gravado: nem o tipo, nem o resumo, nem a gravação.</span>
+            <span className="field-hint">{t('preview.nothingSaved')}</span>
           </div>
         )}
       </div>
@@ -77,7 +79,8 @@ export function RecordingPicker({ onPick, onClose }: { onPick: (recordingId: str
   )
 }
 
-const percent = (confidence: number | null) => (confidence === null ? '' : ` (confiança ${Math.round(confidence * 100)}%)`)
+const percent = (confidence: number | null) =>
+  confidence === null ? '' : i18n.t('organize:preview.confidence', { percent: Math.round(confidence * 100) })
 
 /** The preview result, or the wait, the failure and the changed-draft notice. */
 export function AgendaPreviewResult({
@@ -88,12 +91,13 @@ export function AgendaPreviewResult({
   /** The draft changed since the preview started. */
   stale: boolean
 }) {
+  const { t } = useTranslation('organize')
   const { state, preview, elapsedMs, error } = run
   if (state === 'idle') return null
   if (stale) {
     return (
       <p className="alert alert-warning" role="status">
-        O rascunho mudou desde a pré-visualização.
+        {t('preview.stale')}
       </p>
     )
   }
@@ -101,9 +105,9 @@ export function AgendaPreviewResult({
     return (
       <p className="alert" role="status">
         <span>
-          Pré-visualizando na gravação…{' '}
+          {t('preview.running')}{' '}
           <span className="tabular" aria-hidden="true">
-            {Math.floor(elapsedMs / 1000)} s
+            {t('seconds', { seconds: Math.floor(elapsedMs / 1000) })}
           </span>
         </span>
       </p>
@@ -112,7 +116,7 @@ export function AgendaPreviewResult({
   if (state === 'expired') {
     return (
       <p className="alert alert-warning" role="alert">
-        A pré-visualização expirou antes de terminar. Tente de novo.
+        {t('preview.expired')}
       </p>
     )
   }
@@ -123,40 +127,41 @@ export function AgendaPreviewResult({
       <p className="alert alert-error" role="alert">
         {failure
           ? failure.code === 'no_provider'
-            ? NO_PROVIDER
+            ? t('preview.noProvider')
             : failure.message
           : state === 'failed'
             ? errorMessage(error)
-            : 'A pré-visualização não trouxe resultado. Tente de novo.'}
+            : t('preview.empty')}
       </p>
     )
   }
 
   return (
-    <section className={styles.previewResult} aria-label="Pré-visualização">
+    <section className={styles.previewResult} aria-label={t('preview.label')}>
       <div className={styles.previewBlock}>
-        <span className="kicker">Detecção · {item.recording_title}</span>
+        <span className="kicker">{t('preview.detection', { title: item.recording_title })}</span>
         {item.detected ? (
           <span className="badge badge-success">
-            {item.fallback ? 'Nenhum outro tipo se encaixaria: ficaria este' : 'Este tipo seria escolhido'}
+            {item.fallback ? t('preview.fallbackStays') : t('preview.chosen')}
             {percent(item.confidence)}
           </span>
         ) : (
           <span className="badge badge-warning">
-            {item.fallback ? 'Nenhum tipo se encaixaria: ficaria o padrão,' : 'O agente escolheria'}&nbsp;
+            {item.fallback ? t('preview.fallbackOther') : t('preview.agentPicks')}
+            {'\u00a0'}
             <strong>{item.detected_type_name}</strong>
             {percent(item.confidence)}
           </span>
         )}
       </div>
       <div className={styles.previewBlock}>
-        <span className="kicker">Título</span>
+        <span className="kicker">{t('preview.titleLabel')}</span>
         <span>{item.title}</span>
       </div>
       <div className={styles.previewBlock}>
-        <span className="kicker">Tags</span>
+        <span className="kicker">{t('preview.tags')}</span>
         {item.tags.length ? (
-          <ul className={styles.tags} aria-label="Tags da pré-visualização">
+          <ul className={styles.tags} aria-label={t('preview.tagsLabel')}>
             {item.tags.map((tag) => (
               <li key={tag} className="tag tag-neutral">
                 {tag}
@@ -164,11 +169,11 @@ export function AgendaPreviewResult({
             ))}
           </ul>
         ) : (
-          <span className="text-muted">Nenhuma</span>
+          <span className="text-muted">{t('preview.noTags')}</span>
         )}
       </div>
       <div className={styles.previewBlock}>
-        <span className="kicker">Resumo</span>
+        <span className="kicker">{t('preview.summary')}</span>
         <div className="doc">
           <Markdown components={SAFE_MARKDOWN}>{item.summary_md}</Markdown>
         </div>

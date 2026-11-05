@@ -6,6 +6,6 @@ export const ImportContext = createContext<ImportQueue | null>(null)
 
 export function useImportContext(): ImportQueue {
   const queue = useContext(ImportContext)
-  if (!queue) throw new Error('useImportContext fora do ImportProvider')
+  if (!queue) throw new Error('useImportContext outside the ImportProvider')
   return queue
 }

@@ -1,11 +1,12 @@
 // The library in time: weeks from Monday to Sunday and the month grid, in the browser's local dates,
 // and the position of each recording on the agenda (start hour and duration, in hours).
 import type { Schemas } from '../../api/client'
-import { markersLabel, MONTHS, recordingState, timeLabel, weekdayIndex } from '../../shared/format'
+import { i18n } from '../../i18n'
+import { dayMonth, markersLabel, monthName, recordingState, timeLabel, weekdayIndex } from '../../shared/format'
 
 type Recording = Schemas['Recording']
 
-const WEEKDAYS_LONG = ['segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo']
+const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
 
 function startOfDay(day: Date): Date {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate())
@@ -67,26 +68,31 @@ export function monthGrid(day: Date): Range & { cells: MonthCell[] } {
   return { from, to: addDays(from, cells.length), cells }
 }
 
-/** "segunda, 21 de setembro". */
+/** "segunda, 21 de setembro", "Monday, September 21". */
 export function dayLabel(day: Date): string {
-  return `${WEEKDAYS_LONG[weekdayIndex(day)]}, ${day.getDate()} de ${MONTHS[day.getMonth()]}`
+  const weekday = i18n.t(`library:calendar.weekday.${WEEKDAYS[weekdayIndex(day)]}`)
+  return i18n.t('library:calendar.day', { weekday, date: dayMonth(day) })
 }
 
-/** "21–27 de setembro de 2026", "28 de setembro – 4 de outubro de 2026". */
+/** "21–27 de setembro de 2026", "28 de setembro – 4 de outubro de 2026"; "September 21–27, 2026" in en. */
 export function weekTitle(from: Date): string {
   const last = addDays(from, 6)
-  const end = `${last.getDate()} de ${MONTHS[last.getMonth()]} de ${last.getFullYear()}`
-  if (from.getMonth() === last.getMonth()) return `${from.getDate()}–${end}`
-  const start = `${from.getDate()} de ${MONTHS[from.getMonth()]}`
-  return from.getFullYear() === last.getFullYear()
-    ? `${start} – ${end}`
-    : `${start} de ${from.getFullYear()} – ${end}`
+  if (from.getMonth() === last.getMonth()) {
+    return i18n.t('library:calendar.weekSameMonth', {
+      from: from.getDate(),
+      to: last.getDate(),
+      month: monthName(last),
+      year: last.getFullYear(),
+    })
+  }
+  const start = dayMonth(from, from.getFullYear() !== last.getFullYear())
+  return i18n.t('library:calendar.range', { from: start, to: dayMonth(last, true) })
 }
 
-/** "Setembro de 2026". */
+/** "Setembro de 2026", "September 2026". */
 export function monthTitle(day: Date): string {
-  const month = MONTHS[day.getMonth()]
-  return `${month[0].toUpperCase()}${month.slice(1)} de ${day.getFullYear()}`
+  const month = monthName(day)
+  return i18n.t('library:calendar.month', { month: `${month[0].toUpperCase()}${month.slice(1)}`, year: day.getFullYear() })
 }
 
 /** "58 min", "1 h 40", "2 h"; without a duration, "—". */
@@ -100,7 +106,7 @@ export function shortDuration(ms: number | null): string {
 
 /** "Nota · Rascunho da pauta" for notes; the title as it is for meetings. */
 export function recordingTitle(recording: Pick<Recording, 'title' | 'kind'>): string {
-  return recording.kind === 'note' ? `Nota · ${recording.title}` : recording.title
+  return recording.kind === 'note' ? i18n.t('library:calendar.note', { title: recording.title }) : recording.title
 }
 
 /** The full label of a recording on the agenda: title, time, duration, status and markers. */

@@ -1,4 +1,5 @@
 import { memo, useId, useState, type MouseEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
 import { hms, useMarkerMutations, type Marker } from './markers'
@@ -10,6 +11,7 @@ const MAX_NOTE = 500
 
 /** The `.segment-marker` before the segment: time, note and device, with edit note and delete. */
 export function SegmentMarker({ marker, recordingId }: { marker: Marker; recordingId: string }) {
+  const { t } = useTranslation(['transcript', 'common'])
   const { editNote, remove } = useMarkerMutations(recordingId)
   const [editing, setEditing] = useState(false)
   const [note, setNote] = useState(marker.note ?? '')
@@ -23,13 +25,13 @@ export function SegmentMarker({ marker, recordingId }: { marker: Marker; recordi
   }
 
   return (
-    <div className="segment-marker" aria-label={`Marcador em ${at}`} role="group">
+    <div className="segment-marker" aria-label={t('marker.group', { time: at })} role="group">
       <span className="marker-count">{at}</span>
       <span className="segment-marker-note">
         {editing ? (
           <>
             <label htmlFor={inputId} className="visually-hidden">
-              Nota do marcador em {at}
+              {t('marker.noteLabel', { time: at })}
             </label>
             <input
               id={inputId}
@@ -44,16 +46,16 @@ export function SegmentMarker({ marker, recordingId }: { marker: Marker; recordi
               }}
             />
             <button type="button" className="btn btn-primary btn-sm" onClick={save} disabled={editNote.isPending}>
-              Salvar
+              {t('common:save')}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
-              Cancelar
+              {t('common:cancel')}
             </button>
           </>
         ) : (
           <>
-            <b>{marker.note ?? 'Marcador'}</b>
-            {marker.device_name && <span>Marcado no {marker.device_name}</span>}
+            <b>{marker.note ?? t('markers.marker')}</b>
+            {marker.device_name && <span>{t('markers.device', { device: marker.device_name })}</span>}
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -62,10 +64,10 @@ export function SegmentMarker({ marker, recordingId }: { marker: Marker; recordi
                 setEditing(true)
               }}
             >
-              Editar nota
+              {t('marker.editNote')}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirming(true)}>
-              Excluir marcador
+              {t('marker.delete')}
             </button>
           </>
         )}
@@ -77,15 +79,16 @@ export function SegmentMarker({ marker, recordingId }: { marker: Marker; recordi
       </span>
       {confirming && (
         <ConfirmDialog
-          title="Excluir o marcador?"
-          confirmLabel="Excluir marcador"
+          title={t('marker.deleteTitle')}
+          confirmLabel={t('marker.delete')}
           busy={remove.isPending}
           onCancel={() => setConfirming(false)}
           onConfirm={() => remove.mutate(marker.id, { onSuccess: () => setConfirming(false) })}
         >
           <p>
-            O marcador em {at}
-            {marker.note ? ` ("${marker.note}")` : ''} sai da gravação.
+            {marker.note
+              ? t('marker.deleteTextNote', { time: at, note: marker.note })
+              : t('marker.deleteText', { time: at })}
           </p>
         </ConfirmDialog>
       )}
@@ -123,6 +126,7 @@ export const SegmentRow = memo(function SegmentRow({
   onSeek,
   onEdit,
 }: SegmentRowProps) {
+  const { t } = useTranslation('transcript')
   const clock = hms(segment.start_ms)
 
   function onSegmentClick(event: MouseEvent<HTMLDivElement>) {
@@ -148,7 +152,7 @@ export const SegmentRow = memo(function SegmentRow({
             type="button"
             className={`timecode ${styles.timecode}`}
             onClick={() => onSeek(segment.start_ms, true)}
-            aria-label={`Ouvir a partir de ${clock}, fala de ${name}`}
+            aria-label={t('segment.listen', { time: clock, name })}
           >
             {clock}
           </button>
@@ -158,7 +162,7 @@ export const SegmentRow = memo(function SegmentRow({
             <SegmentEditor
               transcriptId={transcriptId}
               segment={segment}
-              label={`Texto da fala de ${name} em ${clock}`}
+              label={t('segment.textLabel', { name, time: clock })}
               onClose={() => onEdit(null)}
             />
           ) : (
@@ -168,9 +172,9 @@ export const SegmentRow = memo(function SegmentRow({
                 type="button"
                 className={`btn btn-ghost btn-sm ${styles.edit}`}
                 onClick={() => onEdit(segment.id)}
-                aria-label={`Corrigir a fala de ${name} em ${clock}`}
+                aria-label={t('segment.fixLabel', { name, time: clock })}
               >
-                Corrigir
+                {t('segment.fix')}
               </button>
             </>
           )}

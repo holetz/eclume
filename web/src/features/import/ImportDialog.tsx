@@ -1,5 +1,6 @@
 import { Upload, X } from 'lucide-react'
 import { useId, useState, type DragEvent } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { Dialog } from '../../app/Dialog'
 import { accountDefaultLabel, useTranscriptionPreference } from '../../app/transcriptionLanguage'
@@ -9,16 +10,10 @@ import { checkEnvironment } from '../../lib/media-convert'
 import styles from './ImportDialog.module.css'
 import { useImportContext } from './importContext'
 import type { ImportDate, ImportItem } from './useImportQueue'
-import { formatBytes } from '../../shared/format'
+import { deviceStateLabel, formatBytes } from '../../shared/format'
 import { enableNotifyOutcomes, notifyOutcomesOn, notifyPermission, type NotifyPermission } from '../../app/preferences'
-import { ESTADOS_APARELHO } from '../../lib/vocabulario.js'
 
-const SOURCE_LABELS: Record<ImportDate['source'], string> = {
-  metadata: 'Dos metadados do arquivo',
-  metadata_day: 'Só o dia nos metadados · a hora é a da modificação, confira',
-  file_date: 'Sem data no arquivo · usando a data de modificação, confira',
-  user: 'Editada por você',
-}
+const SOURCES: readonly ImportDate['source'][] = ['metadata', 'metadata_day', 'file_date', 'user']
 
 /** "47:12", "1:05:09". */
 function clockDuration(seconds: number | null | undefined): string {
@@ -31,24 +26,21 @@ function clockDuration(seconds: number | null | undefined): string {
 }
 
 // What the screen reader announces: only the state change, not every progress point.
-const ANNOUNCED: Partial<Record<ImportItem['state']['kind'], string>> = {
-  converting: 'convertendo',
-  uploading: 'enviando',
-  done: 'enviado',
-  error: 'falhou',
-  canceled: 'cancelado',
-}
+const ANNOUNCED = ['converting', 'uploading', 'done', 'error', 'canceled'] as const
+type Announced = (typeof ANNOUNCED)[number]
+const isAnnounced = (kind: ImportItem['state']['kind']): kind is Announced => (ANNOUNCED as readonly string[]).includes(kind)
 
 /**
  * On the uploaded row, the offer to turn on the browser notification (a gesture, never on load). It goes away
  * when the notification is already on or the API is missing; when denied, it says where to allow it.
  */
 function NotifyOffer() {
+  const { t } = useTranslation('import')
   const [permission, setPermission] = useState<NotifyPermission | 'on'>(() =>
     notifyOutcomesOn() ? 'on' : notifyPermission(),
   )
   if (permission === 'on' || permission === 'unsupported') return null
-  if (permission === 'denied') return <> · O navegador bloqueou os avisos deste site</>
+  if (permission === 'denied') return <>{t('notify.blocked')}</>
   return (
     <>
       {' · '}
@@ -57,52 +49,57 @@ function NotifyOffer() {
         className={styles.linkButton}
         onClick={() => void enableNotifyOutcomes().then((next) => setPermission(next === 'granted' ? 'on' : next))}
       >
-        Avisar quando ficar pronta
+        {t('notify.offer')}
       </button>
     </>
   )
 }
 
 function Status({ item, onRetry }: { item: ImportItem; onRetry: () => void }) {
+  const { t } = useTranslation(['import', 'common'])
   const { state } = item
   switch (state.kind) {
     case 'reading':
-      return <>Lendo…</>
+      return <>{t('status.reading')}</>
     case 'ready':
-      return <>Pronto para enviar</>
+      return <>{t('status.ready')}</>
     case 'converting':
-      return <>Convertendo {Math.round(state.ratio * 100)}%</>
+      return <>{t('status.converting', { percent: Math.round(state.ratio * 100) })}</>
     case 'uploading':
       return state.progress && state.progress.partsTotal > 0 ? (
         <>
-          Enviando {Math.min(state.progress.partsDone + 1, state.progress.partsTotal)} de {state.progress.partsTotal}
+          {t('status.uploadingPart', {
+            current: Math.min(state.progress.partsDone + 1, state.progress.partsTotal),
+            total: state.progress.partsTotal,
+          })}
         </>
       ) : (
-        <>Enviando…</>
+        <>{t('status.uploading')}</>
       )
     case 'done':
       return (
         <>
-          {state.deduplicated ? 'Já estava na biblioteca' : 'Enviado'} ·{' '}
-          <Link to={`/gravacoes/${state.recordingId}`}>Abrir</Link>
+          {state.deduplicated ? t('status.duplicate') : t('status.done')} ·{' '}
+          <Link to={`/gravacoes/${state.recordingId}`}>{t('status.open')}</Link>
           {!state.deduplicated && <NotifyOffer />}
         </>
       )
     case 'error':
       return (
         <span className={styles.error}>
-          {ESTADOS_APARELHO.failed.rotulo}: {state.message} ·{' '}
+          {t('status.error', { state: deviceStateLabel('failed'), message: state.message })} ·{' '}
           <button type="button" className={styles.linkButton} onClick={onRetry}>
-            Tentar de novo
+            {t('common:retry')}
           </button>
         </span>
       )
     case 'canceled':
-      return <>Cancelado</>
+      return <>{t('status.canceled')}</>
   }
 }
 
 function Row({ item, defaultLanguage }: { item: ImportItem; defaultLanguage: string }) {
+  const { t } = useTranslation('import')
   const queue = useImportContext()
   const sourceId = useId()
   const busy = item.state.kind === 'converting' || item.state.kind === 'uploading'
@@ -125,20 +122,24 @@ function Row({ item, defaultLanguage }: { item: ImportItem; defaultLanguage: str
           required
           value={item.date.value}
           disabled={!editable}
-          aria-label={`Início da gravação de ${item.file.name}`}
+          aria-label={t('row.start', { name: item.file.name })}
           aria-describedby={sourceId}
           aria-invalid={!item.date.value || undefined}
           data-warning={warn || undefined}
           onChange={(event) => queue.setDate(item.id, event.target.value)}
         />
         <div className="date-source" id={sourceId} data-warning={warn || undefined}>
-          {item.state.kind === 'reading' ? 'Lendo a data do arquivo…' : SOURCE_LABELS[item.date.source]}
+          {item.state.kind === 'reading'
+            ? t('row.readingDate')
+            : SOURCES.includes(item.date.source)
+              ? t(`source.${item.date.source}`)
+              : item.date.source}
         </div>
       </td>
       <td>
         <LanguageSelect
           className={`input ${styles.language}`}
-          label={`Idioma de ${item.file.name}`}
+          label={t('row.language', { name: item.file.name })}
           value={item.language ?? ''}
           defaultLabel={defaultLanguage}
           disabled={!editable}
@@ -149,7 +150,8 @@ function Row({ item, defaultLanguage }: { item: ImportItem; defaultLanguage: str
       <td>
         <Status item={item} onRetry={() => queue.retry(item.id)} />
         <span className="visually-hidden" aria-live="polite">
-          {ANNOUNCED[item.state.kind] && `${item.file.name}: ${ANNOUNCED[item.state.kind]}`}
+          {isAnnounced(item.state.kind) &&
+            t('announce', { name: item.file.name, state: t(`announced.${item.state.kind}`) })}
         </span>
       </td>
       <td>
@@ -157,7 +159,7 @@ function Row({ item, defaultLanguage }: { item: ImportItem; defaultLanguage: str
           <button
             type="button"
             className={`btn btn-ghost btn-icon ${styles.remove}`}
-            aria-label={busy ? `Cancelar o envio de ${item.file.name}` : `Remover ${item.file.name}`}
+            aria-label={busy ? t('row.cancel', { name: item.file.name }) : t('row.remove', { name: item.file.name })}
             onClick={() => (busy ? queue.cancel(item.id) : queue.remove(item.id))}
           >
             <X size={16} aria-hidden />
@@ -173,9 +175,10 @@ function Row({ item, defaultLanguage }: { item: ImportItem; defaultLanguage: str
  * of the recording and the language of each file, confirmed before upload. Closing during upload only hides the modal.
  */
 export function ImportDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation(['import', 'common'])
   const queue = useImportContext()
   const preference = useTranscriptionPreference()
-  const defaultLanguage = preference.data ? accountDefaultLabel(preference.data) : 'Padrão da conta'
+  const defaultLanguage = preference.data ? accountDefaultLabel(preference.data) : t('dialog.accountDefault')
   const environment = checkEnvironment()
   const blocked = !environment.secureContext || !environment.subtleCrypto
   const [over, setOver] = useState(false)
@@ -202,15 +205,15 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog
-      title="Importar arquivos"
-      kicker="Biblioteca"
+      title={t('dialog.title')}
+      kicker={t('dialog.kicker')}
       size="lg"
       plain
       onClose={close}
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={close}>
-            {started ? 'Fechar' : 'Cancelar'}
+            {started ? t('dialog.close') : t('common:cancel')}
           </button>
           <button
             type="button"
@@ -218,7 +221,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
             disabled={blocked || ready.length === 0 || reading || missingDate}
             onClick={queue.send}
           >
-            {ready.length === 0 ? 'Enviar arquivos' : ready.length === 1 ? 'Enviar 1 arquivo' : `Enviar ${ready.length} arquivos`}
+            {ready.length === 0 ? t('dialog.sendNone') : t('dialog.send', { count: ready.length })}
           </button>
         </>
       }
@@ -226,14 +229,12 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
       <div className={styles.body}>
         {blocked && (
           <p className="alert alert-error" role="alert">
-            A conversão exige uma conexão segura. Abra o eclume pelo endereço <strong>https://</strong> e instale o
-            certificado, se o navegador pedir.
+            <Trans t={t} i18nKey="dialog.insecure" components={{ b: <strong /> }} />
           </p>
         )}
         {!blocked && !environment.webCodecs && (
           <p className="alert alert-warning">
-            Este navegador não tem WebCodecs. A conversão usa o modo compatível, mais lento; prefira um Chrome, Edge ou
-            Firefox atualizado.
+            {t('dialog.noWebCodecs')}
           </p>
         )}
         <label
@@ -248,9 +249,9 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
           onDrop={onDrop}
         >
           <Upload size={20} aria-hidden />
-          <strong>Solte áudio ou vídeo aqui</strong>
+          <strong>{t('dialog.drop')}</strong>
           <span className="text-muted">
-            ou <span className={styles.choose}>escolha arquivos</span> · MP3, M4A, WAV, OGG, MP4, MOV, WebM, MKV e outros
+            <Trans t={t} i18nKey="dialog.choose" components={{ choose: <span className={styles.choose} /> }} />
           </span>
           <input
             type="file"
@@ -269,13 +270,13 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
             <table className="table">
               <thead>
                 <tr>
-                  <th scope="col">Arquivo</th>
-                  <th scope="col">Início da gravação</th>
-                  <th scope="col">Idioma</th>
-                  <th scope="col">Duração</th>
-                  <th scope="col">Situação</th>
+                  <th scope="col">{t('table.file')}</th>
+                  <th scope="col">{t('table.start')}</th>
+                  <th scope="col">{t('table.language')}</th>
+                  <th scope="col">{t('table.duration')}</th>
+                  <th scope="col">{t('table.status')}</th>
                   <th scope="col">
-                    <span className="visually-hidden">Ações</span>
+                    <span className="visually-hidden">{t('table.actions')}</span>
                   </th>
                 </tr>
               </thead>

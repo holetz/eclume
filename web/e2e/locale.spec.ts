@@ -103,3 +103,58 @@ test.describe('browser in Portuguese', () => {
     expect(await page.evaluate(() => (window as { __noReload?: boolean }).__noReload)).toBe(true)
   })
 })
+
+test.describe('an English account across the areas', () => {
+  test.use({ locale: 'en-US' })
+
+  test('the library, a recording, search, people, organize, collections and tags read in English', async ({
+    page,
+    baseURL,
+  }) => {
+    await session(page, baseURL!, 'en')
+    await page.goto('/entrar')
+    await login(page, { email: 'Email', password: 'Password', submit: 'Log in' })
+    const nav = page.getByRole('navigation', { name: 'Main' })
+
+    // Library: the week of the mock fixtures, with the date range in English.
+    await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible()
+    await page.goto('/?visao=semana&data=2026-09-21')
+    await expect(page.locator('.toolbar-title')).toHaveText('September 21–27, 2026')
+    await expect(page.getByRole('button', { name: 'Next week' })).toBeVisible()
+
+    // A recording: the pipeline steps and the regions come from the shared vocabulary.
+    await page.getByRole('link', { name: /^Planejamento semanal/ }).click()
+    await expect(page.getByRole('list', { name: 'Processing' }).getByRole('listitem').first()).toHaveText(
+      'Audio received',
+    )
+    await expect(page.getByRole('region', { name: 'Fields' })).toBeVisible()
+
+    // Search.
+    await page.goto('/busca')
+    await expect(page.getByRole('heading', { level: 1, name: 'Search' })).toBeVisible()
+    await page.getByRole('searchbox', { name: 'Terms' }).fill('turmas')
+    await page.getByRole('button', { name: 'Search', exact: true }).click()
+    await expect(page.getByRole('region', { name: 'Results' }).getByRole('listitem')).toHaveCount(3)
+
+    // People.
+    await nav.getByRole('link', { name: 'People' }).click()
+    await expect(page.getByRole('heading', { level: 1, name: 'People' })).toBeVisible()
+    await expect(page.getByRole('table', { name: 'People' }).getByLabel('Name of the new person')).toBeVisible()
+
+    // Organize: custom fields and agenda types.
+    await page.goto('/config/campos')
+    await expect(page.getByRole('heading', { level: 1, name: 'Custom fields' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'New field' })).toBeVisible()
+    await page.goto('/config/agendas')
+    await expect(page.getByRole('heading', { level: 1, name: 'Agenda types' })).toBeVisible()
+
+    // Collections and tags.
+    await page.goto('/colecoes')
+    await expect(page.getByRole('heading', { level: 1, name: 'Collections' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'New collection' })).toBeVisible()
+    await page.goto('/tags')
+    await expect(page.getByRole('heading', { level: 1, name: 'Tags' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'New tag' })).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  })
+})

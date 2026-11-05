@@ -30,15 +30,29 @@ v1) has its own line and each entry cites it.
 - Web interface in English and Portuguese: the app follows the account locale (else the browser
   language), switches in place at Settings › Account, loads only the active language, and shows
   every API error in it (#249).
+- The library, the recording page, import, search, people, custom fields and agenda types,
+  collections and tags in English and Portuguese, with the pipeline steps and reasons shared with
+  the apps (#250).
 
 ### Fixed
 
+- A count of exactly one million (or another multiple of a million) in Portuguese showed the bare
+  message key instead of the text; every plural now answers for every category of the language
+  (#250).
 - Re-transcribing with only the minimum or only the maximum number of speakers filled in keeps the
   platform limit on the empty side, as the help text promises; before, the whole pair was replaced
   and the ceiling disappeared (#216).
 
 ### Changed
 
+- License: eclume is now GPL-3.0-or-later (was MIT), for the server, GPU worker, engines and web
+  and for the desktop and phone apps; the desktop crates adapted from Anarlog stay MIT.
+  `NOTICE.md` records the third-party licence decisions (#324).
+- The queue store is Valkey (`valkey/valkey`, BSD-3-Clause) instead of the `redis:7-alpine` image,
+  whose Redis 7.4 is under RSALv2/SSPLv1. Same protocol, ACL and `redis` service. Valkey cannot
+  read Redis 7.4's data: before the first deploy with this change, drain the queue and set
+  `/srv/eclume/redis` aside, as the
+  [cutover](docs/project/deploy-producao.md#one-time-cutover-from-redis-to-valkey) describes (#324).
 - API errors are localized by their `code`: `title` and `detail` are now English, and the contract
   lists every code in `ProblemCode`. The agent prompts are English, with the output language taken
   from the account locale (contract 2.30.0, #248).

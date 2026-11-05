@@ -1,6 +1,7 @@
 // The recording page's shared playback: a single <audio>, read and commanded by the player,
 // by the markers' ticks and chips and by the transcript's segments.
 import { createContext, useContext, useSyncExternalStore } from 'react'
+import { activeLocale } from '../../i18n'
 
 export const RATES = [1, 1.25, 1.5, 2] as const
 
@@ -78,5 +79,5 @@ export function usePlaybackSelect<T extends string | number | boolean | null>(se
 
 /** "1×", "1,25×". */
 export function rateLabel(rate: number): string {
-  return `${rate.toLocaleString('pt-BR')}×`
+  return `${rate.toLocaleString(activeLocale())}×`
 }

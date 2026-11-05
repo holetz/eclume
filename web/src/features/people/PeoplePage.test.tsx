@@ -10,6 +10,21 @@ beforeAll(() => preloadRoute('/pessoas'))
 afterEach(() => vi.unstubAllGlobals())
 
 describe('people directory', () => {
+  it('reads in English when the account chose English', async () => {
+    const me = fixtures.me()
+    mockFetch({
+      'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }),
+      'GET /api/v1/people': () => fixtures.personPage(),
+    })
+    renderApp('/pessoas')
+    expect(await screen.findByRole('heading', { level: 1, name: 'People' })).toBeInTheDocument()
+    const table = await screen.findByRole('table', { name: 'People' })
+    expect(within(table).getByRole('columnheader', { name: 'Voice samples' })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: 'Company' })).toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: 'Search people' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Columns' })).toBeInTheDocument()
+  })
+
   it('lists the people in a table with a count and filters by name', async () => {
     const http = mockFetch({
       'GET /api/v1/me': () => fixtures.me(),

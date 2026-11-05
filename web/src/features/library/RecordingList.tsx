@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router'
 import type { Schemas } from '../../api/client'
 import { dayKey, recordingTitle, sameDay, shortDuration } from './calendar'
@@ -26,16 +27,17 @@ function groupByDay(recordings: Recording[]): DayGroup[] {
 
 /** The running list: one `.day-group` per day, with one `.rec-row` per recording. */
 export function RecordingList({ recordings }: { recordings: Recording[] }) {
+  const { t } = useTranslation('library')
   const location = useLocation()
   const from = `${location.pathname}${location.search}`
   const today = new Date()
   return groupByDay(recordings).map(({ day, items }) => {
-    const label = `${sameDay(day, today) ? 'Hoje · ' : ''}${shortDayLabel(day)}`
+    const label = sameDay(day, today) ? t('list.today', { day: shortDayLabel(day) }) : shortDayLabel(day)
     return (
       <section key={dayKey(day)} className="day-group" aria-label={label}>
         <div className="day-group-head">
           <b>{label}</b>
-          <span className="text-muted">{items.length === 1 ? '1 item' : `${items.length} itens`}</span>
+          <span className="text-muted">{t('list.items', { count: items.length })}</span>
         </div>
         {items.map((recording) => (
           <Link key={recording.id} to={`/gravacoes/${recording.id}`} state={{ from }} className="rec-row">
