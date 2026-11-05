@@ -1,5 +1,5 @@
-//! `HttpUploader`: a implementação real do `Uploader` do `eclume-recorder`. Calcula o `sha256`
-//! uma vez, guarda-o e o upload em curso na fila (para a retomada) e sobe pelo [`Client`].
+//! `HttpUploader`: the real `Uploader` implementation from `eclume-recorder`. Computes `sha256`
+//! once, saves it and the active upload in the queue (for resuming) and uploads through [`Client`].
 
 use std::fs::File;
 use std::io::Read;
@@ -15,19 +15,18 @@ use crate::api::{Capture, MarkerInput, UploadCreate};
 use crate::protocol::Client;
 use crate::transport::TrustMode;
 
-/// Tipo do arquivo que o desktop grava (Ogg/Opus mono 16 kHz), o de uma linha sem `content_type`.
+/// The file type the desktop records (Ogg/Opus mono 16 kHz), used for rows without `content_type`.
 pub const CONTENT_TYPE: &str = "audio/ogg; codecs=opus";
 
-/// O que o uploader precisa saber além da fila.
+/// What the uploader needs to know beyond the queue.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UploaderConfig {
-    /// Endereço da API (`https://host:8443`), sem o `/api/v1`.
+    /// API address (`https://host:8443`), without `/api/v1`.
     pub api_url: String,
     pub pat: String,
-    /// Em quem o TLS confia: a CA fixada (`Pinned`), a escolhida à mão ou nenhuma
-    /// (`PlatformPlus`).
+    /// What TLS trusts: the pinned CA (`Pinned`), a manually chosen CA or none (`PlatformPlus`).
     pub trust: TrustMode,
-    /// `eclume-desktop/<versão>`.
+    /// `eclume-desktop/<version>`.
     pub client_version: String,
 }
 
@@ -45,7 +44,7 @@ impl HttpUploader {
         Ok(Self::from_client(client, queue, &config.client_version))
     }
 
-    /// Sobre um cliente já montado (transporte próprio: a CA fixada do celular, ou os testes).
+    /// Uses an existing client (custom transport: the phone's pinned CA, or tests).
     pub fn from_client(client: Client, queue: Arc<Mutex<Queue>>, client_version: &str) -> Self {
         Self {
             client,
@@ -56,14 +55,14 @@ impl HttpUploader {
         }
     }
 
-    /// Troca o `capture.device_name` (no celular, o modelo do aparelho).
+    /// Changes `capture.device_name` (the device model on the phone).
     pub fn with_device_name(mut self, device_name: impl Into<String>) -> Self {
         self.device_name = Some(device_name.into());
         self
     }
 
-    /// O idioma da transcrição do aparelho, para a gravação sem idioma próprio; `None` deixa o da
-    /// conta.
+    /// The device's transcript language, for recordings without their own language; `None` leaves
+    /// the account's language.
     pub fn with_language(mut self, language: Option<String>) -> Self {
         self.language = language;
         self
@@ -107,7 +106,8 @@ impl HttpUploader {
                 })
                 .collect(),
             duration_ms: recording.duration_ms.and_then(|ms| u64::try_from(ms).ok()),
-            // O da gravação, senão o do aparelho; sem nenhum, vale o da conta no servidor.
+            // The recording's language, otherwise the device's; with neither, the server account's
+            // applies.
             language: recording.language.clone().or_else(|| self.language.clone()),
             source: recording.source,
             capture: Capture {
@@ -149,7 +149,7 @@ impl Uploader for HttpUploader {
         )?;
         if uploaded.deduplicated {
             log::info!(
-                "gravação {} já estava no servidor ({})",
+                "recording {} was already on the server ({})",
                 recording.id,
                 uploaded.recording_id
             );
@@ -158,9 +158,10 @@ impl Uploader for HttpUploader {
     }
 }
 
-/// O nome de que o servidor deriva o título. Uma importação leva o nome original com a extensão
-/// do arquivo enviado (`kickoff-guion.ogg`); uma gravação do app, `2026-09-24 14-00 Teams.ogg`
-/// ou `2026-09-26 10-42 nota.ogg`, na hora local, como o navegador nomeia.
+/// The name from which the server derives the title. An import uses the original name with the
+/// uploaded file's extension (`kickoff-guion.ogg`); an app recording uses
+/// `2026-09-24 14-00 Teams.ogg` or `2026-09-26 10-42 nota.ogg`, in local time, as the browser names
+/// it.
 pub fn filename(recording: &QueuedRecording) -> String {
     if let (Source::Upload, Some(name)) = (recording.source, &recording.original_name) {
         let ext = recording
@@ -188,7 +189,7 @@ pub fn filename(recording: &QueuedRecording) -> String {
     format!("{when} {what}.ogg")
 }
 
-/// SHA-256 do arquivo inteiro, em hex minúsculo, lido em blocos.
+/// SHA-256 of the whole file, in lowercase hex, read in blocks.
 pub fn sha256_file(path: &Path) -> Result<String> {
     let mut file =
         File::open(path).with_context(|| format!("falha ao abrir {}", path.display()))?;
@@ -267,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn sha256_do_arquivo() {
+    fn file_sha256() {
         let path = std::env::temp_dir().join(format!("eclume-sha-{}", std::process::id()));
         std::fs::write(&path, b"abc").unwrap();
         assert_eq!(
@@ -278,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn nome_do_arquivo_diz_quando_e_qual_reuniao() {
+    fn filename_tells_when_and_which_meeting() {
         let teams = filename(&recording(Some("teams")));
         assert!(teams.ends_with(" Teams.ogg"), "{teams}");
         assert!(teams.starts_with("2025-09-2"), "{teams}");
@@ -287,12 +288,12 @@ mod tests {
     }
 
     #[test]
-    fn nome_da_nota_e_da_importacao() {
+    fn voice_note_and_import_filename() {
         let queue = recorded_queue();
         queue.set_kind("g1", Kind::Note).unwrap();
-        let nota = filename(&queue.get("g1").unwrap().unwrap());
-        assert!(nota.ends_with(" nota.ogg"), "{nota}");
-        assert!(nota.starts_with("2025-09-2"), "{nota}");
+        let note = filename(&queue.get("g1").unwrap().unwrap());
+        assert!(note.ends_with(" nota.ogg"), "{note}");
+        assert!(note.starts_with("2025-09-2"), "{note}");
         assert_eq!(
             filename(&imported("/tmp/i1.ogg", None)),
             "kickoff-guion.ogg"
@@ -304,7 +305,7 @@ mod tests {
     }
 
     #[test]
-    fn pedido_de_upload_segue_o_contrato() {
+    fn upload_request_follows_contract() {
         let uploader = uploader();
         let create = uploader.create_request(&recording(Some("meet")), &[], 10, "ab".into());
         let json = serde_json::to_value(&create).unwrap();
@@ -325,7 +326,7 @@ mod tests {
     }
 
     #[test]
-    fn pedido_do_celular_leva_origem_titulo_tipo_e_aparelho() {
+    fn mobile_request_includes_source_title_type_and_device() {
         let queue = recorded_queue();
         queue.set_source("g1", Source::Mobile).unwrap();
         queue
@@ -336,7 +337,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        let marcador = queue.add_marker("g1", 42_000, Some("prazo")).unwrap();
+        let marker = queue.add_marker("g1", 42_000, Some("prazo")).unwrap();
         let uploader = uploader().with_device_name("Pixel 8");
         let create = uploader.create_request(
             &queue.get("g1").unwrap().unwrap(),
@@ -352,11 +353,11 @@ mod tests {
             json["agenda_type_id"],
             "7c0e2f7a-1b2c-4d5e-8f90-a1b2c3d4e5f6"
         );
-        assert_eq!(json["markers"][0]["client_id"], marcador.client_id);
+        assert_eq!(json["markers"][0]["client_id"], marker.client_id);
         assert_eq!(json["capture"]["device_name"], "Pixel 8");
         assert!(
             json.get("language").is_none(),
-            "sem idioma, vale o do servidor"
+            "without a language, the server language applies"
         );
 
         let create = uploader.with_language(Some("es".into())).create_request(
@@ -367,7 +368,7 @@ mod tests {
         );
         assert_eq!(serde_json::to_value(&create).unwrap()["language"], "es");
 
-        // O idioma escolhido para a gravação vence o do aparelho.
+        // The language chosen for the recording overrides the device's.
         queue.save_details("g1", None, None, Some("auto")).unwrap();
         let create = self::uploader()
             .with_language(Some("es".into()))
@@ -376,11 +377,11 @@ mod tests {
     }
 
     #[test]
-    fn pedido_da_nota_leva_os_marcadores() {
+    fn voice_note_request_includes_markers() {
         let queue = recorded_queue();
         queue.set_kind("g1", Kind::Note).unwrap();
-        let sem_nota = queue.add_marker("g1", 12_000, None).unwrap();
-        let com_nota = queue.add_marker("g1", 3_000, Some("decisão")).unwrap();
+        let without_note = queue.add_marker("g1", 12_000, None).unwrap();
+        let with_note = queue.add_marker("g1", 3_000, Some("decisão")).unwrap();
         let markers = queue.markers("g1").unwrap();
         let create = uploader().create_request(
             &queue.get("g1").unwrap().unwrap(),
@@ -393,18 +394,18 @@ mod tests {
         assert_eq!(
             json["markers"],
             serde_json::json!([
-                {"client_id": com_nota.client_id, "at_ms": 3_000, "note": "decisão"},
-                {"client_id": sem_nota.client_id, "at_ms": 12_000},
+                {"client_id": with_note.client_id, "at_ms": 3_000, "note": "decisão"},
+                {"client_id": without_note.client_id, "at_ms": 12_000},
             ])
         );
     }
 
     #[test]
-    fn pedido_da_importacao_leva_origem_e_tipo_da_linha() {
+    fn import_request_includes_source_and_type_from_row() {
         let uploader = uploader();
-        let copia = imported("/tmp/i1.avi", Some("video/x-msvideo"));
+        let copied = imported("/tmp/i1.avi", Some("video/x-msvideo"));
         let json =
-            serde_json::to_value(uploader.create_request(&copia, &[], 10, "ab".into())).unwrap();
+            serde_json::to_value(uploader.create_request(&copied, &[], 10, "ab".into())).unwrap();
         assert_eq!(json["source"], "upload");
         assert_eq!(json["kind"], "meeting");
         assert_eq!(json["recorded_at_source"], "file_metadata");
@@ -412,8 +413,8 @@ mod tests {
         assert_eq!(json["content_type"], "video/x-msvideo");
         assert_eq!(json["filename"], "kickoff-guion.avi");
         assert_eq!(json["capture"]["client_version"], "eclume-desktop/0.1.0");
-        let convertida = imported("/tmp/i1.ogg", None);
-        let json = serde_json::to_value(uploader.create_request(&convertida, &[], 10, "ab".into()))
+        let converted = imported("/tmp/i1.ogg", None);
+        let json = serde_json::to_value(uploader.create_request(&converted, &[], 10, "ab".into()))
             .unwrap();
         assert_eq!(json["content_type"], CONTENT_TYPE);
     }

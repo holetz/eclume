@@ -1,16 +1,17 @@
-//! Captura de áudio do app desktop do eclume.
+//! Audio capture for the eclume desktop app.
 //!
-//! Duas fontes, cada uma entregando amostras mono `f32` na taxa nativa do dispositivo:
+//! Two sources, each delivering mono `f32` samples at the device's native rate:
 //!
-//! - [`MicSource`]: o dispositivo de entrada escolhido ou o padrão, por `cpal`
-//!   ([`list_input_devices`] lista os nomes);
-//! - [`SystemSource`]: o áudio que o sistema está tocando (loopback), por plataforma —
-//!   PipeWire/Pulse no Linux, WASAPI no Windows, Core Audio tap no macOS; segue a saída em uso
-//!   ou uma saída escolhida ([`list_output_devices`] lista os ids).
+//! - [`MicSource`]: the selected or default input device, through `cpal`
+//!   ([`list_input_devices`] lists the names);
+//! - [`SystemSource`]: audio the system is playing (loopback), per platform —
+//!   PipeWire/Pulse on Linux, WASAPI on Windows, Core Audio tap on macOS; follows the active output
+//!   or a selected output ([`list_output_devices`] lists the ids).
 //!
-//! Quem consome as fontes só conhece o trait [`AudioSource`]; sem a feature `backends`, o crate
-//! expõe apenas o trait e o anel ([`ring`]), sem nenhuma dependência de sistema. A feature `mic`
-//! liga só o [`MicSource`] (o app móvel).
+//! Consumers only know the [`AudioSource`] trait; without the `backends` feature, this crate
+//! exposes only the trait and ring buffer ([`ring`]), with no system dependencies. The `mic`
+//! feature
+//! enables only [`MicSource`] (the mobile app).
 
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -28,35 +29,38 @@ pub use mic::{InputDevices, MicSource, list_input_devices};
 #[cfg(feature = "backends")]
 pub use system::{OutputDevice, OutputDevices, SystemSource, list_output_devices};
 
-/// Como está uma fonte agora.
+/// A source's current state.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SourceState {
-    /// Entregando o áudio do dispositivo.
+    /// Delivering audio from the device.
     Live,
-    /// O dispositivo caiu em `since`; a fonte tenta reabri-lo e entrega silêncio enquanto isso.
+    /// The device disconnected at `since`; the source tries to reopen it, delivering silence
+    /// meanwhile.
     Reconnecting { since: Instant },
 }
 
-/// Uma fonte de áudio mono que o gravador lê por puxada.
+/// A mono audio source the recorder reads by pulling.
 pub trait AudioSource: Send {
-    /// Taxa atual, em Hz. Pode mudar durante a captura (troca de dispositivo); o consumidor deve
-    /// consultá-la a cada leitura.
+    /// Current rate in Hz. May change during capture (device switch); the consumer must
+    /// query it on every read.
     fn sample_rate(&self) -> u32;
 
-    /// Espera até `timeout` por amostras e devolve as que houver.
+    /// Waits up to `timeout` for samples and returns those available.
     ///
-    /// `Some(vec![])` significa que o prazo venceu sem amostras (a fonte segue viva, por exemplo
-    /// um monitor de sink suspenso). `None` significa que a fonte terminou e não vai entregar mais
-    /// nada.
+    /// `Some(vec![])` means the timeout expired without samples (the source is still alive, for
+    /// example
+    /// a suspended sink monitor). `None` means the source has ended and will deliver no more
+    /// samples.
     fn read(&mut self, timeout: Duration) -> Option<Vec<f32>>;
 
-    /// Se a fonte está entregando o dispositivo ou reconectando. Fonte que não reconecta é
-    /// sempre [`SourceState::Live`].
+    /// Whether the source is delivering device audio or reconnecting. A source that never
+    /// reconnects is
+    /// always [`SourceState::Live`].
     fn state(&self) -> SourceState {
         SourceState::Live
     }
 
-    /// Amostras descartadas (anel cheio) desde o início.
+    /// Samples dropped (ring buffer full) since startup.
     fn dropped_samples(&self) -> u64 {
         0
     }
@@ -80,12 +84,12 @@ impl<T: AudioSource + ?Sized> AudioSource for Box<T> {
     }
 }
 
-/// Quanto a parada espera, no máximo, pela thread de captura (o driver soltar o dispositivo).
+/// Maximum time stopping waits for the capture thread (the driver to release the device).
 pub const STOP_DEADLINE: Duration = Duration::from_secs(3);
 
-/// Espera a thread terminar até `deadline`. Vencido o prazo (um driver preso ao soltar o
-/// dispositivo), registra o aviso no log, solta a thread e devolve `None`; a parada não espera
-/// sem prazo.
+/// Waits up to `deadline` for the thread to finish. On timeout (a driver stuck releasing the
+/// device), logs a warning, detaches the thread and returns `None`; stopping never waits
+/// indefinitely.
 pub fn join_with_deadline<T>(
     handle: JoinHandle<T>,
     deadline: Duration,
@@ -94,8 +98,8 @@ pub fn join_with_deadline<T>(
     while !handle.is_finished() {
         if Instant::now() >= until {
             log::warn!(
-                "a thread {} não terminou em {deadline:?}; seguindo sem ela",
-                handle.thread().name().unwrap_or("de captura")
+                "thread {} did not finish within {deadline:?}; continuing without it",
+                handle.thread().name().unwrap_or("capture")
             );
             return None;
         }
@@ -109,7 +113,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn join_com_prazo_solta_a_thread_presa() {
+    fn join_with_deadline_detaches_stuck_thread() {
         let stuck = std::thread::spawn(|| std::thread::sleep(Duration::from_secs(10)));
         let started = Instant::now();
         assert!(join_with_deadline(stuck, Duration::from_millis(200)).is_none());
@@ -117,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn join_com_prazo_devolve_o_resultado_da_thread() {
+    fn join_with_deadline_returns_thread_result() {
         let done = std::thread::spawn(|| 42);
         assert_eq!(
             join_with_deadline(done, STOP_DEADLINE).map(Result::unwrap),

@@ -57,6 +57,9 @@ Anything that is durable knowledge belongs in a /docs/ home above, cited here, n
   the request itself ("do it autonomously", "PR and merge", "all the way to deploy"). Without that
   word the run ends at the open PR, named for the human to decide. The approval a spec carries
   covers every step inside that scope — no later step asks the human again.
+- **A new skill joins its family's router** (`.agents/skills/<family>/SKILL.md`) when the family has
+  three or more model-invocable skills — never a loose entry, and never an edit to an agent that
+  came from the plugin (`.claude/agents/quenching-*.md`).
 
 <!-- Root harness pointer, auto-loaded by every supported harness on every turn. Keep it a thin pointer:
      repo-wide operations + the /docs/ home map. Knowledge is MOVED into /docs/, never copied here.

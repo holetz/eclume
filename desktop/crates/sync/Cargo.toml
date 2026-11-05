@@ -1,6 +1,6 @@
 [package]
 name = "eclume-sync"
-description = "Sync do app desktop do eclume: upload resumível das gravações por PAT, pelo contrato v1."
+description = "eclume desktop sync: resumable recording uploads with a PAT, through contract v1."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,8 +8,8 @@ rust-version.workspace = true
 publish = false
 
 [features]
-# O chaveiro do SO (Secret Service, Credential Manager, Keychain). Sem ele, o segredo fica só no
-# arquivo privado: é o caso do celular, cujo cofre é o diretório do app.
+# The OS keyring (Secret Service, Credential Manager, Keychain). Without it, the secret stays only
+# in the private file: used on mobile, where the vault is the app directory.
 default = ["os-keyring"]
 os-keyring = ["dep:keyring"]
 

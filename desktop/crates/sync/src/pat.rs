@@ -1,8 +1,9 @@
-//! Onde a credencial fica — a de dispositivo, emitida pelo login ou pelo pareamento, ou o PAT
-//! colado numa versão anterior; as duas são tokens `eclp_` e usam a mesma entrada: no chaveiro do SO (Secret Service no Linux, Credential Manager no Windows,
-//! Keychain no macOS), pelo crate `keyring`. Sem chaveiro disponível (sessão sem Secret Service,
-//! por exemplo), num arquivo `pat` no diretório de config com permissão 0600 — o mesmo nível de
-//! proteção de um `~/.netrc`, e a janela avisa. `ECLUME_PAT` sobrepõe os dois, para dev e testes.
+//! Where the credential lives: the device credential issued by sign-in or pairing, or the PAT
+//! pasted in an earlier version; both are `eclp_` tokens and use the same entry in the OS keyring
+//! (Secret Service on Linux, Credential Manager on Windows, Keychain on macOS), through the
+//! `keyring` crate. Without an available keyring (a session without Secret Service, for example),
+//! in a `pat` file in the config directory with mode 0600, the same protection as a `~/.netrc`, and
+//! the window warns the user. `ECLUME_PAT` overrides both for development and tests.
 
 use std::path::{Path, PathBuf};
 
@@ -11,15 +12,15 @@ use serde::Serialize;
 
 use crate::protocol::PAT_PREFIX;
 
-/// Serviço e conta da entrada no chaveiro.
+/// Service and account of the keyring entry.
 pub const KEYRING_SERVICE: &str = "eclume-desktop";
 pub const KEYRING_ACCOUNT: &str = "pat";
-/// Variável que sobrepõe o PAT guardado.
+/// Variable that overrides the stored PAT.
 pub const PAT_ENV: &str = "ECLUME_PAT";
-/// Nome do arquivo do fallback, no diretório de config.
+/// Fallback filename in the config directory.
 pub const PAT_FILE: &str = "pat";
 
-/// De onde veio o PAT em uso.
+/// Where the PAT in use came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PatSource {
@@ -28,14 +29,14 @@ pub enum PatSource {
     File,
 }
 
-/// Um cofre de segredo (o chaveiro do SO, ou um falso nos testes).
+/// A secret vault (the OS keyring, or a fake in tests).
 pub trait SecretBackend: Send + Sync {
     fn get(&self) -> Result<Option<String>>;
     fn set(&self, secret: &str) -> Result<()>;
     fn delete(&self) -> Result<()>;
 }
 
-/// O chaveiro do SO.
+/// The OS keyring.
 #[cfg(feature = "os-keyring")]
 pub struct OsKeyring;
 
@@ -46,10 +47,10 @@ impl OsKeyring {
     }
 }
 
-/// Roda `op` numa thread própria. O Secret Service do `keyring` faz `block_on` por dentro e dá
-/// panic numa thread que já roda um runtime Tokio (um comando `async` do Tauri, o updater); o
-/// panic ainda envenena o mutex global do cofre, e todo acesso seguinte dá panic também. Numa
-/// thread sem runtime o `block_on` funciona, e um panic que sobrar vira erro.
+/// Runs `op` on its own thread. The `keyring` Secret Service uses `block_on` internally and panics
+/// on a thread already running a Tokio runtime (a Tauri `async` command, the updater); the panic
+/// also poisons the vault's global mutex, and every subsequent access panics too. On a thread
+/// without a runtime, `block_on` works, and any remaining panic becomes an error.
 #[cfg(feature = "os-keyring")]
 fn isolated<T: Send>(op: impl FnOnce() -> Result<T> + Send) -> Result<T> {
     std::thread::scope(|scope| {
@@ -88,7 +89,8 @@ impl SecretBackend for OsKeyring {
     }
 }
 
-/// Sem chaveiro (build sem `os-keyring`): nada guardado aqui, e o `PatStore` usa o arquivo.
+/// Without a keyring (built without `os-keyring`): nothing stored here, and `PatStore` uses the
+/// file.
 pub struct NoKeyring;
 
 impl SecretBackend for NoKeyring {
@@ -105,7 +107,7 @@ impl SecretBackend for NoKeyring {
     }
 }
 
-/// Lê, grava e apaga o PAT.
+/// Reads, writes and deletes the PAT.
 pub struct PatStore {
     file: PathBuf,
     keyring: Box<dyn SecretBackend>,
@@ -113,8 +115,8 @@ pub struct PatStore {
 }
 
 impl PatStore {
-    /// O cofre real: chaveiro do SO (com `os-keyring`), arquivo em `config_dir` e a variável
-    /// `ECLUME_PAT`.
+    /// The real vault: OS keyring (with `os-keyring`), file in `config_dir` and the `ECLUME_PAT`
+    /// variable.
     pub fn new(config_dir: &Path) -> Self {
         #[cfg(feature = "os-keyring")]
         let keyring: Box<dyn SecretBackend> = Box::new(OsKeyring);
@@ -139,7 +141,7 @@ impl PatStore {
         }
     }
 
-    /// O PAT em uso e de onde veio; `None` quando não há nenhum.
+    /// The PAT in use and where it came from; `None` when there is none.
     pub fn load(&self) -> Result<Option<(String, PatSource)>> {
         if let Some(pat) = &self.env {
             return Ok(Some((pat.trim().to_string(), PatSource::Env)));
@@ -147,7 +149,7 @@ impl PatStore {
         match self.keyring.get() {
             Ok(Some(pat)) => return Ok(Some((pat, PatSource::Keyring))),
             Ok(None) => {}
-            Err(err) => log::warn!("{err:#}; tentando o arquivo"),
+            Err(err) => log::warn!("{err:#}; trying the file"),
         }
         match std::fs::read_to_string(&self.file) {
             Ok(pat) if !pat.trim().is_empty() => {
@@ -159,7 +161,8 @@ impl PatStore {
         }
     }
 
-    /// Guarda o PAT no chaveiro; sem chaveiro, no arquivo 0600. Devolve onde ficou.
+    /// Stores the PAT in the keyring; without a keyring, in the 0600 file. Returns where it was
+    /// stored.
     pub fn save(&self, pat: &str) -> Result<PatSource> {
         let pat = pat.trim();
         if !pat.starts_with(PAT_PREFIX) || pat.len() <= PAT_PREFIX.len() {
@@ -171,14 +174,14 @@ impl PatStore {
                 Ok(PatSource::Keyring)
             }
             Err(err) => {
-                log::warn!("{err:#}; guardando o PAT em {}", self.file.display());
+                log::warn!("{err:#}; storing the PAT in {}", self.file.display());
                 write_private(&self.file, pat)?;
                 Ok(PatSource::File)
             }
         }
     }
 
-    /// Esquece o PAT guardado (chaveiro e arquivo).
+    /// Forgets the stored PAT (keyring and file).
     pub fn clear(&self) -> Result<()> {
         if let Err(err) = self.keyring.delete() {
             log::warn!("{err:#}");
@@ -197,8 +200,8 @@ impl PatStore {
     }
 }
 
-/// Grava um arquivo legível só pelo dono (0600 no Unix; no Windows, o diretório de config do
-/// usuário já é restrito a ele).
+/// Writes a file readable only by its owner (0600 on Unix; on Windows, the user's config directory
+/// is already restricted to them).
 fn write_private(path: &Path, content: &str) -> Result<()> {
     use std::io::Write;
 
@@ -212,7 +215,7 @@ fn write_private(path: &Path, content: &str) -> Result<()> {
     {
         use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
         options.mode(0o600);
-        // Um arquivo que já existia mantém o modo antigo no `open`: acerta antes de escrever.
+        // An existing file keeps its old mode on `open`: fix it before writing.
         if path.exists() {
             std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
         }
@@ -232,7 +235,7 @@ mod tests {
 
     use super::*;
 
-    /// Chaveiro em memória; `broken` simula um SO sem Secret Service.
+    /// In-memory keyring; `broken` simulates an OS without Secret Service.
     #[derive(Clone, Default)]
     struct FakeKeyring {
         secret: Arc<Mutex<Option<String>>>,
@@ -266,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    fn guarda_no_chaveiro_e_le_de_volta() {
+    fn stores_in_keyring_and_reads_back() {
         let dir = dir("chaveiro");
         let keyring = FakeKeyring::default();
         let store = PatStore::with_backend(dir.join(PAT_FILE), Box::new(keyring.clone()), None);
@@ -283,7 +286,7 @@ mod tests {
     }
 
     #[test]
-    fn sem_chaveiro_cai_no_arquivo_privado() {
+    fn without_keyring_falls_back_to_private_file() {
         let dir = dir("arquivo");
         let broken = FakeKeyring {
             broken: true,
@@ -310,7 +313,7 @@ mod tests {
     }
 
     #[test]
-    fn chaveiro_que_volta_limpa_o_arquivo() {
+    fn returning_keyring_clears_file() {
         let dir = dir("migra");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join(PAT_FILE), "eclp_velho").unwrap();
@@ -326,7 +329,7 @@ mod tests {
     }
 
     #[test]
-    fn variavel_de_ambiente_sobrepoe_e_pat_invalido_e_recusado() {
+    fn environment_variable_overrides_and_invalid_pat_is_rejected() {
         let store = PatStore::with_backend(
             dir("env").join(PAT_FILE),
             Box::new(FakeKeyring::default()),
@@ -342,11 +345,11 @@ mod tests {
 
     #[cfg(feature = "os-keyring")]
     #[test]
-    fn chaveiro_roda_em_thread_propria_e_panic_vira_erro() {
-        // Fora da thread do chamador, o `block_on` do Secret Service não vê o runtime dele.
+    fn keyring_runs_on_own_thread_and_panic_becomes_error() {
+        // Outside the caller's thread, the Secret Service's `block_on` does not see its runtime.
         let name = isolated(|| Ok(std::thread::current().name().map(str::to_owned))).unwrap();
         assert_eq!(name.as_deref(), Some("eclume-keyring"));
-        let err = isolated::<()>(|| panic!("cofre envenenado")).unwrap_err();
+        let err = isolated::<()>(|| panic!("poisoned vault")).unwrap_err();
         assert_eq!(err.to_string(), "o chaveiro do SO falhou (panic)");
     }
 }

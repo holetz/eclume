@@ -1,8 +1,8 @@
 # `assets/zensical/` — the site setup payload (Zensical)
 
-Inert here, like the rest of `assets/`. `/quenching-knowledge-align` (Step 7) stamps these into a target
+Inert here, like the rest of `assets/`. `/quenching-knowledge align` (Step 7) stamps these into a target
 repo **once**, while scaffolding the bundle, so the OKF bundle renders as a site;
-`/quenching-knowledge-documentation-build` **owns** the layer after that — it installs, merges forward,
+`/quenching-knowledge documentation-build` **owns** the layer after that — it installs, merges forward,
 keeps the `nav` in step with the folder tree, and verifies the build. **The OKF
 markdown stays generator-neutral; only this config layer names a generator.**
 

@@ -27,7 +27,7 @@ from quenching.knowledge.site_source import PUBLISHED_HOMES
 # The site's reading order. The nav is deliberately generated from the same publication allow-list
 # as the staged source tree: Zensical has no supported exclusion setting, so catalogues and external
 # research must be absent from both the menu and `docs_dir`, not merely omitted from this list.
-HOME_ORDER = ("tutorials", "how-to", "explanation", "project",
+HOME_ORDER = ("tutorials", "how-to", "documentation", "project",
               "standards", "concepts", "vision", "decisions")
 
 _ATTR_SUFFIX = re.compile(r"\s*\{[^}]*\}\s*$")

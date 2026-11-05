@@ -1,6 +1,6 @@
-//! A UI estática do desktop (`desktop/ui`) segue o Design System: a cópia fiel do `styles.css`
-//! (igual à do web, quando ela existe), fontes locais, nenhum recurso externo e nenhum atributo
-//! `style`, que a CSP da janela bloqueia.
+//! The static desktop UI (`desktop/ui`) follows the Design System: an exact copy of `styles.css`
+//! (matching the web copy, when present), local fonts, no external resources and no `style`
+//! attributes, which the window CSP blocks.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,7 +9,7 @@ fn ui_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../ui")
 }
 
-/// Os arquivos de texto da UI (HTML, CSS e JS), recursivamente.
+/// UI text files (HTML, CSS and JS), recursively.
 fn text_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     for entry in fs::read_dir(dir).unwrap() {
@@ -31,47 +31,47 @@ fn read(path: &Path) -> String {
 }
 
 #[test]
-fn eclume_css_e_a_mesma_copia_do_web() {
+fn eclume_css_matches_web_copy() {
     let desktop = read(&ui_dir().join("eclume.css"));
     assert!(!desktop.contains("fonts.googleapis.com"));
     assert!(
         desktop.contains("--color-rec"),
-        "não parece o styles.css do DS"
+        "does not look like the DS styles.css"
     );
     let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/src/styles/eclume.css");
     if web.exists() {
         assert!(
             desktop == read(&web),
-            "desktop/ui/eclume.css difere de web/src/styles/eclume.css: rode \
-             uv run python design-system/sincronizar.py"
+            "desktop/ui/eclume.css differs from web/src/styles/eclume.css: run \
+             uv run python design-system/sync.py"
         );
     }
 }
 
 #[test]
-fn vocabulario_e_a_mesma_copia_do_web() {
+fn vocabulary_matches_web_copy() {
     let desktop = read(&ui_dir().join("js/vocabulario.js"));
     assert!(
         desktop.contains("export const MOTIVOS"),
-        "não parece o vocabulário de estados"
+        "does not look like the state vocabulary"
     );
     let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/src/lib/vocabulario.js");
     if web.exists() {
         assert!(
             desktop == read(&web),
-            "desktop/ui/js/vocabulario.js difere de web/src/lib/vocabulario.js: copie o do web"
+            "desktop/ui/js/vocabulario.js differs from web/src/lib/vocabulario.js: copy the web version"
         );
     }
 }
 
 #[test]
-fn nenhum_recurso_externo() {
+fn no_external_resources() {
     for path in text_files(&ui_dir()) {
         let text = read(&path);
         for scheme in ["http://", "https://"] {
             assert!(
                 !text.contains(scheme),
-                "{} usa {scheme}: a UI só carrega do próprio app",
+                "{} uses {scheme}: the UI only loads from the app itself",
                 path.display()
             );
         }
@@ -79,14 +79,14 @@ fn nenhum_recurso_externo() {
             !text
                 .lines()
                 .any(|line| line.trim_start().starts_with("@import")),
-            "{} usa @import",
+            "{} uses @import",
             path.display()
         );
     }
 }
 
 #[test]
-fn fontes_declaradas_existem_e_tem_licenca() {
+fn declared_fonts_exist_and_have_license() {
     let fonts = read(&ui_dir().join("fonts.css"));
     let mut declared = Vec::new();
     for part in fonts.split("url(").skip(1) {
@@ -94,18 +94,22 @@ fn fontes_declaradas_existem_e_tem_licenca() {
         let path = ui_dir().join(target);
         assert!(
             path.is_file(),
-            "fonts.css aponta para {target}, que não existe"
+            "fonts.css points to {target}, which does not exist"
         );
         declared.push(path.file_name().unwrap().to_owned());
     }
-    assert_eq!(declared.len(), 7, "Archivo 400–800 e IBM Plex Mono 400/500");
+    assert_eq!(
+        declared.len(),
+        7,
+        "Archivo 400–800 and IBM Plex Mono 400/500"
+    );
     for entry in fs::read_dir(ui_dir().join("fonts")).unwrap() {
         let name = entry.unwrap().file_name();
         if Path::new(&name)
             .extension()
             .is_some_and(|ext| ext == "woff2")
         {
-            assert!(declared.contains(&name), "{name:?} sem @font-face");
+            assert!(declared.contains(&name), "{name:?} without @font-face");
         }
     }
     let license = read(&ui_dir().join("fonts/OFL.txt"));
@@ -114,7 +118,7 @@ fn fontes_declaradas_existem_e_tem_licenca() {
 }
 
 #[test]
-fn sem_atributo_style() {
+fn no_style_attribute() {
     for path in text_files(&ui_dir()) {
         let text = read(&path);
         let offending = match path.extension().and_then(|ext| ext.to_str()) {
@@ -124,14 +128,14 @@ fn sem_atributo_style() {
         };
         assert!(
             !offending,
-            "{} escreve atributo style; use classes ou style.setProperty",
+            "{} writes a style attribute; use classes or style.setProperty",
             path.display()
         );
     }
 }
 
 #[test]
-fn index_carrega_so_arquivos_que_existem() {
+fn index_only_loads_existing_files() {
     let index = read(&ui_dir().join("index.html"));
     for attr in ["href=\"", "src=\""] {
         for part in index.split(attr).skip(1) {
@@ -141,22 +145,22 @@ fn index_carrega_so_arquivos_que_existem() {
             }
             assert!(
                 ui_dir().join(target).is_file(),
-                "index.html referencia {target}, que não existe"
+                "index.html references {target}, which does not exist"
             );
         }
     }
 }
 
-/// Os slugs que a UI pede ao `open_help` (`{ article: "<slug>" }`; `null` é a central).
-fn slugs_de_ajuda(texto: &str) -> Vec<String> {
+/// Slugs the UI requests through `open_help` (`{ article: "<slug>" }`; `null` is the help center).
+fn help_slugs(text: &str) -> Vec<String> {
     let mut slugs = Vec::new();
-    for (inicio, _) in texto.match_indices("\"open_help\"") {
-        let resto = &texto[inicio..];
-        let args = &resto[..resto.find('}').unwrap_or(resto.len())];
+    for (start, _) in text.match_indices("\"open_help\"") {
+        let rest = &text[start..];
+        let args = &rest[..rest.find('}').unwrap_or(rest.len())];
         if let Some(pos) = args.find("article:") {
-            let valor = args[pos + "article:".len()..].trim_start();
-            if let Some(sem_aspas) = valor.strip_prefix('"') {
-                slugs.push(sem_aspas[..sem_aspas.find('"').unwrap()].to_string());
+            let value = args[pos + "article:".len()..].trim_start();
+            if let Some(unquoted) = value.strip_prefix('"') {
+                slugs.push(unquoted[..unquoted.find('"').unwrap()].to_string());
             }
         }
     }
@@ -164,24 +168,24 @@ fn slugs_de_ajuda(texto: &str) -> Vec<String> {
 }
 
 #[test]
-fn artigos_de_ajuda_pedidos_pela_ui_existem_no_web() {
-    let artigos =
+fn help_articles_requested_by_ui_exist_on_web() {
+    let articles =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/src/features/help/articles");
-    if !artigos.exists() {
-        return; // build fora do monorepo
+    if !articles.exists() {
+        return; // build outside the monorepo
     }
-    let mut pedidos = Vec::new();
-    for arquivo in text_files(&ui_dir().join("js")) {
-        pedidos.extend(slugs_de_ajuda(&read(&arquivo)));
+    let mut requested = Vec::new();
+    for file in text_files(&ui_dir().join("js")) {
+        requested.extend(help_slugs(&read(&file)));
     }
     assert!(
-        pedidos.len() >= 3,
-        "esperava os artigos do menu de ajuda: {pedidos:?}"
+        requested.len() >= 3,
+        "expected help menu articles: {requested:?}"
     );
-    for slug in pedidos {
+    for slug in requested {
         assert!(
-            artigos.join(format!("{slug}.md")).exists(),
-            "a UI do desktop abre o artigo {slug}, que não existe em web/src/features/help/articles"
+            articles.join(format!("{slug}.md")).exists(),
+            "the desktop UI opens article {slug}, which does not exist in web/src/features/help/articles"
         );
     }
 }

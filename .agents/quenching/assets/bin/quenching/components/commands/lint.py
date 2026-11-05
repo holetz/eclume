@@ -3,7 +3,7 @@
 Moved verbatim out of the pre-refactor components script.
 
 Every check here is decidable FROM THE FILE. The doctrine's remaining tests — the no-op test,
-sediment, sprawl, positive prescription — stay a human read in `/quenching-align:components:align` Stage 2, because
+sediment, sprawl, positive prescription — stay a human read in `/quenching-components align` Stage 2, because
 each needs a claim about behaviour that no parser can make. Adding a heuristic for one of them
 would move the plugin's anti-fabrication boundary, not the tool's coverage.
 """
@@ -23,7 +23,7 @@ from quenching.components.surface import (COMMANDS_DIR, REFERENCES_DIR, SKILL_FI
                                           body_after_frontmatter, discover_commands,
                                           discover_entry_points, discover_references,
                                           discover_skills, entry_points_dir, plugin_prefix,
-                                          plural, rel)
+                                          plural, rel, surface_references)
 
 # conformance thresholds — the normative statement of the front's mechanical rules.
 # `doctrine.md` and `taxonomy.md` cite the sk-* codes rather than restating these numbers,
@@ -47,12 +47,14 @@ DONE_WHEN_MARKER = "**Done when:**"
 UNSCOPED_TOOLS = ("Bash",)      # granting the whole shell for the turn
 EFFORT_VALUES = ("low", "medium", "high", "xhigh", "max")
 
-# A slash citation carrying at least one `:` — `/quenching-align:knowledge:add`,
-# `/quenching-align:knowledge:documentation:build`. The lookbehind rejects a citation already
-# prefixed by a path or a scheme (`https://`, `${CLAUDE_PLUGIN_ROOT}/…`), and requiring a
-# segment after the `:` keeps a bare namespace (`/quenching-align:components:`) out: naming the
+# A slash citation of a command in either spelling. The target dialect is the hyphenated id,
+# `/quenching-knowledge add`; the retired spelling carries at least one `:`,
+# `/quenching-knowledge add` or the bare `/knowledge:add`. The lookbehind rejects a citation
+# already prefixed by a path or a scheme (`https://`, `.agents/quenching/…`), and requiring a
+# segment after the `:` keeps a bare namespace (`/quenching-components-`) out: naming the
 # namespace is not citing a command.
 CITATION_RE = re.compile(r"(?<![\w:/-])/([a-z0-9-]+(?::[a-z0-9-]+)+)")
+HYPHEN_CITATION_RE = re.compile(r"(?<![\w:/.-])/([a-z0-9]+(?:-[a-z0-9]+)+)(?![\w:-])")
 CITATION_SAMPLE = 3      # examples carried in the message; the count carries the rest
 
 HEADING_RE = re.compile(r"^#{1,6}\s")
@@ -486,12 +488,11 @@ def marker_present(body: str, tool: str) -> bool:
 SKILL_TOOL_RE = re.compile(r"[*`_]*Skill[*`_]*\s+tool", re.I)
 SKILL_TOOL_WINDOW = 1           # lines either side of the name, so a wrapped sentence counts
 
-# The shape of a command's registry path, `specs:develop` or a one-segment `align` — the
-# same generic-form-then-membership pattern CITATION_RE above uses, and for the same
-# reason: one regex over each body, never one regex per target name repeated for every
-# caller. `*` rather than `+` because the path IS the identity and a command sitting at
-# the root of `commands/` has exactly one segment.
-NAME_SHAPE = r"([a-z0-9-]+(?::[a-z0-9-]+)*)"
+# The shape of a command's registry id, `quenching-specs-develop` or a one-segment
+# `quenching-align` — the same generic-form-then-membership pattern CITATION_RE above uses, and
+# for the same reason: one regex over each body, never one regex per target name repeated for
+# every caller.
+NAME_SHAPE = r"([a-z0-9]+(?:-[a-z0-9]+)*)"
 
 
 def named_by_bodies(commands: list[dict], prefix: str) -> dict[str, set[str]]:
@@ -503,11 +504,11 @@ def named_by_bodies(commands: list[dict], prefix: str) -> dict[str, set[str]]:
 
     Two conventions are in use, and only the first is unambiguous on its own:
 
-      A. the BARE registry form, `prefix:docs:align` — what you actually hand the Skill
-         tool. The same name written `/prefix:docs:align` is a human-facing citation, so
+      A. the BARE registry form, `prefix-docs-align` — what you actually hand the Skill
+         tool. The same name written `/prefix-docs-align` is a human-facing citation, so
          a leading slash disqualifies it;
       B. any form of the name on a line whose neighbourhood says "Skill tool" — which is
-         how a body that writes "chain into `/quenching-specs:specs:conclude` (the `Skill` tool)"
+         how a body that writes "chain into `/quenching-specs conclude` (the `Skill` tool)"
          says the same thing.
 
     The union is deliberately the WIDER read. The two errors are not symmetric: a false
@@ -519,27 +520,21 @@ def named_by_bodies(commands: list[dict], prefix: str) -> dict[str, set[str]]:
     by membership in the surface's own set — never one regex per target name re-run for
     every caller, which cost the square of the surface's size."""
     by_name = {c["command"].lstrip("/"): c["command"] for c in commands}
-    # A module family shares one stem: `quenching-specs:` and `quenching-align:` both name
-    # commands of the `quenching` source surface, so any `<stem>-<module>:` prefix counts.
-    esc = re.escape(prefix.split("-", 1)[0]) + r"(?:-[a-z]+)?"
-    registry_re = re.compile(rf"(?<![\w:/-]){esc}:{NAME_SHAPE}(?![\w:-])")
-    adjacent_re = re.compile(rf"(?<![\w:-])/?({esc}:)?{NAME_SHAPE}(?![\w:-])")
+    esc = re.escape(prefix)
+    registry_re = re.compile(rf"(?<![\w:/-])({esc}-{NAME_SHAPE})(?![\w:-])")
+    adjacent_re = re.compile(rf"(?<![\w:-])/?({esc}-{NAME_SHAPE})(?![\w:-])")
 
     out: dict[str, set[str]] = {}
     for caller in commands:
-        lines = caller["body"].splitlines()
+        text = caller["body"] + "\n" + caller.get("refBody", "")
+        lines = text.splitlines()
         skill_lines = [i for i, _ in enumerate(lines)
                        if SKILL_TOOL_RE.search("\n".join(
                            lines[max(0, i - SKILL_TOOL_WINDOW): i + SKILL_TOOL_WINDOW + 1]))]
-        found = {m.group(1) for m in registry_re.finditer(caller["body"])}
+        found = {m.group(1) for m in registry_re.finditer(text)}
         for i in skill_lines:
             for m in adjacent_re.finditer(lines[i]):
-                # Both readings of the optional prefix the adjacent form allows: `foo:bar`
-                # is the command `bar` reached through plugin `foo`, and is also the name
-                # of a command `foo:bar` on a surface whose own tree starts with `foo/`.
-                found.add(m.group(2))
-                if m.group(1):
-                    found.add(m.group(1) + m.group(2))
+                found.add(m.group(1))
         found.discard(caller["command"].lstrip("/"))
         for cand in found:
             if cand in by_name:
@@ -563,7 +558,8 @@ def description_is_resident(fm: dict) -> bool:
     return str(fm.get("disable-model-invocation", "")).strip().lower() != "true"
 
 
-def lint_command(cmd: dict, base: str, named_by: set[str] | None = None) -> list[dict]:
+def lint_command(cmd: dict, base: str, named_by: set[str] | None = None,
+                 known_refs: set[str] | None = None) -> list[dict]:
     """`named_by` is the set of commands whose bodies reach THIS one by name. It is a
     property of the whole surface, so only a caller holding one can supply it — and a
     surface with no plugin manifest has no registry form to be reached by, which is why
@@ -637,7 +633,9 @@ def lint_command(cmd: dict, base: str, named_by: set[str] | None = None) -> list
                            "command is not portable outside Claude Code",
                            characters=len(description), cap=CAP_DESCRIPTION_PORTABLE, **where))
 
-    if len(description) > CAP_DESCRIPTION_BUDGET:
+    # A router's description is a map of intent per flow, so the 250 budget contradicts it:
+    # the budget binds only a skill with no table of flows (`sk-router-description` binds the rest).
+    if len(description) > CAP_DESCRIPTION_BUDGET and not FLOW_ROW_RE.search(body):
         out.append(finding("sk-description-budget", "warn",
                            f"description is {len(description)} characters, over the "
                            f"{CAP_DESCRIPTION_BUDGET} budget — put the key use case first and "
@@ -701,7 +699,7 @@ def lint_command(cmd: dict, base: str, named_by: set[str] | None = None) -> list
         out.append(finding("sk-unscoped-bash", "warn", message,
                            tool=bare, priced=priced, **where))
 
-    out.extend(reference_root_findings(body, base, where))
+    out.extend(reference_root_findings(body, known_refs, where))
     out.extend(_lint_invocation(fm, where, named_by))
     out.extend(_lint_frontmatter_hooks(cmd, where))
     out.extend(_lint_profile(fm, where))
@@ -787,79 +785,165 @@ def _lint_frontmatter_hooks(cmd: dict, where: dict) -> list[dict]:
                            "the ladder checks could not read it — it is NOT reported as clean",
                            **where,
                            remedy="rewrite it in the shape of "
-                                  "assets/templates/automation/hook.md shape 1 (/quenching-align:components:hook:new)"))
+                                  "assets/templates/automation/hook.md shape 1 (/quenching-components hook-new)"))
     out.extend(hook_ladder_findings(cmd.get("hooks") or {},
                                     where_in=f"{where['path']} frontmatter", where=where))
     return out
 
 
-REF_ROOT = "${CLAUDE_PLUGIN_ROOT}/assets/references/"
+COMMON_REF_ROOT = ".agents/quenching/references/"
+SKILL_REF_RE = re.compile(r"\.agents/skills/[a-z0-9-]+/references/")
 REF_LINK_RE = re.compile(r"\]\(([^)\s]+\.md)(?:#[^)]*)?\)|components read\s+[\"']?([^\s`\"'<>-][^\s`\"']*\.md)")
 
 
 URL_SCHEME_RE = re.compile(r"(?:[A-Za-z][A-Za-z0-9+.-]*:|//)")
 
 
-def reference_root_findings(body: str, base: str, where: dict) -> list[dict]:
-    """`sk-reference-root` (error): a link or `cq components read` target that names a
-    `assets/references/**` file without the plugin root, or whose root-anchored path does not
-    exist. The bare form (`specs-develop/questions.md`) makes `cq components read` exit 2."""
-    refs_dir = os.path.join(base, "assets", "references")
-    have_tree = os.path.isdir(refs_dir)
+def reference_root_findings(body: str, known: set[str] | None, where: dict) -> list[dict]:
+    """`sk-reference-root` (error): a link or `cq components read` target that names a reference
+    without its installed root, or whose rooted path does not exist.
+
+    A reference is cited by the path it has once installed: `.agents/skills/<name>/references/<path>`
+    beside its skill, or `.agents/quenching/references/<path>` in the common set. `known` is the
+    set of those paths on this surface (`None`: no tree to check against). The retired
+    `assets` root of the references and a bare `specs-develop/questions.md` both make
+    `cq components read` exit 2."""
     out: list[dict] = []
     seen: set[str] = set()
     for m in REF_LINK_RE.finditer(body):
         target = m.group(1) or m.group(2)
         if target in seen or URL_SCHEME_RE.match(target):
             continue
-        if target.startswith(REF_ROOT):
-            if have_tree and not os.path.isfile(os.path.join(refs_dir, target[len(REF_ROOT):])):
-                problem = "does not exist under assets/references/"
+        if target.startswith(COMMON_REF_ROOT) or SKILL_REF_RE.match(target):
+            if known is not None and target not in known:
+                problem = "does not exist on this surface"
             else:
                 continue
-        elif "assets/references/" in target:
-            problem = "is not anchored at the plugin root"
-        elif have_tree and "/" in target and not target.startswith(("/", ".", "$", "http")) \
-                and os.path.isfile(os.path.join(refs_dir, target)):
-            problem = "names a reference without the plugin root"
+        elif "assets/" + "references/" in target:
+            problem = "is not anchored at an installed references root"
+        elif known is not None and "/" in target and not target.startswith(("/", ".", "$", "http")) \
+                and COMMON_REF_ROOT + target in known:
+            problem = "names a reference without its installed root"
         else:
             continue
         seen.add(target)
         out.append(finding("sk-reference-root", "error",
-                           f"`{target}` {problem} — cite it as `{REF_ROOT}<path>` so it resolves "
-                           "from the plugin root", target=target, **where))
+                           f"`{target}` {problem} — cite it as `{COMMON_REF_ROOT}<path>` or "
+                           "`.agents/skills/<name>/references/<path>` so it resolves once installed",
+                           target=target, **where))
     return out
 
 
-def bare_citations(body: str, invocations: set[str]) -> list[str]:
-    """The bare `/front:verb` citations in `body` that name a command of THIS surface, in
-    order of appearance and without repeats.
+# --------------------------------------------------------------------------- #
+# routers — a skill whose body is a table of flows, each flow a reference of its own
+# --------------------------------------------------------------------------- #
+FLOW_ROW_RE = re.compile(r"^\|\s*`([a-z0-9-]+)`\s*\|\s*\[[^\]]*\]\(([^)\s]+)\)", re.MULTILINE)
+FLOW_CITATION_RE = re.compile(r"`/(quenching-[a-z0-9]+(?:-[a-z0-9]+)*) ([a-z][a-z0-9-]*)(?=[`\s])")
+
+
+def router_flows(cmd: dict) -> dict[str, str]:
+    """`{flow: reference file}` read from a router skill's table of flows; `{}` for any other skill.
+    The table is the router's contract, so the flows are never listed a second time elsewhere."""
+    flows: dict[str, str] = {}
+    folder = os.path.dirname(cmd["path"])
+    for m in FLOW_ROW_RE.finditer(cmd["body"]):
+        link = m.group(2)
+        tail = link.split("/references/", 1)
+        flows[m.group(1)] = os.path.join(folder, "references", tail[1]) if len(tail) == 2 \
+            else os.path.join(folder, link)
+    return flows
+
+
+def router_grant_findings(cmd: dict, flows: dict[str, str], where: dict) -> list[dict]:
+    """`sk-router-grant` (error): the router grants the UNION of its flows' `allowed-tools`, each
+    declared in the flow's own reference. A tool a flow needs and the router lacks fails the flow
+    the moment the router loads it; a bare `Bash` covers every scoped `Bash(...)`."""
+    granted = set(_split_tools(str(cmd["frontmatter"].get("allowed-tools", ""))))
+    bash_open, prefixes = _bash_grants(cmd["frontmatter"])
+    missing: dict[str, list[str]] = {}
+    for flow, path in flows.items():
+        text = read_text(path)
+        if text is None:
+            continue
+        for tool in _split_tools(str(parse_frontmatter(text).get("allowed-tools", ""))):
+            if tool in granted or (bash_open and tool.startswith("Bash(")):
+                continue
+            if tool.startswith("Bash(") and tool.endswith(")"):
+                spec = tool[5:-1]
+                if _grant_covers(spec[:-2] if spec.endswith(":*") else spec, prefixes):
+                    continue
+            missing.setdefault(tool, []).append(flow)
+    if not missing:
+        return []
+    shown = ", ".join(f"`{t}` ({'/'.join(f)})" for t, f in sorted(missing.items()))
+    return [finding("sk-router-grant", "error",
+                    f"the router does not grant what its flows declare — {shown}. The grant is the "
+                    "union of the flows' `allowed-tools`",
+                    missing=sorted(missing), remedy="add the missing tools to the router's allowed-tools",
+                    **where)]
+
+
+def router_description_findings(cmd: dict, flows: dict[str, str], where: dict) -> list[dict]:
+    """`sk-router-description` (error): a flow of the router's table that the description does not
+    name. The description is the only text always in context, so a flow it omits is a flow the
+    user's wording cannot reach."""
+    description = str(cmd["frontmatter"].get("description", ""))
+    missing = [f for f in flows
+               if not re.search(r"(?<![a-z0-9-])" + re.escape(f) + r"(?![a-z0-9-])", description)]
+    if not missing:
+        return []
+    shown = ", ".join(f"`{f}`" for f in missing)
+    return [finding("sk-router-description", "error",
+                    f"the description does not name {shown} from the table of flows — the router "
+                    "can only route the flows its description maps",
+                    missing=missing, remedy="name every flow of the table in the description",
+                    **where)]
+
+
+def dangling_flow_citations(body: str, routers: dict[str, set[str]]) -> list[str]:
+    """The `` `/quenching-<vertical> <flow>` `` citations whose vertical is a router of this
+    surface but whose flow is not in its table."""
+    seen: list[str] = []
+    for m in FLOW_CITATION_RE.finditer(body):
+        flows = routers.get(m.group(1))
+        cite = f"/{m.group(1)} {m.group(2)}"
+        if flows is not None and m.group(2) not in flows and cite not in seen:
+            seen.append(cite)
+    return seen
+
+
+def bare_citations(body: str, invocations: set[str], prefix: str | None = None) -> list[str]:
+    """The retired `:` citations in `body` that name a command of THIS surface, in order of
+    appearance and without repeats: the bare `/front:verb`, and with a `prefix` the module-led
+    `/<prefix>-<module>:front:verb` too.
 
     `body` is the text after the frontmatter, so a citation inside `description:` cannot
     reach here — the boundary is the parse, never a pattern that has to be kept in step
     with one."""
     seen: list[str] = []
     for m in CITATION_RE.finditer(body):
-        cite = "/" + m.group(1)
-        if cite in invocations and cite not in seen:
-            seen.append(cite)
+        name = m.group(1)
+        if prefix and name.startswith(prefix + "-") and ":" in name:
+            name = name.split(":", 1)[1]
+        cite = "/" + name
+        if cite in invocations and "/" + m.group(1) not in seen:
+            seen.append("/" + m.group(1))
     return seen
 
 
 def lint_citations(prefix: str, body: str, invocations: set[str], where: dict) -> list[dict]:
     """One finding per file, never one per citation: a surface mid-sweep carries hundreds,
     and a report nobody can read is a report nobody acts on."""
-    bare = bare_citations(body, invocations)
+    bare = bare_citations(body, invocations, prefix)
     if not bare:
         return []
     shown = ", ".join(f"`{c}`" for c in bare[:CITATION_SAMPLE])
     more = f" (+{len(bare) - CITATION_SAMPLE} more)" if len(bare) > CITATION_SAMPLE else ""
     return [finding("sk-bare-citation", "warn",
-                    f"{plural(len(bare), 'bare command citation')} in the body — {shown}{more}. "
-                    f"These commands come from the `{prefix}` plugin, so the form that resolves "
-                    f"is `{prefix}:<front>:<verb>` for the Skill tool and "
-                    f"`/{prefix}:<front>:<verb>` for a human; the bare form resolves only where "
-                    "the command file lives in the target repo's own .claude/commands/",
+                    f"{plural(len(bare), 'retired command citation')} in the body — {shown}{more}. "
+                    "The source is written in the target dialect: the id that resolves is "
+                    f"`{prefix}-<front>-<verb>` for the Skill tool and "
+                    f"`/{prefix}-<front>-<verb>` for a human; the `:` spelling is retired",
                     citations=bare, **where)]
 
 
@@ -882,9 +966,35 @@ def dangling_citations(body: str, invocations: set[str]) -> list[str]:
     return seen
 
 
-def lint_dangling(body: str, invocations: set[str], where: dict) -> list[dict]:
-    """One finding per file, like `lint_citations`: the citations that resolve to nothing."""
-    dangling = dangling_citations(body, invocations)
+def dangling_hyphen_citations(body: str, invocations: set[str], prefix: str,
+                              fronts: set[str]) -> list[str]:
+    """The `/<prefix>-<front>-<verb>` citations in `body` whose front exists on THIS surface but
+    whose command does not. A citation that leads an existing command names a namespace."""
+    seen: list[str] = []
+    for m in HYPHEN_CITATION_RE.finditer(body):
+        cite = "/" + m.group(1)
+        head = prefix + "-"
+        if cite in seen or cite in invocations or not m.group(1).startswith(head):
+            continue
+        if not any(m.group(1)[len(head):].startswith(front + "-") for front in fronts):
+            continue
+        if any(i.startswith(cite + "-") for i in invocations):
+            continue
+        seen.append(cite)
+    return seen
+
+
+def lint_dangling(body: str, invocations: set[str], where: dict, prefix: str | None = None,
+                  fronts: set[str] | None = None,
+                  routers: dict[str, set[str]] | None = None) -> list[dict]:
+    """One finding per file, like `lint_citations`: the citations that resolve to nothing.
+
+    `fronts` are the routers' short names: `/quenching-<router>-<x>` is a retired shortcut, and a
+    router cited with a flow its table does not list names a flow that is gone."""
+    dangling = (dangling_hyphen_citations(body, invocations, prefix, fronts or set()) if prefix
+                else dangling_citations(body, invocations))
+    if prefix and routers:
+        dangling += dangling_flow_citations(body, routers)
     if not dangling:
         return []
     shown = ", ".join(f"`{c}`" for c in dangling[:CITATION_SAMPLE])
@@ -920,8 +1030,7 @@ def resolve_lint_targets(path_arg: str | None, root: str) -> tuple[str, list[dic
     The references ride along only when the base IS a surface root: linting one file, or a
     bare `commands/` directory, is a scope the caller named and this never widens it."""
     if not path_arg:
-        return (root, discover_entry_points(root),
-                discover_references(os.path.join(root, REFERENCES_DIR)))
+        return (root, discover_entry_points(root), surface_references(root))
     target = os.path.abspath(path_arg)
     if os.path.isfile(target) and os.path.basename(target) == SKILL_FILE:
         base = os.path.dirname(os.path.dirname(target))
@@ -932,8 +1041,7 @@ def resolve_lint_targets(path_arg: str | None, root: str) -> tuple[str, list[dic
         return base, [c for c in discover_commands(base)
                       if os.path.abspath(c["path"]) == target], []
     if os.path.isdir(entry_points_dir(target)):
-        return (target, discover_entry_points(target),
-                discover_references(os.path.join(target, REFERENCES_DIR)))
+        return (target, discover_entry_points(target), surface_references(target))
     return target, discover_commands(target), []
 
 
@@ -976,29 +1084,40 @@ def cmd_lint(args, root: str) -> int:
     surface_commands = (commands if base == surface
                         else discover_entry_points(surface))
     named_by = named_by_bodies(surface_commands, prefix) if prefix else {}
+    surface_flows = {c["command"].lstrip("/"): router_flows(c) for c in surface_commands}
+    routers = {name: set(flows) for name, flows in surface_flows.items() if flows}
+    known_refs = ({r["relpath"] for r in surface_references(surface)}
+                  if os.path.isdir(os.path.join(surface, "skills")) else None)
 
     findings: list[dict] = []
     for cmd in commands:
         findings.extend(lint_command(cmd, base,
-                                     named_by.get(cmd["command"]) if prefix else None))
-        findings.extend(_cq_call_findings(cmd["body"], {"command": cmd["command"],
-                                                         "path": rel(cmd["path"], base)}))
+                                     named_by.get(cmd["command"]) if prefix else None,
+                                     known_refs))
+        where = {"command": cmd["command"], "path": rel(cmd["path"], base)}
+        findings.extend(_cq_call_findings(cmd["body"], where))
+        flows = surface_flows.get(cmd["command"].lstrip("/")) or {}
+        if flows:
+            findings.extend(router_grant_findings(cmd, flows, where))
+            findings.extend(router_description_findings(cmd, flows, where))
     if base == surface:
         findings.extend(lint_agents(base, base))
 
+    invocations = {c["command"] for c in surface_commands}
     if prefix:
-        invocations = {c["command"] for c in surface_commands}
+        fronts = {name[len(prefix) + 1:] for name in routers if name.startswith(prefix + "-")}
+        spellings = {"/" + ":".join(c["relpath"][:-3].split("/")) for c in surface_commands
+                     if "relpath" in c and not c["relpath"].endswith(SKILL_FILE)}
         for cmd in commands:
-            findings.extend(lint_citations(prefix, cmd["body"], invocations,
-                                           {"command": cmd["command"],
-                                            "path": rel(cmd["path"], base)}))
+            where = {"command": cmd["command"], "path": rel(cmd["path"], base)}
+            findings.extend(lint_citations(prefix, cmd["body"], spellings, where))
+            findings.extend(lint_dangling(cmd["body"], invocations, where, prefix, fronts, routers))
         for ref in references:
-            findings.extend(lint_citations(prefix, ref["body"], invocations,
-                                           {"command": SURFACE_MISSING,
-                                            "path": rel(ref["path"], base)}))
+            where = {"command": SURFACE_MISSING, "path": rel(ref["path"], base)}
+            findings.extend(lint_citations(prefix, ref["body"], spellings, where))
+            findings.extend(lint_dangling(ref["body"], invocations, where, prefix, fronts, routers))
 
     else:
-        invocations = {c["command"] for c in surface_commands}
         for cmd in commands:
             findings.extend(lint_dangling(cmd["body"], invocations,
                                           {"command": cmd["command"],

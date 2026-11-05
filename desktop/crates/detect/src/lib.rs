@@ -1,9 +1,9 @@
-//! Detecção de reuniões do app desktop do eclume.
+//! Meeting detection for the eclume desktop app.
 //!
-//! Os sinais do SO (quem usa o mic, processos, títulos de janela) viram um [`Snapshot`];
-//! [`classify`] decide se há reunião e em qual app; o [`Debouncer`] transforma isso em
-//! `MeetingEvent`s de início e fim; e o [`AutoRecorder`] aplica as políticas por app e diz ao app
-//! se inicia, para ou pergunta.
+//! OS signals (mic users, processes, window titles) become a [`Snapshot`];
+//! [`classify`] decides whether there is a meeting and in which app; [`Debouncer`] turns it into
+//! start and end `MeetingEvent`s; and [`AutoRecorder`] applies per-app policies and tells the app
+//! whether to start, stop or ask.
 
 pub mod auto;
 pub mod classify;

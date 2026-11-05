@@ -1,9 +1,9 @@
 // fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:crates/detect/src/list/macos.rs
 // fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:crates/detect/src/mic/macos/device.rs
-//! Quem usa o mic no macOS: os objetos de processo do Core Audio (macOS 14+) com entrada ativa.
-//! Onde a lista de processos não existe, sobra o estado do dispositivo de entrada padrão
-//! (`DeviceIsRunningSomewhere`), sem dono — e aí a lista de processos em execução ajuda a dizer
-//! qual app de reunião é.
+//! Mic users on macOS: Core Audio process objects (macOS 14+) with active input.
+//! Where the process list is unavailable, only the default input device state remains
+//! (`DeviceIsRunningSomewhere`), without an owner — the list of running processes then helps
+//! identify the meeting app.
 
 use anyhow::Result;
 use cidre::core_audio as ca;
@@ -66,7 +66,7 @@ pub(super) fn snapshot() -> Result<Snapshot> {
     })
 }
 
-/// macOS antes do 14: só dá para saber se o mic padrão está em uso por alguém.
+/// macOS before 14: can only tell whether someone is using the default mic.
 fn device_only() -> Snapshot {
     let busy = ca::System::default_input_device()
         .and_then(|device| device.prop::<u32>(&IS_RUNNING_SOMEWHERE))

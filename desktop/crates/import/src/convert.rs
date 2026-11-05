@@ -1,10 +1,10 @@
-//! Conversão do arquivo importado para Ogg/Opus mono 16 kHz a 32 kbps, o formato do navegador.
+//! Conversion of the imported file to Ogg/Opus mono 16 kHz at 32 kbps, the browser's format.
 //!
-//! O `symphonia` demultiplexa e decodifica (MP3, AAC, ALAC, FLAC, Vorbis, PCM em MP4/MOV/M4A,
-//! MKV/WebM, Ogg e WAV); o Opus, que ele só demultiplexa, vai para a libopus. A mixagem para mono
-//! e o `Mixer` do recorder (o reamostrador do workspace) levam a 16 kHz, e o `OggOpusWriter` do
-//! recorder codifica. O que não dá para converter é copiado como está: o worker do servidor
-//! decodifica com ffmpeg.
+//! `symphonia` demuxes and decodes (MP3, AAC, ALAC, FLAC, Vorbis, PCM in MP4/MOV/M4A,
+//! MKV/WebM, Ogg and WAV); Opus, which it only demuxes, goes to libopus. The mono downmix and
+//! the recorder's `Mixer` (the workspace resampler) bring it to 16 kHz, and the recorder's
+//! `OggOpusWriter` encodes. What cannot be converted is copied as is: the server worker decodes
+//! it with ffmpeg.
 
 use std::fs::File;
 use std::io::{BufWriter, ErrorKind};
@@ -22,41 +22,44 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 
-/// A taxa do navegador para voz.
+/// The browser's bitrate for voice.
 pub const BITRATE: i32 = 32_000;
-/// O `content_type` do que sai convertido.
+/// The `content_type` of the converted output.
 pub const OGG_OPUS: &str = "audio/ogg; codecs=opus";
-/// O Opus decodifica a 48 kHz; o maior pacote tem 120 ms.
+/// Opus decodes at 48 kHz; the largest packet is 120 ms.
 const OPUS_RATE: u32 = 48_000;
 const OPUS_MAX_FRAME: usize = 5_760;
 
-/// O arquivo pronto em `gravacoes/`.
+/// The finished file in `gravacoes/`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Converted {
     pub path: PathBuf,
     pub content_type: String,
     pub bytes: u64,
-    /// A duração do áudio convertido; `None` na cópia.
+    /// The duration of the converted audio; `None` for a copy.
     pub duration_ms: Option<u64>,
-    /// `false` quando o original foi copiado como está.
+    /// `false` when the original was copied as is.
     pub converted: bool,
 }
 
-/// A importação foi cancelada: o arquivo parcial já saiu do disco.
+/// The import was cancelled: the partial file is already gone from disk.
 #[derive(Debug)]
 pub struct Cancelled;
 
 impl std::fmt::Display for Cancelled {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // pt-BR UI copy: the window shows it when an import fails.
         f.write_str("importação cancelada")
     }
 }
 
 impl std::error::Error for Cancelled {}
 
-/// Converte `src` para `<dir>/<id>.ogg`, ou o copia para `<dir>/<id>.<ext>` quando não dá.
-/// `progress` recebe a fração feita (0 a 1); `cancel` interrompe entre pacotes. Um pânico do
-/// decodificador conta como arquivo que não decodifica: o `.part` sai e vale "vai como está".
+/// Converts `src` to `<dir>/<id>.ogg`, or copies it to `<dir>/<id>.<ext>` when it cannot.
+/// `progress` receives the fraction done (0 to 1); `cancel` stops between packets. A decoder
+/// panic counts as a file that does not decode: the `.part` is removed and "goes as is" applies.
+/// Errors that leave this function stay pt-BR UI copy (the window shows them); the conversion
+/// errors below only reach the log, because a failed conversion falls back to the copy.
 pub fn convert(
     src: &Path,
     dir: &Path,
@@ -70,7 +73,7 @@ pub fn convert(
     let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         to_opus(src, &part, cancel, &mut progress)
     }))
-    .unwrap_or_else(|_| Err(anyhow!("o decodificador entrou em pânico")));
+    .unwrap_or_else(|_| Err(anyhow!("the decoder panicked")));
     match attempt {
         Ok(samples) => {
             std::fs::rename(&part, &dest)?;
@@ -88,13 +91,13 @@ pub fn convert(
             if err.is::<Cancelled>() {
                 return Err(err);
             }
-            log::info!("{} vai como está: {err:#}", src.display());
+            log::info!("{} goes as is: {err:#}", src.display());
             copy_original(src, dir, id, cancel).inspect(|_| progress(1.0))
         }
     }
 }
 
-/// Copia o original, com a extensão dele e o `content_type` que ela indica.
+/// Copies the original, with its extension and the `content_type` that extension implies.
 fn copy_original(src: &Path, dir: &Path, id: &str, cancel: &AtomicBool) -> Result<Converted> {
     if cancel.load(Ordering::Relaxed) {
         bail!(Cancelled);
@@ -116,7 +119,7 @@ fn copy_original(src: &Path, dir: &Path, id: &str, cancel: &AtomicBool) -> Resul
     })
 }
 
-/// O `content_type` pela extensão; o servidor aceita `audio/*` e `video/*`.
+/// The `content_type` by extension; the server accepts `audio/*` and `video/*`.
 pub fn content_type(ext: &str) -> &'static str {
     match ext.to_ascii_lowercase().as_str() {
         "mp3" => "audio/mpeg",
@@ -140,13 +143,13 @@ pub fn content_type(ext: &str) -> &'static str {
     }
 }
 
-/// Decodificador da trilha: o do `symphonia` ou a libopus.
+/// The track's decoder: `symphonia`'s or libopus.
 enum Decoder {
     Symphonia(Box<dyn symphonia::core::codecs::Decoder>),
     Opus {
         decoder: opus::Decoder,
         channels: usize,
-        /// Amostras a 48 kHz que o `OpusHead` manda descartar no começo.
+        /// Samples at 48 kHz that the `OpusHead` says to drop at the start.
         skip: usize,
         buffer: Vec<f32>,
     },
@@ -157,10 +160,10 @@ impl Decoder {
         if params.codec != CODEC_TYPE_OPUS {
             let decoder = symphonia::default::get_codecs()
                 .make(params, &DecoderOptions::default())
-                .context("codec sem decodificador")?;
+                .context("codec without a decoder")?;
             return Ok(Self::Symphonia(decoder));
         }
-        // OpusHead: "OpusHead", versão, canais (byte 9), pre-skip (bytes 10-11, LE).
+        // OpusHead: "OpusHead", version, channels (byte 9), pre-skip (bytes 10-11, LE).
         let head = params.extra_data.as_deref().unwrap_or_default();
         let channels = head
             .get(9)
@@ -170,21 +173,21 @@ impl Decoder {
         let layout = match channels {
             1 => opus::Channels::Mono,
             2 => opus::Channels::Stereo,
-            n => bail!("Opus com {n} canais"),
+            n => bail!("Opus with {n} channels"),
         };
         let skip = head
             .get(10..12)
             .map_or(0, |b| usize::from(u16::from_le_bytes([b[0], b[1]])));
         Ok(Self::Opus {
             decoder: opus::Decoder::new(OPUS_RATE, layout)
-                .context("falha ao criar o decoder Opus")?,
+                .context("failed to create the Opus decoder")?,
             channels,
             skip,
             buffer: vec![0.0; OPUS_MAX_FRAME * channels],
         })
     }
 
-    /// Decodifica um pacote em amostras mono e a taxa delas; `None` num pacote corrompido.
+    /// Decodes a packet into mono samples and their rate; `None` for a corrupt packet.
     fn decode(
         &mut self,
         data: &symphonia::core::formats::Packet,
@@ -201,7 +204,7 @@ impl Decoder {
                     )))
                 }
                 Err(SymphoniaError::DecodeError(err)) => {
-                    log::debug!("pacote corrompido ignorado: {err}");
+                    log::debug!("corrupt packet skipped: {err}");
                     Ok(None)
                 }
                 Err(err) => Err(err.into()),
@@ -214,7 +217,7 @@ impl Decoder {
             } => {
                 let frames = decoder
                     .decode_float(&data.data, buffer, false)
-                    .context("falha ao decodificar um pacote Opus")?;
+                    .context("failed to decode an Opus packet")?;
                 let mut out = mono(&buffer[..frames * *channels], *channels);
                 let dropped = (*skip).min(out.len());
                 out.drain(..dropped);
@@ -225,7 +228,7 @@ impl Decoder {
     }
 }
 
-/// A média dos canais de um bloco intercalado.
+/// The channel average of an interleaved block.
 fn mono(interleaved: &[f32], channels: usize) -> Vec<f32> {
     if channels <= 1 {
         return interleaved.to_vec();
@@ -236,7 +239,7 @@ fn mono(interleaved: &[f32], channels: usize) -> Vec<f32> {
         .collect()
 }
 
-/// Decodifica, reamostra e codifica em `dest`; devolve as amostras gravadas (16 kHz).
+/// Decodes, resamples and encodes into `dest`; returns the samples written (16 kHz).
 fn to_opus(
     src: &Path,
     dest: &Path,
@@ -249,13 +252,13 @@ fn to_opus(
         .iter()
         .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
         .cloned()
-        .ok_or_else(|| anyhow!("nenhuma trilha de áudio"))?;
+        .ok_or_else(|| anyhow!("no audio track"))?;
     let mut decoder = Decoder::new(&track.codec_params)?;
     let total = track.codec_params.n_frames.filter(|&n| n > 0);
 
     let mut writer = OggOpusWriter::new(
         BufWriter::new(
-            File::create(dest).with_context(|| format!("falha ao criar {}", dest.display()))?,
+            File::create(dest).with_context(|| format!("failed to create {}", dest.display()))?,
         ),
         BITRATE,
         rand_serial(),
@@ -302,7 +305,7 @@ fn to_opus(
         writer.write(&mixer.drain()?)?;
     }
     if writer.samples() == 0 {
-        bail!("nenhuma amostra decodificada");
+        bail!("no samples decoded");
     }
     let samples = writer.samples();
     writer
@@ -314,7 +317,7 @@ fn to_opus(
 }
 
 fn open(src: &Path) -> Result<Box<dyn FormatReader>> {
-    let file = File::open(src).with_context(|| format!("falha ao abrir {}", src.display()))?;
+    let file = File::open(src).with_context(|| format!("failed to open {}", src.display()))?;
     let mut hint = Hint::new();
     if let Some(ext) = src.extension().and_then(|e| e.to_str()) {
         hint.with_extension(ext);
@@ -328,7 +331,7 @@ fn open(src: &Path) -> Result<Box<dyn FormatReader>> {
     Ok(probed.format)
 }
 
-/// Número de série do stream Ogg: basta diferir entre arquivos.
+/// The Ogg stream serial number: it only needs to differ between files.
 fn rand_serial() -> u32 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -353,7 +356,7 @@ mod tests {
         dir
     }
 
-    /// Lê o `OpusHead` e a duração (granule da última página menos o pre-skip) de um Ogg/Opus.
+    /// Reads the `OpusHead` and the duration (last page granule minus pre-skip) of an Ogg/Opus file.
     fn ogg_opus(path: &Path) -> (u8, u32, u64) {
         let mut reader = ogg::reading::PacketReader::new(File::open(path).unwrap());
         let head = reader.read_packet().unwrap().unwrap();
@@ -369,9 +372,9 @@ mod tests {
     }
 
     #[test]
-    fn converte_os_formatos_que_o_symphonia_le_para_opus_mono() {
-        let dir = scratch("converte");
-        for (i, name) in ["tom.m4a", "tom.mp3", "tom.wav", "tom.webm", "tom.ogg"]
+    fn converts_the_formats_symphonia_reads_to_mono_opus() {
+        let dir = scratch("convert");
+        for (i, name) in ["tone.m4a", "tone.mp3", "tone.wav", "tone.webm", "tone.ogg"]
             .into_iter()
             .enumerate()
         {
@@ -401,10 +404,10 @@ mod tests {
     }
 
     #[test]
-    fn o_que_nao_decodifica_e_copiado_com_o_tipo_da_extensao() {
-        let dir = scratch("copia");
+    fn what_does_not_decode_is_copied_with_the_extension_type() {
+        let dir = scratch("copy");
         let out = convert(
-            &fixture("tom.avi"),
+            &fixture("tone.avi"),
             &dir,
             "v",
             &AtomicBool::new(false),
@@ -417,26 +420,26 @@ mod tests {
         assert_eq!(out.duration_ms, None);
         assert_eq!(
             std::fs::read(&out.path).unwrap(),
-            std::fs::read(fixture("tom.avi")).unwrap()
+            std::fs::read(fixture("tone.avi")).unwrap()
         );
         assert!(!dir.join("v.ogg").exists() && !dir.join("v.ogg.part").exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn panico_do_decodificador_vai_como_esta() {
-        let dir = scratch("panico");
+    fn decoder_panic_goes_as_is() {
+        let dir = scratch("panic");
         let mut panicked = false;
         let out = convert(
-            &fixture("tom.wav"),
+            &fixture("tone.wav"),
             &dir,
             "p",
             &AtomicBool::new(false),
             |_| {
-                // Dentro da conversão, o primeiro passo entra em pânico, como um decodificador
-                // quebrado; o "vai como está" segue.
+                // Inside the conversion, the first step panics, like a broken decoder; the
+                // "goes as is" path follows.
                 if !std::mem::replace(&mut panicked, true) {
-                    panic!("decodificador quebrado");
+                    panic!("broken decoder");
                 }
             },
         )
@@ -448,10 +451,10 @@ mod tests {
     }
 
     #[test]
-    fn cancelar_apaga_o_parcial() {
-        let dir = scratch("cancela");
+    fn cancel_deletes_the_partial_file() {
+        let dir = scratch("cancel");
         let err = convert(
-            &fixture("tom.wav"),
+            &fixture("tone.wav"),
             &dir,
             "c",
             &AtomicBool::new(true),
@@ -464,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn tipos_pela_extensao() {
+    fn types_by_extension() {
         assert_eq!(content_type("MOV"), "video/quicktime");
         assert_eq!(content_type("wma"), "audio/x-ms-wma");
         assert_eq!(content_type("xyz"), "application/octet-stream");

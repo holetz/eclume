@@ -1,7 +1,7 @@
-//! Laços de fundo que não morrem por pânico: cada passada roda em `catch_unwind`. O pânico já sai
-//! no log com o backtrace pelo hook de `lib.rs`; aqui o laço só espera (1 s dobrando até 60 s,
-//! zerada no sucesso) e segue na passada seguinte, dono do estado que acumulou entre passadas.
-//! Contrato: docs/standards/code/desktop-gravacao.md §App e bandeja.
+//! Background loops that survive panics: each pass runs in `catch_unwind`. The `lib.rs` hook
+//! already logs the panic with a backtrace; here the loop only waits (1 s doubling up to 60 s,
+//! reset on success) and continues to the next pass, keeping the state accumulated between passes.
+//! Contract: docs/standards/code/desktop-gravacao.md §App and tray.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Duration;
@@ -9,7 +9,7 @@ use std::time::Duration;
 const FIRST_WAIT: Duration = Duration::from_secs(1);
 const MAX_WAIT: Duration = Duration::from_secs(60);
 
-/// A espera depois de um pânico, que cresce enquanto as passadas seguem em pânico.
+/// The wait after a panic, increasing while passes keep panicking.
 #[derive(Debug)]
 pub struct Backoff {
     first: Duration,
@@ -38,8 +38,8 @@ impl Backoff {
     }
 }
 
-/// Roda uma passada do laço `name`. Em pânico, espera o `backoff` e devolve `None`; no sucesso,
-/// zera a espera e devolve o resultado.
+/// Runs one pass of loop `name`. On panic, waits for `backoff` and returns `None`; on success,
+/// resets the wait and returns the result.
 pub fn pass<T>(backoff: &mut Backoff, name: &str, body: impl FnOnce() -> T) -> Option<T> {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(value) => {
@@ -48,7 +48,7 @@ pub fn pass<T>(backoff: &mut Backoff, name: &str, body: impl FnOnce() -> T) -> O
         }
         Err(_) => {
             let wait = backoff.failed();
-            log::error!("pânico numa passada de {name}; a próxima vem em {wait:?}");
+            log::error!("panic in a pass of {name}; next pass in {wait:?}");
             std::thread::sleep(wait);
             None
         }
@@ -60,24 +60,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn supervise_segue_depois_do_panico_com_espera_crescente() {
+    fn supervise_continues_after_panic_with_increasing_wait() {
         let mut backoff = Backoff::starting_at(Duration::from_millis(1));
         assert_eq!(
-            pass(&mut backoff, "teste", || panic!("passada quebrada")),
+            pass(&mut backoff, "test", || panic!("broken pass")),
             None::<()>
         );
         assert_eq!(backoff.next, Duration::from_millis(2));
-        assert_eq!(
-            pass(&mut backoff, "teste", || panic!("de novo")),
-            None::<()>
-        );
+        assert_eq!(pass(&mut backoff, "test", || panic!("again")), None::<()>);
         assert_eq!(backoff.next, Duration::from_millis(4));
-        assert_eq!(pass(&mut backoff, "teste", || 7), Some(7));
+        assert_eq!(pass(&mut backoff, "test", || 7), Some(7));
         assert_eq!(backoff.next, Duration::from_millis(1));
     }
 
     #[test]
-    fn supervise_limita_a_espera_a_um_minuto() {
+    fn supervise_caps_wait_at_one_minute() {
         let mut backoff = Backoff::default();
         for _ in 0..10 {
             backoff.failed();

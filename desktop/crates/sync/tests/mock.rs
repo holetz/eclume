@@ -1,11 +1,11 @@
-//! Integração com o mock do contrato v1 (Prism, `deploy/docker-compose.mock.yml`).
+//! Integration with the contract v1 mock (Prism, `deploy/docker-compose.mock.yml`).
 //!
 //!     docker compose -f deploy/docker-compose.mock.yml up -d --wait
 //!     ECLUME_MOCK_URL=http://127.0.0.1:4010 cargo test -p eclume-sync --test mock
 //!
-//! Sem `ECLUME_MOCK_URL` cada caso se declara pulado. As URLs de parte das fixtures apontam para
-//! `127.0.0.1:4010`, então o mock precisa estar nessa porta, na mesma máquina dos testes. O mock é
-//! estático: retomada e retentativa são provadas nos testes de unidade do protocolo.
+//! Without `ECLUME_MOCK_URL`, each case reports itself skipped. The part URLs in the fixtures point
+//! to `127.0.0.1:4010`, so the mock must use that port on the test machine. The mock is static:
+//! resume and retry are proven in protocol unit tests.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -17,10 +17,10 @@ use eclume_sync::{
     Watermark,
 };
 
-/// Gravação e upload das fixtures do contrato.
+/// Recording and upload from the contract fixtures.
 const RECORDING_ID: &str = "01928f3a-1c00-7a00-8000-000000000401";
 const UPLOAD_ID: &str = "01928f3a-1c00-7a00-8000-000000000601";
-/// Tamanho do arquivo da fixture: 3 partes de 8 MiB, a última menor.
+/// Fixture file size: 3 parts of 8 MiB, the last one smaller.
 const FIXTURE_SIZE: usize = 19_287_595;
 const VERSION: &str = "eclume-desktop/0.1.0";
 const PAT: &str = "eclp_mockmockmockmockmockmockmockmock";
@@ -30,13 +30,13 @@ fn mock_url() -> Option<String> {
         .ok()
         .filter(|u| !u.is_empty());
     if url.is_none() {
-        eprintln!("ECLUME_MOCK_URL ausente: teste de integração pulado");
+        eprintln!("ECLUME_MOCK_URL missing: integration test skipped");
     }
     url
 }
 
-/// Transporte real com um ajuste do mock no caminho: `Prefer: code=201` no `POST /uploads`, para
-/// o Prism simular um upload novo (sem ele responde o 200 `deduplicated`), ou sem o PAT.
+/// Real transport with a mock adjustment along the way: `Prefer: code=201` on `POST /uploads`, so
+/// Prism simulates a new upload (without it, responds with 200 `deduplicated`), or without the PAT.
 struct MockTransport {
     inner: UreqTransport,
     prefer_new_upload: bool,
@@ -67,7 +67,7 @@ fn client(base: &str, prefer_new_upload: bool, strip_pat: bool) -> Client {
     Client::new(Arc::new(transport), base, PAT, RetryPolicy::default()).unwrap()
 }
 
-/// Uma fila com uma gravação `pending` de `size` bytes, do Teams.
+/// A queue with a `pending` Teams recording of `size` bytes.
 fn queue_with_recording(name: &str, size: usize) -> (Arc<Mutex<Queue>>, PathBuf) {
     let dir = std::env::temp_dir().join(format!("eclume-mock-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -92,7 +92,7 @@ fn queue_with_recording(name: &str, size: usize) -> (Arc<Mutex<Queue>>, PathBuf)
 }
 
 #[test]
-fn upload_novo_completa() {
+fn new_upload_completes() {
     let Some(base) = mock_url() else { return };
     let (queue, dir) = queue_with_recording("novo", FIXTURE_SIZE);
     let uploader =
@@ -118,7 +118,7 @@ fn upload_novo_completa() {
 }
 
 #[test]
-fn upload_deduplicado() {
+fn deduplicated_upload() {
     let Some(base) = mock_url() else { return };
     let (queue, dir) = queue_with_recording("dedup", 1024);
     let uploader =
@@ -135,12 +135,13 @@ fn upload_deduplicado() {
     let queue = queue.lock().unwrap();
     let recording = queue.get("g").unwrap().unwrap();
     assert_eq!(recording.remote_id.as_deref(), Some(RECORDING_ID));
-    // Deduplicado não abre upload: nada a retomar.
+    // Deduplication does not open an upload: nothing to resume.
     assert_eq!(recording.upload_id, None);
     std::fs::remove_dir_all(dir).unwrap();
 }
 
-/// O Prism valida o corpo pelo contrato: um pedido fora dele volta 422 e a gravação falha.
+/// Prism validates the body against the contract: a request outside it returns 422 and the
+/// recording fails.
 fn assert_synced(queue: &Arc<Mutex<Queue>>, id: &str, report: SyncReport) {
     let queue = queue.lock().unwrap();
     let recording = queue.get(id).unwrap().unwrap();
@@ -157,7 +158,7 @@ fn assert_synced(queue: &Arc<Mutex<Queue>>, id: &str, report: SyncReport) {
 }
 
 #[test]
-fn nota_com_marcadores_passa_pelo_contrato() {
+fn voice_note_with_markers_passes_contract() {
     let Some(base) = mock_url() else { return };
     let (queue, dir) = queue_with_recording("nota", 1024);
     {
@@ -175,7 +176,7 @@ fn nota_com_marcadores_passa_pelo_contrato() {
 }
 
 #[test]
-fn importacao_copiada_passa_pelo_contrato() {
+fn copied_import_passes_contract() {
     let Some(base) = mock_url() else { return };
     let dir = std::env::temp_dir().join(format!("eclume-mock-import-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -204,7 +205,7 @@ fn importacao_copiada_passa_pelo_contrato() {
 }
 
 #[test]
-fn pat_ausente_da_401() {
+fn missing_pat_returns_401() {
     let Some(base) = mock_url() else { return };
     let (queue, dir) = queue_with_recording("401", 1024);
     let uploader =
@@ -228,19 +229,19 @@ fn pat_ausente_da_401() {
 }
 
 #[test]
-fn check_do_pat_no_mock() {
+fn pat_check_against_mock() {
     let Some(base) = mock_url() else { return };
     client(&base, false, false).check().unwrap();
     assert!(client(&base, false, true).check().is_err());
 }
 
 #[test]
-fn listagem_por_since_no_mock_alimenta_a_marca_dagua() {
+fn mock_since_listing_feeds_watermark() {
     let Some(base) = mock_url() else { return };
     let items = client(&base, false, false)
         .library(Some("2026-01-01T00:00:00Z"))
         .unwrap();
-    // O exemplo do contrato termina antes da marca: nenhum aviso retroativo.
+    // The contract example ends before the watermark: no retroactive notification.
     let mut mark = Watermark::starting(chrono::Utc::now());
     assert!(mark.take(&items).is_empty());
 }

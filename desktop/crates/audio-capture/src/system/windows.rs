@@ -1,9 +1,10 @@
-// Adaptado de fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:crates/audio-actual/src/speaker/windows.rs
-// (MIT, Copyright (c) 2023-present Fastrepl, Inc.; ver VENDOR.md e LICENSE neste crate).
-// Mudanças: anel próprio (`RingWriter`) no lugar do leitor assíncrono, downmix por média,
-// `tracing` → `log`, mensagens em pt-BR, listagem dos endpoints e loopback num endpoint escolhido.
+// Adapted from fastrepl/anarlog@bfb8d9e4ff7fcc8c9aeab2f52cc020d16b195e43:
+// crates/audio-actual/src/speaker/windows.rs
+// (MIT, Copyright (c) 2023-present Fastrepl, Inc.; see VENDOR.md and LICENSE in this crate).
+// Changes: own ring buffer (`RingWriter`) instead of the async reader, downmix by averaging,
+// `tracing` → `log`, pt-BR messages, endpoint listing and loopback on a selected endpoint.
 
-//! Windows: WASAPI loopback do endpoint de saída em uso ou de um escolhido pelo id.
+//! Windows: WASAPI loopback of the active output endpoint or one selected by id.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -23,12 +24,12 @@ use crate::ring::{self, RingSource, RingWriter};
 const DEFAULT_SAMPLE_RATE: u32 = 44_100;
 const INIT_TIMEOUT: Duration = Duration::from_secs(5);
 const ENDPOINT_POLL_INTERVAL: Duration = Duration::from_secs(2);
-// Um app de reunião pode começar a tocar noutro endpoint depois do início da captura. Exigir duas
-// leituras seguidas evita que um som avulso do sistema faça a captura pular de endpoint.
+// A meeting app may start playing on another endpoint after capture begins. Requiring two
+// consecutive readings prevents an isolated system sound from making capture jump endpoints.
 const ENDPOINT_SWITCH_CONFIRMATIONS: u8 = 2;
 
 pub(super) fn list_output_devices() -> Result<OutputDevices> {
-    // O COM é por thread e a thread de quem chama pode já estar num apartamento STA.
+    // COM is per thread and the caller's thread may already be in an STA apartment.
     let handle = thread::Builder::new()
         .name("eclume-lista-saidas".into())
         .spawn(|| -> Result<OutputDevices> {
@@ -75,7 +76,7 @@ pub(super) fn open(target: Option<&str>) -> Result<(RingSource, bool)> {
             .spawn(move || {
                 if let Err(err) = capture_audio_loop(writer, target.as_deref(), &running, &init_tx)
                 {
-                    log::error!("falha no loop de captura WASAPI: {err:#}");
+                    log::error!("WASAPI capture loop failed: {err:#}");
                 }
                 closer.close();
             })
@@ -120,8 +121,8 @@ struct LoopbackCapture {
     device_name: Option<String>,
 }
 
-// Acompanha qual endpoint `open_render_device` escolheria e reporta a troca quando a escolha fica
-// longe do endpoint capturado por `ENDPOINT_SWITCH_CONFIRMATIONS` leituras.
+// Tracks which endpoint `open_render_device` would choose and reports a switch when the choice
+// differs from the captured endpoint for `ENDPOINT_SWITCH_CONFIRMATIONS` readings.
 struct EndpointFollower {
     current: String,
     pending: Option<(String, u8)>,
@@ -174,11 +175,12 @@ fn capture_audio_loop(
         let fell_back = target.is_some() && chosen.is_none();
         if fell_back {
             log::warn!(
-                "saída {:?} não encontrada; seguindo a saída em uso",
+                "output {:?} not found; following the active output",
                 target.unwrap_or_default()
             );
         }
-        // Com uma saída escolhida (e presente), a captura fica nela e não segue a em uso.
+        // With a selected (and present) output, capture stays there instead of following the active
+        // one.
         let follow = chosen.is_none();
         let device = match chosen {
             Some(device) => device,
@@ -196,11 +198,11 @@ fn capture_audio_loop(
         }
     };
 
-    // Todo endpoint é aberto a DEFAULT_SAMPLE_RATE com autoconvert do WASAPI, então a taxa
-    // publicada não muda entre trocas de endpoint.
+    // Every endpoint opens at DEFAULT_SAMPLE_RATE with WASAPI autoconvert, so the published rate
+    // does not change between endpoint switches.
     writer.set_sample_rate(capture.format.sample_rate);
     log::info!(
-        "loopback WASAPI iniciado a {} Hz em {:?}",
+        "WASAPI loopback started at {} Hz on {:?}",
         capture.format.sample_rate,
         capture.device_name
     );
@@ -219,10 +221,10 @@ fn capture_audio_loop(
                         let _ = capture.audio_client.stop_stream();
                         capture = next;
                         follower = EndpointFollower::new(capture.device_id.clone());
-                        log::info!("loopback WASAPI trocou para {:?}", capture.device_name);
+                        log::info!("WASAPI loopback switched to {:?}", capture.device_name);
                     }
                     Err(err) => {
-                        log::warn!("troca de endpoint WASAPI falhou, mantendo o atual: {err:#}");
+                        log::warn!("WASAPI endpoint switch failed, keeping current: {err:#}");
                     }
                 }
             }
@@ -336,20 +338,20 @@ fn drain_packets(capture_client: &AudioCaptureClient, queue: &mut VecDeque<u8>) 
         match capture_client.get_next_packet_size() {
             Ok(Some(frames)) if frames > 0 => {
                 if let Err(err) = capture_client.read_from_device_to_deque(queue) {
-                    log::error!("falha ao ler áudio do WASAPI: {err}");
+                    log::error!("failed to read WASAPI audio: {err}");
                     return;
                 }
             }
             Ok(_) => return,
             Err(err) => {
-                log::error!("falha ao consultar o tamanho do pacote WASAPI: {err}");
+                log::error!("failed to query WASAPI packet size: {err}");
                 return;
             }
         }
     }
 }
 
-// Só endpoints ativos: um desconectado ou desabilitado conta como sumido.
+// Only active endpoints: a disconnected or disabled one counts as missing.
 fn find_render_device(enumerator: &DeviceEnumerator, id: &str) -> Option<Device> {
     let collection = enumerator.get_device_collection(&Direction::Render).ok()?;
     collection
@@ -365,8 +367,8 @@ fn open_render_device(enumerator: &DeviceEnumerator) -> Result<Device> {
     Ok(render_device_in_use(enumerator, &default).unwrap_or(default))
 }
 
-// Apps de reunião costumam tocar num endpoint que não é o padrão. Quando outro processo toca em
-// algum lugar, segue-o; o padrão ganha o empate.
+// Meeting apps often play on an endpoint other than the default. When another process plays
+// somewhere, follow it; the default wins ties.
 fn render_device_in_use(enumerator: &DeviceEnumerator, default: &Device) -> Option<Device> {
     if has_foreign_active_session(default) {
         return None;
@@ -434,14 +436,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn seguidor_ignora_endpoint_inalterado() {
+    fn follower_ignores_unchanged_endpoint() {
         let mut follower = EndpointFollower::new("speakers".into());
         assert_eq!(follower.observe("speakers".into()), None);
         assert_eq!(follower.observe("speakers".into()), None);
     }
 
     #[test]
-    fn seguidor_troca_apos_confirmacoes_seguidas() {
+    fn follower_switches_after_consecutive_confirmations() {
         let mut follower = EndpointFollower::new("speakers".into());
         assert_eq!(follower.observe("headset".into()), None);
         assert_eq!(
@@ -451,7 +453,7 @@ mod tests {
     }
 
     #[test]
-    fn seguidor_zera_com_mudanca_avulsa() {
+    fn follower_resets_on_isolated_change() {
         let mut follower = EndpointFollower::new("speakers".into());
         assert_eq!(follower.observe("headset".into()), None);
         assert_eq!(follower.observe("speakers".into()), None);

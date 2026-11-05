@@ -1,9 +1,10 @@
-//! O upload resumível do contrato v1: `POST /uploads` com o `sha256` (200 `deduplicated` encerra
-//! sem transferir nada) → `PUT` de cada parte na URL recebida → `POST /uploads/{id}/complete`.
-//! Retomar é `GET /uploads/{id}`, pular `parts_received` e pedir `part-urls` do que falta.
+//! Contract v1 resumable upload: `POST /uploads` with `sha256` (200 `deduplicated` ends without
+//! transferring anything) → `PUT` each part to the received URL → `POST /uploads/{id}/complete`.
+//! Resuming means `GET /uploads/{id}`, skipping `parts_received` and requesting `part-urls` for the
+//! rest.
 //!
-//! Cada requisição tem retentativa com backoff para falha de rede, 408, 429 e 5xx; o resto dos
-//! erros (401, 403, 422...) falha na hora com a mensagem do problem.
+//! Each request retries with backoff for network failures, 408, 429 and 5xx; other errors (401,
+//! 403, 422...) fail immediately with the problem message.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
@@ -22,19 +23,19 @@ use crate::api::{
 };
 use crate::transport::{HttpRequest, HttpResponse, Transport};
 
-/// Prefixo de todo PAT do eclume.
+/// Prefix of every eclume PAT.
 pub const PAT_PREFIX: &str = "eclp_";
-/// O contrato limita a 1000 partes por pedido de URLs.
+/// The contract limits URL requests to 1000 parts.
 const MAX_PART_URLS: usize = 1000;
-/// Teto para um `Retry-After` que o servidor mandar.
+/// Cap for a `Retry-After` sent by the server.
 const MAX_RETRY_AFTER: Duration = Duration::from_secs(60);
 
-/// Retentativas por requisição.
+/// Retries per request.
 #[derive(Clone)]
 pub struct RetryPolicy {
-    /// Tentativas além da primeira.
+    /// Attempts beyond the first.
     pub retries: u32,
-    /// Espera antes da primeira retentativa; dobra a cada uma.
+    /// Wait before the first retry; doubles each time.
     pub base_delay: Duration,
     pub sleep: Arc<dyn Fn(Duration) + Send + Sync>,
 }
@@ -49,20 +50,20 @@ impl Default for RetryPolicy {
     }
 }
 
-/// O resultado de um upload confirmado pelo servidor.
+/// The result of an upload confirmed by the server.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Uploaded {
     pub recording_id: String,
-    /// O servidor já tinha uma gravação com este hash.
+    /// The server already had a recording with this hash.
     pub deduplicated: bool,
 }
 
-/// Status em que vale tentar de novo a mesma requisição.
+/// Statuses for which retrying the same request is worthwhile.
 pub fn is_transient(status: u16) -> bool {
     status == 408 || status == 429 || status >= 500
 }
 
-/// O erro legível de uma resposta sem sucesso, com o `code` e o texto do problem.
+/// The readable error of an unsuccessful response, with the problem's `code` and text.
 pub fn api_error(what: &str, response: &HttpResponse) -> anyhow::Error {
     let problem: Problem = serde_json::from_slice(&response.body).unwrap_or_default();
     let code = problem
@@ -87,8 +88,8 @@ pub fn api_error(what: &str, response: &HttpResponse) -> anyhow::Error {
     anyhow!(message)
 }
 
-/// O servidor deu o upload por vencido (409 `upload_expired`): o multipart sumiu do bucket. Quem
-/// sobe recomeça com um upload novo, uma vez.
+/// The server expired the upload (409 `upload_expired`): the multipart disappeared from the bucket.
+/// The uploader starts over with a new upload, once.
 #[derive(Debug)]
 pub struct UploadExpired(String);
 
@@ -100,9 +101,9 @@ impl std::fmt::Display for UploadExpired {
 
 impl std::error::Error for UploadExpired {}
 
-/// O servidor recusou porque o token não tem o escopo da operação (403 `insufficient_scope`): um
-/// servidor anterior ao contrato 2.8.0, ou um token que a migração ainda não alcançou. Quem chama
-/// distingue este erro (`downcast_ref`) de uma falha qualquer para degradar em vez de desistir.
+/// The server refused because the token lacks the operation's scope (403 `insufficient_scope`): a
+/// server before contract 2.8.0, or a token not yet reached by migration. Callers distinguish this
+/// error (`downcast_ref`) from other failures to degrade instead of giving up.
 #[derive(Debug)]
 pub struct MissingScope {
     message: String,
@@ -124,7 +125,7 @@ impl std::fmt::Display for MissingScope {
 
 impl std::error::Error for MissingScope {}
 
-/// Cliente da API do eclume, com a credencial da conta ou do aparelho.
+/// An eclume API client, with the account or device credential.
 pub struct Client {
     transport: Arc<dyn Transport>,
     base: Url,
@@ -160,20 +161,20 @@ impl Client {
         request.header("Authorization", format!("Bearer {}", self.token))
     }
 
-    /// URL na mesma origem da API: leva o PAT. Uma URL pré-assinada do armazenamento (outra
-    /// origem) não pode levar, porque o S3 recusa dois mecanismos de autenticação.
+    /// A URL at the API's origin: carries the PAT. A presigned storage URL (another origin) must
+    /// not carry it, because S3 rejects two authentication mechanisms.
     fn same_origin(&self, url: &str) -> bool {
         Url::parse(url).is_ok_and(|url| url.origin() == self.base.origin())
     }
 
-    /// Envia com retentativa e backoff; devolve a última resposta, de sucesso ou não.
+    /// Sends with retries and backoff; returns the last response, successful or otherwise.
     fn send(&self, request: &HttpRequest) -> Result<HttpResponse> {
         let mut attempt = 0;
         loop {
             let result = self.transport.send(request.clone());
             let retry_after = match &result {
                 Ok(response) if !is_transient(response.status) => return result,
-                // A interrupção é de propósito (a rede do eclume caiu): não se retenta.
+                // The interruption is intentional (the eclume network went down): do not retry.
                 Err(err) if eclume_recorder::is_interrupted(err) => return result,
                 Ok(response) => response
                     .header("retry-after")
@@ -187,12 +188,12 @@ impl Client {
             let delay = retry_after.unwrap_or(self.retry.base_delay * 2_u32.pow(attempt));
             match &result {
                 Ok(response) => log::warn!(
-                    "{} {} respondeu {}; nova tentativa em {delay:?}",
+                    "{} {} returned {}; retrying in {delay:?}",
                     request.method,
                     crate::transport::redact(&request.url),
                     response.status
                 ),
-                Err(err) => log::warn!("{err:#}; nova tentativa em {delay:?}"),
+                Err(err) => log::warn!("{err:#}; retrying in {delay:?}"),
             }
             (self.retry.sleep)(delay);
             attempt += 1;
@@ -207,7 +208,7 @@ impl Client {
         parse(what, &response)
     }
 
-    /// Confere o PAT e o endereço: `GET /api/v1/me`.
+    /// Checks the PAT and address: `GET /api/v1/me`.
     pub fn check(&self) -> Result<()> {
         let request = self.authorize(HttpRequest::new("GET", self.endpoint("/me")));
         let response = self.send(&request)?;
@@ -218,21 +219,21 @@ impl Client {
         }
     }
 
-    /// Quem é o dono do token: `GET /api/v1/me` (o e-mail da conta depois do pareamento).
+    /// Who owns the token: `GET /api/v1/me` (the account e-mail after pairing).
     pub fn me(&self) -> Result<api::Me> {
         let request = HttpRequest::new("GET", self.endpoint("/me"));
         self.call_json("falha ao ler a conta", request)
     }
 
-    /// O idioma de transcrição da conta e o padrão do servidor: `GET /api/v1/me/transcription`
-    /// (`recordings:read`, contrato 2.20.0), para a aba Áudio nomear o padrão da conta.
+    /// The account's transcript language and server default: `GET /api/v1/me/transcription`
+    /// (`recordings:read`, contract 2.20.0), so the Audio tab can name the account default.
     pub fn transcription_preference(&self) -> Result<api::TranscriptionPreference> {
         let request = HttpRequest::new("GET", self.endpoint("/me/transcription"));
         self.call_json("falha ao ler o idioma da conta", request)
     }
 
-    /// Monta o cliente real (TLS pelo `trust` da config, a versão no `User-Agent`) a partir da
-    /// config do uploader: o mesmo que sobe as gravações lê o resumo delas.
+    /// Builds the real client (TLS from the config's `trust`, version in `User-Agent`) from the
+    /// uploader config: the client uploading recordings also reads their summaries.
     pub fn from_config(config: &crate::uploader::UploaderConfig) -> Result<Self> {
         let transport = crate::transport::UreqTransport::with_trust(
             &config.trust,
@@ -247,9 +248,9 @@ impl Client {
         )
     }
 
-    /// A espera na fila de uma gravação enviada (`GET /recordings/{id}`, `job.queue` desde o
-    /// contrato 2.16.0): a posição muda sem mover o `updated_at`, por isso não vem do `?since=`.
-    /// `None` fora da fila, com a gravação apagada ou em servidor anterior à 2.16.0.
+    /// An uploaded recording's queue wait (`GET /recordings/{id}`, `job.queue` since contract
+    /// 2.16.0): position changes without moving `updated_at`, so it does not come from `?since=`.
+    /// `None` outside the queue, for a deleted recording or on a server before 2.16.0.
     pub fn queue_wait(&self, recording_id: &str) -> Result<Option<QueueWait>> {
         let url = self.endpoint(&format!("/recordings/{recording_id}"));
         let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
@@ -261,9 +262,9 @@ impl Client {
         Ok(recording.job.and_then(|job| job.queue))
     }
 
-    /// Uma gravação por id (`GET /recordings/{id}`), com `job` e `pipeline`, na forma da listagem.
-    /// `None` com a gravação apagada (404). É a releitura de uma gravação pendente da pasta
-    /// sincronizada sem listar a biblioteca inteira.
+    /// A recording by id (`GET /recordings/{id}`), with `job` and `pipeline`, in listing form.
+    /// `None` for a deleted recording (404). Rereads a synced folder's pending recording without
+    /// listing the whole library.
     pub fn recording(&self, recording_id: &str) -> Result<Option<api::LibraryRecording>> {
         let url = self.endpoint(&format!("/recordings/{recording_id}"));
         let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
@@ -274,7 +275,7 @@ impl Client {
         }
     }
 
-    /// Percorre as páginas de uma listagem por cursor (`limit` 200) e junta os itens.
+    /// Traverses cursor listing pages (`limit` 200) and collects the items.
     fn paged<P, T>(
         &self,
         what: &str,
@@ -309,7 +310,7 @@ impl Client {
         }
     }
 
-    /// As Collections do usuário: `GET /api/v1/collections` (`recordings:read`).
+    /// The user's collections: `GET /api/v1/collections` (`recordings:read`).
     pub fn collections(&self) -> Result<Vec<api::CollectionInfo>> {
         self.paged(
             "falha ao listar as coleções",
@@ -319,10 +320,10 @@ impl Client {
         )
     }
 
-    /// As gravações da biblioteca: `GET /api/v1/recordings`, só as com `updated_at >= since`
-    /// quando dado (o servidor move `updated_at` também quando um resumo muda, contrato 2.8.0, e
-    /// quando a etapa de resumo falha ou é pulada, 2.17.0). É a leitura do espelho e do aviso de
-    /// desfechos ([`crate::outcome`]).
+    /// Library recordings: `GET /api/v1/recordings`, only those with `updated_at >= since` when
+    /// provided (the server also moves `updated_at` when a summary changes, contract 2.8.0, and
+    /// when the summary step fails or is skipped, 2.17.0). Used by the mirror and outcome
+    /// notifications ([`crate::outcome`]).
     pub fn library(&self, since: Option<&str>) -> Result<Vec<api::LibraryRecording>> {
         let query: Vec<(&str, &str)> = since.map(|value| ("since", value)).into_iter().collect();
         self.paged(
@@ -333,9 +334,9 @@ impl Client {
         )
     }
 
-    /// As `limit` gravações mais recentes da conta, numa página só (`GET /api/v1/recordings`
-    /// com `sort=created_desc`): o painel de gravações recentes da janela, com o `job` e o
-    /// `pipeline` de cada uma. `limit` vai de 1 a 200, como o contrato aceita.
+    /// The account's `limit` most recent recordings, in one page (`GET /api/v1/recordings` with
+    /// `sort=created_desc`): the window's recent recordings panel, with each recording's `job` and
+    /// `pipeline`. `limit` ranges from 1 to 200, as the contract allows.
     pub fn recent(&self, limit: u32) -> Result<Vec<api::LibraryRecording>> {
         let mut url =
             Url::parse(&self.endpoint("/recordings")).context("endereço da API inválido")?;
@@ -349,8 +350,8 @@ impl Client {
         Ok(page.items)
     }
 
-    /// O resumo atual de uma gravação para o espelho: `Ok(None)` quando ainda não há (404, 409
-    /// sem transcrição, ou nenhuma versão concluída).
+    /// A recording's current summary for the mirror: `Ok(None)` when none exists yet (404, 409
+    /// without a transcript, or no completed version).
     pub fn current_summary(&self, recording_id: &str) -> Result<Option<LibrarySummary>> {
         let url = self.endpoint(&format!("/recordings/{recording_id}/summary"));
         let response = self.send(&self.authorize(HttpRequest::new("GET", url)))?;
@@ -374,7 +375,7 @@ impl Client {
         }
     }
 
-    /// Os marcadores da gravação (`recordings:read`), em ordem de instante; a nota é opcional.
+    /// The recording's markers (`recordings:read`), in time order; the note is optional.
     pub fn markers(&self, recording_id: &str) -> Result<Vec<api::Marker>> {
         let url = self.endpoint(&format!("/recordings/{recording_id}/markers"));
         let page: api::MarkerPage =
@@ -382,8 +383,8 @@ impl Client {
         Ok(page.items)
     }
 
-    /// A transcrição de uma gravação: `GET /api/v1/transcripts?recording_id=` (`transcripts:read`,
-    /// que a credencial de dispositivo tem desde o contrato 2.8.0). `Ok(None)` sem transcrição.
+    /// A recording's transcript: `GET /api/v1/transcripts?recording_id=` (`transcripts:read`,
+    /// granted to device credentials since contract 2.8.0). `Ok(None)` without a transcript.
     pub fn transcript(&self, recording_id: &str) -> Result<Option<api::Transcript>> {
         let transcripts = self.paged(
             "falha ao ler a transcrição",
@@ -420,8 +421,8 @@ impl Client {
         Ok(urls)
     }
 
-    /// Envia uma parte e devolve o ETag. `Ok(None)`: a URL pré-assinada foi recusada (expirou) e
-    /// vale pedir outra.
+    /// Sends a part and returns the ETag. `Ok(None)`: the presigned URL was rejected (expired) and
+    /// another should be requested.
     fn put_part(&self, part: &PartUrl, body: &[u8]) -> Result<Option<String>> {
         let mut request = HttpRequest::new("PUT", part.url.clone()).body(body.to_vec());
         for (name, value) in &part.headers {
@@ -445,10 +446,10 @@ impl Client {
         Err(api_error(&what, &response))
     }
 
-    /// Sobe o arquivo e devolve a gravação confirmada. `resume` é o upload guardado de uma
-    /// tentativa anterior; `save_upload_id` persiste o upload em curso (ou o limpa, com `None`)
-    /// antes de qualquer parte subir, para a próxima tentativa retomar. Um 409 `upload_expired`
-    /// numa parte ou no `complete` limpa o upload guardado e recomeça do zero, uma vez.
+    /// Uploads the file and returns the confirmed recording. `resume` is the upload saved from an
+    /// earlier attempt; `save_upload_id` persists the active upload (or clears it with `None`)
+    /// before any part is uploaded, so the next attempt can resume. A 409 `upload_expired` on a
+    /// part or `complete` clears the saved upload and starts over, once.
     pub fn upload(
         &self,
         path: &Path,
@@ -495,7 +496,8 @@ impl Client {
         }
     }
 
-    /// Abre um upload novo e o guarda; `Err` traz a gravação que o servidor já resolveu (dedup).
+    /// Creates a new upload and saves it; `Err` carries the recording already resolved by the
+    /// server (dedup).
     fn start_upload(
         &self,
         create: &UploadCreate,
@@ -578,7 +580,7 @@ impl Client {
     }
 }
 
-/// Um upload que o servidor já resolveu (deduplicado ou concluído antes).
+/// An upload already resolved by the server (deduplicated or completed earlier).
 fn finished(upload: Upload) -> Result<Uploaded> {
     let recording_id = upload.recording_id.ok_or_else(|| {
         anyhow!(
@@ -593,7 +595,7 @@ fn finished(upload: Upload) -> Result<Uploaded> {
     })
 }
 
-/// `Job.queue`: por que a transcrição espera. A UI monta a frase com `fraseDaEspera`.
+/// `Job.queue`: why transcription is waiting. The UI builds the sentence with `fraseDaEspera`.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct QueueWait {
     pub reason: String,
@@ -609,7 +611,7 @@ pub struct QueueWait {
     pub processor: Option<ProcessorStatus>,
 }
 
-/// Se o processador de transcrição está no ar (`ProcessorStatus`).
+/// Whether the transcription processor is up (`ProcessorStatus`).
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ProcessorStatus {
     pub online: bool,
@@ -617,7 +619,7 @@ pub struct ProcessorStatus {
     pub offline_since: Option<String>,
 }
 
-/// A parte da `Recording` que a espera na fila lê.
+/// The part of `Recording` read by the queue wait.
 #[derive(Clone, Debug, Default, serde::Deserialize)]
 struct RecordingJobOnly {
     #[serde(default)]
@@ -630,7 +632,7 @@ struct RecordingJob {
     queue: Option<QueueWait>,
 }
 
-/// A parte do `SummaryState` que o espelho e o Copiar do aviso leem.
+/// The part of `SummaryState` read by the mirror and the notification's Copy action.
 #[derive(Clone, Debug, Default, serde::Deserialize)]
 pub struct SummaryState {
     #[serde(default)]
@@ -644,18 +646,18 @@ pub struct SummaryVersion {
     pub status: String,
     #[serde(default)]
     pub content_md: Option<String>,
-    /// Número da versão (`summaries.version`): muda quando o resumo é refeito ou editado.
+    /// Version number (`summaries.version`): changes when the summary is regenerated or edited.
     #[serde(default)]
     pub version: u64,
     #[serde(default)]
     pub agenda_type: Option<api::AgendaRef>,
-    /// A `revision` da transcrição de que o resumo partiu (contrato 2.25.0); ausente num servidor
-    /// anterior.
+    /// The transcript `revision` the summary was based on (contract 2.25.0); absent on earlier
+    /// servers.
     #[serde(default)]
     pub transcript_revision: Option<u64>,
 }
 
-/// O resumo atual de uma gravação para o espelho local.
+/// A recording's current summary for the local mirror.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LibrarySummary {
     pub version: u64,
@@ -664,7 +666,7 @@ pub struct LibrarySummary {
     pub transcript_revision: Option<u64>,
 }
 
-/// Um endereço de servidor: `http://` ou `https://` seguido do host.
+/// A server address: `http://` or `https://` followed by the host.
 pub fn parse_base(url: &str) -> Result<Url> {
     let base = Url::parse(url.trim()).with_context(|| format!("endereço inválido: {url}"))?;
     if !matches!(base.scheme(), "http" | "https") || base.host().is_none() {
@@ -678,7 +680,7 @@ pub(crate) fn parse<T: DeserializeOwned>(what: &str, response: &HttpResponse) ->
         .with_context(|| format!("{what}: resposta fora do contrato"))
 }
 
-/// Os bytes da parte `number` (a partir de 1): `part_size` bytes, menos a última.
+/// The bytes of part `number` (starting at 1): `part_size` bytes, except for the last part.
 fn read_part(file: &mut File, number: u32, part_size: u64, size: u64) -> Result<Vec<u8>> {
     let offset = u64::from(number - 1) * part_size;
     if offset >= size {
@@ -700,7 +702,7 @@ pub(crate) mod script {
 
     use crate::transport::{HttpRequest, HttpResponse, Transport};
 
-    /// Transporte roteirizado: confere método e caminho de cada requisição, em ordem, e responde.
+    /// Scripted transport: checks each request's method and path, in order, and responds.
     #[derive(Default)]
     pub struct Script {
         steps: Mutex<VecDeque<(String, Result<HttpResponse>)>>,
@@ -723,10 +725,12 @@ pub(crate) mod script {
 
     impl Transport for Script {
         fn send(&self, request: HttpRequest) -> Result<HttpResponse> {
-            let (call, response) =
-                self.steps.lock().unwrap().pop_front().unwrap_or_else(|| {
-                    panic!("requisição a mais: {} {}", request.method, request.url)
-                });
+            let (call, response) = self
+                .steps
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| panic!("extra request: {} {}", request.method, request.url));
             let path = request
                 .url
                 .split_once("://")
@@ -734,7 +738,7 @@ pub(crate) mod script {
             assert_eq!(
                 format!("{} {}", request.method, path),
                 call,
-                "requisição fora do roteiro"
+                "request outside script"
             );
             self.seen.lock().unwrap().push(request);
             response
@@ -846,7 +850,7 @@ mod tests {
     }
 
     #[test]
-    fn upload_novo_sobe_as_partes_e_conclui() {
+    fn new_upload_sends_parts_and_completes() {
         let script = Script::default()
             .expect(
                 "POST /api/v1/uploads",
@@ -911,7 +915,7 @@ mod tests {
     }
 
     #[test]
-    fn espera_na_fila_vem_da_leitura_da_gravacao() {
+    fn queue_wait_comes_from_reading_recording() {
         let script = Script::default()
             .expect(
                 "GET /api/v1/recordings/r1",
@@ -945,12 +949,12 @@ mod tests {
     }
 
     #[test]
-    fn biblioteca_pagina_colecoes_e_gravacoes() {
-        let gravacao = |id: &str, colecoes: &[&str]| {
+    fn library_paginates_collections_and_recordings() {
+        let recording = |id: &str, collections: &[&str]| {
             serde_json::json!({
                 "id": id, "title": format!("Reunião {id}"), "status": "done",
                 "recorded_at": "2026-09-18T14:00:05Z", "updated_at": "2026-09-19T10:00:00Z",
-                "collection_ids": colecoes, "transcript_id": format!("t-{id}"),
+                "collection_ids": collections, "transcript_id": format!("t-{id}"),
                 "agenda_type": {"id": "a1", "name": "Reunião de equipe", "origin": "auto"},
                 "pipeline": [{"step": "summary", "state": "done"}]
             })
@@ -974,22 +978,25 @@ mod tests {
                 "GET /api/v1/recordings?limit=200&since=2026-09-18T00%3A00%3A00Z",
                 json(
                     200,
-                    serde_json::json!({"items": [gravacao("r1", &["c1", "c2"]), gravacao("r2", &[])], "next_cursor": null}),
+                    serde_json::json!({"items": [recording("r1", &["c1", "c2"]), recording("r2", &[])], "next_cursor": null}),
                 ),
             );
         let (client, script, _) = make_client(script);
-        let colecoes = client.collections().unwrap();
+        let collections = client.collections().unwrap();
         assert_eq!(
-            colecoes.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+            collections
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
             ["Clientes", "Interno"]
         );
-        let gravacoes = client.library(Some("2026-09-18T00:00:00Z")).unwrap();
-        assert_eq!(gravacoes.len(), 2);
-        assert_eq!(gravacoes[0].collection_ids, ["c1", "c2"]);
-        assert!(gravacoes[1].collection_ids.is_empty());
-        assert_eq!(gravacoes[0].summary_state(), Some("done"));
+        let recordings = client.library(Some("2026-09-18T00:00:00Z")).unwrap();
+        assert_eq!(recordings.len(), 2);
+        assert_eq!(recordings[0].collection_ids, ["c1", "c2"]);
+        assert!(recordings[1].collection_ids.is_empty());
+        assert_eq!(recordings[0].summary_state(), Some("done"));
         assert_eq!(
-            gravacoes[0].agenda_type.as_ref().map(|a| a.name.as_str()),
+            recordings[0].agenda_type.as_ref().map(|a| a.name.as_str()),
             Some("Reunião de equipe")
         );
         assert!(script.seen().iter().all(|request| request
@@ -998,7 +1005,7 @@ mod tests {
     }
 
     #[test]
-    fn recentes_leem_uma_pagina_so_na_ordem_de_envio() {
+    fn recent_reads_one_page_in_upload_order() {
         let script = Script::default().expect(
             "GET /api/v1/recordings?limit=5&sort=created_desc",
             json(
@@ -1014,19 +1021,19 @@ mod tests {
             ),
         );
         let (client, script, _) = make_client(script);
-        let recentes = client.recent(5).unwrap();
-        assert_eq!(recentes.len(), 1);
-        let job = recentes[0].job.as_ref().unwrap();
+        let recent = client.recent(5).unwrap();
+        assert_eq!(recent.len(), 1);
+        let job = recent[0].job.as_ref().unwrap();
         assert_eq!(
             (job.stage.as_deref(), job.progress),
             (Some("asr"), Some(500))
         );
-        // O cursor da próxima página é ignorado: o painel quer só as N primeiras.
+        // The next page cursor is ignored: the panel only wants the first N items.
         assert_eq!(script.seen().len(), 1);
     }
 
     #[test]
-    fn gravacao_por_id_le_a_forma_da_listagem_e_404_e_apagada() {
+    fn recording_by_id_reads_listing_form_and_404_means_deleted() {
         let script = Script::default()
             .expect(
                 "GET /api/v1/recordings/r1",
@@ -1050,8 +1057,8 @@ mod tests {
     }
 
     #[test]
-    fn resumo_atual_da_biblioteca_traz_versao_e_tipo() {
-        let atual = |status: &str, md: Option<&str>| {
+    fn current_library_summary_includes_version_and_type() {
+        let current = |status: &str, md: Option<&str>| {
             json(
                 200,
                 serde_json::json!({
@@ -1064,11 +1071,11 @@ mod tests {
         let script = Script::default()
             .expect(
                 "GET /api/v1/recordings/r1/summary",
-                atual("done", Some("# Ata")),
+                current("done", Some("# Ata")),
             )
             .expect(
                 "GET /api/v1/recordings/r2/summary",
-                atual("done", Some("  ")),
+                current("done", Some("  ")),
             )
             .expect(
                 "GET /api/v1/recordings/r3/summary",
@@ -1081,11 +1088,11 @@ mod tests {
             .expect("GET /api/v1/recordings/r5/summary", status(404))
             .expect("GET /api/v1/recordings/r6/summary", status(403));
         let (client, _, _) = make_client(script);
-        let pronto = client.current_summary("r1").unwrap().unwrap();
-        assert_eq!(pronto.version, 3);
-        assert_eq!(pronto.agenda_type.as_deref(), Some("1:1"));
-        assert_eq!(pronto.content_md, "# Ata");
-        assert_eq!(pronto.transcript_revision, Some(4));
+        let ready = client.current_summary("r1").unwrap().unwrap();
+        assert_eq!(ready.version, 3);
+        assert_eq!(ready.agenda_type.as_deref(), Some("1:1"));
+        assert_eq!(ready.content_md, "# Ata");
+        assert_eq!(ready.transcript_revision, Some(4));
         assert_eq!(client.current_summary("r2").unwrap(), None);
         assert_eq!(client.current_summary("r3").unwrap(), None);
         assert_eq!(client.current_summary("r4").unwrap(), None);
@@ -1094,8 +1101,8 @@ mod tests {
     }
 
     #[test]
-    fn falta_de_escopo_e_um_erro_distinguivel_e_o_resto_segue_generico() {
-        let problema = |status: u16, code: &str| {
+    fn missing_scope_is_distinct_error_and_rest_stays_generic() {
+        let problem = |status: u16, code: &str| {
             json(
                 status,
                 serde_json::json!({"title": "Forbidden", "detail": "Este PAT não tem o escopo transcripts:read.", "code": code}),
@@ -1104,18 +1111,18 @@ mod tests {
         let script = Script::default()
             .expect(
                 "GET /api/v1/transcripts?limit=200&recording_id=r1",
-                problema(403, "insufficient_scope"),
+                problem(403, "insufficient_scope"),
             )
             .expect(
                 "GET /api/v1/transcripts?limit=200&recording_id=r2",
-                problema(403, "outro_codigo"),
+                problem(403, "outro_codigo"),
             );
         let (client, _, _) = make_client(script);
-        let falta = client.transcript("r1").unwrap_err();
-        assert!(falta.downcast_ref::<MissingScope>().is_some());
-        assert!(format!("{falta:#}").contains("insufficient_scope"));
-        assert!(format!("{falta:#}").contains("transcripts:read"));
-        // Só 403 com esse código conta: o resto segue erro comum.
+        let missing = client.transcript("r1").unwrap_err();
+        assert!(missing.downcast_ref::<MissingScope>().is_some());
+        assert!(format!("{missing:#}").contains("insufficient_scope"));
+        assert!(format!("{missing:#}").contains("transcripts:read"));
+        // Only 403 with this code counts: the rest remain ordinary errors.
         assert!(client
             .transcript("r2")
             .unwrap_err()
@@ -1124,8 +1131,8 @@ mod tests {
     }
 
     #[test]
-    fn transcricao_da_gravacao_vem_do_filtro_por_gravacao() {
-        let transcricao = serde_json::json!({
+    fn recording_transcript_comes_from_recording_filter() {
+        let transcript = serde_json::json!({
             "id": "t1", "recording_id": "r1", "title": "Alinhamento", "language": "pt",
             "recorded_at": "2026-09-18T14:00:05Z", "duration_ms": 61000, "revision": 2,
             "speakers": [{"id": "S1", "label": "Mariana"}],
@@ -1136,7 +1143,7 @@ mod tests {
                 "GET /api/v1/transcripts?limit=200&recording_id=r1",
                 json(
                     200,
-                    serde_json::json!({"items": [transcricao], "next_cursor": null}),
+                    serde_json::json!({"items": [transcript], "next_cursor": null}),
                 ),
             )
             .expect(
@@ -1144,18 +1151,18 @@ mod tests {
                 json(200, serde_json::json!({"items": [], "next_cursor": null})),
             );
         let (client, _, _) = make_client(script);
-        let lida = client.transcript("r1").unwrap().unwrap();
+        let read = client.transcript("r1").unwrap().unwrap();
         assert_eq!(
-            (lida.revision, lida.speakers[0].label.as_str()),
+            (read.revision, read.speakers[0].label.as_str()),
             (2, "Mariana")
         );
-        assert_eq!(lida.segments[0].text, "Bom dia.");
-        assert_eq!(lida.segments[0].end_ms, 4200);
+        assert_eq!(read.segments[0].text, "Bom dia.");
+        assert_eq!(read.segments[0].end_ms, 4200);
         assert!(client.transcript("r2").unwrap().is_none());
     }
 
     #[test]
-    fn deduplicado_confirma_sem_transferir() {
+    fn deduplicated_confirms_without_transfer() {
         let mut dedup = upload("deduplicated", vec![], &[]);
         dedup["recording_id"] = "rec-9".into();
         dedup["part_count"] = 0.into();
@@ -1163,7 +1170,7 @@ mod tests {
         let (client, script, _) = make_client(script);
         let (path, create) = file();
         let uploaded = client
-            .upload(&path, &create, None, &mut |_| panic!("nada a guardar"))
+            .upload(&path, &create, None, &mut |_| panic!("nothing to save"))
             .unwrap();
         assert_eq!(
             uploaded,
@@ -1176,7 +1183,7 @@ mod tests {
     }
 
     #[test]
-    fn retomada_pula_as_partes_recebidas_e_pede_urls_das_que_faltam() {
+    fn resume_skips_received_parts_and_requests_missing_urls() {
         let script = Script::default()
             .expect(
                 "GET /api/v1/uploads/up-1",
@@ -1197,7 +1204,9 @@ mod tests {
         let (client, script, _) = make_client(script);
         let (path, create) = file();
         let uploaded = client
-            .upload(&path, &create, Some("up-1"), &mut |_| panic!("não recria"))
+            .upload(&path, &create, Some("up-1"), &mut |_| {
+                panic!("must not recreate")
+            })
             .unwrap();
         assert_eq!(uploaded.recording_id, "rec-1");
         let seen = script.seen();
@@ -1210,8 +1219,8 @@ mod tests {
     }
 
     #[test]
-    fn retomada_de_upload_sumido_ou_concluido() {
-        // Sumiu (expirou e foi limpo): recria do zero.
+    fn resume_missing_or_completed_upload() {
+        // Gone (expired and cleaned up): recreate from scratch.
         let mut dedup = upload("deduplicated", vec![], &[]);
         dedup["recording_id"] = "rec-2".into();
         let script = Script::default()
@@ -1229,7 +1238,7 @@ mod tests {
         assert_eq!(uploaded.recording_id, "rec-2");
         assert_eq!(saved, vec![None]);
 
-        // Já concluído (o app caiu depois do complete): confirma sem subir nada.
+        // Already completed (the app crashed after complete): confirm without uploading anything.
         let mut done = upload("completed", vec![], &[]);
         done["recording_id"] = "rec-3".into();
         let script = Script::default().expect("GET /api/v1/uploads/up-1", json(200, done));
@@ -1254,7 +1263,7 @@ mod tests {
     }
 
     #[test]
-    fn upload_vencido_no_meio_recomeca_uma_vez() {
+    fn upload_expiring_midway_restarts_once() {
         let parts = vec![part(1, BASE), part(2, BASE), part(3, BASE)];
         let script = Script::default()
             .expect(
@@ -1287,7 +1296,7 @@ mod tests {
     }
 
     #[test]
-    fn upload_vencido_de_novo_no_complete_vira_erro() {
+    fn upload_expiring_again_at_complete_becomes_error() {
         let parts = vec![part(1, BASE), part(2, BASE), part(3, BASE)];
         let mut script = Script::default();
         for _ in 0..2 {
@@ -1310,7 +1319,7 @@ mod tests {
     }
 
     #[test]
-    fn interrupcao_nao_e_retentada() {
+    fn interruption_is_not_retried() {
         let script = Script::default().expect(
             "POST /api/v1/uploads",
             Err(anyhow::Error::new(eclume_recorder::SyncInterrupted)),
@@ -1326,7 +1335,7 @@ mod tests {
     }
 
     #[test]
-    fn retenta_rede_e_5xx_com_backoff_e_retry_after() {
+    fn retries_network_and_5xx_with_backoff_and_retry_after() {
         let mut dedup = upload("deduplicated", vec![], &[]);
         dedup["recording_id"] = "rec-4".into();
         let script = Script::default()
@@ -1358,7 +1367,7 @@ mod tests {
     }
 
     #[test]
-    fn desiste_depois_das_retentativas() {
+    fn gives_up_after_retries() {
         let script = Script::default()
             .expect("POST /api/v1/uploads", status(502))
             .expect("POST /api/v1/uploads", status(502))
@@ -1374,7 +1383,7 @@ mod tests {
     }
 
     #[test]
-    fn nao_retenta_401_e_mostra_o_problem() {
+    fn does_not_retry_401_and_shows_problem() {
         let script = Script::default().expect(
             "POST /api/v1/uploads",
             json(401, serde_json::json!({"title": "Não autenticado", "detail": "PAT revogado.", "code": "unauthorized"})),
@@ -1392,7 +1401,7 @@ mod tests {
     }
 
     #[test]
-    fn url_pre_assinada_vai_sem_pat_e_e_renovada_quando_expira() {
+    fn presigned_url_omits_pat_and_is_renewed_on_expiry() {
         let storage = "https://minio.test:9000";
         let script = Script::default()
             .expect(
@@ -1430,8 +1439,8 @@ mod tests {
     }
 
     #[test]
-    fn arquivo_que_mudou_de_tamanho_nao_sobe() {
-        // Nada vai à rede: o tamanho é conferido antes.
+    fn file_with_changed_size_is_not_uploaded() {
+        // Nothing goes to the network: the size is checked first.
         let script = Script::default();
         let (client, _, _) = make_client(script);
         let (path, mut create) = file();
@@ -1443,7 +1452,7 @@ mod tests {
     }
 
     #[test]
-    fn valida_endereco_e_pat() {
+    fn validates_address_and_pat() {
         let transport: Arc<dyn Transport> = Arc::new(Script::default());
         assert!(Client::new(
             Arc::clone(&transport),
@@ -1479,7 +1488,7 @@ mod tests {
     }
 
     #[test]
-    fn check_confere_o_pat_em_me() {
+    fn check_validates_pat_at_me() {
         let script = Script::default()
             .expect("GET /api/v1/me", json(200, serde_json::json!({"id": "u"})))
             .expect(
@@ -1493,7 +1502,7 @@ mod tests {
     }
 
     #[test]
-    fn me_le_a_conta_do_token() {
+    fn me_reads_token_account() {
         let script = Script::default().expect(
             "GET /api/v1/me",
             json(
@@ -1515,7 +1524,7 @@ mod tests {
     }
 
     #[test]
-    fn idioma_da_conta_cai_no_padrao_do_servidor() {
+    fn account_language_falls_back_to_server_default() {
         let script = Script::default()
             .expect(
                 "GET /api/v1/me/transcription",

@@ -1,9 +1,9 @@
-//! Codificação do fluxo mixado em Ogg/Opus mono 16 kHz (RFC 7845).
+//! Encodes the mixed stream as mono 16 kHz Ogg/Opus (RFC 7845).
 //!
-//! Os cabeçalhos `OpusHead` e `OpusTags` ocupam uma página cada. Os pacotes de áudio (frames de
-//! 20 ms) são agrupados em páginas de ~1 s, e cada página é descarregada no escritor: se o
-//! processo morrer no meio, o que já foi escrito continua legível. O granule position está em
-//! unidades de 48 kHz, como o formato exige, e o da última página marca a duração exata.
+//! The `OpusHead` and `OpusTags` headers each occupy one page. Audio packets (20 ms frames) are
+//! grouped into ~1 s pages, and each page is flushed to the writer: if the process dies midway,
+//! what was already written remains readable. The granule position uses 48 kHz units, as the
+//! format requires, and the last page's position marks the exact duration.
 
 use std::io::Write;
 
@@ -13,34 +13,34 @@ use opus::{Application, Bitrate, Channels, Encoder};
 
 use crate::mix::{FRAME, TARGET_RATE};
 
-/// Taxa de bits padrão: 24 kbps, na faixa de voz do Opus.
+/// Default bitrate: 24 kbps, in the Opus speech range.
 pub const DEFAULT_BITRATE: i32 = 24_000;
-/// Pacotes por página: 50 frames de 20 ms = 1 s.
+/// Packets per page: 50 frames of 20 ms = 1 s.
 const PACKETS_PER_PAGE: u32 = 50;
-/// O granule do Ogg/Opus conta amostras a 48 kHz.
+/// The Ogg/Opus granule counts samples at 48 kHz.
 const GRANULE_PER_SAMPLE: u64 = (48_000 / TARGET_RATE) as u64;
 const MAX_PACKET: usize = 4_000;
 const VENDOR: &str = concat!("eclume-desktop ", env!("CARGO_PKG_VERSION"));
 
-/// Escritor de Ogg/Opus mono 16 kHz sobre qualquer `Write`.
+/// Mono 16 kHz Ogg/Opus writer over any `Write`.
 pub struct OggOpusWriter<W: Write> {
     encoder: Encoder,
     packets: PacketWriter<'static, W>,
     serial: u32,
-    /// Lookahead do encoder, a 16 kHz.
+    /// Encoder lookahead, at 16 kHz.
     lookahead: usize,
     pending: Vec<f32>,
-    /// Amostras reais recebidas (16 kHz), sem o preenchimento final.
+    /// Real samples received (16 kHz), excluding final padding.
     samples_in: u64,
-    /// Amostras já codificadas (16 kHz), incluindo preenchimento.
+    /// Samples already encoded (16 kHz), including padding.
     samples_encoded: u64,
     packets_in_page: u32,
-    /// O último pacote fica retido para poder sair com a marca de fim de stream.
+    /// The last packet is held so it can carry the end-of-stream flag.
     held: Option<Vec<u8>>,
 }
 
 impl<W: Write> OggOpusWriter<W> {
-    /// Escreve os cabeçalhos e prepara o encoder.
+    /// Writes the headers and prepares the encoder.
     pub fn new(writer: W, bitrate: i32, serial: u32) -> Result<Self> {
         let mut encoder = Encoder::new(TARGET_RATE, Channels::Mono, Application::Voip)
             .context("falha ao criar o encoder Opus")?;
@@ -82,12 +82,12 @@ impl<W: Write> OggOpusWriter<W> {
         self.lookahead as u64 * GRANULE_PER_SAMPLE
     }
 
-    /// Amostras reais recebidas até agora (16 kHz).
+    /// Real samples received so far (16 kHz).
     pub fn samples(&self) -> u64 {
         self.samples_in
     }
 
-    /// Codifica as amostras mono 16 kHz; os frames incompletos esperam a próxima chamada.
+    /// Encodes mono 16 kHz samples; incomplete frames wait for the next call.
     pub fn write(&mut self, samples: &[f32]) -> Result<()> {
         self.samples_in += samples.len() as u64;
         self.pending.extend_from_slice(samples);
@@ -111,13 +111,14 @@ impl<W: Write> OggOpusWriter<W> {
         Ok(())
     }
 
-    /// Escreve um pacote. O granule é o total decodificável até o fim dele, em 48 kHz e contando
-    /// o pre-skip; no último, é o pre-skip mais as amostras reais, o que corta o preenchimento.
+    /// Writes a packet. The granule is the total decodable up to its end, at 48 kHz and
+    /// including pre-skip; for the last packet, it is pre-skip plus real samples, trimming the
+    /// padding.
     fn emit(&mut self, packet: Vec<u8>, last: bool) -> Result<()> {
         let granule = if last {
             self.pre_skip() + self.samples_in * GRANULE_PER_SAMPLE
         } else {
-            // O pacote retido é o mais recente; este termina um frame antes dele.
+            // The held packet is the newest; this one ends one frame before it.
             (self.samples_encoded - FRAME as u64) * GRANULE_PER_SAMPLE
         };
         self.packets_in_page += 1;
@@ -139,20 +140,20 @@ impl<W: Write> OggOpusWriter<W> {
         Ok(())
     }
 
-    /// Codifica o que falta (incluindo o lookahead), fecha o stream e devolve o escritor.
+    /// Encodes the remainder (including lookahead), closes the stream and returns the writer.
     pub fn finish(mut self) -> Result<W> {
-        // Silêncio para empurrar o lookahead para fora e completar o último frame.
+        // Silence to push out the lookahead and complete the last frame.
         let tail = self.lookahead + (FRAME - (self.pending.len() + self.lookahead) % FRAME) % FRAME;
         self.pending.extend(std::iter::repeat_n(0.0, tail));
         let frames: Vec<f32> = std::mem::take(&mut self.pending);
         for frame in frames.as_chunks::<FRAME>().0 {
             self.encode_frame(frame)?;
         }
-        // Um stream sem nenhum áudio ainda precisa de um pacote para carregar o fim.
+        // A stream with no audio still needs a packet to carry the end flag.
         if self.held.is_none() {
             self.encode_frame(&[0.0; FRAME])?;
         }
-        let last = self.held.take().expect("há sempre um pacote retido aqui");
+        let last = self.held.take().expect("a packet is always held here");
         self.emit(last, true)?;
         let mut writer = self.packets.into_inner();
         writer.flush()?;
@@ -163,12 +164,12 @@ impl<W: Write> OggOpusWriter<W> {
 fn opus_head(pre_skip: u16) -> Vec<u8> {
     let mut head = Vec::with_capacity(19);
     head.extend_from_slice(b"OpusHead");
-    head.push(1); // versão
-    head.push(1); // canais
+    head.push(1); // version
+    head.push(1); // channels
     head.extend_from_slice(&pre_skip.to_le_bytes());
-    head.extend_from_slice(&TARGET_RATE.to_le_bytes()); // taxa de entrada original
-    head.extend_from_slice(&0i16.to_le_bytes()); // ganho de saída
-    head.push(0); // mapeamento de canais: mono/estéreo
+    head.extend_from_slice(&TARGET_RATE.to_le_bytes()); // original input rate
+    head.extend_from_slice(&0i16.to_le_bytes()); // output gain
+    head.push(0); // channel mapping: mono/stereo
     head
 }
 
@@ -177,7 +178,7 @@ fn opus_tags() -> Vec<u8> {
     tags.extend_from_slice(b"OpusTags");
     tags.extend_from_slice(&(VENDOR.len() as u32).to_le_bytes());
     tags.extend_from_slice(VENDOR.as_bytes());
-    tags.extend_from_slice(&0u32.to_le_bytes()); // nenhum comentário
+    tags.extend_from_slice(&0u32.to_le_bytes()); // no comments
     tags
 }
 
@@ -195,7 +196,7 @@ mod tests {
             .collect()
     }
 
-    /// Energia de uma frequência pelo algoritmo de Goertzel.
+    /// Frequency energy using the Goertzel algorithm.
     fn goertzel(samples: &[f32], freq: f32) -> f32 {
         let k = 2.0 * (std::f32::consts::TAU * freq / TARGET_RATE as f32).cos();
         let (mut s1, mut s2) = (0.0f32, 0.0f32);
@@ -249,7 +250,7 @@ mod tests {
     }
 
     #[test]
-    fn encode_round_trip_preserva_senoide_e_duracao() {
+    fn encode_round_trip_preserves_sine_wave_and_duration() {
         let input = sine(440.0, 0.5, TARGET_RATE as usize); // 1 s
         let mut writer = OggOpusWriter::new(Vec::new(), DEFAULT_BITRATE, 7).unwrap();
         for chunk in input.chunks(123) {
@@ -262,10 +263,10 @@ mod tests {
         assert_eq!(out.input_rate, 16_000);
         assert!(out.pre_skip > 0);
         assert_eq!(out.pages_flagged_eos, 1);
-        // A duração pelo granule é exata: (granule - pre_skip) / 48 kHz = 1 s.
+        // The granule duration is exact: (granule - pre_skip) / 48 kHz = 1 s.
         assert_eq!(out.final_granule - u64::from(out.pre_skip), 48_000);
 
-        // Remove o pre-skip (em 16 kHz) e compara o conteúdo.
+        // Remove pre-skip (at 16 kHz) and compare the content.
         let skip = usize::from(out.pre_skip) / 3;
         let audio = &out.audio[skip..skip + input.len()];
         let rms = (audio.iter().map(|s| s * s).sum::<f32>() / audio.len() as f32).sqrt();
@@ -276,8 +277,8 @@ mod tests {
     }
 
     #[test]
-    fn encode_fica_na_faixa_de_opus_de_voz() {
-        // 10 s de voz sintética: duas senoides moduladas e ruído leve.
+    fn encode_stays_in_opus_speech_range() {
+        // 10 s of synthetic speech: two modulated sine waves and light noise.
         let mut seed = 1u32;
         let samples: Vec<f32> = (0..TARGET_RATE as usize * 10)
             .map(|i| {
@@ -294,12 +295,12 @@ mod tests {
         writer.write(&samples).unwrap();
         let bytes = writer.finish().unwrap();
         let per_second = bytes.len() / 10;
-        // 24 kbps = 3.000 B/s; aceita a variação do VBR e o overhead do Ogg.
+        // 24 kbps = 3,000 B/s; allow VBR variation and Ogg overhead.
         assert!((1_500..4_500).contains(&per_second), "{per_second} B/s");
     }
 
     #[test]
-    fn stream_vazio_ainda_fecha_valido() {
+    fn empty_stream_still_closes_validly() {
         let writer = OggOpusWriter::new(Vec::new(), DEFAULT_BITRATE, 3).unwrap();
         let out = decode(writer.finish().unwrap());
         assert_eq!(out.pages_flagged_eos, 1);
@@ -307,13 +308,13 @@ mod tests {
     }
 
     #[test]
-    fn paginas_sao_descarregadas_durante_a_gravacao() {
+    fn pages_are_flushed_during_recording() {
         let mut writer = OggOpusWriter::new(Vec::new(), DEFAULT_BITRATE, 9).unwrap();
         let headers = writer.packets.inner().len();
         writer
             .write(&sine(300.0, 0.4, TARGET_RATE as usize * 2))
             .unwrap();
-        // Dois segundos fecham ao menos uma página de 1 s antes do `finish`.
+        // Two seconds close at least one 1 s page before `finish`.
         assert!(writer.packets.inner().len() > headers);
     }
 }

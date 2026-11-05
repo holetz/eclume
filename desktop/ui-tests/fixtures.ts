@@ -1,15 +1,15 @@
-// Serve desktop/ui de dentro do teste e injeta o Tauri simulado. Qualquer requisição que saia do
-// app (fonte de CDN, script externo) é abortada e registrada em `externas`.
+// Serves desktop/ui from inside the test and injects the simulated Tauri. Any request that leaves
+// the app (a CDN font, an external script) is aborted and recorded in `externalRequests`.
 import { test as base, expect, type Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const aqui = path.dirname(fileURLToPath(import.meta.url))
-const UI = path.resolve(aqui, '../ui')
-export const ORIGEM = 'http://eclume.test'
+const here = path.dirname(fileURLToPath(import.meta.url))
+const UI = path.resolve(here, '../ui')
+export const ORIGIN = 'http://eclume.test'
 
-const TIPOS: Record<string, string> = {
+const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -17,43 +17,43 @@ const TIPOS: Record<string, string> = {
 }
 
 type Fixtures = {
-  externas: string[]
-  abrir: (cenario?: string) => Promise<Page>
+  externalRequests: string[]
+  open: (scenario?: string) => Promise<Page>
 }
 
 export const test = base.extend<Fixtures>({
-  externas: async ({}, use) => {
+  externalRequests: async ({}, use) => {
     await use([])
   },
-  abrir: async ({ page, externas }, use) => {
+  open: async ({ page, externalRequests }, use) => {
     await page.route('**/*', async (route) => {
       const url = new URL(route.request().url())
-      if (url.origin !== ORIGEM) {
-        externas.push(url.href)
+      if (url.origin !== ORIGIN) {
+        externalRequests.push(url.href)
         return route.abort()
       }
-      const arquivo = path.join(UI, decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname))
+      const file = path.join(UI, decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname))
       try {
-        const corpo = await readFile(arquivo)
-        return route.fulfill({ body: corpo, contentType: TIPOS[path.extname(arquivo)] ?? 'application/octet-stream' })
+        const body = await readFile(file)
+        return route.fulfill({ body: body, contentType: CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream' })
       } catch {
-        return route.fulfill({ status: 404, body: 'não encontrado' })
+        return route.fulfill({ status: 404, body: 'not found' })
       }
     })
-    await use(async (cenario = 'ocioso') => {
-      await page.addInitScript((nome) => {
-        ;(window as unknown as { __MOCK_CENARIO: string }).__MOCK_CENARIO = nome
-      }, cenario)
-      await page.addInitScript({ path: path.join(aqui, 'mock-tauri.js') })
-      await page.goto(`${ORIGEM}/index.html`)
+    await use(async (scenario = 'idle') => {
+      await page.addInitScript((name) => {
+        ;(window as unknown as { __MOCK_SCENARIO: string }).__MOCK_SCENARIO = name
+      }, scenario)
+      await page.addInitScript({ path: path.join(here, 'mock-tauri.js') })
+      await page.goto(`${ORIGIN}/index.html`)
       return page
     })
   },
 })
 
-/** As chamadas ao Tauri simulado, na ordem. */
-export async function chamadas(page: Page): Promise<{ comando: string; args: unknown }[]> {
-  return page.evaluate(() => (window as unknown as { __mock: { chamadas: never[] } }).__mock.chamadas)
+/** The calls to the simulated Tauri, in order. */
+export async function calls(page: Page): Promise<{ command: string; args: unknown }[]> {
+  return page.evaluate(() => (window as unknown as { __mock: { calls: never[] } }).__mock.calls)
 }
 
 export { expect }

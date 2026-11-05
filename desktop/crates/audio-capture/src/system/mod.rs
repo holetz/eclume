@@ -1,4 +1,4 @@
-//! Áudio que o sistema está tocando (loopback), por plataforma.
+//! Audio the system is playing (loopback), per platform.
 
 use std::time::Duration;
 
@@ -21,44 +21,44 @@ use macos as platform;
 #[cfg(target_os = "windows")]
 use windows as platform;
 
-/// Uma saída de áudio: o id estável que a config guarda e o nome que a aba Áudio mostra.
+/// An audio output: the stable id stored in config and the name shown in the Audio tab.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OutputDevice {
     pub id: String,
     pub name: String,
 }
 
-/// As saídas que o sistema oferece agora e o id da padrão.
+/// The outputs currently available and the default output's id.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OutputDevices {
     pub default: Option<String>,
     pub devices: Vec<OutputDevice>,
 }
 
-/// Lista as saídas cujo áudio dá para capturar: no Linux, os sinks do PipeWire/Pulse pelo nome
-/// do nó; no Windows, os endpoints de reprodução ativos pelo id. No macOS a lista vem vazia: o
-/// process tap só segue a saída em uso.
+/// Lists outputs whose audio can be captured: PipeWire/Pulse sinks by node name on Linux;
+/// active playback endpoints by id on Windows. On macOS the list is empty: the
+/// process tap only follows the active output.
 pub fn list_output_devices() -> Result<OutputDevices> {
     platform_list()
 }
 
-/// O áudio do sistema, como [`AudioSource`].
+/// System audio as an [`AudioSource`].
 pub struct SystemSource {
     ring: RingSource,
-    /// A saída pedida sumiu e a captura voltou a seguir a saída em uso.
+    /// The requested output was missing and capture resumed following the active output.
     fell_back: bool,
 }
 
 impl SystemSource {
-    /// Abre a captura do áudio que toca na saída de id `target` (ver [`list_output_devices`]);
-    /// `None` segue a saída em uso. Se a saída pedida sumiu, segue a em uso com um aviso no log
-    /// e em [`SystemSource::fell_back`].
+    /// Opens capture of audio playing on output id `target` (see [`list_output_devices`]);
+    /// `None` follows the active output. If the requested output is missing, follows the active one
+    /// with a log warning and [`SystemSource::fell_back`].
     pub fn open_target(target: Option<&str>) -> Result<Self> {
         let (ring, fell_back) = platform_open(target)?;
         Ok(Self { ring, fell_back })
     }
 
-    /// A saída pedida não estava lá e a captura segue a saída em uso.
+    /// The requested output was missing and capture follows the active output.
     pub fn fell_back(&self) -> bool {
         self.fell_back
     }

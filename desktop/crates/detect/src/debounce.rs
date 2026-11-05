@@ -1,6 +1,6 @@
-//! Debounce da detecção: a reunião só começa depois de alguns segundos contínuos de sinal e só
-//! termina depois de um silêncio mais longo, para o mic que solta por instantes (troca de
-//! dispositivo, reconexão) não abrir e fechar gravações.
+//! Detection debounce: a meeting only starts after a few continuous seconds of signal and only
+//! ends after a longer silence, so brief mic releases (device switches, reconnection)
+//! do not open and close recordings.
 
 use std::time::{Duration, Instant};
 
@@ -8,7 +8,7 @@ use eclume_recorder::{MeetingDetector, MeetingEvent};
 
 use crate::classify::{classify, AppKey, SignalSource};
 
-/// Quanto tempo o sinal precisa durar para começar ou faltar para terminar.
+/// How long the signal must last to start, or be absent to end.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DebounceConfig {
     pub start_after: Duration,
@@ -24,13 +24,13 @@ impl Default for DebounceConfig {
     }
 }
 
-/// Transforma a classificação de cada instante em eventos de início e fim de reunião.
+/// Turns classification at each instant into meeting start and end events.
 #[derive(Clone, Debug)]
 pub struct Debouncer {
     config: DebounceConfig,
-    /// Desde quando há detecção contínua, antes de a reunião começar.
+    /// Since when detection has been continuous, before the meeting starts.
     present_since: Option<Instant>,
-    /// Desde quando falta detecção, com a reunião em curso.
+    /// Since when detection has been absent, during an ongoing meeting.
     absent_since: Option<Instant>,
     active: Option<AppKey>,
 }
@@ -45,13 +45,14 @@ impl Debouncer {
         }
     }
 
-    /// A reunião em curso, depois do debounce.
+    /// The ongoing meeting, after debounce.
     pub fn active(&self) -> Option<AppKey> {
         self.active
     }
 
-    /// Registra a classificação observada em `now`. O app anunciado no início é o da última
-    /// observação; uma troca de app no meio da reunião não gera evento.
+    /// Records the classification observed at `now`. The app announced at the start is from the
+    /// last
+    /// observation; an app switch during the meeting does not generate an event.
     pub fn observe(&mut self, now: Instant, detection: Option<AppKey>) -> Option<MeetingEvent> {
         match (self.active, detection) {
             (None, Some(app)) => {
@@ -86,13 +87,13 @@ impl Debouncer {
     }
 }
 
-/// `MeetingDetector` sobre uma fonte de sinais: cada `poll` tira um retrato, classifica e passa
-/// pelo debounce. O relógio é injetável para os testes.
+/// `MeetingDetector` over a signal source: each `poll` takes a snapshot, classifies it and passes
+/// it through debounce. The clock is injectable for tests.
 pub struct DebouncedDetector<S> {
     source: S,
     debouncer: Debouncer,
     clock: Box<dyn FnMut() -> Instant + Send>,
-    /// Última falha registrada no log, para não repetir a mesma a cada segundo.
+    /// Last failure logged, to avoid repeating the same one every second.
     last_error: Option<String>,
 }
 
@@ -127,11 +128,11 @@ impl<S: SignalSource> MeetingDetector for DebouncedDetector<S> {
                 self.last_error = None;
                 self.debouncer.observe(now, classify(&snapshot))
             }
-            // Sem sinal neste instante: não conta nem como presença nem como ausência.
+            // No signal at this instant: counts as neither presence nor absence.
             Err(err) => {
                 let message = format!("{err:#}");
                 if self.last_error.as_deref() != Some(message.as_str()) {
-                    log::warn!("falha ao ler os sinais de reunião: {message}");
+                    log::warn!("failed to read meeting signals: {message}");
                     self.last_error = Some(message);
                 }
                 None
@@ -152,12 +153,12 @@ mod tests {
     }
 
     #[test]
-    fn comeca_so_depois_do_sinal_continuo() {
+    fn starts_only_after_continuous_signal() {
         let t0 = Instant::now();
         let mut d = Debouncer::new(DebounceConfig::default());
         assert_eq!(d.observe(t0, Some(AppKey::Teams)), None);
         assert_eq!(d.observe(secs(t0, 2), Some(AppKey::Teams)), None);
-        // Um buraco zera a contagem.
+        // A gap resets the count.
         assert_eq!(d.observe(secs(t0, 2), None), None);
         assert_eq!(d.observe(secs(t0, 4), Some(AppKey::Teams)), None);
         assert_eq!(d.observe(secs(t0, 6), Some(AppKey::Teams)), None);
@@ -172,12 +173,12 @@ mod tests {
     }
 
     #[test]
-    fn termina_so_depois_do_silencio_longo() {
+    fn ends_only_after_long_silence() {
         let t0 = Instant::now();
         let mut d = Debouncer::new(DebounceConfig::default());
         d.observe(t0, Some(AppKey::Zoom));
         assert!(d.observe(secs(t0, 3), Some(AppKey::Zoom)).is_some());
-        // O mic solta por 10 s e volta: a reunião continua.
+        // The mic releases for 10 s and returns: the meeting continues.
         assert_eq!(d.observe(secs(t0, 10), None), None);
         assert_eq!(d.observe(secs(t0, 20), None), None);
         assert_eq!(d.observe(secs(t0, 21), Some(AppKey::Zoom)), None);
@@ -189,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn troca_de_app_no_meio_nao_gera_evento_e_o_anuncio_e_o_ultimo() {
+    fn app_switch_mid_meeting_emits_no_event_and_announces_last_app() {
         let t0 = Instant::now();
         let mut d = Debouncer::new(DebounceConfig::default());
         d.observe(t0, Some(AppKey::Navegador));
@@ -214,7 +215,7 @@ mod tests {
     }
 
     #[test]
-    fn detector_classifica_cada_retrato_e_ignora_falha_de_leitura() {
+    fn detector_classifies_each_snapshot_and_ignores_read_failure() {
         let teams = || {
             Ok(Snapshot {
                 mic_users: vec![AudioClient::new("ms-teams", "Microsoft Teams")],
@@ -237,8 +238,8 @@ mod tests {
                 *n += 1;
                 now
             });
-        assert_eq!(detector.poll(), None); // t=0, começa a contar
-        assert_eq!(detector.poll(), None); // t=1, falha: ignorada
+        assert_eq!(detector.poll(), None); // t=0, starts counting
+        assert_eq!(detector.poll(), None); // t=1, failure: ignored
         assert_eq!(detector.poll(), None); // t=2
         assert_eq!(
             detector.poll(),

@@ -1,6 +1,6 @@
 [package]
 name = "eclume-desktop"
-description = "App desktop do eclume: grava reuniões, sincroniza e fica na bandeja do sistema."
+description = "eclume desktop app: records meetings, syncs and stays in the system tray."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -26,29 +26,29 @@ log = "0.4"
 notify-rust = "4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# 2.12 traz o tao 0.37: no Wayland o tao 0.35 cobria a HeaderBar com um EventBox acima dos
-# botões, e minimizar/fechar não recebiam o clique (tauri-apps/tauri#13440).
+# 2.12 brings tao 0.37: on Wayland, tao 0.35 covered the HeaderBar with an EventBox above the
+# buttons, so minimize/close received no clicks (tauri-apps/tauri#13440).
 tauri = { version = "2.12", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
-# Iniciar com o computador: `Run` no Windows, `~/.config/autostart` no Linux, LaunchAgent no macOS.
+# Autostart: `Run` on Windows, `~/.config/autostart` on Linux, LaunchAgent on macOS.
 tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
-# Uma instância só: `eclume-desktop --nova-nota` (o atalho do sistema no Wayland) chega à que já
-# está aberta.
+# Single instance: `eclume-desktop --nova-nota` (the system shortcut on Wayland) reaches the
+# instance already open.
 tauri-plugin-single-instance = "2"
 tauri-plugin-dialog = "2"
-# "Copiar" do aviso de resumo pronto: o Markdown do resumo na área de transferência.
+# "Copy" in the summary ready notice: summary Markdown on the clipboard.
 tauri-plugin-clipboard-manager = "2"
-# Fixado no minor: `configure_client` expõe o `reqwest` do plugin, que pode mudar num minor.
+# Minor pinned: `configure_client` exposes the plugin's `reqwest`, which may change in a minor.
 tauri-plugin-updater = "2.12"
-# O mesmo `reqwest` do updater (sem features próprias): a CA extra entra no cliente dele.
+# The same `reqwest` as the updater (no features of its own): adds the extra CA to its client.
 reqwest = { version = "0.13", default-features = false }
 tokio = { version = "1", features = ["time", "sync", "macros"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# Portal `GlobalShortcuts` do Wayland (KDE, GNOME 48+): o `global-hotkey` só ouve janelas X11.
-# `async-io`, nunca `tokio`: com `tokio`, o `zbus::block_on` (chaveiro, notificações) passa a usar
-# um runtime Tokio próprio e dá panic quando chamado de uma thread Tokio (comando `async`).
+# Wayland `GlobalShortcuts` portal (KDE, GNOME 48+): `global-hotkey` only listens to X11 windows.
+# `async-io`, never `tokio`: with `tokio`, `zbus::block_on` (keyring, notifications) uses its own
+# Tokio runtime and panics when called from a Tokio thread (`async` command).
 ashpd = { version = "0.13", default-features = false, features = ["global_shortcuts", "async-io"] }
 futures-util = { version = "0.3", default-features = false }
 

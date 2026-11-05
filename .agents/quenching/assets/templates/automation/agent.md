@@ -47,9 +47,9 @@ checks, and recommendations each citing the standard it applies. Guard every
 optional-feature check with "if present", so a minimal artifact passes clean.>
 
 <!-- MOLD (quenching · subagent definition) → becomes `.claude/agents/<name>.md` in a target
-     repo, minted by /quenching-components-agent-new under `/docs/standards/automation/agents.md` and the
+     repo, minted by /quenching-components agent-new under `/docs/standards/automation/agents.md` and the
      execution-profile doctrine
-     (.agents/quenching/assets/references/components-command-new/capabilities.md §Subagents).
+     (.agents/quenching/references/components-command-new/capabilities.md §Subagents).
 
      WHEN AN AGENT PAYS: the returned summary is much smaller than the work that produced it
      (a repo-wide sweep, a many-file audit, a doc read ending in one table), or slices run in

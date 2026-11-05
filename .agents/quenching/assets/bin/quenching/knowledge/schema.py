@@ -115,8 +115,15 @@ CONCEPT_DOC_CODES = (
     "source-last-modified-invalid", "usage-window-invalid",
     "attested-computation-no-runtime", "attested-computation-malformed",
 )
-LEGACY_HOMES = {"knowledge": "concepts", "reference": "external"}
-LEGACY_QUADRANTS = {"getting-started": "tutorials", "concepts": "explanation"}
+# `explanation/` -> `documentation/` (2026-11-04): the home keeps covering the Diátaxis
+# "explanation" quadrant under the name its readers outside engineering look for — a declared
+# divergence from OKF v0.2, which names the home `explanation`.
+LEGACY_HOMES = {"knowledge": "concepts", "reference": "external", "explanation": "documentation"}
+# Where a pre-rename quadrant under the retired `documentation/` wrapper belongs today.
+LEGACY_QUADRANTS = {"getting-started": "tutorials", "concepts": "documentation"}
+# The subfolders that mark a `documentation/` as the retired 2026-08 wrapper rather than the
+# canonical home: the quadrants it used to hold, under either generation of their names.
+WRAPPER_QUADRANTS = ("tutorials", "how-to", "explanation", "project", "getting-started", "concepts")
 
 
 def _nonempty(fm: dict, key: str) -> bool:

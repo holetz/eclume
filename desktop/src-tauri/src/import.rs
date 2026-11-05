@@ -1,6 +1,6 @@
-//! Importar arquivo: o diálogo nativo (janela, bandeja e `Ctrl+O`), o arrastar para a janela e a
-//! conversão em segundo plano, com o progresso por evento. A janela não tem API de arquivo: ela
-//! só recebe caminhos do Rust.
+//! File import: native dialog (window, tray and `Ctrl+O`), drag and drop onto the window and
+//! background conversion, with progress events. The window has no file API: it only
+//! receives paths from Rust.
 
 use std::path::{Path, PathBuf};
 
@@ -13,29 +13,29 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::state::AppState;
 
-/// Um arquivo para a vista de importação abrir (arrastado ou escolhido pela bandeja).
+/// A file for the import view to open (dropped or chosen from the tray).
 pub const OPEN_EVENT: &str = "import-dropped";
 const PROGRESS_EVENT: &str = "import-progress";
 const FINISHED_EVENT: &str = "import-finished";
 const FAILED_EVENT: &str = "import-failed";
 
-/// O filtro do diálogo: os formatos que o app converte e os que ele copia para o servidor.
+/// Dialog filter: formats the app converts and those it copies to the server.
 pub const EXTENSIONS: [&str; 20] = [
     "mp3", "m4a", "aac", "wav", "flac", "ogg", "oga", "opus", "weba", "wma", "amr", "ac3", "mp4",
     "m4v", "mov", "webm", "mkv", "avi", "wmv", "3gp",
 ];
 
-/// O que a vista mostra antes da confirmação.
+/// What the view shows before confirmation.
 #[derive(Clone, Debug, Serialize)]
 pub struct ImportPreview {
     pub path: PathBuf,
-    /// O nome do arquivo, com extensão.
+    /// The file name, including extension.
     pub name: String,
     #[serde(flatten)]
     pub probe: Probe,
 }
 
-/// Lê o arquivo escolhido.
+/// Reads the chosen file.
 pub fn preview(path: &Path) -> Result<ImportPreview> {
     Ok(ImportPreview {
         name: path
@@ -47,7 +47,7 @@ pub fn preview(path: &Path) -> Result<ImportPreview> {
     })
 }
 
-/// A data vem do arquivo confirmada ou digitada; a do relógio da captura não vale aqui.
+/// The date comes from the file and is confirmed, or typed; the capture clock does not apply here.
 pub fn parse_source(text: &str) -> Result<RecordedAtSource> {
     match RecordedAtSource::parse(text) {
         Some(source @ (RecordedAtSource::FileMetadata | RecordedAtSource::User)) => Ok(source),
@@ -55,7 +55,7 @@ pub fn parse_source(text: &str) -> Result<RecordedAtSource> {
     }
 }
 
-/// Abre o diálogo nativo (bloqueia: chame fora da thread da UI).
+/// Opens the native dialog (blocks: call off the UI thread).
 pub fn pick(app: &AppHandle) -> Option<PathBuf> {
     app.dialog()
         .file()
@@ -65,13 +65,13 @@ pub fn pick(app: &AppHandle) -> Option<PathBuf> {
         .and_then(|file| file.into_path().ok())
 }
 
-/// Mostra a janela na vista de importação com `path`.
+/// Shows the window in the import view with `path`.
 pub fn open_in_window(app: &AppHandle, path: &Path) {
     crate::show_window(app);
     let _ = app.emit(OPEN_EVENT, path.to_string_lossy());
 }
 
-/// "Importar arquivo…" da bandeja: o diálogo e, escolhido o arquivo, a janela.
+/// "Import file…" from the tray: the dialog, then the window once a file is chosen.
 pub fn pick_from_tray(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
@@ -81,7 +81,7 @@ pub fn pick_from_tray(app: &AppHandle) {
     });
 }
 
-/// Converte e põe na fila numa thread; o fim sai por `import-finished` ou `import-failed`.
+/// Converts and queues on a thread; completion emits `import-finished` or `import-failed`.
 pub fn spawn(
     app: &AppHandle,
     path: PathBuf,
@@ -92,7 +92,7 @@ pub fn spawn(
     let app = app.clone();
     std::thread::spawn(move || {
         let state = app.state::<AppState>();
-        // Solta a importação no fim, mesmo que a conversão entre em pânico.
+        // Releases the import on completion, even if conversion panics.
         let importing = state.import_guard();
         let result = state.import_file(&path, recorded_at, source, &cancel, |done| {
             let _ = app.emit(PROGRESS_EVENT, done);
@@ -100,13 +100,13 @@ pub fn spawn(
         drop(importing);
         match result {
             Ok(recording) => {
-                log::info!("{} importado como {}", path.display(), recording.id);
+                log::info!("{} imported as {}", path.display(), recording.id);
                 let _ = app.emit(FINISHED_EVENT, recording.id);
                 crate::sync::nudge(&app);
             }
-            Err(err) if err.is::<Cancelled>() => log::info!("importação cancelada"),
+            Err(err) if err.is::<Cancelled>() => log::info!("import cancelled"),
             Err(err) => {
-                log::error!("falha ao importar {}: {err:#}", path.display());
+                log::error!("failed to import {}: {err:#}", path.display());
                 let _ = app.emit(FAILED_EVENT, format!("{err:#}"));
             }
         }
@@ -120,7 +120,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn origem_da_data_da_importacao() {
+    fn import_date_source() {
         assert_eq!(
             parse_source("file_metadata").unwrap(),
             RecordedAtSource::FileMetadata
@@ -131,11 +131,11 @@ mod tests {
     }
 
     #[test]
-    fn previa_do_arquivo() {
+    fn file_preview() {
         let path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/import/tests/fixtures/tom.m4a");
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/import/tests/fixtures/tone.m4a");
         let preview = preview(&path).unwrap();
-        assert_eq!(preview.name, "tom.m4a");
+        assert_eq!(preview.name, "tone.m4a");
         let json = serde_json::to_value(&preview).unwrap();
         assert_eq!(json["date_origin"], "mvhd");
         assert_eq!(json["has_audio"], true);

@@ -1,5 +1,5 @@
-// Testes da UI do desktop (desktop/ui) num Chromium, com o Tauri simulado por mock-tauri.js. A UI
-// é servida pelo próprio teste (page.route em fixtures.ts), sem servidor nem build.
+// Desktop UI tests (desktop/ui) in Chromium, with Tauri simulated by mock-tauri.js. The test itself
+// serves the UI (page.route in fixtures.ts), with no server and no build.
 import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({

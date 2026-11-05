@@ -1,8 +1,8 @@
-"""`cq git commit` — the one deterministic commit boundary of `/quenching-specs:specs:execute`.
+"""`cq git commit` — the one deterministic commit boundary of `/quenching-specs execute`.
 
 Commits the index AS STAGED with the subject the caller passes: it never stages, never amends,
 never passes `--no-verify`, so the repository's hooks run. The caller resolves the subject
-(`assets/references/git/commit.md` §Commit messages); this verb refuses a blank one rather than
+(`.agents/quenching/references/git/commit.md` §Commit messages); this verb refuses a blank one rather than
 derive a generic one, refuses an empty index, and reports the subject git actually recorded so the
 caller can compare it with what it will write onto the spec task.
 

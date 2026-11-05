@@ -1,18 +1,18 @@
-//! O painel de gravações recentes do topo da janela: as últimas N gravações da conta, com a fase
-//! do processamento, o progresso e o alerta quando a pessoa precisa agir.
+//! The recent recordings panel at the top of the window: the account’s last N recordings, with
+//! processing phase, progress and alerts when the person needs to act.
 //!
-//! A fonte é dupla. As linhas da fila local que ainda não chegaram ao servidor (gravando,
-//! aguardando envio, enviando, falhou o envio) vêm primeiro; depois, a página das N mais
-//! recentes da conta (`GET /recordings?limit=N&sort=created_desc`), que a thread
-//! `eclume-recentes` lê a cada 5 s com a janela visível e algo em andamento. Fora disso, a cada
-//! 60 s, só o que mudou desde a última leitura (`?since=`, repartido com o aviso de desfechos e a
-//! pasta sincronizada, ver [`crate::sync::library_since`]) é mesclado na página; a página inteira
-//! volta a cada 10 min, ao cutucar o laço (envio concluído, configurações, janela aberta) e quando
-//! a contagem muda. Uma leitura que falha dobra a espera até 60 s. Uma gravação enviada daqui e
-//! presente na página é uma linha só, a do servidor.
+//! Two sources feed the panel. Local queue rows not yet on the server (recording, awaiting
+//! upload, uploading, upload failed) come first, followed by the account’s N most recent
+//! recordings (`GET /recordings?limit=N&sort=created_desc`). The `eclume-recentes` thread reads
+//! them every 5 s while the window is visible and something is in progress. Otherwise, every
+//! 60 s, only changes since the last read (`?since=`, shared with outcome notifications and the
+//! synced folder, see [`crate::sync::library_since`]) are merged into the page. The full page is
+//! read every 10 min, when the loop is nudged (upload complete, settings, window opened) and when
+//! the count changes. A failed read doubles the wait up to 60 s. A recording uploaded from this
+//! device and present in the page is a single row, from the server.
 //!
-//! O Rust entrega códigos (fase, etapa, motivo); os rótulos são os do vocabulário compartilhado
-//! (`ui/js/vocabulario.js`), aplicados pela janela.
+//! Rust provides codes (phase, stage, reason); the window applies labels from the shared
+//! vocabulary (`ui/js/vocabulario.js`).
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
@@ -30,61 +30,61 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::state::AppState;
 
-/// Com a janela visível e alguma linha em andamento: o progresso anda na tela.
+/// With the window visible and a row in progress: progress advances on screen.
 pub const BUSY_INTERVAL: Duration = Duration::from_secs(5);
-/// Fora disso, uma leitura por minuto basta para o painel estar em dia ao abrir.
+/// Otherwise, one read per minute keeps the panel up to date when opened.
 pub const IDLE_INTERVAL: Duration = Duration::from_secs(60);
-/// O teto da espera depois de leituras que falham: dobra a partir do ritmo normal até aqui.
+/// Maximum wait after failed reads: doubles from the normal interval up to this limit.
 pub const ERROR_MAX_INTERVAL: Duration = Duration::from_secs(60);
-/// De quanto em quanto a página inteira é relida no ritmo lento (pega o que o `?since=` não vê,
-/// como a gravação apagada).
+/// How often the full page is reread at the slow interval (catches what `?since=` misses,
+/// such as deleted recordings).
 pub const FULL_READ_EVERY_MS: i64 = 10 * 60 * 1000;
-/// Folga do `?since=` sobre o maior `updated_at` da página, como na pasta sincronizada.
+/// `?since=` margin below the page’s greatest `updated_at`, as in the synced folder.
 const SINCE_MARGIN_SECS: i64 = 120;
 
-/// Os estados da gravação que o contrato 2.20.0 conhece (`RecordingStatus`).
+/// Recording states known to contract 2.20.0 (`RecordingStatus`).
 const KNOWN_STATUS: [&str; 5] = ["uploading", "queued", "processing", "transcribed", "failed"];
-/// Os estados de etapa que o contrato 2.20.0 conhece (`PipelineStep.state`).
+/// Step states known to contract 2.20.0 (`PipelineStep.state`).
 const KNOWN_STEP_STATES: [&str; 5] = ["pending", "active", "done", "failed", "skipped"];
-/// O motivo de resumo pulado que a própria pessoa resolve no web (escolher o tipo de agenda).
+/// The skipped-summary reason the person can resolve on the web (choose an agenda type).
 const ACTIONABLE_NO_SUMMARY: [&str; 1] = ["no_agenda_type"];
 
-/// Onde a gravação está.
+/// Where the recording stands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Phase {
-    /// No aparelho: gravando.
+    /// On the device: recording.
     Recording,
-    /// No aparelho: aguardando envio.
+    /// On the device: awaiting upload.
     Pending,
-    /// No aparelho: enviando.
+    /// On the device: uploading.
     Uploading,
-    /// No aparelho: o envio falhou.
+    /// On the device: upload failed.
     UploadFailed,
-    /// Enviada daqui, sem notícia do servidor (sem leitura ainda, ou fora da página).
+    /// Uploaded from here, without server information (not read yet, or outside the page).
     Uploaded,
-    /// Na fila do servidor.
+    /// In the server queue.
     Queued,
-    /// Transcrevendo, com a etapa do job e o progresso.
+    /// Transcribing, with job stage and progress.
     Transcribing,
-    /// Numa etapa do pipeline depois da transcrição (tipo de agenda, campos, resumo).
+    /// In a pipeline step after transcription (agenda type, fields, summary).
     Processing,
-    /// O resumo está pronto: a linha oferece Copiar resumo.
+    /// The summary is ready: the row offers Copy summary.
     SummaryReady,
-    /// Transcrita, sem etapa de resumo.
+    /// Transcribed, without a summary step.
     Transcribed,
-    /// Pronta sem resumo (a etapa foi pulada, com o motivo).
+    /// Ready without a summary (the step was skipped, with a reason).
     NoSummary,
     SummaryFailed,
     TranscriptionFailed,
-    /// A transcrição foi cancelada pelo dono.
+    /// Transcription was cancelled by the owner.
     Cancelled,
-    /// Um estado que este app não conhece: o servidor é mais novo.
+    /// A state this app does not know: the server is newer.
     Unknown,
 }
 
 impl Phase {
-    /// Em andamento: o laço lê mais vezes enquanto há uma linha assim.
+    /// In progress: the loop reads more often while any row is in this state.
     pub fn in_progress(self) -> bool {
         matches!(
             self,
@@ -99,66 +99,66 @@ impl Phase {
     }
 }
 
-/// Por que a pessoa precisa agir.
+/// Why the person needs to act.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Attention {
-    /// O envio falhou: "Tentar agora" (`sync_now`).
+    /// Upload failed: Try now (`sync_now`).
     UploadFailed,
-    /// A transcrição falhou sem retentativa automática: "Abrir no web".
+    /// Transcription failed without automatic retry: Open on web.
     TranscriptionFailed,
-    /// O resumo falhou: "Abrir no web" para gerar de novo.
+    /// Summary failed: Open on web to generate it again.
     SummaryFailed,
-    /// Pronta sem resumo por um motivo que a pessoa resolve (o tipo de agenda): "Abrir no web".
+    /// Ready without a summary for a reason the person can resolve (agenda type): Open on web.
     NoSummary,
-    /// Um estado que o app não conhece (como "aguardando locutores"): "Abrir no web".
+    /// A state the app does not know (such as awaiting speakers): Open on web.
     NeedsYou,
 }
 
-/// Uma linha do painel.
+/// A panel row.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RecentItem {
-    /// Chave estável da linha: o id do servidor, ou `local:<id>` antes do envio.
+    /// Stable row key: the server id, or `local:<id>` before upload.
     pub key: String,
     pub remote_id: Option<String>,
     pub local_id: Option<String>,
-    /// O título; vazio quando ninguém deu um (a janela mostra a data).
+    /// The title; empty when none was given (the window shows the date).
     pub title: String,
-    /// Início local em ms (linhas do aparelho).
+    /// Local start in ms (device rows).
     pub started_at: Option<i64>,
-    /// `created_at` do servidor.
+    /// Server `created_at`.
     pub created_at: Option<String>,
     pub duration_ms: Option<i64>,
     pub phase: Phase,
-    /// A etapa em curso: do job (`asr`…) na transcrição, do pipeline (`summary`…) depois, ou a
-    /// etapa do estado desconhecido.
+    /// The current stage: from the job (`asr`…) during transcription, from the pipeline
+    /// (`summary`…) afterward, or the step with an unknown state.
     pub stage: Option<String>,
-    /// Progresso da transcrição em milésimos (0–1000).
+    /// Transcription progress in thousandths (0–1000).
     pub progress: Option<u16>,
     pub attention: Option<Attention>,
-    /// O motivo no vocabulário de `PipelineStep.reason`.
+    /// The reason in the `PipelineStep.reason` vocabulary.
     pub reason: Option<String>,
-    /// O texto cru: o erro do envio, o código do erro do job ou o estado desconhecido.
+    /// Raw text: upload error, job error code or unknown state.
     pub detail: Option<String>,
-    /// A espera na fila do servidor, quando o sync a leu.
+    /// The wait in the server queue, when read by sync.
     pub wait: Option<QueueWait>,
 }
 
-/// O que o comando `recent` devolve.
+/// What the `recent` command returns.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RecentView {
-    /// Quantas linhas a pessoa pediu; `0` esconde o painel.
+    /// How many rows the person requested; `0` hides the panel.
     pub count: u8,
     pub items: Vec<RecentItem>,
-    /// Quantas linhas pedem a pessoa.
+    /// How many rows need the person’s attention.
     pub needs_you: usize,
-    /// Quando o servidor foi lido por último (ms), `None` antes da primeira leitura.
+    /// When the server was last read (ms), `None` before the first read.
     pub fetched_at: Option<i64>,
-    /// A falha da última leitura; o painel segue com o que sabia.
+    /// The last read failure; the panel keeps its previous information.
     pub error: Option<String>,
 }
 
-/// O que a fase de uma linha do servidor diz.
+/// What a server row’s phase tells us.
 #[derive(Debug, PartialEq)]
 struct Classified {
     phase: Phase,
@@ -182,8 +182,8 @@ impl Classified {
     }
 }
 
-/// A fase de uma gravação do servidor, na precedência alerta > em andamento > pronto: um
-/// estado desconhecido no meio de um pipeline com resumo pronto ainda é alerta.
+/// A server recording’s phase, with precedence alert > in progress > ready: an unknown
+/// state in a pipeline with a ready summary still raises an alert.
 fn classify(recording: &LibraryRecording) -> Classified {
     if !recording.status.is_empty() && !KNOWN_STATUS.contains(&recording.status.as_str()) {
         return Classified {
@@ -238,7 +238,7 @@ fn classify(recording: &LibraryRecording) -> Classified {
         }
         _ => {}
     }
-    // Depois da transcrição: a etapa ativa, senão a primeira à espera.
+    // After transcription: the active step, otherwise the first waiting step.
     let running = recording
         .pipeline
         .iter()
@@ -279,7 +279,7 @@ fn classify(recording: &LibraryRecording) -> Classified {
     }
 }
 
-/// O título dado ao parar, senão o que o servidor deu, senão o nome do arquivo importado.
+/// The title given when stopping, otherwise the server title or the imported file name.
 fn local_title(recording: &QueuedRecording) -> String {
     recording
         .title
@@ -351,10 +351,10 @@ fn remote_item(
     }
 }
 
-/// Junta a fila local (mais recente primeiro) e a página do servidor numa lista de no máximo
-/// `count` linhas. As linhas locais ainda não enviadas vêm primeiro; uma enviada daqui que está
-/// na página vira a linha do servidor. Sem leitura do servidor (`remote` `None`), as enviadas
-/// aparecem como "Enviada".
+/// Combine the local queue (newest first) and the server page into at most `count` rows.
+/// Local rows not yet uploaded come first; an upload from here that appears in the page
+/// becomes the server row. Without a server read (`remote` `None`), uploaded recordings
+/// appear as Uploaded.
 pub fn build(
     local: &[QueuedRecording],
     remote: Option<&[LibraryRecording]>,
@@ -378,12 +378,12 @@ pub fn build(
     items
 }
 
-/// Se a janela está visível e alguma linha está em andamento: o ritmo rápido.
+/// Use the fast interval if the window is visible and any row is in progress.
 pub fn is_busy(items: &[RecentItem], visible: bool) -> bool {
     visible && items.iter().any(|item| item.phase.in_progress())
 }
 
-/// Quanto o laço espera até a próxima leitura.
+/// How long the loop waits before the next read.
 pub fn interval(items: &[RecentItem], visible: bool) -> Duration {
     if is_busy(items, visible) {
         BUSY_INTERVAL
@@ -392,17 +392,17 @@ pub fn interval(items: &[RecentItem], visible: bool) -> Duration {
     }
 }
 
-/// A espera depois de `failures` leituras seguidas que falharam: o ritmo normal dobrando a cada
-/// falha, até [`ERROR_MAX_INTERVAL`]. Sem falha, o ritmo normal.
+/// Wait after `failures` consecutive failed reads: the normal interval doubles with each
+/// failure, up to [`ERROR_MAX_INTERVAL`]. Without failures, use the normal interval.
 pub fn error_interval(normal: Duration, failures: u32) -> Duration {
     normal
         .saturating_mul(2u32.saturating_pow(failures.min(8)))
         .min(ERROR_MAX_INTERVAL.max(normal))
 }
 
-/// Se a próxima leitura é a página inteira (e não só o que mudou): quando o laço foi cutucado,
-/// no ritmo rápido (o progresso anda na tela), sem página ainda, sem `since` para pedir, com a
-/// contagem trocada ou com a última página inteira velha.
+/// Whether the next read fetches the full page (rather than only changes): when the loop
+/// was nudged, at the fast interval (progress advances on screen), with no page or `since`
+/// yet, when the count changed or the last full page is old.
 pub fn read_full_page(
     cursor: Option<&str>,
     full_at: Option<i64>,
@@ -418,9 +418,9 @@ pub fn read_full_page(
         || full_at.is_none_or(|at| !(0..FULL_READ_EVERY_MS).contains(&(now - at)))
 }
 
-/// Mescla na página `page` (da mais recente para a mais antiga, por criação) as gravações que
-/// mudaram: troca por id as que já estavam, acrescenta as novas e mantém as `count` mais
-/// recentes. Uma gravação apagada só sai na leitura da página inteira.
+/// Merge changed recordings into `page` (newest to oldest, by creation): replace existing
+/// recordings by id, add new ones and keep the `count` most recent. A deleted recording
+/// only disappears when the full page is read.
 pub fn merge_changes(
     page: &[LibraryRecording],
     changed: &[LibraryRecording],
@@ -442,38 +442,38 @@ pub fn merge_changes(
         }
     }
     let created = |item: &LibraryRecording| item.created_at.as_deref().and_then(api::instant_ms);
-    // Estável: o que tem a mesma criação (ou nenhuma) fica na ordem em que estava.
+    // Stable: equal creation times (or missing ones) keep their previous order.
     merged.sort_by_key(|item| std::cmp::Reverse(created(item)));
     merged.truncate(count);
     merged
 }
 
-/// A última leitura do servidor.
+/// The last server read.
 #[derive(Default)]
 struct Snapshot {
     items: Option<Vec<LibraryRecording>>,
     fetched_at: Option<i64>,
-    /// Quando a página inteira foi lida pela última vez, e com qual contagem.
+    /// When the full page was last read, and with which count.
     full_at: Option<i64>,
     count: u8,
     error: Option<String>,
 }
 
-/// O que uma leitura trouxe.
+/// What a read returned.
 enum Read {
-    /// A página inteira das `count` mais recentes.
+    /// The full page of the `count` most recent recordings.
     Page(Vec<LibraryRecording>),
-    /// Só o que mudou desde o `since`.
+    /// Only changes since `since`.
     Changes(Vec<LibraryRecording>),
 }
 
-/// O canal para cutucar o laço e a última leitura.
+/// The channel for nudging the loop, and the last read.
 pub struct RecentHandle {
     tx: Mutex<Sender<()>>,
     snapshot: Mutex<Snapshot>,
 }
 
-/// Sobe a thread `eclume-recentes` e registra o canal no app.
+/// Start the `eclume-recentes` thread and register the channel in the app.
 pub fn spawn(app: &AppHandle) {
     let (tx, rx) = mpsc::channel::<()>();
     app.manage(RecentHandle {
@@ -487,21 +487,21 @@ pub fn spawn(app: &AppHandle) {
             let mut wait = Duration::ZERO;
             let mut failures: u32 = 0;
             let mut fast = false;
-            // A primeira volta (espera zero) é uma leitura inteira, como um cutucão.
+            // The first iteration (zero wait) reads the full page, like a nudge.
             let mut forced = true;
             loop {
                 let woke = rx.recv_timeout(wait);
                 if matches!(woke, Err(RecvTimeoutError::Disconnected)) {
                     break;
                 }
-                // Um cutucão (e não o fim da espera) pede a página inteira.
+                // A nudge (rather than the wait ending) requests the full page.
                 forced |= woke.is_ok();
                 while rx.try_recv().is_ok() {}
                 match fetch(&app, forced, fast) {
                     Ok(()) => failures = 0,
                     Err(err) => {
                         failures = failures.saturating_add(1);
-                        log::info!("recentes: {err:#}");
+                        log::info!("recent: {err:#}");
                     }
                 }
                 forced = false;
@@ -516,11 +516,11 @@ pub fn spawn(app: &AppHandle) {
             }
         });
     if let Err(err) = spawned {
-        log::error!("falha ao iniciar o painel de recentes: {err}");
+        log::error!("failed to start recent panel: {err}");
     }
 }
 
-/// Pede uma leitura já (envio concluído, configurações salvas, a principal aberta).
+/// Request a read now (upload complete, settings saved, main window opened).
 pub fn nudge(app: &AppHandle) {
     if let Some(handle) = app.try_state::<RecentHandle>() {
         if let Ok(tx) = handle.tx.lock() {
@@ -529,15 +529,15 @@ pub fn nudge(app: &AppHandle) {
     }
 }
 
-/// Quantas a leitura pede: a maior das duas contagens, porque a janela e a bandeja cortam a mesma
-/// lista, cada uma no seu N.
+/// How many recordings to request: the greater of the two counts, since the window and tray
+/// each take their own N rows from the same list.
 pub fn fetch_count(window: u8, tray: u8) -> u8 {
     window.max(tray)
 }
 
-/// Lê as recentes. Sem credencial ou com a janela e a bandeja escondendo as recentes, não lê
-/// nada. Devagar (`fast` falso, sem `forced`), lê só o que mudou ([`read_full_page`]) e mescla na
-/// página. A falha fica em `error` e o último retrato segue valendo.
+/// Read recent recordings. Without a device credential, or when both window and tray hide
+/// recent recordings, read nothing. At the slow interval (`fast` false, no `forced`), read
+/// only changes ([`read_full_page`]) and merge them. Failures go in `error`; keep the snapshot.
 fn fetch(app: &AppHandle, forced: bool, fast: bool) -> Result<()> {
     let state = app.state::<AppState>();
     let count = fetch_count(state.recent_count()?, state.tray_recent_count()?);
@@ -602,7 +602,7 @@ fn fetch(app: &AppHandle, forced: bool, fast: bool) -> Result<()> {
     }
 }
 
-/// O painel como a janela o desenha.
+/// The panel as drawn by the window.
 pub fn view(app: &AppHandle) -> Result<RecentView> {
     let state = app.state::<AppState>();
     let count = state.recent_count()?;
@@ -623,39 +623,39 @@ pub fn view(app: &AppHandle) -> Result<RecentView> {
     })
 }
 
-/// Uma ação do submenu de uma gravação na bandeja.
+/// An action in a recording’s tray submenu.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TrayAction {
-    /// "Copiar resumo", pelo id remoto.
+    /// Copy summary, by remote id.
     CopySummary(String),
-    /// "Abrir no web", pelo id remoto.
+    /// Open on web, by remote id.
     OpenWeb(String),
-    /// "Tentar agora" (`sync_now`), pelo id local, que só torna o item único no menu.
+    /// Try now (`sync_now`), by local id, which only makes the menu item unique.
     Retry(String),
 }
 
-/// Uma gravação no menu da bandeja: o rótulo pronto e as ações que valem para ela.
+/// A recording in the tray menu: the final label and its applicable actions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrayEntry {
     pub key: String,
-    /// "Título · Estado", com o `&` já escapado para o menu nativo.
+    /// Title · State, with `&` already escaped for the native menu.
     pub label: String,
     pub actions: Vec<TrayAction>,
 }
 
-/// A seção Recentes do menu da bandeja. O progresso e a espera ficam de fora, de propósito: o
-/// menu só é reconstruído quando isto muda.
+/// The Recent section of the tray menu. Progress and wait are deliberately excluded:
+/// the menu is rebuilt only when this changes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TraySection {
-    /// "Recentes", ou "Recentes · 1 precisa de você".
+    /// Recent, or Recent · 1 needs you.
     pub header: String,
     pub entries: Vec<TrayEntry>,
 }
 
-/// O máximo de caracteres do título no menu, antes das reticências.
+/// Maximum title characters in the menu, before the ellipsis.
 const TRAY_TITLE_MAX: usize = 40;
 
-/// O andamento de uma etapa do pipeline, como o `ETAPAS` de `vocabulario.js`.
+/// Pipeline step progress, like `ETAPAS` in `vocabulario.js`.
 fn stage_progress(stage: &str) -> &'static str {
     match stage {
         "received" => "Enviando",
@@ -669,8 +669,8 @@ fn stage_progress(stage: &str) -> &'static str {
     }
 }
 
-/// O estado de uma linha em texto, com os rótulos que `recentes.js` tira do vocabulário: o menu
-/// nativo não passa pela janela.
+/// A row’s state as text, with the labels `recent.js` takes from the vocabulary: the
+/// native menu does not go through the window.
 pub fn state_label(item: &RecentItem) -> &'static str {
     match item.phase {
         Phase::Recording => "Gravando",
@@ -699,7 +699,7 @@ pub fn state_label(item: &RecentItem) -> &'static str {
 
 const NEEDS_YOU: &str = "Precisa de você";
 
-/// "05/10 14:02" a partir de um `AAAA-MM-DDTHH:MM:SS` local.
+/// "05/10 14:02" from a local `YYYY-MM-DDTHH:MM:SS`.
 fn short_date(local: &str) -> Option<String> {
     let day = local.get(8..10)?;
     let month = local.get(5..7)?;
@@ -707,9 +707,9 @@ fn short_date(local: &str) -> Option<String> {
     Some(format!("{day}/{month} {time}"))
 }
 
-/// O título curto da linha: o título com reticências passado do limite; sem título, a data curta
-/// no fuso deste computador, como o painel; sem data, "Gravação". O `&` vira `&&`, porque o menu
-/// nativo o lê como mnemônico no GTK e no Windows.
+/// The short row title: add an ellipsis past the limit; without a title, use a short date
+/// in this computer’s time zone, as in the panel; without a date, use Recording. `&` becomes
+/// `&&` because the native menu reads it as a mnemonic on GTK and Windows.
 pub fn tray_title(item: &RecentItem) -> String {
     let title = item.title.trim();
     let text = if title.is_empty() {
@@ -754,7 +754,7 @@ fn tray_entry(item: &RecentItem) -> TrayEntry {
     }
 }
 
-/// A seção da bandeja a partir das linhas já cortadas no N da bandeja.
+/// The tray section from rows already limited to the tray’s N.
 pub fn tray_section_of(items: &[RecentItem]) -> TraySection {
     let header = match items.iter().filter(|item| item.attention.is_some()).count() {
         0 => "Recentes".to_string(),
@@ -767,9 +767,9 @@ pub fn tray_section_of(items: &[RecentItem]) -> TraySection {
     }
 }
 
-/// A seção Recentes do menu da bandeja, da mesma fila local e do mesmo retrato do painel, sem
-/// leitura própria da API; `None` com `tray_recent_count` em 0. Antes da primeira leitura (ou
-/// antes de a thread subir), só a fila local.
+/// The Recent section of the tray menu, from the same local queue and panel snapshot,
+/// without its own API read; `None` when `tray_recent_count` is 0. Before the first read
+/// (or before the thread starts), use only the local queue.
 pub fn tray_section(app: &AppHandle) -> Result<Option<TraySection>> {
     let state = app.state::<AppState>();
     let count = state.tray_recent_count()?;
@@ -791,8 +791,8 @@ pub fn tray_section(app: &AppHandle) -> Result<Option<TraySection>> {
     Ok(Some(tray_section_of(&items)))
 }
 
-/// "Copiar resumo": põe o Markdown do resumo atual na área de transferência, o mesmo que o
-/// "Copiar" do aviso de resumo pronto copia.
+/// Copy summary: put the current summary’s Markdown on the clipboard, as the summary-ready
+/// notification’s Copy action does.
 pub fn copy_summary(app: &AppHandle, recording_id: &str) -> Result<()> {
     let state = app.state::<AppState>();
     let config = state
@@ -806,7 +806,7 @@ pub fn copy_summary(app: &AppHandle, recording_id: &str) -> Result<()> {
         .map_err(|err| anyhow!("falha ao copiar o resumo: {err}"))
 }
 
-/// "Abrir no web": a página da gravação no eclume web.
+/// Open on web: the recording page in eclume web.
 pub fn open_recording(app: &AppHandle, recording_id: &str) -> Result<()> {
     let url = crate::sync::recording_url(&app.state::<AppState>().web_url()?, recording_id);
     app.opener()
@@ -829,7 +829,7 @@ mod tests {
         }
     }
 
-    fn remota(id: &str, status: &str) -> LibraryRecording {
+    fn remote(id: &str, status: &str) -> LibraryRecording {
         LibraryRecording {
             id: id.into(),
             title: format!("Reunião {id}"),
@@ -845,13 +845,13 @@ mod tests {
         }
     }
 
-    fn com_job(mut rec: LibraryRecording, job: JobInfo) -> LibraryRecording {
+    fn with_job(mut rec: LibraryRecording, job: JobInfo) -> LibraryRecording {
         rec.job = Some(job);
         rec
     }
 
-    fn com_etapas(mut rec: LibraryRecording, etapas: Vec<PipelineStepInfo>) -> LibraryRecording {
-        rec.pipeline = etapas;
+    fn with_steps(mut rec: LibraryRecording, steps: Vec<PipelineStepInfo>) -> LibraryRecording {
+        rec.pipeline = steps;
         rec
     }
 
@@ -895,14 +895,14 @@ mod tests {
     }
 
     #[test]
-    fn fase_de_cada_estado_do_servidor() {
-        let fase = |rec: &LibraryRecording| classify(rec).phase;
+    fn phase_for_each_server_state() {
+        let phase = |rec: &LibraryRecording| classify(rec).phase;
         assert_eq!(
-            fase(&com_job(remota("a", "queued"), job("queued"))),
+            phase(&with_job(remote("a", "queued"), job("queued"))),
             Phase::Queued
         );
-        let transcrevendo = classify(&com_job(
-            remota("b", "processing"),
+        let transcribing = classify(&with_job(
+            remote("b", "processing"),
             JobInfo {
                 stage: Some("asr".into()),
                 progress: Some(420),
@@ -911,14 +911,14 @@ mod tests {
         ));
         assert_eq!(
             (
-                transcrevendo.phase,
-                transcrevendo.stage.as_deref(),
-                transcrevendo.progress
+                transcribing.phase,
+                transcribing.stage.as_deref(),
+                transcribing.progress
             ),
             (Phase::Transcribing, Some("asr"), Some(420))
         );
-        let resumindo = classify(&com_etapas(
-            com_job(remota("c", "transcribed"), job("succeeded")),
+        let summary = classify(&with_steps(
+            with_job(remote("c", "transcribed"), job("succeeded")),
             vec![
                 step("transcription", "done", None),
                 step("agenda_type", "done", None),
@@ -926,29 +926,29 @@ mod tests {
             ],
         ));
         assert_eq!(
-            (resumindo.phase, resumindo.stage.as_deref()),
+            (summary.phase, summary.stage.as_deref()),
             (Phase::Processing, Some("summary"))
         );
         assert_eq!(
-            fase(&com_etapas(
-                remota("d", "transcribed"),
+            phase(&with_steps(
+                remote("d", "transcribed"),
                 vec![step("summary", "done", None)]
             )),
             Phase::SummaryReady
         );
-        assert_eq!(fase(&remota("e", "transcribed")), Phase::Transcribed);
+        assert_eq!(phase(&remote("e", "transcribed")), Phase::Transcribed);
         assert_eq!(
-            fase(&com_job(remota("f", "failed"), job("cancelled"))),
+            phase(&with_job(remote("f", "failed"), job("cancelled"))),
             Phase::Cancelled
         );
     }
 
     #[test]
-    fn alertas_so_onde_a_pessoa_resolve() {
-        let alerta = |rec: &LibraryRecording| classify(rec).attention;
-        let falhou = |retryable| {
-            com_job(
-                remota("a", "failed"),
+    fn alerts_only_where_the_person_can_resolve_them() {
+        let alert = |rec: &LibraryRecording| classify(rec).attention;
+        let failed = |retryable| {
+            with_job(
+                remote("a", "failed"),
                 JobInfo {
                     error: Some(JobError {
                         code: "engine_error".into(),
@@ -958,52 +958,52 @@ mod tests {
                 },
             )
         };
-        assert_eq!(alerta(&falhou(false)), Some(Attention::TranscriptionFailed));
+        assert_eq!(alert(&failed(false)), Some(Attention::TranscriptionFailed));
         assert_eq!(
-            classify(&falhou(false)).detail.as_deref(),
+            classify(&failed(false)).detail.as_deref(),
             Some("engine_error")
         );
-        // Passageira: o servidor tenta de novo.
-        assert_eq!(alerta(&falhou(true)), None);
+        // Transient: the server retries.
+        assert_eq!(alert(&failed(true)), None);
         assert_eq!(
-            alerta(&com_etapas(
-                remota("b", "transcribed"),
+            alert(&with_steps(
+                remote("b", "transcribed"),
                 vec![step("summary", "failed", None)]
             )),
             Some(Attention::SummaryFailed)
         );
-        let pulado = |motivo| {
-            com_etapas(
-                remota("c", "transcribed"),
-                vec![step("summary", "skipped", Some(motivo))],
+        let skipped = |reason| {
+            with_steps(
+                remote("c", "transcribed"),
+                vec![step("summary", "skipped", Some(reason))],
             )
         };
         assert_eq!(
-            alerta(&pulado("no_agenda_type")),
+            alert(&skipped("no_agenda_type")),
             Some(Attention::NoSummary)
         );
-        assert_eq!(classify(&pulado("no_provider")).phase, Phase::NoSummary);
-        assert_eq!(alerta(&pulado("no_provider")), None);
-        assert_eq!(alerta(&pulado("cancelled")), None);
+        assert_eq!(classify(&skipped("no_provider")).phase, Phase::NoSummary);
+        assert_eq!(alert(&skipped("no_provider")), None);
+        assert_eq!(alert(&skipped("cancelled")), None);
     }
 
     #[test]
-    fn estado_desconhecido_vira_precisa_de_voce_mesmo_com_o_resumo_pronto() {
-        let etapa = classify(&com_etapas(
-            remota("a", "transcribed"),
+    fn unknown_state_needs_you_even_with_summary_ready() {
+        let step_info = classify(&with_steps(
+            remote("a", "transcribed"),
             vec![
                 step("transcription", "done", None),
                 step("speakers", "awaiting_speakers", Some("speakers_required")),
                 step("summary", "done", None),
             ],
         ));
-        assert_eq!(etapa.phase, Phase::Unknown);
-        assert_eq!(etapa.attention, Some(Attention::NeedsYou));
-        assert_eq!(etapa.stage.as_deref(), Some("speakers"));
-        assert_eq!(etapa.detail.as_deref(), Some("awaiting_speakers"));
-        assert_eq!(etapa.reason.as_deref(), Some("speakers_required"));
+        assert_eq!(step_info.phase, Phase::Unknown);
+        assert_eq!(step_info.attention, Some(Attention::NeedsYou));
+        assert_eq!(step_info.stage.as_deref(), Some("speakers"));
+        assert_eq!(step_info.detail.as_deref(), Some("awaiting_speakers"));
+        assert_eq!(step_info.reason.as_deref(), Some("speakers_required"));
 
-        let status = classify(&remota("b", "awaiting_speakers"));
+        let status = classify(&remote("b", "awaiting_speakers"));
         assert_eq!(
             (status.phase, status.attention, status.detail.as_deref()),
             (
@@ -1015,40 +1015,40 @@ mod tests {
     }
 
     #[test]
-    fn locutores_aguardando_viram_alerta_com_a_etapa_e_o_motivo() {
-        let etapa = classify(&com_etapas(
-            remota("w", "transcribed"),
+    fn waiting_speakers_raise_alert_with_step_and_reason() {
+        let step_info = classify(&with_steps(
+            remote("w", "transcribed"),
             vec![
                 step("transcription", "done", None),
                 step("speakers", "waiting", Some("unnamed_speakers")),
                 step("summary", "pending", None),
             ],
         ));
-        assert_eq!(etapa.phase, Phase::Unknown);
-        assert_eq!(etapa.attention, Some(Attention::NeedsYou));
-        assert_eq!(etapa.stage.as_deref(), Some("speakers"));
-        assert_eq!(etapa.detail.as_deref(), Some("waiting"));
-        assert_eq!(etapa.reason.as_deref(), Some("unnamed_speakers"));
+        assert_eq!(step_info.phase, Phase::Unknown);
+        assert_eq!(step_info.attention, Some(Attention::NeedsYou));
+        assert_eq!(step_info.stage.as_deref(), Some("speakers"));
+        assert_eq!(step_info.detail.as_deref(), Some("waiting"));
+        assert_eq!(step_info.reason.as_deref(), Some("unnamed_speakers"));
     }
 
     #[test]
-    fn junta_a_fila_local_e_a_pagina_sem_duplicar_e_corta_em_n() {
-        let fila = vec![
+    fn merge_local_queue_and_page_without_duplicates_and_limit_to_n() {
+        let queue = vec![
             local("l-gravando", Status::Recording, 500, None),
             local("l-falhou", Status::Failed, 400, None),
             local("l-enviada", Status::Synced, 300, Some("r1")),
             local("l-velha", Status::Synced, 100, Some("r-fora")),
         ];
-        let pagina = vec![
-            com_job(remota("r1", "queued"), job("queued")),
-            com_etapas(
-                remota("r2", "transcribed"),
+        let page = vec![
+            with_job(remote("r1", "queued"), job("queued")),
+            with_steps(
+                remote("r2", "transcribed"),
                 vec![step("summary", "done", None)],
             ),
-            remota("r3", "transcribed"),
+            remote("r3", "transcribed"),
         ];
-        let mut esperas = BTreeMap::new();
-        esperas.insert(
+        let mut waits = BTreeMap::new();
+        waits.insert(
             "r1".to_string(),
             QueueWait {
                 reason: "gpu_busy".into(),
@@ -1059,53 +1059,53 @@ mod tests {
                 processor: None,
             },
         );
-        let linhas = build(&fila, Some(pagina.as_slice()), &esperas, 4);
+        let rows = build(&queue, Some(page.as_slice()), &waits, 4);
         assert_eq!(
-            linhas.iter().map(|l| l.key.as_str()).collect::<Vec<_>>(),
+            rows.iter().map(|l| l.key.as_str()).collect::<Vec<_>>(),
             ["local:l-gravando", "local:l-falhou", "r1", "r2"]
         );
-        assert_eq!(linhas[1].attention, Some(Attention::UploadFailed));
-        assert_eq!(linhas[1].detail.as_deref(), Some("servidor fora do ar"));
-        // A enviada daqui é a linha do servidor, com o id local e a espera na fila.
-        assert_eq!(linhas[2].local_id.as_deref(), Some("l-enviada"));
-        assert_eq!(linhas[2].wait.as_ref().map(|w| w.ahead), Some(Some(2)));
-        assert_eq!(linhas[3].phase, Phase::SummaryReady);
+        assert_eq!(rows[1].attention, Some(Attention::UploadFailed));
+        assert_eq!(rows[1].detail.as_deref(), Some("servidor fora do ar"));
+        // The upload from here is the server row, with the local id and queue wait.
+        assert_eq!(rows[2].local_id.as_deref(), Some("l-enviada"));
+        assert_eq!(rows[2].wait.as_ref().map(|w| w.ahead), Some(Some(2)));
+        assert_eq!(rows[3].phase, Phase::SummaryReady);
 
-        // Sem leitura do servidor, as enviadas aparecem como "Enviada".
-        let sem_servidor = build(&fila, None, &BTreeMap::new(), 5);
-        assert_eq!(sem_servidor.len(), 4);
-        assert_eq!(sem_servidor[2].phase, Phase::Uploaded);
-        assert_eq!(sem_servidor[2].key, "r1");
+        // Without a server read, uploaded recordings appear as Uploaded.
+        let without_server = build(&queue, None, &BTreeMap::new(), 5);
+        assert_eq!(without_server.len(), 4);
+        assert_eq!(without_server[2].phase, Phase::Uploaded);
+        assert_eq!(without_server[2].key, "r1");
 
-        assert!(build(&fila, Some(pagina.as_slice()), &esperas, 0).is_empty());
+        assert!(build(&queue, Some(page.as_slice()), &waits, 0).is_empty());
     }
 
     #[test]
-    fn a_leitura_pede_a_maior_das_duas_contagens() {
+    fn read_requests_the_greater_count() {
         assert_eq!(fetch_count(5, 1), 5);
         assert_eq!(fetch_count(0, 3), 3);
         assert_eq!(fetch_count(0, 0), 0);
-        // A janela e a bandeja cortam a mesma lista, cada uma no seu N.
-        let pagina: Vec<_> = (1..=5)
-            .map(|n| remota(&format!("r{n}"), "transcribed"))
+        // The window and tray each take their own N rows from the same list.
+        let page: Vec<_> = (1..=5)
+            .map(|n| remote(&format!("r{n}"), "transcribed"))
             .collect();
-        let janela = build(&[], Some(pagina.as_slice()), &BTreeMap::new(), 5);
-        let bandeja = build(&[], Some(pagina.as_slice()), &BTreeMap::new(), 1);
-        assert_eq!(janela.len(), 5);
-        assert_eq!(bandeja, janela[..1]);
+        let window = build(&[], Some(page.as_slice()), &BTreeMap::new(), 5);
+        let tray = build(&[], Some(page.as_slice()), &BTreeMap::new(), 1);
+        assert_eq!(window.len(), 5);
+        assert_eq!(tray, window[..1]);
     }
 
-    fn linha(item: RecentItem) -> TrayEntry {
+    fn entry(item: RecentItem) -> TrayEntry {
         tray_section_of(&[item]).entries.remove(0)
     }
 
     #[test]
-    fn bandeja_rotula_cada_fase_e_da_as_acoes_que_valem() {
-        let pronta = build(
+    fn tray_labels_each_phase_and_offers_applicable_actions() {
+        let ready = build(
             &[],
             Some(
-                &[com_etapas(
-                    remota("r1", "transcribed"),
+                &[with_steps(
+                    remote("r1", "transcribed"),
                     vec![step("summary", "done", None)],
                 )][..],
             ),
@@ -1113,7 +1113,7 @@ mod tests {
             1,
         );
         assert_eq!(
-            linha(pronta[0].clone()),
+            entry(ready[0].clone()),
             TrayEntry {
                 key: "r1".into(),
                 label: "Reunião r1 · Resumo pronto".into(),
@@ -1124,16 +1124,16 @@ mod tests {
             }
         );
 
-        let falhou = build(
+        let failed = build(
             &[local("l1", Status::Failed, 10, None)],
             None,
             &BTreeMap::new(),
             1,
         );
-        let mut falhou = falhou[0].clone();
-        falhou.title = "Daily".into();
+        let mut failed = failed[0].clone();
+        failed.title = "Daily".into();
         assert_eq!(
-            linha(falhou),
+            entry(failed),
             TrayEntry {
                 key: "local:l1".into(),
                 label: "Daily · Precisa de você (Falhou o envio)".into(),
@@ -1141,70 +1141,70 @@ mod tests {
             }
         );
 
-        let mut gravando = build(
+        let mut recording = build(
             &[local("l2", Status::Recording, 10, None)],
             None,
             &BTreeMap::new(),
             1,
         )[0]
         .clone();
-        gravando.title = "Reunião".into();
-        let gravando = linha(gravando);
-        assert_eq!(gravando.label, "Reunião · Gravando");
-        assert!(gravando.actions.is_empty());
+        recording.title = "Reunião".into();
+        let recording = entry(recording);
+        assert_eq!(recording.label, "Reunião · Gravando");
+        assert!(recording.actions.is_empty());
 
-        let locutores = com_etapas(
-            remota("r2", "transcribed"),
+        let speakers = with_steps(
+            remote("r2", "transcribed"),
             vec![step("speakers", "waiting", Some("unnamed_speakers"))],
         );
-        let locutores = build(&[], Some(&[locutores][..]), &BTreeMap::new(), 1);
+        let speakers = build(&[], Some(&[speakers][..]), &BTreeMap::new(), 1);
         assert_eq!(
-            linha(locutores[0].clone()).label,
+            entry(speakers[0].clone()).label,
             "Reunião r2 · Precisa de você (Aguardando locutores)"
         );
-        let novo = build(
+        let new = build(
             &[],
-            Some(&[remota("r3", "estado_novo")][..]),
+            Some(&[remote("r3", "estado_novo")][..]),
             &BTreeMap::new(),
             1,
         );
-        assert_eq!(linha(novo[0].clone()).label, "Reunião r3 · Precisa de você");
+        assert_eq!(entry(new[0].clone()).label, "Reunião r3 · Precisa de você");
 
-        let resumindo = com_etapas(
-            com_job(remota("r4", "transcribed"), job("succeeded")),
+        let summary = with_steps(
+            with_job(remote("r4", "transcribed"), job("succeeded")),
             vec![step("summary", "active", None)],
         );
-        let resumindo = build(&[], Some(&[resumindo][..]), &BTreeMap::new(), 1);
-        assert_eq!(linha(resumindo[0].clone()).label, "Reunião r4 · Resumindo");
+        let summary = build(&[], Some(&[summary][..]), &BTreeMap::new(), 1);
+        assert_eq!(entry(summary[0].clone()).label, "Reunião r4 · Resumindo");
         assert_eq!(
-            linha(resumindo[0].clone()).actions,
+            entry(summary[0].clone()).actions,
             [TrayAction::OpenWeb("r4".into())]
         );
     }
 
     #[test]
-    fn bandeja_conta_os_alertas_no_cabecalho_e_ignora_o_progresso() {
-        let fila = vec![
+    fn tray_counts_alerts_in_header_and_ignores_progress() {
+        let queue = vec![
             local("a", Status::Failed, 3, None),
             local("b", Status::Failed, 2, None),
             local("c", Status::Pending, 1, None),
         ];
-        let linhas = build(&fila, None, &BTreeMap::new(), 3);
+        let rows = build(&queue, None, &BTreeMap::new(), 3);
         assert_eq!(
-            tray_section_of(&linhas).header,
+            tray_section_of(&rows).header,
             "Recentes · 2 precisam de você"
         );
         assert_eq!(
-            tray_section_of(&linhas[1..]).header,
+            tray_section_of(&rows[1..]).header,
             "Recentes · 1 precisa de você"
         );
-        assert_eq!(tray_section_of(&linhas[2..]).header, "Recentes");
+        assert_eq!(tray_section_of(&rows[2..]).header, "Recentes");
         assert!(tray_section_of(&[]).entries.is_empty());
 
-        // O progresso anda sem mudar a seção: o menu não é reconstruído por ele.
-        let andando = |progress| {
-            com_job(
-                remota("r", "processing"),
+        // Progress advances without changing the section: it does not rebuild the menu.
+        let in_progress = |progress| {
+            with_job(
+                remote("r", "processing"),
                 JobInfo {
                     stage: Some("asr".into()),
                     progress: Some(progress),
@@ -1212,17 +1212,17 @@ mod tests {
                 },
             )
         };
-        let antes = build(&[], Some(&[andando(100)][..]), &BTreeMap::new(), 1);
-        let depois = build(&[], Some(&[andando(900)][..]), &BTreeMap::new(), 1);
-        assert_ne!(antes, depois);
-        assert_eq!(tray_section_of(&antes), tray_section_of(&depois));
+        let before = build(&[], Some(&[in_progress(100)][..]), &BTreeMap::new(), 1);
+        let after = build(&[], Some(&[in_progress(900)][..]), &BTreeMap::new(), 1);
+        assert_ne!(before, after);
+        assert_eq!(tray_section_of(&before), tray_section_of(&after));
     }
 
     #[test]
-    fn titulo_da_bandeja_e_curto_escapa_o_e_comercial_e_cai_na_data() {
+    fn tray_title_is_short_escapes_ampersand_and_falls_back_to_date() {
         let mut item = build(
             &[],
-            Some(&[remota("r", "transcribed")][..]),
+            Some(&[remote("r", "transcribed")][..]),
             &BTreeMap::new(),
             1,
         )[0]
@@ -1230,14 +1230,14 @@ mod tests {
         item.title = "P&D · revisão".into();
         assert_eq!(tray_title(&item), "P&&D · revisão");
         item.title = "a".repeat(60);
-        let curto = tray_title(&item);
-        assert_eq!(curto.chars().count(), TRAY_TITLE_MAX);
-        assert!(curto.ends_with('…'));
+        let short = tray_title(&item);
+        assert_eq!(short.chars().count(), TRAY_TITLE_MAX);
+        assert!(short.ends_with('…'));
         item.title = "  ".into();
-        // Sem título, a data curta no fuso local, como o painel ("dd/mm hh:mm").
-        let data = tray_title(&item);
-        assert_eq!(data.len(), "05/10 12:00".len());
-        assert_eq!(&data[2..3], "/");
+        // Without a title, use the short date in local time, as in the panel ("dd/mm hh:mm").
+        let date = tray_title(&item);
+        assert_eq!(date.len(), "05/10 12:00".len());
+        assert_eq!(&date[2..3], "/");
         item.created_at = None;
         item.started_at = None;
         assert_eq!(tray_title(&item), "Gravação");
@@ -1249,27 +1249,27 @@ mod tests {
     }
 
     #[test]
-    fn le_mais_vezes_so_com_a_janela_visivel_e_algo_em_andamento() {
-        let fila = vec![local("l", Status::Pending, 1, None)];
-        let andando = build(&fila, Some(&[][..]), &BTreeMap::new(), 5);
-        assert_eq!(interval(&andando, true), BUSY_INTERVAL);
-        assert_eq!(interval(&andando, false), IDLE_INTERVAL);
-        let pronta = build(
+    fn read_more_often_only_with_window_visible_and_work_in_progress() {
+        let queue = vec![local("l", Status::Pending, 1, None)];
+        let in_progress = build(&queue, Some(&[][..]), &BTreeMap::new(), 5);
+        assert_eq!(interval(&in_progress, true), BUSY_INTERVAL);
+        assert_eq!(interval(&in_progress, false), IDLE_INTERVAL);
+        let ready = build(
             &[],
             Some(
-                &[com_etapas(
-                    remota("r", "transcribed"),
+                &[with_steps(
+                    remote("r", "transcribed"),
                     vec![step("summary", "done", None)],
                 )][..],
             ),
             &BTreeMap::new(),
             5,
         );
-        assert_eq!(interval(&pronta, true), IDLE_INTERVAL);
+        assert_eq!(interval(&ready, true), IDLE_INTERVAL);
     }
 
     #[test]
-    fn leitura_que_falha_dobra_a_espera_ate_um_minuto_e_sem_falha_e_o_ritmo_normal() {
+    fn failed_read_doubles_wait_up_to_one_minute_otherwise_normal_interval() {
         let secs = Duration::from_secs;
         assert_eq!(error_interval(BUSY_INTERVAL, 0), secs(5));
         assert_eq!(error_interval(BUSY_INTERVAL, 1), secs(10));
@@ -1283,19 +1283,19 @@ mod tests {
     }
 
     #[test]
-    fn a_pagina_inteira_so_no_ritmo_rapido_no_cutucao_e_a_cada_dez_minutos() {
+    fn full_page_only_at_fast_interval_on_nudge_and_every_ten_minutes() {
         let since = Some("2026-10-05T12:00:00Z");
         let now = 100 * 60 * 1000;
         let recent = Some(now - 60 * 1000);
-        // Devagar, com página, `since` e contagem iguais: só o que mudou.
+        // Slow interval, same page, `since` and count: only changes.
         assert!(!read_full_page(since, recent, true, false, false, now));
-        // Cutucão, ritmo rápido, contagem trocada, sem `since` ou sem página inteira anterior.
+        // Nudge, fast interval, changed count, no `since` or no previous full page.
         assert!(read_full_page(since, recent, true, true, false, now));
         assert!(read_full_page(since, recent, true, false, true, now));
         assert!(read_full_page(since, recent, false, false, false, now));
         assert!(read_full_page(None, recent, true, false, false, now));
         assert!(read_full_page(since, None, true, false, false, now));
-        // A página inteira de 10 min atrás já é velha; o relógio que voltou também não vale.
+        // A full page from 10 min ago is old; a clock that went backward is also invalid.
         assert!(read_full_page(
             since,
             Some(now - FULL_READ_EVERY_MS),
@@ -1323,24 +1323,24 @@ mod tests {
     }
 
     #[test]
-    fn mescla_troca_por_id_acrescenta_a_nova_e_mantem_as_mais_recentes() {
-        let em = |id: &str, status: &str, created: &str| {
-            let mut rec = remota(id, status);
+    fn merge_replaces_by_id_adds_new_and_keeps_most_recent() {
+        let at = |id: &str, status: &str, created: &str| {
+            let mut rec = remote(id, status);
             rec.created_at = Some(created.into());
             rec
         };
         let page = vec![
-            em("c", "processing", "2026-10-05T12:03:00Z"),
-            em("b", "transcribed", "2026-10-05T12:02:00Z"),
-            em("a", "transcribed", "2026-10-05T12:01:00Z"),
+            at("c", "processing", "2026-10-05T12:03:00Z"),
+            at("b", "transcribed", "2026-10-05T12:02:00Z"),
+            at("a", "transcribed", "2026-10-05T12:01:00Z"),
         ];
         let changed = vec![
-            // Troca a "c", que terminou.
-            em("c", "transcribed", "2026-10-05T12:03:00Z"),
-            // Nova, a mais recente.
-            em("d", "queued", "2026-10-05T12:04:00Z"),
-            // Mais antiga que a página inteira: cai fora do corte.
-            em("z", "transcribed", "2026-10-05T11:00:00Z"),
+            // Replace "c", which finished.
+            at("c", "transcribed", "2026-10-05T12:03:00Z"),
+            // New, the most recent.
+            at("d", "queued", "2026-10-05T12:04:00Z"),
+            // Older than the full page: falls outside the limit.
+            at("z", "transcribed", "2026-10-05T11:00:00Z"),
         ];
         let merged = merge_changes(&page, &changed, 3);
         let seen: Vec<(&str, &str)> = merged
@@ -1351,12 +1351,12 @@ mod tests {
             seen,
             [("d", "queued"), ("c", "transcribed"), ("b", "transcribed")]
         );
-        // Sem mudança, a página fica como estava.
+        // Without changes, the page stays as it was.
         assert_eq!(merge_changes(&page, &[], 3), page);
-        // Datas comparadas como datas, não como texto ("…:05Z" vem depois de "…:05.5Z").
+        // Compare dates as dates, not text ("…:05Z" comes after "…:05.5Z").
         let fine = vec![
-            em("x", "queued", "2026-10-05T12:00:05Z"),
-            em("y", "queued", "2026-10-05T12:00:05.500000Z"),
+            at("x", "queued", "2026-10-05T12:00:05Z"),
+            at("y", "queued", "2026-10-05T12:00:05.500000Z"),
         ];
         let merged = merge_changes(&[], &fine, 2);
         assert_eq!(merged[0].id, "y");

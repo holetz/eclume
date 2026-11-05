@@ -1,12 +1,12 @@
-/* Camada de produto do desktop: só o que a janela precisa e o Design System (eclume.css) não
-   define. A CSP da janela bloqueia style="", então as utilidades que os exemplos do DS fazem por
-   atributo de estilo moram aqui. */
+/* Desktop product layer: only what the window needs and the Design System (eclume.css) does not
+   define. The window CSP blocks style="", so the utilities the DS examples apply through a
+   style attribute live here. */
 
 [hidden] {
   display: none !important;
 }
 
-/* A .tray-window do DS é um painel de 520 × 600 com moldura; no app ela é a janela inteira. */
+/* The DS .tray-window is a framed 520 × 600 panel; in the app it is the whole window. */
 .tray.tray-window {
   width: 100%;
   min-height: 100vh;
@@ -25,13 +25,13 @@
   justify-content: space-between;
 }
 
-/* Primeira execução: o código de 6 caracteres cabe inteiro; o endereço ocupa a linha. */
-.input-codigo {
+/* First run: the 6-character code fits whole; the address takes the full row. */
+.input-code {
   width: 12ch;
   text-transform: uppercase;
 }
 
-.input-endereco {
+.input-address {
   flex: 1;
   min-width: 0;
 }
@@ -75,7 +75,7 @@
   font-size: 12px;
 }
 
-/* O medidor de nível com 16 barras; a altura de cada uma vem de --h, por setProperty. */
+/* The 16-bar level meter; each bar's height comes from --h, through setProperty. */
 .meter i {
   transition: height 80ms linear;
 }
@@ -88,7 +88,7 @@
   gap: var(--space-4);
 }
 
-#politica-opcoes {
+#policy-options {
   justify-self: start;
 }
 
@@ -96,14 +96,14 @@
   margin: 0;
 }
 
-/* O cabeçalho das configurações cola nas abas, como no frame "Settings". */
+/* The settings header sits flush on the tabs, as in the "Settings" frame. */
 .tray-section-tabs {
   padding-bottom: 0;
 }
 
 .tabs-flush {
   border-bottom: 0;
-  /* Cinco abas cabem em 380 px com o vão menor; se faltar largura, quebram em vez de rolar. */
+  /* Five tabs fit in 380 px with the smaller gap; short of width, they wrap instead of scrolling. */
   gap: var(--space-3);
   flex-wrap: wrap;
 }
@@ -120,12 +120,12 @@
   padding-top: var(--space-3);
 }
 
-/* "Manter por alguns dias": o campo dos dias fica dentro da própria escolha, à direita. */
-.choice-dias {
+/* "Manter por alguns dias": the days field sits inside the choice itself, on the right. */
+.choice-days {
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
-.choice-dias-campo {
+.choice-days-field {
   grid-column: 3;
   grid-row: 1 / span 2;
   display: flex;
@@ -133,16 +133,16 @@
   gap: var(--space-2);
 }
 
-/* O DS esconde todo input da `.choice` (é o rádio); o dos dias aparece. */
-.choice .input-dias {
+/* The DS hides every `.choice` input (it is the radio); the days one shows. */
+.choice .input-days {
   position: static;
   opacity: 1;
   width: 88px;
   height: auto;
 }
 
-/* A seção do aviso só ocupa espaço quando há aviso. */
-#config-aviso-secao:has(#config-aviso[hidden]) {
+/* The notice section only takes space when there is a notice. */
+#config-notice-section:has(#config-notice[hidden]) {
   display: none;
 }
 
@@ -153,38 +153,38 @@
   color: color-mix(in srgb, var(--color-text) 70%, transparent);
 }
 
-/* O medidor do teste de nível usa o acento, como o frame "Settings · Audio". */
+/* The level test meter uses the accent, as in the "Settings · Audio" frame. */
 .meter-accent {
   color: var(--color-accent);
 }
 
-/* A combinação de um atalho global, na aba Áudio. */
-.kbd-atalho {
+/* A global shortcut's key combination, in the Audio tab. */
+.kbd-shortcut {
   padding: 6px 12px;
   font-family: var(--font-mono);
   font-size: 12px;
 }
 
-.kbd-atalho[data-capturando] {
+.kbd-shortcut[data-capturing] {
   border-color: var(--color-accent);
 }
 
-.list-row-sub[data-problema] {
+.list-row-sub[data-problem] {
   color: var(--color-warning);
 }
 
-/* O comando da CLI que o atalho do sistema chama (Wayland fora do GNOME), numa linha própria. */
-.atalho-comando {
+/* The CLI command the system shortcut calls (Wayland outside GNOME), on its own row. */
+.shortcut-command {
   grid-column: 1 / -1;
   user-select: all;
 }
 
-/* O menu de ajuda fica ancorado no ícone de ajuda, sobre a janela. */
+/* The help menu is anchored to the help icon, over the window. */
 .tray-window {
   position: relative;
 }
 
-.menu-ajuda {
+.help-menu {
   position: absolute;
   top: 52px;
   right: 44px;
@@ -192,41 +192,41 @@
   width: 280px;
 }
 
-.menu-item-dica {
+.menu-item-hint {
   flex-wrap: wrap;
 }
 
-.menu-item-dica small {
+.menu-item-hint small {
   width: 100%;
   font-size: 11px;
   opacity: 0.7;
 }
 
-#abrir-ajuda[aria-expanded="true"] {
+#open-help[aria-expanded="true"] {
   background: color-mix(in srgb, var(--color-accent) 18%, transparent);
 }
 
-.titulo-folha {
+.sheet-title {
   font-size: 20px;
 }
 
-/* O motivo de um envio que falhou, em texto visível sob a linha da fila (nunca só no `title`). */
-.queue .fila-erro {
+/* Why an upload failed, as visible text under the queue row (never only in `title`). */
+.queue .queue-error {
   grid-column: 1 / -1;
   color: var(--color-danger);
   font-size: 12px;
 }
 
-/* Por que a transcrição de uma gravação enviada espera no servidor (`Job.queue`). */
-.queue .fila-espera {
+/* Why an uploaded recording's transcription waits on the server (`Job.queue`). */
+.queue .queue-wait {
   grid-column: 1 / -1;
   color: var(--color-text-muted);
   font-size: 12px;
 }
 
-/* O painel "Recentes" do topo da principal: uma linha compacta por gravação (título, estado,
-   ação), com o progresso e o motivo do alerta numa segunda linha só quando há. */
-.recentes {
+/* The "Recentes" panel at the top of home: one compact row per recording (title, state,
+   action), with the progress and the alert reason on a second row only when present. */
+.recent-panel {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -234,13 +234,13 @@
   border-bottom: 1px solid var(--color-divider);
 }
 
-.recentes-lista {
+.recent-list {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.recentes-lista .recente {
+.recent-list .recent-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
@@ -250,35 +250,35 @@
   font-size: 13px;
 }
 
-.recentes-lista .recente:first-child {
+.recent-list .recent-item:first-child {
   border-top: 0;
 }
 
-.recente-titulo {
+.recent-title {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.recente-progresso {
+.recent-progress {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.recente-detalhe {
+.recent-detail {
   grid-column: 1 / -1;
   color: var(--color-text-muted);
   font-size: 12px;
 }
 
-/* O motivo de um alerta (ou o erro de uma ação) em texto, nunca só pela cor do selo. */
-.recente-alerta .recente-motivo,
-.recente-detalhe.recente-motivo {
+/* An alert's reason (or an action's error) as text, never only through the badge color. */
+.recent-alert .recent-reason,
+.recent-detail.recent-reason {
   color: var(--color-warning);
 }
 
-.recente-copiar svg {
+.recent-copy svg {
   margin-right: 4px;
 }

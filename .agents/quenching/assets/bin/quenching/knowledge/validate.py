@@ -114,7 +114,7 @@ def validate_tree(bundle_root: str, deadline: float | None = None,
     if not (root / "index.md").exists():
         findings.append(("WARN", "index.md", "bundle-no-index", "bundle root has no `index.md`"))
     # Does this directory claim to be a bundle at all? Structural and legacy checks below still
-    # run — they are what `/quenching-align:knowledge:align` reads to migrate a target — but the
+    # run — they are what `/quenching-knowledge align` reads to migrate a target — but the
     # per-file concept-doc verdicts are withheld, because they judge files against a contract
     # this tree never adopted.
     # `_build_corpus` keys by ABSOLUTE path; joining onto the caller's (possibly relative)
@@ -132,10 +132,10 @@ def validate_tree(bundle_root: str, deadline: float | None = None,
     # detecta por estrutura, sítio a sítio — nunca por versão)
     root_entries = {p.name for p in root.iterdir() if p.is_dir()}
     findings.extend(check_legacy_home(root_entries))
-    findings.extend(check_legacy_documentation_home(root_entries))
     doc_dir = root / "documentation"
-    if doc_dir.is_dir():
-        quadrant_entries = {p.name for p in doc_dir.iterdir() if p.is_dir()}
+    quadrant_entries = {p.name for p in doc_dir.iterdir() if p.is_dir()} if doc_dir.is_dir() else set()
+    findings.extend(check_legacy_documentation_home(root_entries, quadrant_entries))
+    if quadrant_entries:
         findings.extend(check_legacy_doc_quadrant(quadrant_entries))
     glossary_rels = sorted({
         os.path.relpath(p, bundle_root).replace(os.sep, "/")

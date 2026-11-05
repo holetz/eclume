@@ -1,14 +1,14 @@
-//! Os tipos do contrato v1 (`contracts/openapi-v1.yaml`) que o upload usa. Tolerantes como o
-//! contrato exige: propriedades desconhecidas são ignoradas e os estados ficam em texto, para um
-//! valor novo de enum não quebrar o cliente.
+//! The contract v1 types (`contracts/openapi-v1.yaml`) used by uploads. Tolerant as the contract
+//! requires: unknown properties are ignored and states remain text, so a new enum value does not
+//! break the client.
 
 use eclume_recorder::{Kind, RecordedAtSource, Source};
 use serde::{Deserialize, Serialize};
 
-/// Contexto da captura, preenchido pelo app que gravou (desktop ou celular).
+/// Capture context, filled by the recording app (desktop or phone).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Capture {
-    /// `teams`, `meet`, `zoom`, `other` ou nada (gravação manual).
+    /// `teams`, `meet`, `zoom`, `other` or nothing (manual recording).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meeting_app: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -16,7 +16,7 @@ pub struct Capture {
     pub client_version: String,
 }
 
-/// Um marcador feito durante a gravação; o `client_id` torna o reenvio idempotente.
+/// A marker made during recording; `client_id` makes resending idempotent.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct MarkerInput {
     pub client_id: String,
@@ -32,28 +32,29 @@ pub struct UploadCreate {
     pub content_type: String,
     pub size_bytes: u64,
     pub sha256: String,
-    /// Título escolhido ao parar; sem valor, o servidor deriva do nome do arquivo.
+    /// Title chosen when stopping; without a value, the server derives it from the filename.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recorded_at: Option<String>,
     pub recorded_at_source: RecordedAtSource,
     pub kind: Kind,
-    /// Tipo de agenda escolhido ao parar: dispensa a detecção no servidor.
+    /// Agenda type chosen when stopping: skips server detection.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agenda_type_id: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub markers: Vec<MarkerInput>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
-    /// Idioma da transcrição (`pt`, `es`, `en` ou `auto`); sem valor, vale o idioma da conta.
+    /// Transcript language (`pt`, `es`, `en` or `auto`); without a value, the account language
+    /// applies.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
     pub source: Source,
     pub capture: Capture,
 }
 
-/// URL de uma parte, com os headers que o `PUT` deve levar.
+/// A part URL, with the headers the `PUT` must carry.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct PartUrl {
     pub part_number: u32,
@@ -62,14 +63,14 @@ pub struct PartUrl {
     pub headers: std::collections::BTreeMap<String, String>,
 }
 
-/// Parte que o armazenamento já confirmou.
+/// A part already confirmed by storage.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct ReceivedPart {
     pub part_number: u32,
     pub etag: String,
 }
 
-/// O upload, na criação e na retomada.
+/// The upload, at creation and on resume.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Upload {
     pub id: String,
@@ -99,7 +100,7 @@ pub struct PartUrls {
     pub parts: Vec<PartUrl>,
 }
 
-/// Uma parte no `complete`.
+/// A part in `complete`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct CompletedPart {
     pub part_number: u32,
@@ -112,13 +113,13 @@ pub struct UploadComplete {
     pub parts: Vec<CompletedPart>,
 }
 
-/// O que o desktop lê da gravação criada.
+/// What the desktop reads from the created recording.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Recording {
     pub id: String,
 }
 
-/// Erro em `application/problem+json` (RFC 9457) com o `code` estável do contrato.
+/// An `application/problem+json` error (RFC 9457) with the contract's stable `code`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 pub struct Problem {
     pub title: Option<String>,
@@ -126,14 +127,14 @@ pub struct Problem {
     pub code: Option<String>,
 }
 
-/// `GET /api/v1/server`: o descritor público (holetz/eclume#35).
+/// `GET /api/v1/server`: the public descriptor (holetz/eclume#35).
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct ServerInfo {
     pub name: String,
     pub url: String,
-    /// SHA-256 (hex minúsculo) do DER da CA raiz; `None` enquanto a raiz não foi publicada.
+    /// SHA-256 (lowercase hex) of the root CA DER; `None` until the root is published.
     pub ca_sha256: Option<String>,
-    /// A próxima raiz durante a rotação (contrato 2.21.0); `None` fora dela.
+    /// The next root during rotation (contract 2.21.0); `None` otherwise.
     #[serde(default)]
     pub ca_next_sha256: Option<String>,
     #[serde(default)]
@@ -159,14 +160,14 @@ pub struct DevicePair<'a> {
     pub platform: &'a str,
 }
 
-/// O token emitido, sem o segredo.
+/// The issued token, without the secret.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct TokenInfo {
     pub id: String,
     pub name: String,
 }
 
-/// A credencial de dispositivo: o segredo (só nesta resposta) e o servidor que a emitiu.
+/// The device credential: the secret (only in this response) and the server that issued it.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct DeviceCredential {
     pub token: TokenInfo,
@@ -174,7 +175,7 @@ pub struct DeviceCredential {
     pub server: ServerInfo,
 }
 
-/// O que o desktop lê de `GET /api/v1/me`.
+/// What the desktop reads from `GET /api/v1/me`.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Me {
     pub user: MeUser,
@@ -194,17 +195,17 @@ pub struct MeAuth {
     pub token_id: Option<String>,
 }
 
-/// Uma Collection de `GET /api/v1/collections` (plana: sem hierarquia).
-/// O idioma de transcrição da conta: `GET /api/v1/me/transcription` (contrato 2.20.0).
+/// A collection from `GET /api/v1/collections` (flat: no hierarchy). The account's transcript
+/// language: `GET /api/v1/me/transcription` (contract 2.20.0).
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct TranscriptionPreference {
-    /// O escolhido pela conta (`pt`, `auto`…); `None` é o padrão do servidor.
+    /// The account's choice (`pt`, `auto`…); `None` means the server default.
     pub language: Option<String>,
     pub platform_default: String,
 }
 
 impl TranscriptionPreference {
-    /// O idioma que vale para a conta: o escolhido, senão o do servidor.
+    /// The language that applies to the account: its choice, otherwise the server's.
     pub fn effective(&self) -> &str {
         self.language.as_deref().unwrap_or(&self.platform_default)
     }
@@ -216,7 +217,7 @@ pub struct CollectionInfo {
     pub name: String,
 }
 
-/// Uma página de `GET /api/v1/collections`.
+/// A page of `GET /api/v1/collections`.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct CollectionPage {
     #[serde(default)]
@@ -225,54 +226,54 @@ pub struct CollectionPage {
     pub next_cursor: Option<String>,
 }
 
-/// O tipo de agenda de uma gravação: só o nome importa para o espelho local.
+/// A recording's agenda type: only the name matters for the local mirror.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct AgendaRef {
     #[serde(default)]
     pub name: String,
 }
 
-/// Uma etapa do pipeline de uma gravação.
+/// A recording's pipeline step.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct PipelineStepInfo {
     pub step: String,
     pub state: String,
     #[serde(default)]
     pub finished_at: Option<String>,
-    /// Por que a etapa foi pulada (`no_provider`, `cancelled`, `summary_deleted`…).
+    /// Why the step was skipped (`no_provider`, `cancelled`, `summary_deleted`…).
     #[serde(default)]
     pub reason: Option<String>,
 }
 
-/// O job de transcrição de uma gravação: o estado e o fim decidem o desfecho; a etapa, o
-/// progresso e o erro alimentam o painel de gravações recentes da janela.
+/// A recording's transcription job: state and end determine the outcome; step, progress and error
+/// feed the window's recent recordings panel.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 pub struct JobInfo {
     pub state: String,
     #[serde(default)]
     pub finished_at: Option<String>,
-    /// A etapa em curso (`preprocessing`, `asr`…), `None` fora de execução.
+    /// The current step (`preprocessing`, `asr`…), `None` when not running.
     #[serde(default)]
     pub stage: Option<String>,
-    /// O progresso do job em milésimos (0–1000): o contrato manda um número de 0 a 1, e o
-    /// inteiro mantém o `Eq` dos tipos da listagem.
+    /// Job progress in thousandths (0–1000): the contract sends a number from 0 to 1, and the
+    /// integer preserves `Eq` for the listing types.
     #[serde(default, deserialize_with = "permille")]
     pub progress: Option<u16>,
     #[serde(default)]
     pub error: Option<JobError>,
 }
 
-/// O erro de um job que falhou.
+/// The error of a failed job.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 pub struct JobError {
     #[serde(default)]
     pub code: String,
-    /// A falha é passageira (o servidor tenta de novo); ausente em servidores anteriores à 1.4.0.
+    /// The failure is transient (the server retries); absent on servers before 1.4.0.
     #[serde(default)]
     pub retryable: bool,
 }
 
-/// `progress` de 0 a 1 em milésimos, limitado à faixa; `null` ou ausente é `None`.
+/// `progress` from 0 to 1 in thousandths, clamped to the range; `null` or absent means `None`.
 fn permille<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<u16>, D::Error> {
     let value: Option<f64> = Option::deserialize(deserializer)?;
     Ok(value
@@ -280,7 +281,7 @@ fn permille<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<
         .map(|v| (v.clamp(0.0, 1.0) * 1000.0).round() as u16))
 }
 
-/// O que o espelho local lê de uma gravação da biblioteca (`GET /api/v1/recordings`).
+/// What the local mirror reads from a library recording (`GET /api/v1/recordings`).
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct LibraryRecording {
     pub id: String,
@@ -307,8 +308,9 @@ pub struct LibraryRecording {
 }
 
 impl LibraryRecording {
-    /// Se a gravação mudou em `since` ou depois (`updated_at >= since`, como o servidor compara).
-    /// Sem `updated_at` legível, conta como mudada: reler é barato, perder uma mudança não é.
+    /// Whether the recording changed at or after `since` (`updated_at >= since`, as the server
+    /// compares). Without a readable `updated_at`, counts as changed: rereading is cheap, missing a
+    /// change is not.
     pub fn updated_since(&self, since: &str) -> bool {
         match (
             self.updated_at.as_deref().and_then(instant_ms),
@@ -319,18 +321,18 @@ impl LibraryRecording {
         }
     }
 
-    /// Estado da etapa `summary` do pipeline, quando a gravação a tem.
+    /// State of the pipeline's `summary` step, when the recording has one.
     pub fn summary_state(&self) -> Option<&str> {
         self.summary_step().map(|step| step.state.as_str())
     }
 
-    /// A etapa `summary` do pipeline, quando a gravação a tem.
+    /// The pipeline's `summary` step, when the recording has one.
     pub fn summary_step(&self) -> Option<&PipelineStepInfo> {
         self.pipeline.iter().find(|step| step.step == "summary")
     }
 }
 
-/// Uma página de `GET /api/v1/recordings`.
+/// A page of `GET /api/v1/recordings`.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct LibraryPage {
     #[serde(default)]
@@ -339,7 +341,7 @@ pub struct LibraryPage {
     pub next_cursor: Option<String>,
 }
 
-/// Um locutor da transcrição.
+/// A transcript speaker.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct TranscriptSpeaker {
     pub id: String,
@@ -347,7 +349,7 @@ pub struct TranscriptSpeaker {
     pub label: String,
 }
 
-/// Um segmento da transcrição (as palavras ficam de fora: só vêm com `?include=words`).
+/// A transcript segment (words are omitted: only included with `?include=words`).
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct TranscriptSegment {
     #[serde(default)]
@@ -360,7 +362,7 @@ pub struct TranscriptSegment {
     pub text: String,
 }
 
-/// A transcrição de `GET /api/v1/transcripts`.
+/// The transcript from `GET /api/v1/transcripts`.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Transcript {
     pub id: String,
@@ -381,7 +383,7 @@ pub struct Transcript {
     pub segments: Vec<TranscriptSegment>,
 }
 
-/// Um marcador de `GET /api/v1/recordings/{id}/markers`: o instante e a nota opcional.
+/// A marker from `GET /api/v1/recordings/{id}/markers`: the time and optional note.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Marker {
     pub at_ms: u64,
@@ -389,14 +391,14 @@ pub struct Marker {
     pub note: Option<String>,
 }
 
-/// A página (única) de `GET /api/v1/recordings/{id}/markers`.
+/// The (single) page of `GET /api/v1/recordings/{id}/markers`.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct MarkerPage {
     #[serde(default)]
     pub items: Vec<Marker>,
 }
 
-/// Uma página de `GET /api/v1/transcripts`.
+/// A page of `GET /api/v1/transcripts`.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct TranscriptPage {
     #[serde(default)]
@@ -405,10 +407,10 @@ pub struct TranscriptPage {
     pub next_cursor: Option<String>,
 }
 
-/// O cursor do próximo `?since=`: o maior `updated_at` da listagem menos `margin_secs`. A margem
-/// cobre a transação que confirmou depois de outra com `updated_at` maior (o `now()` do servidor é
-/// o início da transação): reler o que já estava certo é barato, perder uma mudança não é.
-/// Compara datas de verdade, porque o servidor omite os microssegundos quando zero.
+/// The next `?since=` cursor: the listing's highest `updated_at` minus `margin_secs`. The margin
+/// covers a transaction committing after another with a higher `updated_at` (the server's `now()`
+/// is the transaction start): rereading correct data is cheap, missing a change is not. Compares
+/// actual dates, because the server omits microseconds when zero.
 pub fn cursor_from(items: &[LibraryRecording], margin_secs: i64) -> Option<String> {
     items
         .iter()
@@ -422,27 +424,27 @@ pub fn cursor_from(items: &[LibraryRecording], margin_secs: i64) -> Option<Strin
         })
 }
 
-/// Um instante RFC 3339 em milissegundos desde a época Unix; `None` se o texto não é uma data.
-/// Compara datas de verdade: como texto, "…:05Z" vem depois de "…:05.5Z".
+/// An RFC 3339 timestamp in milliseconds since the Unix epoch; `None` if the text is not a date.
+/// Compares actual dates: as text, "…:05Z" comes after "…:05.5Z".
 pub fn instant_ms(text: &str) -> Option<i64> {
     chrono::DateTime::parse_from_rfc3339(text)
         .ok()
         .map(|at| at.timestamp_millis())
 }
 
-/// Se uma leitura feita com `?since=cached` já traz tudo o que uma com `?since=wanted` traria
-/// (`cached <= wanted`). Texto que não é data nunca cobre.
+/// Whether a read with `?since=cached` already includes everything one with `?since=wanted` would
+/// (`cached <= wanted`). Text that is not a date never covers it.
 pub fn since_covers(cached: &str, wanted: &str) -> bool {
     matches!((instant_ms(cached), instant_ms(wanted)), (Some(cached), Some(wanted)) if cached <= wanted)
 }
 
-/// Um instante em milissegundos desde a época Unix como RFC 3339 (UTC), para um `?since=`.
+/// A timestamp in milliseconds since the Unix epoch as RFC 3339 (UTC), for a `?since=`.
 pub fn rfc3339_from_ms(ms: i64) -> Option<String> {
     chrono::DateTime::from_timestamp_millis(ms)
         .map(|at| at.format("%Y-%m-%dT%H:%M:%SZ").to_string())
 }
 
-/// O início de uma gravação (`recorded_at`, RFC 3339) no fuso `zone`, como `AAAA-MM-DDTHH:MM:SS`.
+/// A recording's start (`recorded_at`, RFC 3339) in `zone`, as `AAAA-MM-DDTHH:MM:SS`.
 pub fn start_in<Tz>(recorded_at: &str, zone: &Tz) -> Option<String>
 where
     Tz: chrono::TimeZone,
@@ -457,14 +459,14 @@ where
         })
 }
 
-/// O mesmo que [`start_in`] num deslocamento fixo em segundos a leste de UTC (Brasília: `-10800`).
+/// Like [`start_in`] with a fixed offset in seconds east of UTC (Brasilia: `-10800`).
 pub fn start_at_offset(recorded_at: &str, east_seconds: i32) -> Option<String> {
     let zone = chrono::FixedOffset::east_opt(east_seconds)?;
     start_in(recorded_at, &zone)
 }
 
-/// O início de uma gravação no fuso deste computador: dá o mês da pasta e o nome do arquivo na
-/// pasta sincronizada, para baterem com a hora que a pessoa vê.
+/// A recording's start in this computer's time zone: provides the folder month and filename in the
+/// synced folder, matching the time the user sees.
 pub fn local_start(recorded_at: &str) -> Option<String> {
     start_in(recorded_at, &chrono::Local)
 }
@@ -490,46 +492,46 @@ mod tests {
     }
 
     #[test]
-    fn o_job_da_listagem_le_etapa_progresso_e_erro_e_aceita_servidor_antigo() {
-        let completo: JobInfo = serde_json::from_value(serde_json::json!({
+    fn listing_job_reads_step_progress_and_error_and_accepts_old_server() {
+        let complete: JobInfo = serde_json::from_value(serde_json::json!({
             "state": "running", "finished_at": null, "stage": "asr", "progress": 0.426,
             "error": null, "attempts": 1
         }))
         .unwrap();
-        assert_eq!(completo.stage.as_deref(), Some("asr"));
-        assert_eq!(completo.progress, Some(426));
-        assert_eq!(completo.error, None);
+        assert_eq!(complete.stage.as_deref(), Some("asr"));
+        assert_eq!(complete.progress, Some(426));
+        assert_eq!(complete.error, None);
 
-        let falhou: JobInfo = serde_json::from_value(serde_json::json!({
+        let failed: JobInfo = serde_json::from_value(serde_json::json!({
             "state": "failed", "progress": 7,
             "error": {"code": "gpu_oom", "message": "sem VRAM", "retryable": true}
         }))
         .unwrap();
-        assert_eq!(falhou.progress, Some(1000));
+        assert_eq!(failed.progress, Some(1000));
         assert_eq!(
-            falhou.error,
+            failed.error,
             Some(JobError {
                 code: "gpu_oom".into(),
                 retryable: true
             })
         );
 
-        let antigo: JobInfo =
+        let legacy: JobInfo =
             serde_json::from_value(serde_json::json!({"state": "queued"})).unwrap();
         assert_eq!(
-            (antigo.stage, antigo.progress, antigo.error),
+            (legacy.stage, legacy.progress, legacy.error),
             (None, None, None)
         );
     }
 
     #[test]
-    fn o_inicio_local_vira_a_hora_do_fuso_e_muda_de_mes_junto() {
+    fn local_start_uses_time_zone_and_changes_month_with_it() {
         let brasilia = chrono::FixedOffset::west_opt(3 * 3600).unwrap();
         assert_eq!(
             start_in("2026-09-18T14:00:05Z", &brasilia).as_deref(),
             Some("2026-09-18T11:00:05")
         );
-        // 02:30 UTC de 1º de outubro ainda é 30 de setembro à noite em Brasília.
+        // 02:30 UTC on October 1 is still the evening of September 30 in Brasilia.
         assert_eq!(
             start_in("2026-10-01T02:30:00Z", &brasilia).as_deref(),
             Some("2026-09-30T23:30:00")
@@ -539,15 +541,15 @@ mod tests {
             Some("2026-09-18T14:00:05")
         );
         assert_eq!(start_in("lixo", &brasilia), None);
-        // O fuso do computador só muda a hora, nunca a forma.
+        // The computer's time zone changes only the time, never the format.
         let local = local_start("2026-09-18T14:00:05Z").unwrap();
         assert_eq!(local.len(), 19);
         assert_eq!(&local[10..11], "T");
     }
 
     #[test]
-    fn o_cursor_e_o_maior_updated_at_menos_a_margem_comparando_datas() {
-        // Como texto, "…:05Z" > "…:05.5Z" (o `Z` vem depois do `.`); como data, o segundo é maior.
+    fn cursor_is_latest_updated_at_minus_margin_comparing_dates() {
+        // As text, "…:05Z" > "…:05.5Z" (`Z` comes after `.`); as dates, the second is later.
         let items = [
             at(Some("2026-09-19T10:00:05Z")),
             at(None),
@@ -562,7 +564,7 @@ mod tests {
             cursor_from(&items, 120).as_deref(),
             Some("2026-09-19T09:58:05Z")
         );
-        // A margem atravessa a virada de dia.
+        // The margin crosses the day boundary.
         assert_eq!(
             cursor_from(&[at(Some("2026-09-19T00:01:00-03:00"))], 120).as_deref(),
             Some("2026-09-19T02:59:00Z")
@@ -572,13 +574,13 @@ mod tests {
     }
 
     #[test]
-    fn since_cobre_comparando_datas_e_updated_since_filtra_pelo_instante() {
+    fn since_covers_by_comparing_dates_and_updated_since_filters_by_time() {
         assert!(since_covers(
             "2026-09-19T10:00:00Z",
             "2026-09-19T10:00:00.500000Z"
         ));
         assert!(since_covers("2026-09-19T10:00:00Z", "2026-09-19T10:00:00Z"));
-        // Como texto, "…:05Z" > "…:05.5Z"; como data, a segunda é maior.
+        // As text, "…:05Z" > "…:05.5Z"; as dates, the second is later.
         assert!(since_covers(
             "2026-09-19T10:00:05Z",
             "2026-09-19T10:00:05.500000Z"
@@ -593,7 +595,7 @@ mod tests {
         let mut item = at(Some("2026-09-19T10:00:05.500000Z"));
         assert!(item.updated_since("2026-09-19T10:00:05Z"));
         assert!(!item.updated_since("2026-09-19T10:00:06Z"));
-        // Sem `updated_at` legível, conta como mudada.
+        // Without a readable `updated_at`, counts as changed.
         item.updated_at = None;
         assert!(item.updated_since("2026-09-19T10:00:06Z"));
     }

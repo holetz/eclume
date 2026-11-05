@@ -16,8 +16,8 @@ maintainer: <owner>
 A hook charges **other people's operations**: it fires on events the command that installed
 it does not own, so a session-wide hook taxes every iteration in the repo — including every
 one it never helps. This repo therefore installs every hook at the **narrowest scope that
-still catches what it exists to catch**, minted by `/quenching-components-hook-new` under one plan → one
-OK, inventoried (report-only) by `/quenching-components-align`.
+still catches what it exists to catch**, minted by `/quenching-components hook-new` under one plan → one
+OK, inventoried (report-only) by `/quenching-components align`.
 
 ## The scope ladder — narrowest first
 
@@ -56,8 +56,8 @@ deterministic 95% may share a matcher with a `prompt` rung for the judgment tail
   cost on no-match.
 
 <!-- MOLD (quenching · hooks standard) → becomes `/docs/standards/automation/hooks.md` in a
-     target repo's OKF bundle, offered by /quenching-components-hook-new on first run (never created without
+     target repo's OKF bundle, offered by /quenching-components hook-new on first run (never created without
      an OK). Fill the placeholders, keep the body, add repo-specific deltas below it. Born
      `authority: background`. STAMP = MERGE, never clobber. The full doctrine lives in the
-     plugin (`.agents/quenching/assets/references/components-command-new/capabilities.md` §Hooks);
+     plugin (`.agents/quenching/references/components-command-new/capabilities.md` §Hooks);
      this standard is the target-repo projection of it. -->

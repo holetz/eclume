@@ -3,8 +3,8 @@
 Frontmatter + body molds the commands stamp/apply. They live **outside** the `/docs/` bundle
 (so they are not themselves validated), and each produces an OKF-conformant concept doc when
 filled — except the `harness/` and `automation/command|agent|hook` molds, which produce files
-that are not OKF concepts at all. `/quenching-knowledge-add` picks the mold by home → `type` (see
-`.agents/quenching/assets/references/knowledge-add/homes.md`).
+that are not OKF concepts at all. `/quenching-knowledge add` picks the mold by home → `type` (see
+`.agents/quenching/references/knowledge-add/homes.md`).
 
 A mold is **applied per insert, never copied wholesale**: its content reaches the target repo,
 the file itself does not.
@@ -31,13 +31,13 @@ the file itself does not.
 
 The **harness molds** (`harness/`) produce **exempt** files — `AGENTS.md` carries **no
 frontmatter and no `type`** (harness pointers, not OKF concepts — okf-spec strict-7; the validator
-skips them). `/quenching-components-harness-align` applies them when it refactors a repo's harness files into thin
+skips them). `/quenching-components harness-align` applies them when it refactors a repo's harness files into thin
 pointers over the bundle.
 
 The **automation molds** (`automation/`) are the `/quenching-components-*` family's —
-`/quenching-components-command-new`, `/quenching-components-agent-new`,
-`/quenching-components-hook-new` mint from the three artifact molds, and
-`/quenching-components-align` maintains the registry and the three `*-standard.md` rules in the
+`/quenching-components command-new`, `/quenching-components agent-new`,
+`/quenching-components hook-new` mint from the three artifact molds, and
+`/quenching-components align` maintains the registry and the three `*-standard.md` rules in the
 target's bundle. There is
 ONE command mold, not a skill-plus-wrapper pair: the host merged commands into skills, so a
 single `.agents/skills/<path>.md` carries both the description that routes to it and the body
@@ -45,7 +45,7 @@ that runs. It lands under `.claude/` (outside the bundle — never validated), w
 and taxonomy-standard molds are OKF concept docs the pair maintains in the bundle; the
 registry's `<!-- GENERATED:BEGIN/END -->` zone is derived from `.agents/skills/**/*.md` and
 only those two commands write inside its markers (taxonomy owner:
-`.agents/quenching/assets/references/components-command-new/taxonomy.md`).
+`.agents/quenching/references/components-command-new/taxonomy.md`).
 
 ## Stamp discipline
 

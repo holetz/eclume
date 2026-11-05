@@ -1,12 +1,12 @@
-//! A pasta sincronizada: o laço que espelha a biblioteca do usuário (resumos em Markdown e
-//! transcrições em JSONL, uma subpasta por Collection) numa pasta local. Roda em thread própria,
-//! para uma biblioteca grande não atrasar o upload das gravações.
+//! The synced folder: a loop that mirrors the user’s library (Markdown summaries and JSONL
+//! transcripts, one subfolder per collection) into a local folder. Runs in its own thread
+//! so a large library does not delay recording uploads.
 //!
-//! Cada ciclo lê só o que mudou desde o último (`?since=` do manifesto, repartido com o aviso de
-//! desfechos e as recentes, ver [`crate::sync::library_since`]) e relê as pendentes por id; a cada
-//! 6 h, e em "Sincronizar agora", uma varredura confere a biblioteca inteira e apaga o que saiu do
-//! servidor.
-//! O contrato está em docs/standards/code/desktop-pasta-sincronizada.md.
+//! Each cycle reads only changes since the last one (manifest `?since=`, shared with outcome
+//! notifications and recent recordings, see [`crate::sync::library_since`]) and rereads pending
+//! recordings by id. Every 6 h, and on Sync now, a sweep checks the entire library and removes
+//! recordings deleted from the server.
+//! The contract is in docs/standards/code/desktop-pasta-sincronizada.md.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -26,25 +26,25 @@ use tauri::{AppHandle, Manager};
 
 use crate::state::AppState;
 
-/// Intervalo entre ciclos.
+/// Interval between cycles.
 const INTERVAL: Duration = Duration::from_secs(60);
-/// A varredura que confere a biblioteca inteira e apaga o que saiu do servidor.
+/// The sweep checks the entire library and removes recordings deleted from the server.
 const SWEEP_EVERY_MS: i64 = 6 * 60 * 60 * 1000;
 
 static LAST_SWEEP: AtomicI64 = AtomicI64::new(0);
 
-/// O que o espelho lê do servidor. O `Client` real de um lado, um falso nos testes.
+/// What the mirror reads from the server. The real `Client` in production, a fake in tests.
 pub trait Source {
     fn collections(&self) -> Result<Vec<CollectionInfo>>;
     fn library(&self, since: Option<&str>) -> Result<Vec<LibraryRecording>>;
-    /// Uma gravação por id (`None`: apagada), para reler uma pendente sem listar a biblioteca.
+    /// One recording by id (`None`: deleted), to reread a pending item without listing the library.
     fn recording(&self, recording_id: &str) -> Result<Option<LibraryRecording>>;
     fn current_summary(&self, recording_id: &str) -> Result<Option<LibrarySummary>>;
     fn transcript(&self, recording_id: &str) -> Result<Option<api::Transcript>>;
-    /// Os marcadores da gravação, para a seção de notas do `.md`.
+    /// Recording markers, for the `.md` notes section.
     fn markers(&self, recording_id: &str) -> Result<Vec<api::Marker>>;
-    /// O início da gravação em hora local (`AAAA-MM-DDTHH:MM:SS`), que dá mês e nome ao arquivo.
-    /// O padrão usa o fuso deste computador; os testes fixam um.
+    /// Recording start in local time (`YYYY-MM-DDTHH:MM:SS`), used for the file’s month and name.
+    /// Defaults to this computer’s time zone; tests use a fixed one.
     fn local_start(&self, recorded_at: &str) -> Option<String> {
         api::local_start(recorded_at)
     }
@@ -71,8 +71,8 @@ impl Source for Client {
     }
 }
 
-/// O `Client` com a leitura `?since=` repartida com o aviso de desfechos e as recentes: a leitura
-/// incremental passa por [`crate::sync::library_since`]; a biblioteca inteira e o resto vão direto.
+/// The `Client` with `?since=` reads shared with outcome notifications and recent recordings:
+/// incremental reads use [`crate::sync::library_since`]; full library and other reads go direct.
 struct SharedSource<'a> {
     config: &'a UploaderConfig,
     client: &'a Client,
@@ -102,22 +102,22 @@ impl Source for SharedSource<'_> {
     }
 }
 
-/// O resultado de um ciclo.
+/// The result of a cycle.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Report {
-    /// Gravações lidas neste ciclo (as que mudaram, ou todas na primeira passada).
+    /// Recordings read in this cycle (changed ones, or all on the first pass).
     pub recordings: usize,
     pub written: usize,
     pub unchanged: usize,
     pub removed: usize,
-    /// Gravações que falharam ao ler: o cursor não avança e o próximo ciclo as tenta de novo.
+    /// Recordings that failed to read: the cursor does not advance and the next cycle retries them.
     pub failed: usize,
-    /// O servidor recusou a leitura de transcrições (403 `insufficient_scope`): os resumos foram
-    /// sincronizados e as transcrições esperam o servidor liberar o escopo.
+    /// The server refused transcript reads (403 `insufficient_scope`): summaries were synced
+    /// and transcripts wait for the server to allow the scope.
     pub transcripts_denied: bool,
 }
 
-/// Monta o que o espelho escreve a partir do que o servidor devolveu.
+/// Build what the mirror writes from the server response.
 pub fn to_item(
     recording: &LibraryRecording,
     local_start: Option<String>,
@@ -195,12 +195,12 @@ pub fn to_item(
     }
 }
 
-/// Margem do cursor `since`, em segundos: cobre a transação que confirma depois de outra com
-/// `updated_at` maior (o `now()` do servidor é o início da transação).
+/// `since` cursor margin, in seconds: covers a transaction committed after another with a
+/// greater `updated_at` (server `now()` is the transaction start).
 const CURSOR_MARGIN_SECS: i64 = 120;
 
-/// Os nomes de Collection por id, com uma grafia só por nome: "Clientes" e "clientes" viram a
-/// mesma pasta em Windows e macOS, então todas usam a primeira (em ordem de nome e id).
+/// Collection names by id, with one spelling per name: "Clientes" and "clientes" become the
+/// same folder on Windows and macOS, so all use the first spelling (sorted by name and id).
 fn collection_names(mut collections: Vec<CollectionInfo>) -> HashMap<String, String> {
     collections.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
     let mut canonical: HashMap<String, String> = HashMap::new();
@@ -215,9 +215,9 @@ fn collection_names(mut collections: Vec<CollectionInfo>) -> HashMap<String, Str
     names
 }
 
-/// Um ciclo: lê o que mudou (ou tudo, na primeira passada), escreve, e numa varredura apaga o que
-/// saiu do servidor. O manifesto é sempre gravado no fim, mesmo depois de um erro: os arquivos
-/// já escritos não podem ficar sem registro.
+/// One cycle: read changes (or everything on the first pass), write, and during a sweep remove
+/// recordings deleted from the server. Always save the manifest at the end, even after an error:
+/// files already written must not be left untracked.
 pub fn sync_library(
     source: &dyn Source,
     mirror: &mut Mirror,
@@ -225,8 +225,8 @@ pub fn sync_library(
     sweep: bool,
 ) -> Result<Report> {
     let names = collection_names(source.collections()?);
-    // Arquivos de outro desenho de pasta e nome, ou escritos com a opção de transcrições de
-    // antes: relê tudo, e o manifesto move e apaga o que ficou para trás.
+    // Files from an older folder and naming layout, or written with the previous transcript
+    // setting: reread everything, and let the manifest move and delete leftovers.
     let since = if mirror.needs_rebuild(transcripts) {
         None
     } else {
@@ -236,9 +236,9 @@ pub fn sync_library(
     let cursor = api::cursor_from(&changed, CURSOR_MARGIN_SECS);
     let mut pending = mirror.pending().clone();
 
-    // Primeira passada: a listagem já é a biblioteca inteira. Depois, a varredura pede a inteira,
-    // para achar o que saiu do servidor, o que o manifesto ainda não tem e as pendentes; fora dela,
-    // só as pendentes são relidas, por id.
+    // First pass: the listing already contains the entire library. Later sweeps request it all
+    // to find deletions, recordings missing from the manifest and pending items; outside sweeps,
+    // only pending items are reread, by id.
     let mut todo = changed;
     let mut present: Option<Vec<String>> = None;
     if since.is_none() {
@@ -247,8 +247,8 @@ pub fn sync_library(
         let all = source.library(None)?;
         present = Some(all.iter().map(|r| r.id.clone()).collect());
         for recording in all {
-            // O que o manifesto não tem, as transcrições que ficaram faltando (um servidor sem o
-            // escopo, antes) e as pendentes.
+            // Recordings missing from the manifest, missing transcripts (server previously lacked
+            // the scope) and pending items.
             let missing = pending.contains(&recording.id)
                 || match mirror.entry(&recording.id) {
                     None => true,
@@ -263,30 +263,30 @@ pub fn sync_library(
             }
         }
     } else {
-        // Sem varredura, as pendentes voltam por id: a biblioteca inteira só a cada 6 h.
+        // Without a sweep, pending items return by id: the full library is read only every 6 h.
         for id in pending.clone() {
             if todo.iter().any(|r| r.id == id) {
                 continue;
             }
             match source.recording(&id) {
                 Ok(Some(recording)) => todo.push(recording),
-                // Apagada no servidor: não há mais o que repetir; a varredura limpa o arquivo.
+                // Deleted on the server: nothing left to retry; the sweep removes the file.
                 Ok(None) => {
                     pending.remove(&id);
                 }
-                // Servidor fora: continua pendente e o próximo ciclo tenta de novo.
-                Err(err) => log::info!("pasta sincronizada: pendente {id}: {err:#}"),
+                // Server unavailable: remains pending and the next cycle retries.
+                Err(err) => log::info!("synced folder: pending {id}: {err:#}"),
             }
         }
     }
 
     let mut report = Report::default();
-    // Sem o escopo, a primeira recusa vale para o ciclo todo: as demais gravações nem pedem.
+    // Without the scope, the first refusal applies to the whole cycle: skip further requests.
     let mut transcripts_on = transcripts;
     for recording in &todo {
         report.recordings += 1;
-        // Uma gravação que já tinha `.jsonl` e agora é recusada fica como está: degradar é não
-        // atualizar, não apagar.
+        // A recording that already had `.jsonl` and is now refused stays as it is: degrade by
+        // skipping updates, without deleting.
         let had_transcript = mirror
             .entry(&recording.id)
             .is_some_and(|entry| entry.transcript_revision.is_some());
@@ -296,7 +296,7 @@ pub fn sync_library(
             } else {
                 None
             };
-            // Só há `.md` com resumo; sem ele, ler os marcadores seria uma chamada à toa.
+            // Only summaries have `.md`; without one, reading markers would be a wasted call.
             let markers = if summary.is_some() {
                 source.markers(&recording.id)?
             } else {
@@ -306,7 +306,7 @@ pub fn sync_library(
                 match source.transcript(&recording.id) {
                     Ok(transcript) => transcript,
                     Err(err) if err.downcast_ref::<MissingScope>().is_some() => {
-                        log::warn!("pasta sincronizada: sem o escopo das transcrições: {err:#}");
+                        log::warn!("synced folder: missing transcript scope: {err:#}");
                         *transcripts_on = false;
                         *denied = true;
                         None
@@ -345,7 +345,7 @@ pub fn sync_library(
                 report.removed += applied.removed;
             }
             Err(err) => {
-                log::warn!("pasta sincronizada: gravação {}: {err:#}", recording.id);
+                log::warn!("synced folder: recording {}: {err:#}", recording.id);
                 pending.insert(recording.id.clone());
                 report.failed += 1;
             }
@@ -359,21 +359,21 @@ pub fn sync_library(
             Err(err) => fatal = Some(err),
         }
     }
-    // O cursor avança mesmo com falhas: as gravações que falharam ficam em `pending` e são elas
-    // que o ciclo seguinte repete, não a biblioteca inteira.
+    // The cursor advances even with failures: failed recordings remain in `pending` and only
+    // those are retried next cycle, rather than the entire library.
     if let Some(cursor) = cursor {
         mirror.set_since(Some(cursor));
     } else if since.is_none() {
-        // Biblioteca vazia: o próximo ciclo já é incremental.
+        // Empty library: the next cycle is already incremental.
         mirror.set_since(Some("1970-01-01T00:00:00Z".to_string()));
     }
     mirror.set_pending(pending);
     mirror.mark_layout_current();
     mirror.set_transcripts(transcripts);
     if let Err(err) = mirror.write_agents(transcripts) {
-        // Uma pasta com o nome do arquivo, ou um arquivo travado: o `AGENTS.md` não é motivo
-        // para perder o registro do que já foi escrito.
-        log::warn!("pasta sincronizada: AGENTS.md: {err:#}");
+        // A folder with the file’s name, or a locked file: `AGENTS.md` must not cause the loss
+        // of records for files already written.
+        log::warn!("synced folder: AGENTS.md: {err:#}");
     }
     mirror.save()?;
     match fatal {
@@ -382,7 +382,7 @@ pub fn sync_library(
     }
 }
 
-/// O que a aba mostra além do "sincronizada": nada quando tudo passou, ou o que ficou de fora.
+/// What the tab shows besides Synced: nothing if all succeeded, or what was left out.
 pub fn status_note(report: &Report) -> Option<String> {
     let mut notes = Vec::new();
     if report.transcripts_denied {
@@ -401,10 +401,10 @@ pub fn status_note(report: &Report) -> Option<String> {
     (!notes.is_empty()).then(|| notes.join(" · "))
 }
 
-/// O canal para cutucar o laço; a mensagem diz se é para varrer a biblioteca inteira.
+/// The channel for nudging the loop; the message says whether to sweep the entire library.
 pub struct MirrorHandle(Mutex<Sender<bool>>);
 
-/// Sobe a thread da pasta sincronizada e registra o canal no app.
+/// Start the synced folder thread and register the channel in the app.
 pub fn spawn(app: &AppHandle) {
     let (tx, rx) = mpsc::channel::<bool>();
     app.manage(MirrorHandle(Mutex::new(tx)));
@@ -418,22 +418,22 @@ pub fn spawn(app: &AppHandle) {
                 Err(RecvTimeoutError::Timeout) => false,
                 Err(RecvTimeoutError::Disconnected) => break,
             };
-            // Vários cutucões seguidos valem um ciclo só.
+            // Several consecutive nudges count as a single cycle.
             let forced = forced | rx.try_iter().any(|sweep| sweep);
             let due = now_ms() - LAST_SWEEP.load(Ordering::Relaxed) >= SWEEP_EVERY_MS;
-            crate::supervise::pass(&mut backoff, "pasta sincronizada", || {
+            crate::supervise::pass(&mut backoff, "synced folder", || {
                 if let Err(err) = tick(&app, forced || due) {
-                    log::error!("falha na pasta sincronizada: {err:#}");
+                    log::error!("synced folder failed: {err:#}");
                 }
             });
             crate::refresh_ui(&app);
         });
     if let Err(err) = spawned {
-        log::error!("falha ao iniciar a pasta sincronizada: {err}");
+        log::error!("failed to start synced folder: {err}");
     }
 }
 
-/// Pede um ciclo já (`sweep`: conferir também a biblioteca inteira).
+/// Request a cycle now (`sweep`: also check the entire library).
 pub fn nudge(app: &AppHandle, sweep: bool) {
     if let Some(handle) = app.try_state::<MirrorHandle>() {
         if let Ok(tx) = handle.0.lock() {
@@ -499,11 +499,11 @@ mod tests {
         summaries: RefCell<BTreeMap<String, LibrarySummary>>,
         transcripts: RefCell<BTreeMap<String, api::Transcript>>,
         broken_transcript: RefCell<Vec<String>>,
-        /// O servidor recusa `transcripts:read` (403 `insufficient_scope`).
+        /// The server refuses `transcripts:read` (403 `insufficient_scope`).
         denied_transcripts: RefCell<bool>,
         transcript_calls: RefCell<usize>,
         markers: RefCell<BTreeMap<String, Vec<api::Marker>>>,
-        /// Fuso do "computador" do teste, em horas a oeste de UTC (0 = UTC).
+        /// Time zone of the test “computer”, in hours west of UTC (0 = UTC).
         west_hours: RefCell<i32>,
         calls: RefCell<Vec<String>>,
     }
@@ -667,13 +667,13 @@ mod tests {
     }
 
     #[test]
-    fn primeira_passada_espelha_a_biblioteca_e_a_segunda_nao_reescreve() {
+    fn first_pass_mirrors_library_and_second_does_not_rewrite() {
         let dir = tmp("primeira");
         let fake = fake();
         let mut mirror = Mirror::open(&dir).unwrap();
         let first = sync_library(&fake, &mut mirror, true, false).unwrap();
-        // aaaaaaaa: md e jsonl nas duas Collections (4); bbbbbbbb: sem-colecao (2);
-        // cccccccc: sem transcrição, nada a escrever.
+        // aaaaaaaa: md and jsonl in both collections (4); bbbbbbbb: sem-colecao (2);
+        // cccccccc: no transcript, nothing to write.
         assert_eq!((first.recordings, first.written, first.failed), (3, 6, 0));
         assert_eq!(
             listed(&dir),
@@ -689,7 +689,7 @@ mod tests {
         assert!(dir.join("AGENTS.md").exists());
         assert_eq!(mirror.since(), Some("2026-09-19T11:58:00Z"));
 
-        // O segundo ciclo lê a partir do cursor (inclusivo: só a última) e não reescreve nada.
+        // The second cycle reads from the cursor (inclusive: only the last) and rewrites nothing.
         let second = sync_library(&fake, &mut mirror, true, false).unwrap();
         assert_eq!((second.recordings, second.written), (1, 0));
         assert_eq!(
@@ -700,18 +700,18 @@ mod tests {
     }
 
     #[test]
-    fn resumo_refeito_chega_pelo_since_e_reescreve_so_o_md() {
+    fn regenerated_summary_arrives_via_since_and_rewrites_only_md() {
         let dir = tmp("refeito");
         let fake = fake();
         let mut mirror = Mirror::open(&dir).unwrap();
         sync_library(&fake, &mut mirror, true, false).unwrap();
-        // O servidor move `updated_at` quando o resumo muda (contrato 2.8.0).
+        // The server moves `updated_at` when the summary changes (contract 2.8.0).
         fake.summaries
             .borrow_mut()
             .insert("bbbbbbbb-2".into(), summary(2));
         fake.recordings.borrow_mut()[1].updated_at = Some("2026-09-20T09:00:00Z".into());
         let report = sync_library(&fake, &mut mirror, true, false).unwrap();
-        // O cursor é inclusivo: a última gravação vem de novo, sem nada a escrever.
+        // The cursor is inclusive: the last recording returns again, with nothing to write.
         assert_eq!(
             (report.recordings, report.written, report.unchanged),
             (2, 1, 1)
@@ -724,31 +724,31 @@ mod tests {
     }
 
     #[test]
-    fn resumo_de_revisao_anterior_da_transcricao_chega_marcado_no_md() {
+    fn summary_from_earlier_transcript_revision_is_flagged_in_md() {
         let dir = tmp("desatualizado");
         let fake = fake();
         let mut mirror = Mirror::open(&dir).unwrap();
         sync_library(&fake, &mut mirror, true, false).unwrap();
-        let caminho = dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md");
-        assert!(!std::fs::read_to_string(&caminho)
+        let path = dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md");
+        assert!(!std::fs::read_to_string(&path)
             .unwrap()
             .contains("summary_stale"));
-        // O resumo partiu da revisão 0 e a transcrição já está na 1.
-        let mut velho = summary(2);
-        velho.transcript_revision = Some(0);
+        // The summary was based on revision 0 and the transcript is already at 1.
+        let mut old_summary = summary(2);
+        old_summary.transcript_revision = Some(0);
         fake.summaries
             .borrow_mut()
-            .insert("bbbbbbbb-2".into(), velho);
+            .insert("bbbbbbbb-2".into(), old_summary);
         fake.recordings.borrow_mut()[1].updated_at = Some("2026-09-20T09:00:00Z".into());
         sync_library(&fake, &mut mirror, true, false).unwrap();
-        let md = std::fs::read_to_string(&caminho).unwrap();
+        let md = std::fs::read_to_string(&path).unwrap();
         assert!(md.contains("summary_stale: true\n"));
         assert!(md.contains("> [!warning] Resumo de uma versão anterior da transcrição"));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn nota_de_marcador_entra_no_md_e_editada_reescreve_so_ele() {
+    fn marker_note_is_included_in_md_and_edit_rewrites_only_md() {
         let dir = tmp("notas");
         let fake = fake();
         let mut mirror = Mirror::open(&dir).unwrap();
@@ -770,7 +770,7 @@ mod tests {
         let path = dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md");
         let md = std::fs::read_to_string(&path).unwrap();
         assert!(md.ends_with("## Notas dos marcadores\n\n- [00:01:01] decisão: aprovar\n"));
-        // A nota editada move o `updated_at` da gravação (servidor) e o `.md` é reescrito.
+        // The edited note moves the recording’s `updated_at` (server) and the `.md` is rewritten.
         fake.markers
             .borrow_mut()
             .insert("bbbbbbbb-2".into(), vec![note(61_000, "decisão: adiar")]);
@@ -783,7 +783,7 @@ mod tests {
     }
 
     #[test]
-    fn a_varredura_apaga_o_que_saiu_do_servidor_e_o_incremental_nao() {
+    fn sweep_removes_server_deletions_but_incremental_does_not() {
         let dir = tmp("varredura");
         let fake = fake();
         let mut mirror = Mirror::open(&dir).unwrap();
@@ -802,21 +802,21 @@ mod tests {
     }
 
     #[test]
-    fn a_varredura_traz_o_que_o_manifesto_nao_tem() {
+    fn sweep_fetches_recordings_missing_from_manifest() {
         let dir = tmp("faltante");
         let fake = fake();
         let mut mirror = Mirror::open(&dir).unwrap();
         sync_library(&fake, &mut mirror, true, false).unwrap();
-        // Uma gravação antiga (antes do cursor) que o manifesto nunca viu.
-        let mut antiga = recording("dddddddd-4", &["c2"], "2026-09-01T00:00:00Z", true);
-        antiga.title = "Antiga".into();
+        // An old recording (before the cursor) that the manifest has never seen.
+        let mut old_recording = recording("dddddddd-4", &["c2"], "2026-09-01T00:00:00Z", true);
+        old_recording.title = "Antiga".into();
         fake.summaries
             .borrow_mut()
             .insert("dddddddd-4".into(), summary(1));
         fake.transcripts
             .borrow_mut()
             .insert("dddddddd-4".into(), transcript("dddddddd-4"));
-        fake.recordings.borrow_mut().push(antiga);
+        fake.recordings.borrow_mut().push(old_recording);
         assert_eq!(
             sync_library(&fake, &mut mirror, true, false)
                 .unwrap()
@@ -832,7 +832,7 @@ mod tests {
     }
 
     #[test]
-    fn falha_numa_gravacao_vira_pendencia_e_nao_faz_reler_a_biblioteca_inteira() {
+    fn failed_recording_stays_pending_without_full_library_reread() {
         let dir = tmp("falha");
         let fake = fake();
         fake.broken_transcript
@@ -841,12 +841,12 @@ mod tests {
         let mut mirror = Mirror::open(&dir).unwrap();
         let report = sync_library(&fake, &mut mirror, true, false).unwrap();
         assert_eq!((report.failed, report.written), (1, 2));
-        // O cursor avança e a que falhou fica pendente: é ela que se repete, não tudo.
+        // The cursor advances and the failed item stays pending: retry it, rather than everything.
         assert_eq!(mirror.since(), Some("2026-09-19T11:58:00Z"));
         assert!(mirror.pending().contains("aaaaaaaa-1"));
         assert!(status_note(&report).unwrap().contains("1 gravações"));
 
-        // Ainda quebrada: outro ciclo tenta só a pendente, sem reler a biblioteca do início.
+        // Still broken: another cycle retries only the pending item, without rereading the library.
         fake.calls.borrow_mut().clear();
         let still = sync_library(&fake, &mut mirror, true, false).unwrap();
         assert_eq!((still.failed, still.recordings), (1, 2));
@@ -854,7 +854,7 @@ mod tests {
             fake.calls.borrow().first().unwrap(),
             "library since=Some(\"2026-09-19T11:58:00Z\")"
         );
-        // A pendente volta por id, nunca pela listagem inteira.
+        // The pending item returns by id, never through the full listing.
         assert!(fake
             .calls
             .borrow()
@@ -865,7 +865,7 @@ mod tests {
             .iter()
             .any(|call| call == "library since=None"));
 
-        // Consertada, a pendente entra e a fila esvazia.
+        // Fixed: the pending item is added and the queue empties.
         fake.broken_transcript.borrow_mut().clear();
         let again = sync_library(&fake, &mut mirror, true, false).unwrap();
         assert_eq!((again.failed, again.written), (0, 4));
@@ -874,7 +874,7 @@ mod tests {
     }
 
     #[test]
-    fn ligar_e_desligar_as_transcricoes_refaz_a_pasta_nos_dois_sentidos() {
+    fn toggling_transcripts_rebuilds_folder_in_both_directions() {
         let dir = tmp("liga-desliga");
         let fake = fake();
         let mut mirror = Mirror::open(&dir).unwrap();
@@ -887,7 +887,7 @@ mod tests {
             3
         );
 
-        // Desligada: mesmo sem nada novo no servidor, os `.jsonl` saem e o `.md` perde o link.
+        // Disabled: even without server changes, remove `.jsonl` files and their `.md` links.
         sync_library(&fake, &mut mirror, false, false).unwrap();
         assert!(listed(&dir).iter().all(|f| f.ends_with(".md")));
         let md =
@@ -898,7 +898,7 @@ mod tests {
             .unwrap()
             .contains("jsonl"));
 
-        // Ligada de novo: voltam na hora, sem esperar a varredura de 6 h.
+        // Enabled again: restore them immediately, without waiting for the 6 h sweep.
         sync_library(&fake, &mut mirror, true, false).unwrap();
         assert_eq!(
             listed(&dir)
@@ -911,7 +911,7 @@ mod tests {
     }
 
     #[test]
-    fn colecoes_que_so_diferem_em_maiusculas_usam_uma_grafia_so() {
+    fn collections_differing_only_in_case_use_one_spelling() {
         let names = collection_names(vec![
             CollectionInfo {
                 id: "2".into(),
@@ -932,7 +932,7 @@ mod tests {
     }
 
     #[test]
-    fn sem_o_escopo_o_jsonl_que_ja_existia_fica_como_esta() {
+    fn existing_jsonl_is_preserved_without_scope() {
         let dir = tmp("escopo-preserva");
         let fake = fake();
         let mut mirror = Mirror::open(&dir).unwrap();
@@ -940,8 +940,8 @@ mod tests {
         let jsonl = dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.jsonl");
         assert!(jsonl.exists());
 
-        // O resumo muda, mas o servidor passa a recusar as transcrições: o `.jsonl` não some e o
-        // `.md` (com o link para ele) não é reescrito sem transcrição.
+        // The summary changes, but the server starts refusing transcripts: keep the `.jsonl` and
+        // do not rewrite the `.md` (with its link) without a transcript.
         *fake.denied_transcripts.borrow_mut() = true;
         fake.summaries
             .borrow_mut()
@@ -956,10 +956,10 @@ mod tests {
     }
 
     #[test]
-    fn o_manifesto_e_gravado_mesmo_com_o_agents_md_travado() {
+    fn manifest_is_saved_even_when_agents_md_is_locked() {
         let dir = tmp("agents-travado");
         let fake = fake();
-        // Uma pasta no lugar do arquivo: escrever o `AGENTS.md` falha em todo ciclo.
+        // A folder in place of the file: writing `AGENTS.md` fails every cycle.
         std::fs::create_dir_all(dir.join("AGENTS.md")).unwrap();
         let mut mirror = Mirror::open(&dir).unwrap();
         let report = sync_library(&fake, &mut mirror, true, false).unwrap();
@@ -967,39 +967,39 @@ mod tests {
         let reopened = Mirror::open(&dir).unwrap();
         assert_eq!(reopened.known_ids().len(), 2);
         assert!(reopened.since().is_some());
-        // O próximo ciclo é incremental: o erro do `AGENTS.md` não força reler tudo.
+        // The next cycle is incremental: the `AGENTS.md` error does not force a full reread.
         assert!(!reopened.needs_rebuild(true));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn servidor_sem_o_escopo_das_transcricoes_sincroniza_os_resumos_e_nao_insiste() {
+    fn server_without_transcript_scope_syncs_summaries_without_repeated_requests() {
         let dir = tmp("sem-escopo");
         let fake = fake();
         *fake.denied_transcripts.borrow_mut() = true;
         let mut mirror = Mirror::open(&dir).unwrap();
         let report = sync_library(&fake, &mut mirror, true, false).unwrap();
-        // Os resumos de aaaaaaaa (2 Collections) e bbbbbbbb (1) saem; nenhum `.jsonl`; nada falhou.
+        // Write summaries for aaaaaaaa (2 collections) and bbbbbbbb (1); no `.jsonl`; no failures.
         assert_eq!(
             (report.written, report.failed, report.transcripts_denied),
             (3, 0, true)
         );
         assert!(listed(&dir).iter().all(|f| f.ends_with(".md")));
-        // A primeira recusa vale para o ciclo todo: uma chamada só, não uma por gravação.
+        // The first refusal applies to the whole cycle: one call, rather than one per recording.
         assert_eq!(*fake.transcript_calls.borrow(), 1);
-        // O cursor avança (não se relê tudo a cada minuto) e a aba explica o que faltou.
+        // The cursor advances (no full reread every minute) and the tab explains what is missing.
         assert_eq!(mirror.since(), Some("2026-09-19T11:58:00Z"));
-        let nota = status_note(&report).unwrap();
-        assert!(nota.contains("transcrições") && nota.contains("contrato 2.8.0"));
-        assert!(!nota.contains("não puderam ser lidas"));
+        let note = status_note(&report).unwrap();
+        assert!(note.contains("transcrições") && note.contains("contrato 2.8.0"));
+        assert!(!note.contains("não puderam ser lidas"));
 
-        // O servidor é atualizado: a varredura completa as transcrições que faltavam.
+        // The server is updated: the sweep fills in the missing transcripts.
         *fake.denied_transcripts.borrow_mut() = false;
         let incremental = sync_library(&fake, &mut mirror, true, false).unwrap();
         assert_eq!(incremental.written, 0);
         let sweep = sync_library(&fake, &mut mirror, true, true).unwrap();
         assert_eq!((sweep.transcripts_denied, sweep.failed), (false, 0));
-        // Os três `.jsonl` que faltavam, e os três `.md`, que ganham a propriedade `transcript`.
+        // Three missing `.jsonl` files, and three `.md` files gaining the `transcript` property.
         assert_eq!(sweep.written, 6);
         assert_eq!(
             listed(&dir)
@@ -1013,30 +1013,30 @@ mod tests {
     }
 
     #[test]
-    fn a_nota_da_aba_soma_recusa_e_falhas() {
+    fn tab_note_combines_denial_and_failures() {
         assert_eq!(status_note(&Report::default()), None);
-        let so_falhas = Report {
+        let only_failures = Report {
             failed: 2,
             ..Report::default()
         };
-        assert!(status_note(&so_falhas)
+        assert!(status_note(&only_failures)
             .unwrap()
             .starts_with("2 gravações não puderam"));
-        let ambos = Report {
+        let both = Report {
             failed: 1,
             transcripts_denied: true,
             ..Report::default()
         };
-        let nota = status_note(&ambos).unwrap();
-        assert!(nota.contains("contrato 2.8.0") && nota.contains(" · 1 gravações"));
+        let note = status_note(&both).unwrap();
+        assert!(note.contains("contrato 2.8.0") && note.contains(" · 1 gravações"));
     }
 
     #[test]
-    fn a_pasta_e_o_nome_seguem_a_hora_local_do_computador() {
+    fn folder_and_name_follow_computer_local_time() {
         let dir = tmp("hora-local");
         let fake = fake();
         *fake.west_hours.borrow_mut() = 3;
-        // 02:30 UTC de 1º de outubro é 23:30 de 30 de setembro no computador (UTC-3).
+        // 02:30 UTC on October 1 is 23:30 on September 30 on the computer (UTC-3).
         fake.recordings.borrow_mut()[1].recorded_at = Some("2026-10-01T02:30:00Z".into());
         let mut mirror = Mirror::open(&dir).unwrap();
         sync_library(&fake, &mut mirror, true, false).unwrap();
@@ -1046,7 +1046,7 @@ mod tests {
         assert!(dir
             .join("Clientes/2026-09/2026-09-18_1100_aaaaaaaa.md")
             .exists());
-        // O `recorded_at` do front matter continua em UTC.
+        // The front matter’s `recorded_at` stays in UTC.
         let md =
             std::fs::read_to_string(dir.join("sem-colecao/2026-09/2026-09-30_2330_bbbbbbbb.md"))
                 .unwrap();
@@ -1056,40 +1056,40 @@ mod tests {
     }
 
     #[test]
-    fn quem_ja_sincronizou_no_layout_antigo_e_migrado_sem_duplicar() {
+    fn previously_synced_old_layout_is_migrated_without_duplicates() {
         let dir = tmp("migracao");
         let fake = fake();
         let mut mirror = Mirror::open(&dir).unwrap();
         sync_library(&fake, &mut mirror, true, false).unwrap();
 
-        // Volta a pasta ao desenho antigo: arquivo com título no nome, direto na Collection, e o
-        // manifesto sem a versão do layout.
-        let novo = dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md");
-        let antigo_rel = "sem-colecao/2026-09-18 Reunião bbbbbbbb-2 - bbbbbbbb.md";
-        std::fs::rename(&novo, dir.join(antigo_rel)).unwrap();
-        let manifesto = dir.join(".eclume-sync.json");
+        // Revert the folder to the old layout: title in the file name, directly in the collection,
+        // and no layout version in the manifest.
+        let new_path = dir.join("sem-colecao/2026-09/2026-09-18_1400_bbbbbbbb.md");
+        let old_relative = "sem-colecao/2026-09-18 Reunião bbbbbbbb-2 - bbbbbbbb.md";
+        std::fs::rename(&new_path, dir.join(old_relative)).unwrap();
+        let manifest = dir.join(".eclume-sync.json");
         let mut json: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(&manifesto).unwrap()).unwrap();
+            serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
         json.as_object_mut().unwrap().remove("layout");
-        json["recordings"]["bbbbbbbb-2"]["files"] = serde_json::json!([antigo_rel]);
-        std::fs::write(&manifesto, serde_json::to_vec(&json).unwrap()).unwrap();
+        json["recordings"]["bbbbbbbb-2"]["files"] = serde_json::json!([old_relative]);
+        std::fs::write(&manifest, serde_json::to_vec(&json).unwrap()).unwrap();
 
         let mut mirror = Mirror::open(&dir).unwrap();
         assert!(mirror.needs_rebuild(true));
         let report = sync_library(&fake, &mut mirror, true, false).unwrap();
-        // Tudo foi relido (não só o que mudou desde o cursor) e o arquivo antigo se foi.
+        // Everything was reread (not just changes since the cursor) and the old file is gone.
         assert_eq!(report.recordings, 3);
-        assert!(!dir.join(antigo_rel).exists());
-        assert!(novo.exists());
+        assert!(!dir.join(old_relative).exists());
+        assert!(new_path.exists());
         assert!(!mirror.needs_rebuild(true));
-        // O ciclo seguinte volta a ser incremental.
+        // The next cycle is incremental again.
         let next = sync_library(&fake, &mut mirror, true, false).unwrap();
         assert_eq!((next.recordings, next.written), (1, 0));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn sem_transcricoes_so_o_markdown_e_o_agents_muda() {
+    fn without_transcripts_only_markdown_and_agents_change() {
         let dir = tmp("sem-jsonl");
         let fake = fake();
         let mut mirror = Mirror::open(&dir).unwrap();
@@ -1102,7 +1102,7 @@ mod tests {
     }
 
     #[test]
-    fn colecao_desconhecida_e_ignorada_e_o_titulo_cai_na_transcricao() {
+    fn unknown_collection_is_ignored_and_title_falls_back_to_transcript() {
         let mut rec = recording("eeeeeeee-5", &["c1", "sumiu"], "2026-09-19T10:00:00Z", true);
         rec.title = "  ".into();
         let names = HashMap::from([("c1".to_string(), "Clientes".to_string())]);

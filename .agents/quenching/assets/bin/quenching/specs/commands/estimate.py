@@ -22,7 +22,7 @@ EXCLUDED = [
     "host/system/harness overhead", "conditional execute references", "tool/test output",
     "iteration count", "growing conversation history", "generated code",
 ]
-EXECUTE_BODY = Path(__file__).resolve().parents[5] / "commands/specs/execute.md"
+EXECUTE_BODY = Path(__file__).resolve().parents[5] / "skills/quenching-specs/references/execute.md"
 # Small-tier projection (ADR 0014). Fixed prompt of a Task sub-agent in this repository,
 # measured 2026-10-17 on the first turn of general-purpose sub-agents (32065-33329 tokens).
 EXECUTOR_FIXED_TOKENS = 33000
@@ -67,7 +67,7 @@ def _is_generated_mirror(root: Path, entry: str) -> bool:
                    for marker in (".generated-from.json", ".generated-files.json")):
             continue
         try:
-            manifest = json.loads((root / "plugins/quenching/assets/modules.json")
+            manifest = json.loads((root / "quenching/assets/modules.json")
                                   .read_text(encoding="utf-8"))
         except (OSError, ValueError, UnicodeError):
             manifest = {}
@@ -116,7 +116,8 @@ def estimate_build(info: dict, root: str | Path, budget: int = WORKER_BUDGET_TOK
         unresolved = [{"path": row["path"], "reason": row["reason"]}
                       for row in files.values() if row["bytes"] is None and not row.get("writeOnly")]
         unresolved.extend({"task": task["id"], "reason": "no files declared"}
-                          for task in tasks if not task["files"])
+                          for task in tasks
+                          if not task["files"] and not task["operational"])
         if preamble_missing:
             unresolved.append({"path": str(preamble), "reason": "execute preamble unavailable"})
         byte_count = common_bytes + sum(row["bytes"] or 0 for row in files.values()

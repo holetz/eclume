@@ -1,9 +1,11 @@
-//! Uma fonte que se reconecta: quando o anel do dispositivo fecha (erro do stream, dispositivo
-//! tirado, perfil Bluetooth trocando) ou um seguidor pede a troca, ela solta o anel velho e reabre
-//! pelo abridor, numa thread à parte, com espera de 0,5 s dobrando até 5 s, sem desistir enquanto
-//! a gravação existir. Enquanto reconecta, entrega silêncio no ritmo do relógio, na última taxa:
-//! a faixa não fica para trás, e a duração segue a da reunião.
-//! Contrato: docs/standards/code/desktop-gravacao.md §Fontes.
+//! A reconnecting source: when the device's ring buffer closes (stream error, unplugged device,
+//! Bluetooth profile switch) or a follower requests a switch, it releases the old ring and reopens
+//! through the opener on a separate thread, waiting 0.5 s and doubling up to 5 s, retrying as long
+//! as
+//! the recording exists. While reconnecting, it delivers silence at wall-clock pace at the last
+//! rate:
+//! the track does not fall behind, and its duration matches the meeting.
+//! Contract: docs/standards/code/desktop-gravacao.md §Sources.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
@@ -18,29 +20,29 @@ use crate::{AudioSource, SourceState};
 const FIRST_WAIT: Duration = Duration::from_millis(500);
 const MAX_WAIT: Duration = Duration::from_secs(5);
 
-/// O que abre (ou reabre) o dispositivo e devolve o anel dele.
+/// Opens (or reopens) the device and returns its ring buffer.
 pub type Opener = Box<dyn FnMut() -> Result<RingSource> + Send>;
 
-/// Uma fonte sobre um abridor, que reabre o dispositivo quando ele cai.
+/// A source wrapping an opener that reopens the device when it disconnects.
 pub struct Reconnecting {
     open: Arc<Mutex<Opener>>,
     current: Option<RingSource>,
-    /// A taxa do último anel, usada no silêncio da reconexão.
+    /// The last ring buffer's rate, used for silence during reconnection.
     rate: u32,
-    /// Quando o dispositivo caiu, e quantas amostras de silêncio já saíram desde então.
+    /// When the device disconnected, and how many silent samples have been emitted since.
     lost: Option<(Instant, u64)>,
-    /// A reabertura em curso, numa thread à parte.
+    /// The ongoing reopen attempt, on a separate thread.
     pending: Option<Receiver<Result<RingSource>>>,
     next_try: Instant,
     wait: Duration,
-    /// Descartes dos anéis já soltos.
+    /// Dropped samples from already released ring buffers.
     dropped_before: u64,
-    /// Ligado por um seguidor quando o dispositivo em uso deve trocar (o padrão do SO mudou).
+    /// Set by a follower when the active device should switch (the OS default changed).
     switch: Option<Arc<AtomicBool>>,
 }
 
 impl Reconnecting {
-    /// Abre o dispositivo pela primeira vez; uma falha aqui é erro de quem pediu a gravação.
+    /// Opens the device for the first time; a failure here is an error for the recording caller.
     pub fn open(mut open: Opener) -> Result<Self> {
         let first = open()?;
         Ok(Self {
@@ -56,14 +58,14 @@ impl Reconnecting {
         })
     }
 
-    /// Liga o pedido de troca de um seguidor: quando ele vira `true`, a fonte reabre.
+    /// Connects a follower's switch request: when it becomes `true`, the source reopens.
     pub fn with_switch(mut self, switch: Arc<AtomicBool>) -> Self {
         self.switch = Some(switch);
         self
     }
 
-    /// Solta o anel atual numa thread à parte: desmontar um driver que caiu pode demorar, e o
-    /// laço de gravação não espera por isso.
+    /// Releases the current ring buffer on a separate thread: tearing down a failed driver may take
+    /// time, and the recording loop does not wait for it.
     fn release(&mut self) {
         if let Some(ring) = self.current.take() {
             self.dropped_before += ring.dropped_samples();
@@ -73,18 +75,18 @@ impl Reconnecting {
         }
     }
 
-    /// O dispositivo caiu: solta o anel e passa a reconectar já.
+    /// The device disconnected: releases the ring buffer and starts reconnecting immediately.
     fn lose(&mut self, now: Instant) {
         self.release();
         if self.lost.is_none() {
-            log::warn!("dispositivo de áudio caiu; tentando reabrir");
+            log::warn!("audio device disconnected; trying to reopen");
             self.lost = Some((now, 0));
         }
         self.wait = FIRST_WAIT;
         self.next_try = now;
     }
 
-    /// Dispara a reabertura numa thread à parte, para o laço de gravação não esperar o driver.
+    /// Starts reopening on a separate thread so the recording loop does not wait for the driver.
     fn try_reopen(&mut self) {
         let (tx, rx) = mpsc::channel();
         let open = Arc::clone(&self.open);
@@ -99,11 +101,11 @@ impl Reconnecting {
             });
         match spawned {
             Ok(_) => self.pending = Some(rx),
-            Err(err) => log::warn!("falha ao criar a thread que reabre o dispositivo: {err}"),
+            Err(err) => log::warn!("failed to create device reopening thread: {err}"),
         }
     }
 
-    /// Recebe o resultado da reabertura em curso, se já houver.
+    /// Receives the result of the ongoing reopen attempt, if available.
     fn poll_pending(&mut self, now: Instant) {
         let Some(rx) = &self.pending else {
             return;
@@ -120,13 +122,13 @@ impl Reconnecting {
                 self.rate = ring.sample_rate();
                 self.current = Some(ring);
                 if let Some((since, _)) = self.lost.take() {
-                    log::info!("dispositivo de áudio de volta depois de {:?}", now - since);
+                    log::info!("audio device back after {:?}", now - since);
                 }
                 self.wait = FIRST_WAIT;
             }
             Err(err) => {
                 log::warn!(
-                    "reabrir o dispositivo falhou ({err:#}); de novo em {:?}",
+                    "reopening device failed ({err:#}); retrying in {:?}",
                     self.wait
                 );
                 self.next_try = now + self.wait;
@@ -135,7 +137,7 @@ impl Reconnecting {
         }
     }
 
-    /// O silêncio devido desde a queda, na última taxa.
+    /// Silence due since disconnection, at the last rate.
     fn silence(&mut self, now: Instant) -> Vec<f32> {
         let Some((since, emitted)) = &mut self.lost else {
             return Vec::new();
@@ -163,7 +165,8 @@ impl AudioSource for Reconnecting {
                 .as_ref()
                 .is_some_and(|switch| switch.swap(false, Ordering::AcqRel))
         {
-            // Troca de dispositivo: reabre já, sem soltar o anel atual até o novo chegar.
+            // Device switch: reopens now, keeping the current ring buffer until the new one
+            // arrives.
             self.try_reopen();
         }
         self.poll_pending(now);
@@ -177,7 +180,7 @@ impl AudioSource for Reconnecting {
         if self.pending.is_none() && now >= self.next_try {
             self.try_reopen();
         }
-        // Espera como uma leitura de verdade esperaria, e entrega o silêncio do intervalo.
+        // Waits as a real read would, and delivers silence for the interval.
         std::thread::sleep(timeout);
         let now = Instant::now();
         self.poll_pending(now);
@@ -207,8 +210,8 @@ mod tests {
     use super::*;
     use crate::ring::{self, RingWriter};
 
-    /// Um abridor roteirizado: cada chamada tira o próximo resultado da fila e entrega o escritor
-    /// do anel aberto ao teste.
+    /// A scripted opener: each call takes the next result from the queue and gives the opened ring
+    /// buffer's writer to the test.
     fn scripted(
         script: Vec<Result<u32, &'static str>>,
     ) -> (Opener, Arc<Mutex<VecDeque<RingWriter>>>) {
@@ -228,14 +231,14 @@ mod tests {
     }
 
     #[test]
-    fn reconnect_entrega_silencio_e_volta_ao_dispositivo() {
+    fn reconnect_delivers_silence_and_returns_to_device() {
         let (opener, writers) = scripted(vec![Ok(16_000), Err("sumiu"), Ok(8_000)]);
         let mut source = Reconnecting::open(opener).unwrap();
         writers.lock().unwrap()[0].push_interleaved(160, 1, |_| 0.5);
         assert_eq!(source.read(Duration::from_millis(10)).unwrap().len(), 160);
         assert_eq!(source.state(), SourceState::Live);
 
-        // O stream do dispositivo cai.
+        // The device stream disconnects.
         writers.lock().unwrap()[0].close();
         let started = Instant::now();
         let mut silence = 0;
@@ -247,15 +250,15 @@ mod tests {
                 break;
             }
         }
-        // A primeira reabertura falha; a segunda, 0,5 s depois, volta a 8 kHz.
+        // The first reopen fails; the second, 0.5 s later, returns at 8 kHz.
         assert_eq!(source.state(), SourceState::Live);
         assert_eq!(source.sample_rate(), 8_000);
         let elapsed = started.elapsed().as_secs_f64();
-        // Silêncio no ritmo do relógio, a 16 kHz (a última taxa antes da queda).
+        // Silence at wall-clock pace, at 16 kHz (the last rate before disconnection).
         let expected = elapsed * 16_000.0;
         assert!(
             (silence as f64) > expected * 0.8 && (silence as f64) <= expected * 1.05,
-            "{silence} amostras de silêncio em {elapsed:.2} s"
+            "{silence} silent samples in {elapsed:.2} s"
         );
         writers.lock().unwrap()[1].push_interleaved(80, 1, |_| 0.25);
         let back = source.read(Duration::from_millis(10)).unwrap();
@@ -263,23 +266,23 @@ mod tests {
     }
 
     #[test]
-    fn reconnect_informa_a_queda_e_soma_os_descartes() {
+    fn reconnect_reports_disconnection_and_sums_dropped_samples() {
         let (opener, writers) = scripted(vec![Ok(16_000)]);
         let mut source = Reconnecting::open(opener).unwrap();
-        // Anel de 4096: 5000 amostras descartam 904.
+        // Ring buffer of 4096: 5000 samples drop 904.
         writers.lock().unwrap()[0].push_interleaved(5_000, 1, |_| 0.1);
         assert_eq!(source.dropped_samples(), 904);
         writers.lock().unwrap()[0].close();
         while source.read(Duration::ZERO).is_some_and(|c| !c.is_empty()) {}
         let SourceState::Reconnecting { since } = source.state() else {
-            panic!("esperava reconectando");
+            panic!("expected reconnecting");
         };
         assert!(since.elapsed() < Duration::from_secs(1));
         assert_eq!(source.dropped_samples(), 904);
     }
 
     #[test]
-    fn reconnect_troca_quando_o_seguidor_pede() {
+    fn reconnect_switches_when_follower_requests() {
         let (opener, writers) = scripted(vec![Ok(16_000), Ok(48_000)]);
         let switch = Arc::new(AtomicBool::new(false));
         let mut source = Reconnecting::open(opener)

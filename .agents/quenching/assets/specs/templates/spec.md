@@ -43,9 +43,9 @@ verification: <VERIFICATION>
 
      MOMENT. Each section belongs to one of three moments on the spec's timeline: `decision`
      (the human, deciding whether to build), `build` (the executor, in step 4 of
-     `/quenching-specs-execute`), `close` (`/quenching-specs-conclude`, at archive time). `## Discoveries` belongs
+     `/quenching-specs execute`), `close` (`/quenching-specs conclude`, at archive time). `## Discoveries` belongs
      to none of them — captured indiscriminately while building, resolved later by
-     `/quenching-specs-develop`'s triage sweep on its own schedule. An orchestrator sends an executor
+     `/quenching-specs develop`'s triage sweep on its own schedule. An orchestrator sends an executor
      exactly the `build` set; that is what lets one file serve every moment without bloating
      agent context. -->
 
@@ -192,8 +192,13 @@ verification: <VERIFICATION>
 
      files:    the paths this task may touch. Declaring them is what PERMITS the task to be
                handed to an executor sub-agent, and what makes a `[P]` marker checkable.
-               A trailing parenthetical is closed grammar: `(new)` is the ONLY reserved
-               annotation, and anything else is refused with `sp-files-annotation`.
+               A trailing parenthetical is closed grammar, and exactly two are reserved:
+               `(new)` marks a path about to be created; `(operational)` declares a task
+               that writes no repository file at all — the marker IS its whole `files:`,
+               its proof is the `verify:`, and the verifier accepts it with no commit sha.
+               Anything else is refused as `sp-files-annotation`; the marker beside a path
+               is refused as `sp-files-operational`, and the marker with no `verify:` is
+               warned as `sp-operational-no-verify`.
      pattern:  an existing file to imitate — the cheapest context an executor can be given.
      verify:   the command that proves the task done. WHEN it runs is the `verification`
                frontmatter policy, not this section's business. With no `verify:` line the
@@ -227,7 +232,7 @@ verification: <VERIFICATION>
 
 ## Discoveries
 
-<!-- MOMENT: none — triage, resolved by `/quenching-specs-develop`'s discoveries bank whenever it runs,
+<!-- MOMENT: none — triage, resolved by `/quenching-specs develop`'s discoveries bank whenever it runs,
      not tied to one of the three. No gate — appended during execution.
 
      One line per discovery, appended by `.agents/quenching/bin/cq specs discover <id> "<text>"` while building.

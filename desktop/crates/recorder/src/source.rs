@@ -1,11 +1,11 @@
-//! Fontes sintéticas, para testes e para exercitar a gravação sem dispositivo.
+//! Synthetic sources for tests and for exercising recording without a device.
 
 use std::collections::VecDeque;
 use std::time::Duration;
 
 use crate::AudioSource;
 
-/// Entrega uma senoide em blocos de 10 ms até completar a duração, e então termina.
+/// Produces a sine wave in 10 ms blocks until the duration is reached, then ends.
 pub struct SineSource {
     rate: u32,
     freq: f32,
@@ -47,7 +47,7 @@ impl AudioSource for SineSource {
     }
 }
 
-/// Entrega uma sequência roteirizada de leituras (`Some(vec![])` simula prazo vencido).
+/// Produces a scripted sequence of reads (`Some(vec![])` simulates a timeout).
 pub struct ScriptedSource {
     rate: u32,
     reads: VecDeque<Option<Vec<f32>>>,

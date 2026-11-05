@@ -407,7 +407,7 @@ class Portal:
         return _json(200, {"ok": True, "fetchedAt": snap["at"], "spec": row,
                            "sections": sections, "tasks": tasks, "records": records,
                            "timeline": timeline, "ready": ready,
-                           "executeCommand": f"/quenching-specs:specs:execute {info['id']}"})
+                           "executeCommand": f"/quenching-specs execute {info['id']}"})
 
     def _search(self, snap: dict, q: str):
         needle = q.strip().lower()

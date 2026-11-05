@@ -1,12 +1,12 @@
-//! Laço de sync: a cada 30 s, ou quando cutucado (gravação encerrada, configurações salvas,
-//! "Sincronizar agora"), devolve à fila as falhas cujo backoff venceu, sobe as `pending` pelo
-//! `HttpUploader` e aplica a retenção — o arquivo local só sai depois da confirmação do servidor.
-//! Depois, no máximo a cada minuto (a leitura `?since=` é repartida com as recentes e a pasta
-//! sincronizada, ver [`library_since`]), lê as gravações da conta que mudaram e avisa o fim
-//! do processamento de cada uma (resumo pronto, resumo que falhou, pronta sem resumo, transcrição
-//! que falhou), guarda o título que o servidor deu às enviadas daqui e a espera na fila delas.
-//! Com a CA fixada, a cada 6 h aprende a próxima raiz anunciada pelo descritor (rotação), e uma
-//! falha de envio ou de leitura confere se a CA mudou — trocando pela próxima quando é a servida.
+//! Sync loop: every 30 s, or when nudged (recording ended, settings saved, Sync now), return
+//! failed recordings whose backoff expired to the queue, upload `pending` recordings through
+//! `HttpUploader` and apply retention. Local files are removed only after server confirmation.
+//! Then, at most once per minute (the `?since=` read is shared with recent recordings and the
+//! synced folder, see [`library_since`]), read changed recordings in the account and notify
+//! processing outcomes (summary ready, summary failed, ready without summary, transcription
+//! failed). Store the server title and queue wait for recordings uploaded from here. With a
+//! pinned CA, learn the next root announced by the descriptor every 6 h (rotation). Upload or
+//! read failures check whether the CA changed, switching to the next one if it is being served.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -25,25 +25,25 @@ use crate::state::AppState;
 
 const INTERVAL: Duration = Duration::from_secs(30);
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
-/// Intervalo mínimo entre duas leituras dos desfechos no servidor.
+/// Minimum interval between server outcome reads.
 const OUTCOMES_EVERY_MS: i64 = 60 * 1000;
-/// A marca d'água do aviso de desfechos ([`Watermark`]), no diretório de dados. O nome é o do
-/// antigo aviso de resumo pronto; o formato antigo (id → instante) não lê como marca e recomeça.
+/// Outcome notification watermark ([`Watermark`]) in the data directory. The name comes from
+/// the old summary-ready notification; the old format (id → time) cannot load as a mark and resets.
 const NOTIFIED_FILE: &str = "resumos-avisados.json";
 
 static LAST_OUTCOMES_CHECK: AtomicI64 = AtomicI64::new(0);
-/// Vida da leitura `?since=` repartida: um pouco menos de um minuto, para o laço do minuto seguinte
-/// já ler de novo em vez de reusar uma leitura velha.
+/// Shared `?since=` read lifetime: just under a minute, so the next minute’s iteration
+/// reads again instead of reusing an old read.
 const SHARED_READ_TTL_MS: i64 = 55 * 1000;
-/// Intervalo entre duas leituras da próxima CA no descritor e a nova tentativa depois de uma falha.
+/// Interval between next-CA reads from the descriptor, and retry interval after failure.
 const NEXT_CA_EVERY_MS: i64 = 6 * 60 * 60 * 1000;
 const NEXT_CA_RETRY_MS: i64 = 10 * 60 * 1000;
 
 static LAST_NEXT_CA_CHECK: AtomicI64 = AtomicI64::new(0);
 
-/// A última leitura `?since=` da conta, de quem a fez primeiro no minuto.
+/// The account’s last `?since=` read, from whoever read first in the minute.
 struct SharedRead {
-    /// De quem é: o endereço e a credencial, para a troca de conta não herdar a leitura do outro.
+    /// Owner: address and device credential, so switching accounts does not inherit another read.
     owner: u64,
     since: String,
     at_ms: i64,
@@ -60,9 +60,9 @@ fn owner_of(config: &UploaderConfig) -> u64 {
     hasher.finish()
 }
 
-/// O que a leitura guardada responde para `?since=wanted` de `owner` em `now`: as gravações dela
-/// com `updated_at >= wanted`, se ela é do mesmo dono, ainda é nova e foi lida com um `since` igual
-/// ou mais antigo (traz tudo o que a pedida traria). `None`: é preciso ler no servidor.
+/// What the cached read answers for `owner` requesting `?since=wanted` at `now`: its recordings
+/// with `updated_at >= wanted`, if the owner matches, it is still fresh and its `since` is equal
+/// or older (covers everything requested). `None`: a server read is needed.
 fn shared_answer(
     cached: Option<&SharedRead>,
     owner: u64,
@@ -87,10 +87,10 @@ fn shared_answer(
     )
 }
 
-/// `GET /recordings?since=`, uma leitura por minuto para quem precisa: o aviso de desfechos, as
-/// recentes e a pasta sincronizada pedem cada um o seu `since`, mas a leitura que um fez já traz o
-/// que os outros pediriam quando o `since` dela é igual ou mais antigo. Quem chega e não é coberto
-/// lê no servidor e deixa a sua (mais antiga) para os demais.
+/// `GET /recordings?since=`, one read per minute for those that need it: outcome notifications,
+/// recent recordings and the synced folder each request their own `since`, but one read covers
+/// the others when its `since` is equal or older. A request not covered reads from the server
+/// and leaves its (older) read for the others.
 pub fn library_since(
     config: &UploaderConfig,
     client: &Client,
@@ -115,7 +115,7 @@ pub fn library_since(
     Ok(items)
 }
 
-/// Sem credencial, as gravações esperam o próximo login.
+/// Without a device credential, recordings wait for the next sign-in.
 fn sign_in_to_send(pending: u32) -> String {
     match pending {
         1 => "Entre para enviar 1 gravação".into(),
@@ -123,10 +123,10 @@ fn sign_in_to_send(pending: u32) -> String {
     }
 }
 
-/// O canal para cutucar o laço.
+/// The channel for nudging the loop.
 pub struct SyncHandle(Mutex<Sender<()>>);
 
-/// Sobe a thread do sync e registra o canal no app.
+/// Start the sync thread and register the channel in the app.
 pub fn spawn(app: &AppHandle) {
     let (tx, rx) = mpsc::channel::<()>();
     app.manage(SyncHandle(Mutex::new(tx)));
@@ -134,25 +134,25 @@ pub fn spawn(app: &AppHandle) {
     let spawned = std::thread::Builder::new()
         .name("eclume-sync".into())
         .spawn(move || {
-            // Acorda a cada `INTERVAL` ou a cada cutucão; termina quando o app fecha o canal.
+            // Wake every `INTERVAL` or on a nudge; exit when the app closes the channel.
             let mut backoff = crate::supervise::Backoff::default();
             while let Ok(()) | Err(RecvTimeoutError::Timeout) = rx.recv_timeout(INTERVAL) {
-                // Vários cutucões seguidos valem uma passada só.
+                // Several consecutive nudges count as a single pass.
                 while rx.try_recv().is_ok() {}
                 crate::supervise::pass(&mut backoff, "sync", || {
                     if let Err(err) = run_once(&app) {
-                        log::error!("falha no sync: {err:#}");
+                        log::error!("sync failed: {err:#}");
                     }
                 });
                 crate::refresh_ui(&app);
             }
         });
     if let Err(err) = spawned {
-        log::error!("falha ao iniciar o sync: {err}");
+        log::error!("failed to start sync: {err}");
     }
 }
 
-/// Pede uma passada de sync já.
+/// Request a sync pass now.
 pub fn nudge(app: &AppHandle) {
     if let Some(handle) = app.try_state::<SyncHandle>() {
         if let Ok(tx) = handle.0.lock() {
@@ -161,7 +161,7 @@ pub fn nudge(app: &AppHandle) {
     }
 }
 
-/// "Sincronizar agora": as falhas voltam à fila sem esperar o backoff.
+/// Sync now: return failures to the queue without waiting for backoff.
 pub fn sync_now(app: &AppHandle) -> Result<()> {
     lock(app.state::<AppState>().queue())?.retry_failed(i64::MAX)?;
     nudge(app);
@@ -196,7 +196,7 @@ fn run_once(app: &AppHandle) -> Result<()> {
                         drop(syncing);
                         let report = report?;
                         log::info!("sync: {report:?}");
-                        // O painel de recentes troca a linha local pela do servidor.
+                        // The recent panel replaces the local row with the server row.
                         crate::recent::nudge(app);
                         (report.failed > 0)
                             .then(|| last_failure(state.queue()))
@@ -213,20 +213,20 @@ fn run_once(app: &AppHandle) -> Result<()> {
             }
         }
     }
-    // Retenção lida antes de travar a fila: a ordem dos locks é sempre estado → fila.
+    // Read retention before locking the queue: lock order is always state → queue.
     let retention_days = state.retention_days()?;
     apply_retention(&*lock(state.queue())?, retention_days, now_ms())?;
     if let Err(err) = check_outcomes(app, &state) {
-        log::info!("desfechos: {err:#}");
+        log::info!("outcomes: {err:#}");
         check_pinned_ca(&state)?;
     }
     learn_next_ca(&state)
 }
 
-/// Lê as gravações da conta que mudaram desde a marca d'água: avisa cada desfecho novo (se o
-/// aviso está ligado), guarda o título do servidor das enviadas daqui e lê a espera na fila das
-/// enviadas nas últimas 24 h ainda sem desfecho. Sem marca (a primeira abertura, ou o arquivo do
-/// formato antigo), nada anterior a agora é avisado: a atualização não dispara uma rajada.
+/// Read account recordings changed since the watermark: notify each new outcome (if enabled),
+/// store the server title of recordings uploaded from here and read the queue wait for uploads
+/// in the last 24 h without an outcome. Without a mark (first launch or an old-format file),
+/// notify nothing before now: the update does not trigger a burst.
 fn check_outcomes(app: &AppHandle, state: &AppState) -> Result<()> {
     let now = now_ms();
     if now - LAST_OUTCOMES_CHECK.load(Ordering::Relaxed) < OUTCOMES_EVERY_MS {
@@ -261,9 +261,9 @@ fn check_outcomes(app: &AppHandle, state: &AppState) -> Result<()> {
                 waits.insert(remote_id, wait);
             }
             Ok(None) => {}
-            // Servidor fora: a próxima volta tenta de novo.
+            // Server unavailable: retry on the next iteration.
             Err(err) => {
-                log::info!("espera de {remote_id}: {err:#}");
+                log::info!("wait for {remote_id}: {err:#}");
                 break;
             }
         }
@@ -274,8 +274,8 @@ fn check_outcomes(app: &AppHandle, state: &AppState) -> Result<()> {
     Ok(())
 }
 
-/// Um aviso por desfecho, ou um agrupado quando passam de [`crate::notify::GROUP_ABOVE`]. O
-/// resumo pronto lê o Markdown para o "Copiar"; sem ele, o aviso sai só com "Abrir".
+/// One notification per outcome, or a grouped one above [`crate::notify::GROUP_ABOVE`].
+/// Summary ready reads Markdown for Copy; without it, the notification only offers Open.
 fn announce(app: &AppHandle, client: &Client, web_url: &str, ended: &[Ended]) {
     if ended.len() > crate::notify::GROUP_ABOVE {
         let library = format!("{}/", web_url.trim_end_matches('/'));
@@ -287,7 +287,7 @@ fn announce(app: &AppHandle, client: &Client, web_url: &str, ended: &[Ended]) {
             .then(|| match client.current_summary(&item.recording_id) {
                 Ok(summary) => summary.map(|summary| summary.content_md),
                 Err(err) => {
-                    log::info!("resumo de {}: {err:#}", item.recording_id);
+                    log::info!("summary for {}: {err:#}", item.recording_id);
                     None
                 }
             })
@@ -297,7 +297,7 @@ fn announce(app: &AppHandle, client: &Client, web_url: &str, ended: &[Ended]) {
     }
 }
 
-/// As gravações enviadas daqui nas últimas 24 h ainda sem desfecho: a espera na fila delas.
+/// Recordings uploaded from here in the last 24 h without an outcome: read their queue wait.
 fn wait_candidates(synced: &[QueuedRecording], mark: &Watermark, now: i64) -> Vec<String> {
     synced
         .iter()
@@ -307,12 +307,12 @@ fn wait_candidates(synced: &[QueuedRecording], mark: &Watermark, now: i64) -> Ve
         .collect()
 }
 
-/// A página da gravação no eclume web.
+/// The recording page in eclume web.
 pub(crate) fn recording_url(web_url: &str, remote_id: &str) -> String {
     format!("{}/gravacoes/{remote_id}", web_url.trim_end_matches('/'))
 }
 
-/// `None` quando o arquivo não existe, é ilegível ou é do formato antigo: recomeça da marca.
+/// `None` if the file is missing, unreadable or in the old format: restart from the mark.
 fn load_mark(path: &Path) -> Option<Watermark> {
     let text = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&text).ok()
@@ -323,9 +323,9 @@ fn save_mark(path: &Path, mark: &Watermark) -> Result<()> {
     Ok(())
 }
 
-/// Depois de uma falha, confere se a CA fixada ainda é a do servidor. Se a servida é a próxima
-/// anunciada, ela vira a fixada e o sync segue; se mudou para outra, o sync para e a janela volta
-/// à primeira execução ("O certificado do servidor mudou").
+/// After a failure, check whether the pinned CA is still the server’s CA. If the served CA is
+/// the announced next one, pin it and continue syncing; if it changed to another CA, stop sync
+/// and return the window to first run (the server certificate changed).
 fn check_pinned_ca(state: &AppState) -> Result<()> {
     let Some((web_url, pinned)) = state.pinned_ca()? else {
         return Ok(());
@@ -334,14 +334,14 @@ fn check_pinned_ca(state: &AppState) -> Result<()> {
         Ok(true) => state.mark_ca_changed(),
         Ok(false) => Ok(()),
         Err(err) => {
-            log::info!("não deu para conferir a CA do servidor: {err:#}");
+            log::info!("could not check server CA: {err:#}");
             Ok(())
         }
     }
 }
 
-/// Aprende a próxima CA anunciada pelo descritor, na conexão fixada na atual ([`learn_next`]), no
-/// máximo a cada [`NEXT_CA_EVERY_MS`]; depois de uma falha, tenta de novo em [`NEXT_CA_RETRY_MS`].
+/// Learn the next CA announced by the descriptor over the connection pinned to the current CA
+/// ([`learn_next`]), at most every [`NEXT_CA_EVERY_MS`]; retry failures in [`NEXT_CA_RETRY_MS`].
 ///
 /// [`learn_next`]: crate::account::learn_next
 fn learn_next_ca(state: &AppState) -> Result<()> {
@@ -358,19 +358,19 @@ fn learn_next_ca(state: &AppState) -> Result<()> {
     match crate::account::learn_next(&crate::account::RealNet, &web_url, &pinned) {
         Ok(learned) => {
             if learned {
-                log::info!("próxima CA do servidor guardada");
+                log::info!("next server CA saved");
             }
             LAST_NEXT_CA_CHECK.store(now, Ordering::Relaxed);
         }
         Err(err) => {
-            log::info!("não deu para ler a próxima CA do servidor: {err:#}");
+            log::info!("could not read next server CA: {err:#}");
             LAST_NEXT_CA_CHECK.store(now - NEXT_CA_EVERY_MS + NEXT_CA_RETRY_MS, Ordering::Relaxed);
         }
     }
     Ok(())
 }
 
-/// O erro da falha mais recente, para a janela.
+/// The most recent failure’s error, for the window.
 fn last_failure(queue: &Mutex<Queue>) -> Result<Option<String>> {
     Ok(lock(queue)?
         .by_status(Status::Failed)?
@@ -379,8 +379,8 @@ fn last_failure(queue: &Mutex<Queue>) -> Result<Option<String>> {
         .and_then(|rec| rec.last_error))
 }
 
-/// Apaga o arquivo local das gravações confirmadas há mais de `retention_days` dias (`None`:
-/// nunca). A linha fica na fila com `purged_at`. Devolve quantas apagou.
+/// Delete local files of recordings confirmed more than `retention_days` days ago (`None`:
+/// never). Keep the row in the queue with `purged_at`. Return the number deleted.
 pub fn apply_retention(queue: &Queue, retention_days: Option<u32>, now: i64) -> Result<usize> {
     let Some(days) = retention_days else {
         return Ok(0);
@@ -392,7 +392,7 @@ pub fn apply_retention(queue: &Queue, retention_days: Option<u32>, now: i64) -> 
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => {
-                log::warn!("falha ao apagar {}: {err}", recording.path.display());
+                log::warn!("failed to delete {}: {err}", recording.path.display());
                 continue;
             }
         }
@@ -417,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    fn retencao_apaga_so_depois_do_prazo_e_so_o_confirmado() {
+    fn retention_deletes_only_confirmed_recordings_after_deadline() {
         let dir = std::env::temp_dir().join(format!("eclume-retencao-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut queue = Queue::open_in_memory().unwrap();
@@ -442,14 +442,14 @@ mod tests {
         assert!(!confirmed.exists());
         assert!(
             pending.exists(),
-            "gravação não confirmada nunca sai do disco"
+            "unconfirmed recording is never removed from disk"
         );
         assert!(queue.get("a").unwrap().unwrap().purged_at.is_some());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn espera_so_das_enviadas_nas_ultimas_24_h_sem_desfecho_e_marca_no_arquivo() {
+    fn wait_only_for_uploads_in_last_24_hours_without_outcome_and_save_mark() {
         let dir = std::env::temp_dir().join(format!("eclume-desfechos-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut queue = Queue::open_in_memory().unwrap();
@@ -473,10 +473,10 @@ mod tests {
         );
 
         let path = dir.join(NOTIFIED_FILE);
-        assert_eq!(load_mark(&path), None, "sem arquivo, a primeira abertura");
+        assert_eq!(load_mark(&path), None, "no file on first launch");
         save_mark(&path, &mark).unwrap();
         assert_eq!(load_mark(&path), Some(mark));
-        // O formato antigo (id → instante) recomeça da marca: nada retroativo.
+        // The old format (id → time) restarts from the mark: nothing retroactive.
         std::fs::write(&path, br#"{"srv-a": 1727780000000}"#).unwrap();
         assert_eq!(load_mark(&path), None);
         assert_eq!(
@@ -487,13 +487,13 @@ mod tests {
     }
 
     #[test]
-    fn sem_credencial_as_gravacoes_esperam_o_login() {
+    fn recordings_without_device_credential_wait_for_sign_in() {
         assert_eq!(sign_in_to_send(1), "Entre para enviar 1 gravação");
         assert_eq!(sign_in_to_send(2), "Entre para enviar 2 gravações");
     }
 
     #[test]
-    fn retencao_zero_apaga_logo_e_tolera_arquivo_sumido() {
+    fn zero_retention_deletes_immediately_and_tolerates_missing_file() {
         let dir = std::env::temp_dir().join(format!("eclume-retencao0-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut queue = Queue::open_in_memory().unwrap();
@@ -537,10 +537,10 @@ mod tests {
     }
 
     #[test]
-    fn leitura_repartida_responde_quem_pede_o_mesmo_since_ou_um_mais_novo() {
+    fn shared_read_answers_requests_with_same_or_newer_since() {
         let cached = shared(1, "2026-10-01T09:58:00Z", 1_000_000);
         let now = 1_000_000 + 30_000;
-        // Mais antigo ou igual ao pedido: serve, filtrando pelo `updated_at` do pedido.
+        // Older than or equal to the request: usable, filtering by the requested `updated_at`.
         assert_eq!(
             ids(shared_answer(Some(&cached), 1, "2026-10-01T09:58:00Z", now).unwrap()),
             ["a", "b"]
@@ -549,22 +549,22 @@ mod tests {
             ids(shared_answer(Some(&cached), 1, "2026-10-01T10:03:00Z", now).unwrap()),
             ["b"]
         );
-        // Um `since` mais velho que o da leitura não está coberto.
+        // A `since` older than the cached read is not covered.
         assert!(shared_answer(Some(&cached), 1, "2026-10-01T09:00:00Z", now).is_none());
-        // Outra conta nunca herda a leitura.
+        // Another account never inherits the read.
         assert!(shared_answer(Some(&cached), 2, "2026-10-01T10:03:00Z", now).is_none());
         assert!(shared_answer(None, 1, "2026-10-01T10:03:00Z", now).is_none());
     }
 
     #[test]
-    fn leitura_repartida_vale_menos_de_um_minuto() {
+    fn shared_read_is_valid_for_less_than_one_minute() {
         let cached = shared(1, "2026-10-01T09:58:00Z", 1_000_000);
         let since = "2026-10-01T10:00:00Z";
         assert!(
             shared_answer(Some(&cached), 1, since, 1_000_000 + SHARED_READ_TTL_MS - 1).is_some()
         );
         assert!(shared_answer(Some(&cached), 1, since, 1_000_000 + SHARED_READ_TTL_MS).is_none());
-        // Relógio que andou para trás: não confia na idade.
+        // The clock went backward: do not trust the age.
         assert!(shared_answer(Some(&cached), 1, since, 999_999).is_none());
     }
 }

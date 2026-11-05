@@ -1,27 +1,27 @@
-//! O `creation_time` do `moov/mvhd` de MP4, MOV e M4A, que gravadores e celulares preenchem, e se
-//! o arquivo tem trilha de som (`hdlr` = `soun`). Percorre as caixas sem dependência.
+//! The `creation_time` of the `moov/mvhd` of MP4, MOV and M4A, which recorders and phones fill
+//! in, and whether the file has a sound track (`hdlr` = `soun`). Walks the boxes with no dependency.
 
 use std::io::{self, Read, Seek, SeekFrom};
 
-/// Segundos de 1904-01-01 (a época do MP4) a 1970-01-01.
+/// Seconds from 1904-01-01 (the MP4 epoch) to 1970-01-01.
 const MP4_EPOCH_OFFSET_S: i64 = 2_082_844_800;
-/// 1990-01-01 UTC: antes disso, a data é zero ou relógio desacertado.
+/// 1990-01-01 UTC: before that, the date is zero or a clock that was never set.
 const MIN_VALID_S: i64 = 631_152_000;
-/// Teto do `moov` lido em memória (ele traz só índices, não mídia).
+/// Cap on the `moov` read into memory (it carries only indexes, not media).
 const MAX_MOOV_BYTES: u64 = 64 * 1024 * 1024;
-/// Caixas que abrem um MP4 ou um MOV antigo sem `ftyp`.
+/// Boxes that open an MP4, or an old MOV without `ftyp`.
 const FIRST_BOXES: [&[u8; 4]; 6] = [b"ftyp", b"moov", b"wide", b"free", b"skip", b"mdat"];
 
-/// O que o `moov` diz.
+/// What the `moov` says.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Mp4Info {
-    /// `creation_time` do `mvhd`, em ms desde 1970; `None` se zero ou anterior a 1990.
+    /// The `mvhd` `creation_time`, in ms since 1970; `None` if zero or before 1990.
     pub created_at_ms: Option<i64>,
-    /// Alguma trilha é de som.
+    /// Some track is a sound track.
     pub has_sound: bool,
 }
 
-/// Lê o `moov` de um MP4; `Ok(None)` quando o arquivo não é MP4 ou não tem `moov`.
+/// Reads the `moov` of an MP4; `Ok(None)` when the file is not MP4 or has no `moov`.
 pub fn read(mut reader: impl Read + Seek) -> io::Result<Option<Mp4Info>> {
     let end = reader.seek(SeekFrom::End(0))?;
     let mut offset = 0;
@@ -57,7 +57,7 @@ pub fn read(mut reader: impl Read + Seek) -> io::Result<Option<Mp4Info>> {
     Ok(None)
 }
 
-/// As caixas filhas de `data`: (tipo, corpo). Para na primeira caixa malformada.
+/// The child boxes of `data`: (type, body). Stops at the first malformed box.
 fn children(mut data: &[u8]) -> impl Iterator<Item = ([u8; 4], &[u8])> {
     std::iter::from_fn(move || {
         if data.len() < 8 {
@@ -97,7 +97,7 @@ fn parse_moov(moov: &[u8]) -> Mp4Info {
     info
 }
 
-/// `mvhd`: versão (1 byte), flags (3) e o `creation_time` em 32 (v0) ou 64 bits (v1).
+/// `mvhd`: version (1 byte), flags (3) and the `creation_time` in 32 (v0) or 64 bits (v1).
 fn mvhd_creation(body: &[u8]) -> Option<i64> {
     let seconds = match body.first()? {
         0 => i64::from(u32::from_be_bytes(body.get(4..8)?.try_into().ok()?)),
@@ -108,7 +108,7 @@ fn mvhd_creation(body: &[u8]) -> Option<i64> {
     (unix >= MIN_VALID_S).then(|| unix * 1000)
 }
 
-/// `trak/mdia/hdlr`: versão e flags (4), `pre_defined` (4) e o tipo do manipulador.
+/// `trak/mdia/hdlr`: version and flags (4), `pre_defined` (4) and the handler type.
 fn trak_is_sound(trak: &[u8]) -> bool {
     children(trak)
         .filter(|(kind, _)| kind == b"mdia")
@@ -122,7 +122,7 @@ mod tests {
 
     use super::*;
 
-    fn caixa(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {
+    fn mp4_box(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {
         let mut out = u32::try_from(body.len() + 8)
             .unwrap()
             .to_be_bytes()
@@ -140,29 +140,29 @@ mod tests {
             body.extend_from_slice(&seconds.to_be_bytes());
         }
         body.extend_from_slice(&[0; 16]);
-        caixa(b"mvhd", &body)
+        mp4_box(b"mvhd", &body)
     }
 
     fn trak(handler: &[u8; 4]) -> Vec<u8> {
         let mut hdlr = vec![0; 8];
         hdlr.extend_from_slice(handler);
-        caixa(b"trak", &caixa(b"mdia", &caixa(b"hdlr", &hdlr)))
+        mp4_box(b"trak", &mp4_box(b"mdia", &mp4_box(b"hdlr", &hdlr)))
     }
 
     fn mp4(moov: &[Vec<u8>]) -> Vec<u8> {
-        let mut out = caixa(b"ftyp", b"M4A \0\0\0\0");
-        out.extend(caixa(b"mdat", &[0; 32]));
-        out.extend(caixa(b"moov", &moov.concat()));
+        let mut out = mp4_box(b"ftyp", b"M4A \0\0\0\0");
+        out.extend(mp4_box(b"mdat", &[0; 32]));
+        out.extend(mp4_box(b"moov", &moov.concat()));
         out
     }
 
-    /// 2026-09-19T14:02:00Z em segundos desde 1904.
-    const DATA_1904: u64 = 1_789_826_520 + 2_082_844_800;
+    /// 2026-09-19T14:02:00Z in seconds since 1904.
+    const DATE_1904: u64 = 1_789_826_520 + 2_082_844_800;
 
     #[test]
-    fn mvhd_v0_e_v1_viram_ms_desde_1970() {
+    fn mvhd_v0_and_v1_become_ms_since_1970() {
         for version in [0, 1] {
-            let info = read(Cursor::new(mp4(&[mvhd(version, DATA_1904), trak(b"soun")])))
+            let info = read(Cursor::new(mp4(&[mvhd(version, DATE_1904), trak(b"soun")])))
                 .unwrap()
                 .unwrap();
             assert_eq!(info.created_at_ms, Some(1_789_826_520_000));
@@ -171,26 +171,26 @@ mod tests {
     }
 
     #[test]
-    fn data_zero_ou_antiga_e_ignorada() {
+    fn zero_or_old_date_is_ignored() {
         let zero = read(Cursor::new(mp4(&[mvhd(0, 0), trak(b"vide")])))
             .unwrap()
             .unwrap();
         assert_eq!(zero.created_at_ms, None);
         assert!(!zero.has_sound);
-        let antiga = 400_000_000 + MP4_EPOCH_OFFSET_S as u64;
-        let info = read(Cursor::new(mp4(&[mvhd(0, antiga)]))).unwrap().unwrap();
+        let old = 400_000_000 + MP4_EPOCH_OFFSET_S as u64;
+        let info = read(Cursor::new(mp4(&[mvhd(0, old)]))).unwrap().unwrap();
         assert_eq!(info.created_at_ms, None);
     }
 
     #[test]
-    fn nao_mp4_ou_truncado_nao_quebra() {
+    fn non_mp4_or_truncated_does_not_break() {
         assert_eq!(
             read(Cursor::new(b"RIFF\0\0\0\0WAVEfmt ".to_vec())).unwrap(),
             None
         );
         assert_eq!(read(Cursor::new(Vec::new())).unwrap(), None);
-        let mut cortado = mp4(&[mvhd(0, DATA_1904)]);
-        cortado.truncate(cortado.len() - 10);
-        assert!(read(Cursor::new(cortado)).is_err());
+        let mut truncated = mp4(&[mvhd(0, DATE_1904)]);
+        truncated.truncate(truncated.len() - 10);
+        assert!(read(Cursor::new(truncated)).is_err());
     }
 }

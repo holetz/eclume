@@ -97,7 +97,7 @@ def reconcile_label_set(current: list[str], desired: list[str], prefix: str = "s
 
 def tags_outside_catalog(tags: list[str], catalog: dict) -> list[str]:
     """Which of `tags` are not a `tagCatalog` key — pure, so the write-time proposal
-    (`/quenching-specs:specs:create`, §4.1) and `doctor`'s `sp-az-tag-uncatalogued` finding (§2.13) share
+    (`/quenching-specs create`, §4.1) and `doctor`'s `sp-az-tag-uncatalogued` finding (§2.13) share
     ONE answer rather than two parsers that could disagree.
 
     No catalog declared flags nothing: `tagCatalog` is optional, and a repository that never

@@ -1,13 +1,13 @@
-//! Notificações nativas, com os textos do frame "Notifications" do DS. A pergunta "gravar esta
-//! reunião?" leva as ações Gravar e Agora não, o resumo pronto, Copiar e Abrir, e os outros
-//! desfechos do processamento (resumo que falhou, pronta sem resumo, transcrição que falhou), Abrir, onde o
-//! SO deixa responder pela notificação — Linux (D-Bus, `notify-rust`), Windows (toast com botões,
-//! `tauri-winrt-notification`) e macOS (`mac-notification-sys`) —, e a mesma pergunta fica na
-//! bandeja e na janela, porque o SO pode suprimir a notificação (modo foco, não perturbe).
+//! Native notifications, with text from the DS "Notifications" frame. The question "record this
+//! meeting?" has Record and Not now actions; a ready summary has Copy and Open; other processing
+//! outcomes (failed summary, ready without a summary, failed transcription) have Open, where the
+//! OS supports notification responses — Linux (D-Bus, `notify-rust`), Windows (toast with buttons,
+//! `tauri-winrt-notification`) and macOS (`mac-notification-sys`). The same question stays in the
+//! tray and window because the OS may suppress notifications (focus mode, do not disturb).
 //!
-//! No Windows, todo aviso sai pelo toast com o AUMID do app instalado, para ter o nome e o ícone
-//! do eclume (o do PowerShell só em dev). No Linux, as ações esperam no máximo
-//! [`ACTIONS_DEADLINE`]: vencido o prazo, a notificação é fechada e a thread termina.
+//! On Windows, every notice uses a toast with the installed app's AUMID to show eclume's name
+//! and icon (PowerShell's only in dev). On Linux, actions wait at most
+//! [`ACTIONS_DEADLINE`]: once it expires, the notification closes and the thread ends.
 
 use std::sync::Arc;
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -20,49 +20,49 @@ use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_opener::OpenerExt;
 
-const ACTION_RECORD: &str = "gravar";
-const ACTION_IGNORE: &str = "ignorar";
+const ACTION_RECORD: &str = "record";
+const ACTION_IGNORE: &str = "ignore";
 const LABEL_RECORD: &str = "Gravar";
 const LABEL_IGNORE: &str = "Agora não";
-const ACTION_COPY: &str = "copiar";
-const ACTION_OPEN: &str = "abrir";
+const ACTION_COPY: &str = "copy";
+const ACTION_OPEN: &str = "open";
 const LABEL_COPY: &str = "Copiar";
 const LABEL_OPEN: &str = "Abrir";
-/// Quanto uma notificação com ações espera resposta no Linux. A pergunta e o resumo seguem na
-/// bandeja, na janela e no web, então ela pode expirar.
+/// How long a notification with actions waits for a response on Linux. The question and summary
+/// stay in the tray, window and web, so it can expire.
 #[cfg(all(unix, not(target_os = "macos")))]
 const ACTIONS_DEADLINE: Duration = Duration::from_secs(15 * 60);
 
-/// O AUMID dos toasts: o `identifier` do app, guardado por [`init`].
+/// The toast AUMID: the app `identifier`, saved by [`init`].
 #[cfg(target_os = "windows")]
 static APP_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
-/// Duas ações `(id, rótulo)`: a principal e a outra.
+/// Two `(id, label)` actions: the primary one and the other.
 type Actions = &'static [(&'static str, &'static str)];
-/// O que fazer com a ação escolhida (o id dela).
+/// What to do with the chosen action (its id).
 type OnAction = Arc<dyn Fn(&AppHandle, &str) + Send + Sync>;
 
-/// O que o app avisa por notificação.
+/// What the app announces through notifications.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Notice {
-    /// Uma reunião foi detectada e a política pede para perguntar.
+    /// A meeting was detected and the policy requires asking.
     Detected(AppKey),
-    /// A gravação automática começou.
+    /// Automatic recording started.
     Recording(AppKey),
-    /// A reunião gravada automaticamente acabou.
+    /// The automatically recorded meeting ended.
     MeetingEnded(Option<i64>),
     NoteSaved(Option<i64>),
     NoteDiscarded,
-    /// "Nova nota" com outra gravação em andamento.
+    /// New voice note requested while another recording is in progress.
     Busy,
-    /// A gravação parou sozinha (fontes caíram ou falha), com o tempo salvo.
+    /// The recording stopped on its own (sources dropped or a failure), with the saved duration.
     RecordingStopped(Option<i64>, StopReason),
-    /// O microfone está fora há mais de 5 s e a gravação segue sem ele.
+    /// The microphone has been unavailable for over 5 s and recording continues without it.
     MicLost,
 }
 
 impl Notice {
-    /// Título e corpo.
+    /// Title and body.
     pub fn text(self) -> (String, String) {
         let duration = |ms: Option<i64>| short_duration(ms.unwrap_or(0));
         match self {
@@ -107,13 +107,13 @@ impl Notice {
     }
 }
 
-/// Mostra um aviso sem ação.
+/// Show a notice without an action.
 pub fn show(notice: Notice) {
     let (title, body) = notice.text();
     info(&title, &body);
 }
 
-/// Guarda o que os avisos precisam do app (o AUMID do Windows); chamado no setup.
+/// Save what notifications need from the app (the Windows AUMID); called during setup.
 pub fn init(app: &AppHandle) {
     #[cfg(target_os = "windows")]
     let _ = APP_ID.set(app.config().identifier.clone());
@@ -121,8 +121,8 @@ pub fn init(app: &AppHandle) {
     let _ = app;
 }
 
-/// O AUMID do toast: o do app instalado; em dev (ou antes de [`init`]), o do PowerShell, que
-/// sempre existe.
+/// The toast AUMID: the installed app's; in dev (or before [`init`]), PowerShell's, which
+/// always exists.
 #[cfg(target_os = "windows")]
 fn toast_app_id() -> String {
     use tauri_winrt_notification::Toast;
@@ -133,18 +133,18 @@ fn toast_app_id() -> String {
     }
 }
 
-/// Notificação informativa, sem ação.
+/// Informational notification, without an action.
 #[cfg(target_os = "windows")]
 pub fn info(title: &str, body: &str) {
     use tauri_winrt_notification::Toast;
 
     let result = Toast::new(&toast_app_id()).title(title).text1(body).show();
     if let Err(err) = result {
-        log::warn!("falha ao notificar \"{title}\": {err}");
+        log::warn!("failed to notify \"{title}\": {err}");
     }
 }
 
-/// Notificação informativa, sem ação.
+/// Informational notification, without an action.
 #[cfg(not(target_os = "windows"))]
 pub fn info(title: &str, body: &str) {
     let result = notify_rust::Notification::new()
@@ -153,36 +153,36 @@ pub fn info(title: &str, body: &str) {
         .body(body)
         .show();
     if let Err(err) = result {
-        log::warn!("falha ao notificar \"{title}\": {err}");
+        log::warn!("failed to notify \"{title}\": {err}");
     }
 }
 
-/// A nota foi para a fila.
+/// The voice note went into the queue.
 pub fn note_saved(duration_ms: Option<i64>) {
     show(Notice::NoteSaved(duration_ms));
 }
 
-/// A nota não teve voz e foi descartada.
+/// The voice note had no speech and was discarded.
 pub fn note_discarded() {
     show(Notice::NoteDiscarded);
 }
 
-/// A gravação parou sozinha: as fontes caíram ou a gravação falhou.
+/// The recording stopped on its own: sources dropped or recording failed.
 pub fn recording_stopped(duration_ms: Option<i64>, reason: StopReason) {
     show(Notice::RecordingStopped(duration_ms, reason));
 }
 
-/// O microfone da gravação em curso está fora há mais de 5 s.
+/// The microphone for the current recording has been unavailable for over 5 s.
 pub fn mic_lost() {
     show(Notice::MicLost);
 }
 
-/// "Nova nota" com outra gravação em andamento.
+/// New voice note requested while another recording is in progress.
 pub fn busy() {
     show(Notice::Busy);
 }
 
-/// "42 s", "3 min" ou "1 h 05 min".
+/// "42 s", "3 min" or "1 h 05 min".
 pub fn short_duration(ms: i64) -> String {
     let seconds = (ms.max(0) + 500) / 1000;
     if seconds < 60 {
@@ -195,7 +195,7 @@ pub fn short_duration(ms: i64) -> String {
     format!("{} h {:02} min", minutes / 60, minutes % 60)
 }
 
-/// Pergunta se grava a reunião detectada (a pergunta também fica na bandeja e na janela).
+/// Ask whether to record the detected meeting (the question also stays in the tray and window).
 pub fn ask(app: &AppHandle, key: AppKey) {
     let (title, body) = Notice::Detected(key).text();
     with_actions(
@@ -207,11 +207,11 @@ pub fn ask(app: &AppHandle, key: AppKey) {
     );
 }
 
-/// Quantos desfechos de uma volta ganham um aviso cada; acima disso, um aviso agrupado.
+/// How many outcomes per pass get individual notices; above this, use a grouped notice.
 pub const GROUP_ABOVE: usize = 3;
 
-/// O texto do motivo de um resumo pulado (o mesmo de `MOTIVOS` em `ui/js/vocabulario.js`); código
-/// desconhecido aparece cru, como na janela.
+/// The reason text for a skipped summary (the same as `MOTIVOS` in `ui/js/vocabulario.js`); an
+/// unknown code appears as is, just as in the window.
 fn reason_text(reason: Option<&str>) -> String {
     match reason {
         Some("no_provider") => "nenhum agente configurado; fale com quem administra".into(),
@@ -221,7 +221,7 @@ fn reason_text(reason: Option<&str>) -> String {
     }
 }
 
-/// Título e corpo do aviso de um desfecho do processamento.
+/// Title and body of a processing outcome notice.
 pub fn outcome_text(
     outcome: Outcome,
     recording_title: &str,
@@ -256,7 +256,7 @@ pub fn outcome_text(
     }
 }
 
-/// Título e corpo do aviso agrupado, quando muitas gravações terminam na mesma volta.
+/// Title and body of the grouped notice when many recordings finish in the same pass.
 pub fn grouped_text(count: usize) -> (String, String) {
     (
         format!("{count} gravações processadas"),
@@ -264,8 +264,8 @@ pub fn grouped_text(count: usize) -> (String, String) {
     )
 }
 
-/// Um desfecho do processamento de uma gravação da conta. Pronto, com o Markdown, leva "Copiar"
-/// (põe o resumo na área de transferência) e "Abrir"; os outros, só "Abrir" (a gravação no web).
+/// A processing outcome for an account recording. A ready summary with Markdown has Copy
+/// (put the summary on the clipboard) and Open; others have only Open (the recording on the web).
 pub fn outcome(app: &AppHandle, ended: &Ended, markdown: Option<String>, url: String) {
     let (title, body) = outcome_text(ended.outcome, &ended.title, ended.reason.as_deref());
     let actions: Actions = if ended.outcome == Outcome::SummaryReady && markdown.is_some() {
@@ -277,7 +277,7 @@ pub fn outcome(app: &AppHandle, ended: &Ended, markdown: Option<String>, url: St
         ACTION_COPY => {
             if let Some(markdown) = &markdown {
                 if let Err(err) = app.clipboard().write_text(markdown.clone()) {
-                    log::warn!("falha ao copiar o resumo: {err}");
+                    log::warn!("failed to copy summary: {err}");
                 }
             }
         }
@@ -287,7 +287,7 @@ pub fn outcome(app: &AppHandle, ended: &Ended, markdown: Option<String>, url: St
     with_actions(app.clone(), title, body, actions, on_action);
 }
 
-/// Muitos desfechos de uma vez: um aviso só, que abre a biblioteca no web.
+/// Many outcomes at once: a single notice that opens the web library.
 pub fn outcomes_grouped(app: &AppHandle, count: usize, url: String) {
     let (title, body) = grouped_text(count);
     let on_action: OnAction = Arc::new(move |app, action| {
@@ -306,7 +306,7 @@ pub fn outcomes_grouped(app: &AppHandle, count: usize, url: String) {
 
 fn open(app: &AppHandle, url: &str) {
     if let Err(err) = app.opener().open_url(url, None::<&str>) {
-        log::warn!("falha ao abrir {url}: {err}");
+        log::warn!("failed to open {url}: {err}");
     }
 }
 
@@ -339,14 +339,14 @@ fn with_actions(app: AppHandle, title: String, body: String, actions: Actions, o
                 handle.wait_for_action(|action| on(&app, action));
                 answered.store(true, std::sync::atomic::Ordering::Release);
             }
-            Err(err) => log::warn!("falha ao notificar \"{title}\": {err}"),
+            Err(err) => log::warn!("failed to notify \"{title}\": {err}"),
         }
     });
 }
 
-/// Vencido o prazo sem resposta, fecha a notificação `id`: o servidor emite o fechamento e a
-/// espera de [`with_actions`] termina. O GNOME ignora o prazo pedido na notificação, por isso o
-/// fechamento explícito.
+/// After the deadline without a response, close notification `id`: the server emits the closure
+/// and [`with_actions`] stops waiting. GNOME ignores the requested notification timeout, hence
+/// the explicit closure.
 #[cfg(all(unix, not(target_os = "macos")))]
 fn close_after_deadline(
     mut notification: notify_rust::Notification,
@@ -358,10 +358,10 @@ fn close_after_deadline(
         if answered.load(std::sync::atomic::Ordering::Acquire) {
             return;
         }
-        // Substitui a mesma notificação (mesmo id) só para obter o handle que a fecha.
+        // Replace the same notification (same id) just to get the handle that closes it.
         match notification.id(id).show() {
             Ok(handle) => handle.close(),
-            Err(err) => log::debug!("falha ao fechar a notificação {id}: {err}"),
+            Err(err) => log::debug!("failed to close notification {id}: {err}"),
         }
     });
 }
@@ -388,7 +388,7 @@ fn with_actions(app: AppHandle, title: String, body: String, actions: Actions, o
         })
         .show();
     if let Err(err) = shown {
-        log::warn!("falha ao notificar \"{title}\": {err}");
+        log::warn!("failed to notify \"{title}\": {err}");
     }
 }
 
@@ -397,7 +397,7 @@ fn with_actions(app: AppHandle, title: String, body: String, actions: Actions, o
     use mac_notification_sys::{MainButton, Notification, NotificationResponse};
 
     std::thread::spawn(move || {
-        // Só vale uma vez por processo; as seguintes devolvem "já definido".
+        // Only applies once per process; subsequent calls return "already set".
         let _ = mac_notification_sys::set_application(&app.config().identifier);
         let first = actions.first().copied();
         let second = actions.get(1).copied();
@@ -421,7 +421,7 @@ fn with_actions(app: AppHandle, title: String, body: String, actions: Actions, o
                 }
             }
             Ok(_) => {}
-            Err(err) => log::warn!("falha ao notificar \"{title}\": {err}"),
+            Err(err) => log::warn!("failed to notify \"{title}\": {err}"),
         }
     });
 }
@@ -436,7 +436,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn textos_do_frame_notifications() {
+    fn notifications_frame_text() {
         let text = |n: Notice| {
             let (title, body) = n.text();
             format!("{title} · {body}")
@@ -481,7 +481,7 @@ mod tests {
     }
 
     #[test]
-    fn textos_dos_desfechos() {
+    fn outcome_texts() {
         let text = |outcome, title: &str, reason: Option<&str>| {
             let (title, body) = outcome_text(outcome, title, reason);
             format!("{title} · {body}")
@@ -522,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn duracao_curta_da_notificacao() {
+    fn short_notification_duration() {
         assert_eq!(short_duration(0), "1 s");
         assert_eq!(short_duration(42_300), "42 s");
         assert_eq!(short_duration(59_400), "59 s");

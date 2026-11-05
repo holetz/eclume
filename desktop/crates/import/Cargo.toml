@@ -1,6 +1,6 @@
 [package]
 name = "eclume-import"
-description = "Importação de arquivos no app desktop do eclume: duração, data de gravação e conversão para Opus."
+description = "File import for the eclume desktop app: duration, recording date and conversion to Opus."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,11 +11,11 @@ publish = false
 eclume-recorder = { path = "../recorder" }
 anyhow = "1"
 log = "0.4"
-# O Opus que o symphonia só demultiplexa: a mesma libopus do recorder.
+# The Opus that symphonia only demuxes: the same libopus as the recorder.
 opus = "0.4"
 serde = { version = "1", features = ["derive"] }
-# Rust puro (MPL-2.0, sem modificação). As features padrão trazem FLAC, MKV/WebM, Ogg, PCM,
-# Vorbis e WAV; somam-se AAC, ALAC, MP3 e o contêiner MP4/MOV/M4A.
+# Pure Rust (MPL-2.0, unmodified). The default features bring FLAC, MKV/WebM, Ogg, PCM,
+# Vorbis and WAV; AAC, ALAC, MP3 and the MP4/MOV/M4A container are added.
 symphonia = { version = "0.5", features = ["aac", "alac", "mp3", "isomp4"] }
 
 [dev-dependencies]

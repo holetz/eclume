@@ -1,9 +1,9 @@
-//! Espelho local da biblioteca do eclume: o resumo atual de cada gravação como `.md` e a
-//! transcrição como `.jsonl`, numa subpasta por Collection.
+//! Local mirror of the eclume library: each recording's current summary as `.md` and its
+//! transcript as `.jsonl`, in one subfolder per collection.
 //!
-//! A pasta serve ao mesmo tempo de vault do Obsidian (o `.md` traz propriedades em front matter;
-//! `.jsonl` e o manifesto não aparecem no Obsidian) e de pasta de trabalho de agente (`AGENTS.md`
-//! na raiz). O servidor é a fonte: o que o app gerou é sobrescrito. Contrato em
+//! The folder serves as both an Obsidian vault (`.md` has front matter properties; `.jsonl` and
+//! the manifest do not appear in Obsidian) and an agent workspace (`AGENTS.md` at the root).
+//! The server is the source: what the app generated is overwritten. Contract in
 //! docs/standards/code/desktop-pasta-sincronizada.md.
 
 pub mod agents;
@@ -16,44 +16,44 @@ pub use layout::{base_name, collection_dir, month_dir, slug, NO_COLLECTION};
 pub use manifest::Manifest;
 pub use reconcile::{Applied, Mirror};
 
-/// O que o espelho sabe de uma gravação para escrevê-la em disco. Sem rede nem Tauri: quem chama
-/// converte os tipos do `eclume-sync` nestes.
+/// What the mirror knows about a recording to write it to disk. No network or Tauri: the caller
+/// converts `eclume-sync` types into these.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MirrorItem {
     pub recording_id: String,
     pub title: String,
-    /// `recorded_at` do servidor (ISO 8601, UTC): vai para o front matter e, sem `local_start`,
-    /// dá nome e mês ao arquivo.
+    /// The server's `recorded_at` (ISO 8601, UTC): added to front matter; without `local_start`,
+    /// determines the file name and month.
     pub recorded_at: Option<String>,
-    /// O início da gravação em hora local (`AAAA-MM-DDTHH:MM:SS`), que o app calcula: dá o mês da
-    /// subpasta e o nome do arquivo, para baterem com o que a pessoa vê.
+    /// The recording start in local time (`AAAA-MM-DDTHH:MM:SS`), calculated by the app: determines
+    /// the monthly subfolder and file name to match what the person sees.
     pub local_start: Option<String>,
-    /// Nomes das Collections da gravação; vazio cai em [`NO_COLLECTION`].
+    /// The recording's collection names; an empty list falls back to [`NO_COLLECTION`].
     pub collections: Vec<String>,
     pub agenda_type: Option<String>,
     pub summary: Option<Summary>,
     pub transcript: Option<Transcript>,
-    /// As notas dos marcadores (só os que têm nota), em ordem de instante.
+    /// Marker notes (only markers with notes), ordered by timestamp.
     pub markers: Vec<MirrorMarker>,
 }
 
-/// Um marcador com nota: vira uma linha da seção "Notas dos marcadores" do `.md`.
+/// A marker with a note: becomes a line in the `.md` marker notes section.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MirrorMarker {
     pub at_ms: u64,
     pub note: String,
 }
 
-/// O resumo atual.
+/// The current summary.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Summary {
     pub version: u64,
     pub markdown: String,
-    /// A `revision` da transcrição de que o resumo partiu; `None` num servidor anterior ao 2.25.0.
+    /// The transcript's `revision` used for the summary; `None` on a server before 2.25.0.
     pub transcript_revision: Option<u64>,
 }
 
-/// A transcrição, já sem o que o espelho não usa.
+/// The transcript, with anything the mirror does not use removed.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Transcript {
     pub id: String,
@@ -78,7 +78,7 @@ pub struct Segment {
     pub text: String,
 }
 
-/// Diretório temporário de teste, apagado ao sair de escopo.
+/// Test temporary directory, deleted when it goes out of scope.
 #[cfg(test)]
 pub(crate) mod testing {
     use std::path::{Path, PathBuf};

@@ -1,31 +1,32 @@
-//! Fila local e persistente das gravações, em SQLite.
+//! Local persistent recording queue in SQLite.
 //!
-//! Uma linha por gravação, com o ciclo `recording → pending → syncing → synced | failed`.
-//! `failed` volta a `pending` por `retry_due` (no prazo do backoff) ou `retry_failed` (já). Uma
-//! linha que ficou em `recording` quando o processo morreu é recuperada na abertura seguinte como
-//! `pending` com `interrupted = 1`.
+//! One row per recording, with the lifecycle `recording → pending → syncing → synced | failed`.
+//! `failed` returns to `pending` through `retry_due` (after backoff) or `retry_failed`
+//! (immediately). A row left in `recording` when the process died is recovered on the next
+//! startup as `pending` with `interrupted = 1`.
 //!
-//! Esquema v2: `upload_id` e `sha256` guardam o upload em curso para a retomada,
-//! `next_attempt_at` agenda a próxima tentativa depois de uma falha, `synced_at` marca a
-//! confirmação do servidor, `purged_at` a remoção do arquivo local pela retenção e
-//! `meeting_app` o app da reunião que a detecção viu (`teams`, `meet`, `zoom`, `other`).
+//! Schema v2: `upload_id` and `sha256` store the ongoing upload for resumption,
+//! `next_attempt_at` schedules the next attempt after a failure, `synced_at` marks server
+//! confirmation, `purged_at` marks local file removal by retention, and `meeting_app` stores
+//! the meeting app seen by detection (`teams`, `meet`, `zoom`, `other`).
 //!
-//! Esquema v3: `kind` separa reunião de nota por voz, `recorded_at_source` diz de onde veio a
-//! data de início (captura, metadados do arquivo importado ou a pessoa), `source` separa a
-//! gravação do app da importação de arquivo, e `original_name`/`content_type` guardam o nome e o
-//! tipo do arquivo importado. A tabela `markers` guarda os marcadores de cada gravação até o
+//! Schema v3: `kind` distinguishes a meeting from a voice note, `recorded_at_source` indicates
+//! where the start date came from (capture, imported file metadata or the person), `source`
+//! distinguishes app recording from file import, and `original_name`/`content_type` store the
+//! imported file's name and type. The `markers` table stores each recording's markers until
 //! upload.
 //!
-//! Esquema v4: `title` e `agenda_type_id` são o título e o tipo de agenda escolhidos ao parar (no
-//! celular, a folha "Gravação salva"), e `details_pending` segura o sync enquanto essa folha está
-//! aberta, por no máximo [`DETAILS_WAIT_MS`].
+//! Schema v4: `title` and `agenda_type_id` are the title and agenda type chosen on stop (on
+//! mobile, the "Recording saved" sheet), and `details_pending` holds sync while that sheet is
+//! open, for at most [`DETAILS_WAIT_MS`].
 //!
-//! Esquema v5: `server_title` é o título que o servidor dá à gravação depois de processada, lido
-//! da listagem por `?since=`; a fila mostra o título local, senão ele.
+//! Schema v5: `server_title` is the title the server gives the recording after processing, read
+//! from the listing with `?since=`; the queue shows the local title, falling back to this one.
 //!
-//! Esquema v6: `language` é o idioma da transcrição escolhido para a gravação (no celular, a folha
-//! "Gravação salva"; `auto` pede a detecção); sem ele, o upload manda o do aparelho, e sem nenhum
-//! vale o da conta. Uma fila v1 a v5 ganha as colunas e a tabela na abertura, sem perder linhas.
+//! Schema v6: `language` is the transcript language chosen for the recording (on mobile, the
+//! "Recording saved" sheet; `auto` requests detection); without it, upload sends the device
+//! language, and without either, the account language applies. A v1 to v5 queue gains the
+//! columns and table on open, without losing rows.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -37,10 +38,11 @@ use serde::Serialize;
 
 const SCHEMA_VERSION: i32 = 6;
 
-/// Quanto uma gravação com `details_pending` espera o título e o tipo antes de subir sem eles.
+/// How long a recording with `details_pending` waits for title and type before uploading
+/// without them.
 pub const DETAILS_WAIT_MS: i64 = 10 * 60 * 1_000;
 
-/// Tamanho máximo da nota de um marcador, em caracteres (o limite do contrato).
+/// Maximum marker note length, in characters (the contract limit).
 pub const MAX_MARKER_NOTE: usize = 500;
 
 const SCHEMA: &str = "
@@ -84,7 +86,7 @@ CREATE TABLE IF NOT EXISTS markers (
 CREATE INDEX IF NOT EXISTS markers_recording ON markers (recording_id, at_ms);
 ";
 
-/// Colunas que a v2 a v6 acrescentaram, com o tipo, para migrar uma fila anterior.
+/// Columns added by v2 to v6, with their types, to migrate an older queue.
 const ADDED_COLUMNS: [(&str, &str); 16] = [
     ("upload_id", "TEXT"),
     ("sha256", "TEXT"),
@@ -104,7 +106,8 @@ const ADDED_COLUMNS: [(&str, &str); 16] = [
     ("language", "TEXT"),
 ];
 
-/// Um enum guardado como texto na fila, lido, escrito e serializado no vocabulário do contrato.
+/// An enum stored as text in the queue, read, written and serialized in the contract
+/// vocabulary.
 macro_rules! text_enum {
     ($(#[$meta:meta])* $name:ident { $($(#[$vmeta:meta])* $variant:ident = $text:literal),+ $(,)? }) => {
         $(#[$meta])*
@@ -148,63 +151,63 @@ macro_rules! text_enum {
 }
 
 text_enum! {
-    /// A natureza da gravação (`kind` do contrato).
+    /// The recording kind (`kind` in the contract).
     Kind {
-        /// Reunião ou gravação manual: microfone e áudio do sistema.
+        /// Meeting or manual recording: microphone and system audio.
         Meeting = "meeting",
-        /// Nota por voz: só o microfone, parada por silêncio.
+        /// Voice note: microphone only, with silence stop.
         Note = "note",
     }
 }
 
 text_enum! {
-    /// De onde veio a data de início (`recorded_at_source` do contrato).
+    /// Where the start date came from (`recorded_at_source` in the contract).
     RecordedAtSource {
-        /// O relógio do computador na captura.
+        /// The computer clock at capture time.
         Capture = "capture",
-        /// Lida dos metadados do arquivo importado e confirmada.
+        /// Read from the imported file's metadata and confirmed.
         FileMetadata = "file_metadata",
-        /// Digitada pela pessoa na importação.
+        /// Entered by the person on import.
         User = "user",
     }
 }
 
 text_enum! {
-    /// Como o áudio chegou (`source` do contrato).
+    /// How the audio arrived (`source` in the contract).
     Source {
-        /// Gravado pelo app desktop.
+        /// Recorded by the desktop app.
         Desktop = "desktop",
-        /// Gravado pelo app móvel.
+        /// Recorded by the mobile app.
         Mobile = "mobile",
-        /// Arquivo importado.
+        /// Imported file.
         Upload = "upload",
     }
 }
 
-/// Um arquivo importado, pronto para entrar na fila.
+/// An imported file, ready to enter the queue.
 #[derive(Clone, Debug)]
 pub struct NewImport<'a> {
     pub id: &'a str,
-    /// O arquivo em `gravacoes/` (convertido para Opus ou a cópia do original).
+    /// The file in `gravacoes/` (converted to Opus or a copy of the original).
     pub path: &'a Path,
-    /// Início da gravação, em ms Unix.
+    /// Recording start, in Unix ms.
     pub recorded_at: i64,
     pub recorded_at_source: RecordedAtSource,
-    /// Nome do arquivo escolhido, sem extensão.
+    /// Selected file name, without extension.
     pub original_name: &'a str,
-    /// Tipo do arquivo em `path`; `None` para Ogg/Opus.
+    /// Type of the file at `path`; `None` for Ogg/Opus.
     pub content_type: Option<&'a str>,
     pub duration_ms: i64,
     pub bytes: i64,
 }
 
-/// Um marcador de uma gravação: um instante no áudio, com nota opcional.
+/// A recording marker: a moment in the audio, with an optional note.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Marker {
-    /// UUID v4, a chave de idempotência do upload.
+    /// UUID v4, the upload idempotency key.
     pub client_id: String,
     pub recording_id: String,
-    /// Posição no áudio, em ms.
+    /// Position in the audio, in ms.
     pub at_ms: i64,
     pub note: Option<String>,
     pub created_at: i64,
@@ -222,8 +225,8 @@ impl Marker {
     }
 }
 
-/// Espera antes da próxima tentativa, depois de `attempts` tentativas: 30 s dobrando a cada
-/// falha, até 1 h.
+/// Wait before the next attempt, after `attempts` attempts: 30 s doubling with each failure, up
+/// to 1 h.
 pub fn retry_backoff_ms(attempts: i64) -> i64 {
     const BASE_MS: i64 = 30_000;
     const MAX_MS: i64 = 3_600_000;
@@ -231,7 +234,7 @@ pub fn retry_backoff_ms(attempts: i64) -> i64 {
     BASE_MS.saturating_mul(1_i64 << exponent).min(MAX_MS)
 }
 
-/// Estado de uma gravação na fila.
+/// State of a recording in the queue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
@@ -265,51 +268,52 @@ impl Status {
     }
 }
 
-/// Uma gravação na fila.
+/// A recording in the queue.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct QueuedRecording {
     pub id: String,
     pub path: PathBuf,
-    /// Início, em milissegundos desde a época Unix.
+    /// Start, in milliseconds since the Unix epoch.
     pub started_at: i64,
     pub ended_at: Option<i64>,
     pub duration_ms: Option<i64>,
     pub bytes: Option<i64>,
     pub status: Status,
-    /// A gravação foi cortada por um encerramento inesperado.
+    /// The recording was cut short by an unexpected shutdown.
     pub interrupted: bool,
     pub attempts: i64,
     pub last_error: Option<String>,
-    /// Identificador da gravação no servidor, depois do sync.
+    /// Recording identifier on the server, after sync.
     pub remote_id: Option<String>,
-    /// Upload em curso no servidor, para retomar.
+    /// Ongoing upload on the server, for resumption.
     pub upload_id: Option<String>,
-    /// SHA-256 do arquivo (hex), calculado uma vez para o upload.
+    /// File SHA-256 (hex), calculated once for upload.
     pub sha256: Option<String>,
-    /// Quando a próxima tentativa fica liberada, depois de uma falha.
+    /// When the next attempt becomes available after a failure.
     pub next_attempt_at: Option<i64>,
-    /// Quando o servidor confirmou a gravação.
+    /// When the server confirmed the recording.
     pub synced_at: Option<i64>,
-    /// Quando a retenção apagou o arquivo local.
+    /// When retention deleted the local file.
     pub purged_at: Option<i64>,
-    /// App da reunião detectada, no vocabulário do contrato (`capture.meeting_app`).
+    /// Detected meeting app, in the contract vocabulary (`capture.meeting_app`).
     pub meeting_app: Option<String>,
     pub kind: Kind,
     pub recorded_at_source: RecordedAtSource,
     pub source: Source,
-    /// Nome do arquivo importado, sem extensão.
+    /// Imported file name, without extension.
     pub original_name: Option<String>,
-    /// Tipo do arquivo; `None` é Ogg/Opus.
+    /// File type; `None` means Ogg/Opus.
     pub content_type: Option<String>,
-    /// Título escolhido ao parar; `None` deixa o servidor derivar.
+    /// Title chosen on stop; `None` lets the server derive it.
     pub title: Option<String>,
-    /// Tipo de agenda escolhido ao parar (UUID do servidor).
+    /// Agenda type chosen on stop (server UUID).
     pub agenda_type_id: Option<String>,
-    /// A pessoa ainda pode dar título e tipo: o sync espera.
+    /// The person can still provide title and type: sync waits.
     pub details_pending: bool,
-    /// O título que o servidor deu à gravação depois de processada.
+    /// The title the server gave the recording after processing.
     pub server_title: Option<String>,
-    /// Idioma da transcrição escolhido para a gravação (`pt`, `auto`…); `None` deixa o do aparelho.
+    /// Transcript language chosen for the recording (`pt`, `auto`…); `None` uses the device
+    /// language.
     pub language: Option<String>,
 }
 
@@ -352,7 +356,7 @@ impl QueuedRecording {
     }
 }
 
-/// Quantas gravações há em cada estado.
+/// How many recordings are in each state.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct QueueCounts {
     pub recording: u32,
@@ -363,26 +367,26 @@ pub struct QueueCounts {
 }
 
 impl QueueCounts {
-    /// Gravações que ainda não chegaram ao servidor.
+    /// Recordings that have not yet reached the server.
     pub fn unsynced(&self) -> u32 {
         self.pending + self.syncing + self.failed
     }
 }
 
-/// Milissegundos desde a época Unix, agora.
+/// Milliseconds since the Unix epoch, now.
 pub fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
-/// A fila, sobre uma conexão SQLite.
+/// The queue, over a SQLite connection.
 pub struct Queue {
     conn: Connection,
 }
 
 impl Queue {
-    /// Abre (ou cria) a fila no arquivo dado.
+    /// Opens (or creates) the queue at the given file.
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)
@@ -394,7 +398,7 @@ impl Queue {
         Self::init(conn)
     }
 
-    /// Fila em memória, para testes.
+    /// In-memory queue, for tests.
     pub fn open_in_memory() -> Result<Self> {
         Self::init(Connection::open_in_memory()?)
     }
@@ -407,7 +411,7 @@ impl Queue {
         Ok(Self { conn })
     }
 
-    /// Registra o início de uma gravação.
+    /// Registers the start of a recording.
     pub fn begin(&self, id: &str, path: &Path, started_at: i64) -> Result<()> {
         self.conn
             .execute(
@@ -418,7 +422,7 @@ impl Queue {
         Ok(())
     }
 
-    /// Fecha uma gravação: ela passa a esperar o sync.
+    /// Closes a recording: it starts waiting for sync.
     pub fn finish(
         &self,
         id: &str,
@@ -438,7 +442,7 @@ impl Queue {
         Ok(())
     }
 
-    /// Marca uma gravação fechada como interrompida (a thread de gravação falhou no meio).
+    /// Marks a closed recording as interrupted (the recording thread failed midway).
     pub fn mark_interrupted(&self, id: &str) -> Result<()> {
         self.conn.execute(
             "UPDATE recordings SET interrupted = 1 WHERE id = ?1",
@@ -447,11 +451,11 @@ impl Queue {
         Ok(())
     }
 
-    /// Recupera as gravações que ficaram em `recording` sem sessão viva (`live`): o processo
-    /// morreu no meio, ou o `.part` ficou preso ao parar. Passam a `pending` com
-    /// `interrupted = 1`. O chamador acerta os arquivos (`fix_file`) antes de gravar caminho e
-    /// tamanho finais; uma linha cujo `fix_file` falha fica em `recording`, no log, e as outras
-    /// seguem. Devolve as recuperadas.
+    /// Recovers recordings left in `recording` without a live session (`live`): the process
+    /// died midway, or the `.part` remained locked on stop. They become `pending` with
+    /// `interrupted = 1`. The caller fixes the files (`fix_file`) before writing final path and
+    /// size; a row whose `fix_file` fails stays in `recording`, logged, and the others
+    /// continue. Returns the recovered recordings.
     pub fn recover_interrupted(
         &self,
         live: &[&str],
@@ -466,7 +470,7 @@ impl Queue {
             let (path, bytes) = match fix_file(&orphan) {
                 Ok(fixed) => fixed,
                 Err(err) => {
-                    log::warn!("gravação {} segue em andamento: {err:#}", orphan.id);
+                    log::warn!("recording {} remains in progress: {err:#}", orphan.id);
                     continue;
                 }
             };
@@ -480,8 +484,8 @@ impl Queue {
         Ok(recovered)
     }
 
-    /// Reserva a próxima gravação a sincronizar (a `pending` mais antiga) e a marca `syncing`.
-    /// Uma gravação com `details_pending` fica de fora até [`DETAILS_WAIT_MS`] depois do fim.
+    /// Claims the next recording to sync (the oldest `pending`) and marks it `syncing`. A
+    /// recording with `details_pending` is excluded until [`DETAILS_WAIT_MS`] after its end.
     pub fn claim_next(&mut self) -> Result<Option<QueuedRecording>> {
         let tx = self.conn.transaction()?;
         let id: Option<String> = tx
@@ -504,8 +508,8 @@ impl Queue {
         self.get(&id)
     }
 
-    /// Devolve a `pending` a gravação reivindicada por [`Queue::claim_next`] cujo sync foi
-    /// interrompido, desfazendo o `attempts + 1`: a interrupção não é falha.
+    /// Returns the recording claimed by [`Queue::claim_next`] whose sync was interrupted to
+    /// `pending`, undoing `attempts + 1`: interruption is not failure.
     pub fn release_claim(&self, id: &str) -> Result<()> {
         self.conn.execute(
             "UPDATE recordings SET status = 'pending', attempts = MAX(attempts - 1, 0)
@@ -515,8 +519,8 @@ impl Queue {
         Ok(())
     }
 
-    /// Devolve a `pending` as falhas com menos de `max_attempts` tentativas, sem esperar o
-    /// backoff (o usuário trocou o PAT ou pediu para tentar de novo).
+    /// Returns failures with fewer than `max_attempts` attempts to `pending`, without waiting
+    /// for backoff (the user changed the PAT or requested a retry).
     pub fn retry_failed(&self, max_attempts: i64) -> Result<usize> {
         Ok(self.conn.execute(
             "UPDATE recordings SET status = 'pending' WHERE status = 'failed' AND attempts < ?1",
@@ -524,8 +528,8 @@ impl Queue {
         )?)
     }
 
-    /// Devolve a `pending` as falhas cujo backoff venceu até `now` (ms Unix), com menos de
-    /// `max_attempts` tentativas.
+    /// Returns failures whose backoff expired by `now` (Unix ms), with fewer than
+    /// `max_attempts` attempts, to `pending`.
     pub fn retry_due(&self, now: i64, max_attempts: i64) -> Result<usize> {
         Ok(self.conn.execute(
             "UPDATE recordings SET status = 'pending'
@@ -535,7 +539,7 @@ impl Queue {
         )?)
     }
 
-    /// Marca a gravação como sincronizada: o servidor confirmou `remote_id`.
+    /// Marks the recording as synced: the server confirmed `remote_id`.
     pub fn mark_synced(&self, id: &str, remote_id: &str) -> Result<()> {
         let changed = self.conn.execute(
             "UPDATE recordings SET status = 'synced', remote_id = ?2, last_error = NULL,
@@ -546,8 +550,8 @@ impl Queue {
         ensure_changed(id, changed)
     }
 
-    /// Marca a tentativa de sync como falha e agenda a próxima por [`retry_backoff_ms`];
-    /// `retry_due` a devolve à fila quando o prazo vence.
+    /// Marks the sync attempt as failed and schedules the next through [`retry_backoff_ms`];
+    /// `retry_due` returns it to the queue when the deadline expires.
     pub fn mark_failed(&self, id: &str, error: &str) -> Result<()> {
         let attempts: Option<i64> = self
             .conn
@@ -569,7 +573,7 @@ impl Queue {
         ensure_changed(id, changed)
     }
 
-    /// Guarda (ou limpa, com `None`) o upload em curso e o hash do arquivo, para retomar.
+    /// Stores (or clears, with `None`) the ongoing upload and file hash, for resumption.
     pub fn set_upload_state(
         &self,
         id: &str,
@@ -586,7 +590,7 @@ impl Queue {
         Ok(())
     }
 
-    /// Guarda o título que o servidor deu à gravação `remote_id`; `true` se mudou alguma linha.
+    /// Stores the title the server gave recording `remote_id`; `true` if any row changed.
     pub fn set_server_title(&self, remote_id: &str, title: &str) -> Result<bool> {
         let changed = self.conn.execute(
             "UPDATE recordings SET server_title = ?2 WHERE remote_id = ?1 AND server_title IS NOT ?2",
@@ -595,7 +599,7 @@ impl Queue {
         Ok(changed > 0)
     }
 
-    /// Registra o app da reunião que originou a gravação.
+    /// Registers the meeting app that originated the recording.
     pub fn set_meeting_app(&self, id: &str, meeting_app: &str) -> Result<()> {
         let changed = self.conn.execute(
             "UPDATE recordings SET meeting_app = ?2 WHERE id = ?1",
@@ -607,7 +611,8 @@ impl Queue {
         Ok(())
     }
 
-    /// Muda a natureza da gravação (uma nota nasce como gravação e vira `note` logo depois).
+    /// Changes the recording kind (a voice note starts as a recording and becomes `note` right
+    /// after).
     pub fn set_kind(&self, id: &str, kind: Kind) -> Result<()> {
         let changed = self.conn.execute(
             "UPDATE recordings SET kind = ?2 WHERE id = ?1",
@@ -619,7 +624,7 @@ impl Queue {
         Ok(())
     }
 
-    /// Muda a origem da gravação (o app móvel grava com `source = mobile`).
+    /// Changes the recording source (the mobile app records with `source = mobile`).
     pub fn set_source(&self, id: &str, source: Source) -> Result<()> {
         let changed = self.conn.execute(
             "UPDATE recordings SET source = ?2 WHERE id = ?1",
@@ -631,7 +636,7 @@ impl Queue {
         Ok(())
     }
 
-    /// Segura o sync da gravação até a pessoa dar título e tipo, ou pular.
+    /// Holds recording sync until the person provides title and type, or skips.
     pub fn set_details_pending(&self, id: &str) -> Result<()> {
         let changed = self.conn.execute(
             "UPDATE recordings SET details_pending = 1 WHERE id = ?1",
@@ -643,8 +648,8 @@ impl Queue {
         Ok(())
     }
 
-    /// Grava o título, o tipo de agenda e o idioma (vazios viram `None`) e libera o sync. Pular é
-    /// chamar com os três `None`.
+    /// Saves title, agenda type and language (empty values become `None`) and releases sync. To
+    /// skip, call with all three set to `None`.
     pub fn save_details(
         &self,
         id: &str,
@@ -661,8 +666,8 @@ impl Queue {
         Ok(())
     }
 
-    /// Libera as gravações que esperavam título e tipo: na abertura seguinte, a folha que segurava
-    /// o sync já não existe.
+    /// Releases recordings waiting for title and type: on the next startup, the sheet holding
+    /// sync no longer exists.
     pub fn release_details_pending(&self) -> Result<usize> {
         Ok(self.conn.execute(
             "UPDATE recordings SET details_pending = 0 WHERE details_pending = 1",
@@ -670,7 +675,7 @@ impl Queue {
         )?)
     }
 
-    /// Registra um arquivo importado, já pronto: nasce `pending`, com `source = upload`.
+    /// Registers an imported file, already ready: starts as `pending`, with `source = upload`.
     pub fn begin_import(&self, import: &NewImport<'_>) -> Result<()> {
         self.conn
             .execute(
@@ -693,8 +698,8 @@ impl Queue {
         Ok(())
     }
 
-    /// Tira da fila uma gravação que ainda não subiu (a nota sem voz), com os marcadores dela.
-    /// Devolve a linha removida, para o chamador apagar o arquivo.
+    /// Removes a recording that has not been uploaded (the voice note without speech) and its
+    /// markers from the queue. Returns the removed row so the caller can delete the file.
     pub fn discard(&mut self, id: &str) -> Result<QueuedRecording> {
         let recording = self
             .get(id)?
@@ -709,7 +714,7 @@ impl Queue {
         Ok(recording)
     }
 
-    /// Acrescenta um marcador em `at_ms` a uma gravação que ainda não subiu.
+    /// Adds a marker at `at_ms` to a recording that has not been uploaded.
     pub fn add_marker(&self, recording_id: &str, at_ms: i64, note: Option<&str>) -> Result<Marker> {
         self.ensure_editable(recording_id)?;
         let marker = Marker {
@@ -733,7 +738,7 @@ impl Queue {
         Ok(marker)
     }
 
-    /// Troca a nota de um marcador (vazia apaga) enquanto a gravação não subiu.
+    /// Changes a marker's note (empty clears it) while the recording has not been uploaded.
     pub fn set_marker_note(&self, client_id: &str, note: Option<&str>) -> Result<Marker> {
         let marker = self
             .conn
@@ -753,7 +758,7 @@ impl Queue {
         Ok(Marker { note, ..marker })
     }
 
-    /// Os marcadores de uma gravação, na ordem do áudio.
+    /// A recording's markers, in audio order.
     pub fn markers(&self, recording_id: &str) -> Result<Vec<Marker>> {
         let mut stmt = self
             .conn
@@ -762,14 +767,14 @@ impl Queue {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// Marcadores só mudam antes do upload: depois, a edição é da web.
+    /// Markers only change before upload: after that, editing happens on the web.
     fn ensure_editable(&self, recording_id: &str) -> Result<()> {
         match self.get(recording_id)? {
             None => bail!("gravação {recording_id} não está na fila"),
             Some(rec) if matches!(rec.status, Status::Syncing | Status::Synced) => {
                 bail!("a gravação já foi para o servidor: edite os marcadores na web")
             }
-            // O upload retomado leva os marcadores de quando foi criado.
+            // The resumed upload carries the markers from when it was created.
             Some(rec) if rec.upload_id.is_some() => {
                 bail!("o envio desta gravação já começou: edite os marcadores na web")
             }
@@ -777,7 +782,7 @@ impl Queue {
         }
     }
 
-    /// Gravações confirmadas até `synced_before` (ms Unix) cujo arquivo local ainda existe.
+    /// Recordings confirmed by `synced_before` (Unix ms) whose local file still exists.
     pub fn purge_candidates(&self, synced_before: i64) -> Result<Vec<QueuedRecording>> {
         self.query(
             "SELECT * FROM recordings
@@ -788,7 +793,7 @@ impl Queue {
         )
     }
 
-    /// Registra que o arquivo local de uma gravação confirmada foi apagado.
+    /// Records that a confirmed recording's local file was deleted.
     pub fn mark_purged(&self, id: &str, at: i64) -> Result<()> {
         let changed = self.conn.execute(
             "UPDATE recordings SET purged_at = ?2
@@ -801,7 +806,7 @@ impl Queue {
         Ok(())
     }
 
-    /// Devolve a `pending` o que ficou em `syncing` quando o processo morreu no meio do upload.
+    /// Returns recordings left in `syncing` when the process died during upload to `pending`.
     pub fn release_stale_syncing(&self) -> Result<usize> {
         Ok(self.conn.execute(
             "UPDATE recordings SET status = 'pending' WHERE status = 'syncing'",
@@ -821,7 +826,7 @@ impl Queue {
         row.map(with_status).transpose()
     }
 
-    /// As gravações mais recentes primeiro.
+    /// Most recent recordings first.
     pub fn list(&self, limit: u32) -> Result<Vec<QueuedRecording>> {
         self.query(
             "SELECT * FROM recordings ORDER BY started_at DESC LIMIT ?1",
@@ -864,7 +869,8 @@ impl Queue {
     }
 }
 
-/// A nota aparada; vazia vira `None`, e acima de [`MAX_MARKER_NOTE`] caracteres é erro.
+/// The trimmed note; empty becomes `None`, and more than [`MAX_MARKER_NOTE`] characters is an
+/// error.
 fn checked_note(note: Option<&str>) -> Result<Option<String>> {
     let note = note.map(str::trim).filter(|n| !n.is_empty());
     if note.is_some_and(|n| n.chars().count() > MAX_MARKER_NOTE) {
@@ -880,8 +886,8 @@ fn ensure_changed(id: &str, changed: usize) -> Result<()> {
     Ok(())
 }
 
-/// Acrescenta as colunas da v2 a v6 a uma fila anterior (o `CREATE TABLE IF NOT EXISTS` não
-/// mexe numa tabela que já existe; a tabela `markers` nasce no `SCHEMA`).
+/// Adds v2 to v6 columns to an older queue (`CREATE TABLE IF NOT EXISTS` does not change an
+/// existing table; the `markers` table is created in `SCHEMA`).
 fn migrate(conn: &Connection) -> Result<()> {
     let mut stmt = conn.prepare("SELECT name FROM pragma_table_info('recordings')")?;
     let existing = stmt
@@ -897,7 +903,7 @@ fn migrate(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// O texto aparado, ou `None` se vazio.
+/// The trimmed text, or `None` if empty.
 fn filled(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|v| !v.is_empty())
 }
@@ -927,7 +933,7 @@ mod tests {
     }
 
     #[test]
-    fn queue_persiste_entre_aberturas() {
+    fn queue_persists_between_opens() {
         let dir = std::env::temp_dir().join(format!("eclume-queue-{}", now_ms()));
         let db = dir.join("queue.sqlite");
         {
@@ -943,7 +949,7 @@ mod tests {
     }
 
     #[test]
-    fn queue_ciclo_completo_de_sync() {
+    fn queue_full_sync_cycle() {
         let mut queue = Queue::open_in_memory().unwrap();
         begin_and_finish(&queue, "velha", 1);
         begin_and_finish(&queue, "nova", 2);
@@ -961,7 +967,7 @@ mod tests {
         assert_eq!(failed.status, Status::Failed);
         assert_eq!(failed.last_error.as_deref(), Some("rede fora"));
 
-        // Falha só volta à fila por `retry_failed`, e até o limite de tentativas.
+        // A failure only returns to the queue through `retry_failed`, up to the attempt limit.
         assert!(queue.claim_next().unwrap().is_none());
         assert_eq!(queue.retry_failed(3).unwrap(), 1);
         assert_eq!(queue.claim_next().unwrap().unwrap().id, "nova");
@@ -980,7 +986,7 @@ mod tests {
     }
 
     #[test]
-    fn queue_recupera_gravacao_interrompida() {
+    fn queue_recovers_interrupted_recording() {
         let queue = Queue::open_in_memory().unwrap();
         queue
             .begin("crash", Path::new("/tmp/crash.ogg.part"), 5)
@@ -1001,7 +1007,7 @@ mod tests {
     }
 
     #[test]
-    fn queue_recusa_transicao_invalida_e_libera_sync_orfao() {
+    fn queue_rejects_invalid_transition_and_releases_orphaned_sync() {
         let mut queue = Queue::open_in_memory().unwrap();
         begin_and_finish(&queue, "x", 1);
         assert!(queue.mark_synced("x", "srv").is_err());
@@ -1013,7 +1019,7 @@ mod tests {
     }
 
     #[test]
-    fn queue_backoff_dobra_ate_uma_hora() {
+    fn queue_backoff_doubles_up_to_one_hour() {
         assert_eq!(retry_backoff_ms(0), 30_000);
         assert_eq!(retry_backoff_ms(1), 30_000);
         assert_eq!(retry_backoff_ms(2), 60_000);
@@ -1023,7 +1029,7 @@ mod tests {
     }
 
     #[test]
-    fn queue_falha_so_volta_quando_o_backoff_vence() {
+    fn queue_failure_only_returns_after_backoff_expires() {
         let mut queue = Queue::open_in_memory().unwrap();
         begin_and_finish(&queue, "r", 1);
         queue.claim_next().unwrap().unwrap();
@@ -1037,7 +1043,7 @@ mod tests {
         assert_eq!(queue.retry_due(next, 2).unwrap(), 1);
         queue.claim_next().unwrap().unwrap();
         queue.mark_failed("r", "de novo").unwrap();
-        // Segunda falha: o prazo dobra, e o limite de tentativas vale.
+        // Second failure: the wait doubles, and the attempt limit applies.
         let again = queue.get("r").unwrap().unwrap();
         assert!(again.next_attempt_at.unwrap() - now_ms() > 30_000);
         assert_eq!(queue.retry_due(i64::MAX, 2).unwrap(), 0);
@@ -1046,7 +1052,7 @@ mod tests {
     }
 
     #[test]
-    fn queue_guarda_estado_de_retomada_e_confirmacao() {
+    fn queue_stores_resumption_and_confirmation_state() {
         let mut queue = Queue::open_in_memory().unwrap();
         begin_and_finish(&queue, "u", 1);
         queue
@@ -1071,7 +1077,7 @@ mod tests {
     }
 
     #[test]
-    fn queue_retencao_so_apaga_o_que_o_servidor_confirmou() {
+    fn queue_retention_only_deletes_server_confirmed_recordings() {
         let mut queue = Queue::open_in_memory().unwrap();
         begin_and_finish(&queue, "ok", 1);
         begin_and_finish(&queue, "falhou", 2);
@@ -1095,12 +1101,12 @@ mod tests {
     }
 
     #[test]
-    fn queue_migra_fila_v2_real_com_os_padroes_da_v4() {
+    fn queue_migrates_real_v2_queue_with_v4_defaults() {
         let dir = std::env::temp_dir().join(format!("eclume-queue-v2-{}", now_ms()));
         std::fs::create_dir_all(&dir).unwrap();
         let db = dir.join("queue.sqlite");
         std::fs::copy(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fila-v2.sqlite"),
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/queue-v2.sqlite"),
             &db,
         )
         .unwrap();
@@ -1146,7 +1152,7 @@ mod tests {
     }
 
     #[test]
-    fn queue_nota_importacao_e_descarte() {
+    fn queue_voice_note_import_and_discard() {
         let mut queue = Queue::open_in_memory().unwrap();
         queue
             .begin("nota", Path::new("/tmp/nota.ogg.part"), 5)
@@ -1187,20 +1193,20 @@ mod tests {
         assert_eq!(json["source"], "upload");
 
         queue.claim_next().unwrap().unwrap();
-        assert!(queue.discard("imp").is_err(), "o que sobe não é descartado");
+        assert!(queue.discard("imp").is_err(), "uploads are not discarded");
     }
 
     #[test]
-    fn queue_marcadores_ordenados_com_nota_limitada_ate_o_upload() {
+    fn queue_ordered_markers_with_limited_notes_until_upload() {
         let mut queue = Queue::open_in_memory().unwrap();
         queue.begin("g", Path::new("/tmp/g.ogg.part"), 1).unwrap();
-        let tarde = queue.add_marker("g", 9_000, Some("  ")).unwrap();
-        let cedo = queue.add_marker("g", 2_000, Some(" ação ")).unwrap();
-        assert_eq!(tarde.note, None);
-        assert_eq!(cedo.note.as_deref(), Some("ação"));
-        assert_ne!(tarde.client_id, cedo.client_id);
+        let late = queue.add_marker("g", 9_000, Some("  ")).unwrap();
+        let early = queue.add_marker("g", 2_000, Some(" ação ")).unwrap();
+        assert_eq!(late.note, None);
+        assert_eq!(early.note.as_deref(), Some("ação"));
+        assert_ne!(late.client_id, early.client_id);
         assert_eq!(
-            uuid::Uuid::parse_str(&cedo.client_id)
+            uuid::Uuid::parse_str(&early.client_id)
                 .unwrap()
                 .get_version_num(),
             4
@@ -1215,16 +1221,14 @@ mod tests {
             [2_000, 9_000]
         );
 
-        let longa = "é".repeat(MAX_MARKER_NOTE + 1);
-        assert!(queue.add_marker("g", 1, Some(&longa)).is_err());
-        assert!(queue
-            .set_marker_note(&tarde.client_id, Some(&longa))
-            .is_err());
-        let limite = "é".repeat(MAX_MARKER_NOTE);
-        let editado = queue
-            .set_marker_note(&tarde.client_id, Some(&limite))
+        let long = "é".repeat(MAX_MARKER_NOTE + 1);
+        assert!(queue.add_marker("g", 1, Some(&long)).is_err());
+        assert!(queue.set_marker_note(&late.client_id, Some(&long)).is_err());
+        let limit = "é".repeat(MAX_MARKER_NOTE);
+        let edited = queue
+            .set_marker_note(&late.client_id, Some(&limit))
             .unwrap();
-        assert_eq!(editado.note.as_deref(), Some(limite.as_str()));
+        assert_eq!(edited.note.as_deref(), Some(limit.as_str()));
         assert!(queue.set_marker_note("nao-existe", None).is_err());
         assert!(queue.add_marker("nao-existe", 1, None).is_err());
 
@@ -1234,10 +1238,10 @@ mod tests {
         queue.add_marker("g", 9_500, None).unwrap();
         queue.claim_next().unwrap().unwrap();
         assert!(queue.add_marker("g", 9_900, None).is_err());
-        assert!(queue.set_marker_note(&cedo.client_id, None).is_err());
+        assert!(queue.set_marker_note(&early.client_id, None).is_err());
         assert_eq!(queue.markers("g").unwrap().len(), 3);
 
-        // Falhou com o upload já criado: a retomada levaria os marcadores antigos.
+        // Failed with the upload already created: resumption would carry the old markers.
         queue
             .set_upload_state("g", Some("up-1"), Some("ab12"))
             .unwrap();
@@ -1248,10 +1252,10 @@ mod tests {
     }
 
     #[test]
-    fn queue_detalhes_seguram_o_sync_ate_salvar_ou_vencer() {
+    fn queue_details_hold_sync_until_saved_or_expired() {
         let mut queue = Queue::open_in_memory().unwrap();
-        let agora = now_ms();
-        begin_and_finish(&queue, "folha", agora);
+        let now = now_ms();
+        begin_and_finish(&queue, "folha", now);
         queue.set_source("folha", Source::Mobile).unwrap();
         queue.set_details_pending("folha").unwrap();
         assert!(queue.get("folha").unwrap().unwrap().details_pending);
@@ -1272,18 +1276,19 @@ mod tests {
         assert_eq!(rec.agenda_type_id, None);
         assert_eq!(rec.language.as_deref(), Some("auto"));
         assert!(!rec.details_pending);
-        // Depois de sair para o servidor, título e tipo não mudam mais aqui.
+        // After leaving for the server, title and type can no longer change here.
         assert!(queue
             .save_details("folha", Some("outro"), None, None)
             .is_err());
 
-        // A folha esquecida aberta não segura o sync para sempre.
+        // A sheet left open does not hold sync forever.
         begin_and_finish(&queue, "esquecida", 1);
         queue.set_details_pending("esquecida").unwrap();
         assert_eq!(queue.claim_next().unwrap().unwrap().id, "esquecida");
 
-        // Na abertura seguinte, o flag de uma folha que já não existe cai (o da esquecida também).
-        begin_and_finish(&queue, "reaberta", agora);
+        // On the next startup, the flag for a sheet that no longer exists is cleared (including
+        // the forgotten one).
+        begin_and_finish(&queue, "reaberta", now);
         queue.set_details_pending("reaberta").unwrap();
         assert_eq!(queue.release_details_pending().unwrap(), 2);
         assert_eq!(queue.claim_next().unwrap().unwrap().id, "reaberta");
@@ -1291,7 +1296,7 @@ mod tests {
     }
 
     #[test]
-    fn queue_migra_fila_v1_sem_perder_linhas() {
+    fn queue_migrates_v1_queue_without_losing_rows() {
         let dir = std::env::temp_dir().join(format!("eclume-queue-v1-{}", now_ms()));
         std::fs::create_dir_all(&dir).unwrap();
         let db = dir.join("queue.sqlite");
@@ -1326,11 +1331,11 @@ mod tests {
         assert!(!queue.set_server_title("srv-velha", "Alinhamento").unwrap());
         assert!(!queue.set_server_title("srv-outra", "Alinhamento").unwrap());
         drop(queue);
-        // Reabrir uma fila já migrada não mexe em nada.
+        // Reopening an already migrated queue changes nothing.
         let queue = Queue::open(&db).unwrap();
-        let velha = queue.get("velha").unwrap().unwrap();
-        assert_eq!(velha.upload_id.as_deref(), Some("up"));
-        assert_eq!(velha.server_title.as_deref(), Some("Alinhamento"));
+        let old = queue.get("velha").unwrap().unwrap();
+        assert_eq!(old.upload_id.as_deref(), Some("up"));
+        assert_eq!(old.server_title.as_deref(), Some("Alinhamento"));
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -2,7 +2,7 @@
 type: standard
 title: Desktop app distribution
 description: How the eclume desktop app becomes installers and updates itself — version in tauri.conf.json, tag desktop-v<versão>, release on the host through deploy/release-desktop.sh (Linux; Windows optional by cross-compilation; macOS out while the repository is private) and the desktop-release workflow as the manual alternative, the server address and fingerprint embedded in the build, updater packages signed with the project's own minisign key, latest.json and instaladores.json with eclume server URLs, publication to /srv/eclume/downloads through deploy/publish-desktop.sh and the "Atualizado para X" notice.
-resource: desktop/scripts/assinar-windows.sh, desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/manifestos_release.py, desktop/scripts/icones_bandeja.py, desktop/INSTALACAO.md, desktop/build.Dockerfile, desktop/build-windows.Dockerfile, .github/workflows/desktop-release.yml, .github/workflows/desktop-platforms.yml, deploy/release-desktop.sh, deploy/publish-desktop.sh
+resource: desktop/scripts/sign-windows.sh, desktop/src-tauri/tauri.conf.json, desktop/src-tauri/build.rs, desktop/src-tauri/icons/**, desktop/src-tauri/Info.plist, desktop/src-tauri/src/updater.rs, desktop/src-tauri/src/config.rs, desktop/scripts/release_manifests.py, desktop/scripts/tray_icons.py, desktop/INSTALACAO.md, desktop/build.Dockerfile, desktop/build-windows.Dockerfile, .github/workflows/desktop-release.yml, .github/workflows/desktop-platforms.yml, deploy/release-desktop.sh, deploy/publish-desktop.sh
 tags: [code, desktop, release, updater, tauri, ci, instaladores]
 timestamp: 2026-10-01
 audience: both
@@ -79,7 +79,7 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   configuration at `/run/assinatura` (read-only) and `--config` with the `bundle.windows.signCommand`.
   `tauri.conf.json` has no `signCommand`: local and Actions builds do not try to sign.
 - **Check before publishing:** with a signature, the release checks the setup and, extracted by
-  `7z`, the `eclume-desktop.exe` and the `uninstall.exe` (`assinar-windows.sh --verificar`); any
+  `7z`, the `eclume-desktop.exe` and the `uninstall.exe` (`sign-windows.sh --verify`); any
   failure stops the release. Without configuration, the dry run warns "instalador Windows sem
   assinatura", `--plan` shows `assinatura Windows ausente`, and `--publish` refuses without
   `--unsigned`.
@@ -100,7 +100,7 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
   `tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis`. Only the NSIS
   ships: the MSI requires WiX, which only runs on Windows. The image and the cross-compiled libopus
   were proven in the dry run of holetz/eclume#68 (the NSIS came out of the host).
-- The manifests are produced on the host, by `manifestos_release.py` (with `desktop/INSTALACAO.md`
+- The manifests are produced on the host, by `release_manifests.py` (with `desktop/INSTALACAO.md`
   copied), and `SHA256SUMS` is checked before publishing. `--publish` creates the GitHub Release
   through the host's `gh`. The `notes` of `latest.json`, which is the text of the "Atualizado para
   X" notice, is the version's section in `desktop/CHANGELOG.md`
@@ -174,7 +174,7 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
 - The bundle icons are generated from `desktop/src-tauri/icons/icon.svg` by `tauri icon`, and only
   those `bundle.icon` lists are included.
 - The tray ones, `tray-{idle,recording,note,syncing}.png` (64 × 64), come from the same mark through
-  `uv run --with pillow python desktop/scripts/icones_bandeja.py`: the orange square with the five
+  `uv run --with pillow python desktop/scripts/tray_icons.py`: the orange square with the five
   white bars; during a meeting the square takes the DS recording color, and the note and the upload
   gain a state dot. `tray.rs` swaps the icon only when the state changes — on Linux each swap
   writes a PNG and reloads the AppIndicator —, and never by the audio level. On GNOME, the
@@ -184,7 +184,7 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
 
 ## Manifests
 
-`manifestos_release.py` writes into the release folder, with absolute URLs
+`release_manifests.py` writes into the release folder, with absolute URLs
 `<base>/<versão>/<arquivo>` (base in `ECLUME_DOWNLOADS_URL`, mandatory, no default):
 
 - **`latest.json`** — the updater manifest: `version`, `notes`, `pub_date` and `platforms` with
@@ -268,7 +268,7 @@ on the next launch.
   commercial CAs, `PKCS11` (physical token) and `PKCS12` (test). Since 2023 the key of a public
   code-signing certificate lives in hardware, so a plain `.pfx` is not the normal case.
   `osslsigncode` verifies, and `7z` opens the installer. Tauri calls
-  `desktop/scripts/assinar-windows.sh %1` through `signCommand` for each executable **before**
+  `desktop/scripts/sign-windows.sh %1` through `signCommand` for each executable **before**
   generating the updater artifacts: the minisign `.sig` of `latest.json` covers the already signed
   installer.
 - **Configuration on the host**, like the updater key: `/srv/eclume/secrets/assinatura-windows/`
@@ -284,7 +284,7 @@ on the next launch.
 - **Switching vendors** is swapping `assinatura.env` (and its files) on the host, without changing
   the script or the release. A vendor that does not fit `jsign` becomes a new mode in the same
   script.
-- `assinar-windows.sh --autoteste` signs and verifies an NSIS stub with a self-signed PKCS#12 and
+- `sign-windows.sh --self-test` signs and verifies an NSIS stub with a self-signed PKCS#12 and
   checks that an unsigned executable is refused.
 - The `desktop-release.yml` workflow (the Actions alternative) remains **unsigned**.
 

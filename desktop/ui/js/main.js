@@ -1,133 +1,133 @@
-// Janela do app desktop: roteia as vistas (uma <section data-vista> cada), aplica o tema (o
-// escolhido nas configurações, ou o do sistema), trata as teclas da janela e consulta o estado do
-// Rust a cada segundo.
+// Desktop app window: route views (one <section data-view> each), apply the theme (from
+// settings or the system), handle window keys and poll the Rust state
+// once a second.
 import { invoke, listen } from "./tauri.js";
-import { preencherIcones } from "./icones.js";
-import * as principal from "./vistas/principal.js";
-import * as primeiraExecucao from "./vistas/primeira-execucao.js";
-import * as importar from "./vistas/importar.js";
-import * as configuracoes from "./vistas/configuracoes.js";
-import * as ajuda from "./vistas/ajuda.js";
+import { fillIcons } from "./icons.js";
+import * as home from "./views/home.js";
+import * as firstRun from "./views/first-run.js";
+import * as importView from "./views/import.js";
+import * as settings from "./views/settings.js";
+import * as help from "./views/help.js";
 
-/** As vistas registradas: nome → { entrar?(params), sair?(), atualizar?(estado) }. */
-const vistas = new Map();
-let atual = null;
+/** Registered views: name → { enter?(params), leave?(), refresh?(state) }. */
+const views = new Map();
+let current = null;
 
-/** O que as vistas recebem ao montar. */
+/** What views receive when mounted. */
 const app = {
   invoke,
   listen,
-  /** O último retrato do estado (`status`), a fila (`recordings`) e o painel Recentes (`recent`). */
-  estado: null,
-  fila: [],
-  recentes: null,
-  ir,
-  voltar: () => ir("principal"),
-  importarArquivo,
-  atualizar,
-  definirTema,
+  /** The latest state snapshot (`status`), queue (`recordings`) and Recent panel (`recent`). */
+  state: null,
+  queue: [],
+  recent: null,
+  go,
+  back: () => go("home"),
+  importFile,
+  refresh,
+  setTheme,
 };
 
-/** "system", "light" ou "dark"; "system" acompanha o `prefers-color-scheme`. */
-let preferenciaDeTema = "system";
+/** "system", "light" or "dark"; "system" follows `prefers-color-scheme`. */
+let themePreference = "system";
 
-/** Registra a vista cuja seção já está no HTML: `modulo.montar(secao, app)` devolve a vista. */
-function registrar(nome, modulo) {
-  vistas.set(nome, modulo.montar(document.querySelector(`[data-vista="${nome}"]`), app));
+/** Register a view whose section is already in HTML: `module.mount(section, app)` returns it. */
+function register(name, module) {
+  views.set(name, module.mount(document.querySelector(`[data-view="${name}"]`), app));
 }
 
-/** Mostra a vista `nome`; devolve `false` se ela não existe. */
-function ir(nome, params) {
-  const vista = vistas.get(nome);
-  if (!vista) return false;
-  if (atual && atual !== nome) vistas.get(atual).sair?.();
-  menuDeAjuda?.fechar();
-  for (const outra of document.querySelectorAll("[data-vista]")) outra.hidden = outra.dataset.vista !== nome;
-  atual = nome;
-  vista.entrar?.(params);
-  if (app.estado) vista.atualizar?.(app.estado, app.fila);
+/** Show the view `name`; return `false` if it does not exist. */
+function go(name, params) {
+  const view = views.get(name);
+  if (!view) return false;
+  if (current && current !== name) views.get(current).leave?.();
+  helpMenu?.close();
+  for (const other of document.querySelectorAll("[data-view]")) other.hidden = other.dataset.view !== name;
+  current = name;
+  view.enter?.(params);
+  if (app.state) view.refresh?.(app.state, app.queue);
   return true;
 }
 
-async function atualizar() {
+async function refresh() {
   try {
-    // Uma falha do painel não impede o resto da janela de desenhar.
-    const [estado, fila, recentes] = await Promise.all([
+    // A panel failure does not prevent the rest of the window from rendering.
+    const [state, queue, recent] = await Promise.all([
       invoke("status"),
       invoke("recordings", { limit: 50 }),
-      invoke("recent").catch((falha) => {
-        console.error(falha);
-        return app.recentes;
+      invoke("recent").catch((failure) => {
+        console.error(failure);
+        return app.recent;
       }),
     ]);
-    app.estado = estado;
-    app.fila = fila;
-    app.recentes = recentes;
-    if (estado.theme && estado.theme !== preferenciaDeTema) definirTema(estado.theme);
-    // Sem credencial (ou com a CA do servidor trocada), a janela fica na primeira execução.
-    if (estado.connection === "first_run" && atual !== "primeira-execucao") ir("primeira-execucao");
-    else vistas.get(atual)?.atualizar?.(estado, fila);
-  } catch (erro) {
-    console.error(erro);
+    app.state = state;
+    app.queue = queue;
+    app.recent = recent;
+    if (state.theme && state.theme !== themePreference) setTheme(state.theme);
+    // Without a credential (or after the server CA changes), stay on first run.
+    if (state.connection === "first_run" && current !== "first-run") go("first-run");
+    else views.get(current)?.refresh?.(state, queue);
+  } catch (error) {
+    console.error(error);
   }
 }
 
-/** O DS só tem o escuro sob `data-theme="dark"`: "Sistema" também grava o atributo. */
-function aplicarTema() {
-  const escuro = preferenciaDeTema === "system" ? temaEscuro.matches : preferenciaDeTema === "dark";
-  document.documentElement.dataset.theme = escuro ? "dark" : "light";
+/** The DS only shows dark under `data-theme="dark"`: System also sets the attribute. */
+function applyTheme() {
+  const dark = themePreference === "system" ? darkTheme.matches : themePreference === "dark";
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
 }
 
-function definirTema(preferencia) {
-  preferenciaDeTema = preferencia;
-  aplicarTema();
+function setTheme(preference) {
+  themePreference = preference;
+  applyTheme();
 }
 
-/** Teclas da janela; os atalhos globais são do Rust. */
-function aoTeclar(evento) {
-  if (app.estado?.connection === "first_run") return;
-  if (evento.key === "Escape") {
-    if (atual !== "principal" && ir("principal")) evento.preventDefault();
+/** Window keys; Rust handles global shortcuts. */
+function onKeyDown(event) {
+  if (app.state?.connection === "first_run") return;
+  if (event.key === "Escape") {
+    if (current !== "home" && go("home")) event.preventDefault();
     return;
   }
-  if (!(evento.ctrlKey || evento.metaKey) || evento.altKey) return;
-  const tecla = evento.key.toLowerCase();
-  if (tecla === "o") {
-    evento.preventDefault();
-    importarArquivo();
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+  const key = event.key.toLowerCase();
+  if (key === "o") {
+    event.preventDefault();
+    importFile();
     return;
   }
-  const destino = { ",": "configuracoes", "/": "atalhos" }[tecla];
-  if (destino && ir(destino)) evento.preventDefault();
+  const destination = { ",": "settings", "/": "shortcuts" }[key];
+  if (destination && go(destination)) event.preventDefault();
 }
 
-/** "Importar arquivo…": o seletor de arquivos do sistema e, escolhido um, a vista de importação. */
-async function importarArquivo() {
+/** Import file: the system file picker, then the import view once a file is chosen. */
+async function importFile() {
   try {
-    const caminho = await invoke("pick_import_file");
-    if (caminho) ir("importar", { path: caminho });
-  } catch (erro) {
-    console.error(erro);
+    const path = await invoke("pick_import_file");
+    if (path) go("import", { path: path });
+  } catch (error) {
+    console.error(error);
   }
 }
 
-registrar("principal", principal);
-registrar("primeira-execucao", primeiraExecucao);
-registrar("importar", importar);
-registrar("configuracoes", configuracoes);
-registrar("atalhos", ajuda);
-const menuDeAjuda = ajuda.ligarMenu(app);
+register("home", home);
+register("first-run", firstRun);
+register("import", importView);
+register("settings", settings);
+register("shortcuts", help);
+const helpMenu = help.wireMenu(app);
 
-const temaEscuro = window.matchMedia("(prefers-color-scheme: dark)");
-aplicarTema();
-temaEscuro.addEventListener("change", aplicarTema);
-preencherIcones();
-document.addEventListener("keydown", aoTeclar);
-ir("principal");
-listen("status-changed", atualizar);
-// Arquivo arrastado para a janela ou escolhido pela bandeja.
-listen("import-dropped", ({ payload }) => ir("importar", { path: payload }));
+const darkTheme = window.matchMedia("(prefers-color-scheme: dark)");
+applyTheme();
+darkTheme.addEventListener("change", applyTheme);
+fillIcons();
+document.addEventListener("keydown", onKeyDown);
+go("home");
+listen("status-changed", refresh);
+// File dropped onto the window or chosen from the tray.
+listen("import-dropped", ({ payload }) => go("import", { path: payload }));
 setInterval(() => {
-  if (!document.hidden) atualizar();
+  if (!document.hidden) refresh();
 }, 1000);
-atualizar();
+refresh();
