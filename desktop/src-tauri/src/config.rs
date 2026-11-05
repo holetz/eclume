@@ -859,10 +859,10 @@ mod tests {
 
     #[test]
     fn config_validates_address() {
-        assert!(validate_web_url("https://192.168.15.199:8443").is_ok());
+        assert!(validate_web_url("https://192.0.2.10:8443").is_ok());
         assert!(validate_web_url("http://localhost").is_ok());
         assert!(validate_web_url("https://").is_err());
-        assert!(validate_web_url("192.168.15.199").is_err());
+        assert!(validate_web_url("192.0.2.10").is_err());
         assert!(validate_web_url("https://a b").is_err());
     }
 }

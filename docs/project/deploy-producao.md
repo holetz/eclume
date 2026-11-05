@@ -4,7 +4,7 @@ title: Production deploy on the GPU host
 description: How eclume runs in production on the host 192.168.15.199 — the eclume compose project with Caddy on 8443, build on the host daemon through the Docker context, secrets in deploy/.env.prod, a separate admin account and open signup, an internal CA on the clients, a daily cron backup with a tested restore, operation and coexistence with lumea.
 resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/deploy_lib.py, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restore-backup.sh, deploy/staging.sh, deploy/docker-compose.staging.yml, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prove-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py, deploy/prove-restricted-ca.sh
 tags: [deploy, producao, host, caddy, backup, runbook]
-timestamp: 2026-10-08
+timestamp: 2026-11-05
 audience: both
 authority: current
 source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60, holetz/eclume#110, holetz/eclume#92, holetz/eclume#101, holetz/eclume#151
@@ -13,11 +13,12 @@ maintainer: holetz
 
 # Production deploy on the GPU host
 
-This is the runbook for **this** production: this institution's eclume runs on the host
+This is the runbook of the **reference deployment**: the maintainer institution's production, a worked
+example to adapt, not a default any script assumes. It runs on the host
 `192.168.15.199`, prepared by the [host runbook](host-setup.md), and answers at
 **`https://192.168.15.199:8443`**. The generic path, for any server with or without a GPU, is in
 [auto-hospedar.md](../how-to/auto-hospedar.md); this page holds the values and choices of this host. The
-host is shared with lumea (443) and with the user's personal services, which the deploy never touches.
+host is shared with another service on 443 and with the user's personal services, which the deploy never touches.
 
 ```
 LAN ──► :8443 caddy (tls internal) ─┬─ /api/*, /media/*, /mcp ──► server:8000 (uvicorn)
@@ -304,9 +305,18 @@ credential. The matrix of what each type requires is in [server-agentes.md](../s
 The smoke does not register a provider: it proves the summary with whatever is registered for `summaries`, of
 any type, or with the one in `--provider <id>`.
 
-**Pending decision (holetz/eclume#129, task 5.3):** whether Anthropic's terms allow a
-subscription's token to serve eclume's accounts. Until the owner records the decision here,
-`claude-cli` remains this production's provider; the switch is re-registering the provider in the panel.
+**Terms decision (holetz/eclume#129, 2026-11-05).** Anthropic's Claude Code legal page
+([code.claude.com/docs/en/legal-and-compliance](https://code.claude.com/docs/en/legal-and-compliance),
+§Authentication and credential use) says that Free, Pro, Max and Ultra credentials must not route requests
+on behalf of other users. The rule for any eclume deployment:
+
+- A subscription `setup-token` (the `claude-cli` provider below) serves **only the owner's own
+  account**. This production uses it because the owner is the account that summarizes.
+- A deployment with **other accounts** uses an Anthropic API key (the `anthropic` provider) under the
+  Commercial Terms, or a local or OpenAI-compatible provider.
+
+Switching is re-registering the provider in the panel; [auto-hospedar.md](../how-to/auto-hospedar.md#5-summary-provider)
+points here for the self-hosting path.
 
 **Claude token.** On a computer with Claude Code logged in to the subscription, `claude setup-token`
 opens the authorization in the browser and prints the token (`sk-ant-oat01-…`). Register it in the panel:
@@ -442,10 +452,10 @@ ECLUME_PROD_SSH=holetz@192.168.15.199 bash deploy/prove-web-prod.sh
 
 HTTPS is mandatory for the microphone and for media conversion in the browser. The root is at
 **`https://192.168.15.199:8443/downloads/eclume-root.crt`** (a single certificate, the active CA's
-root). It is distinct from lumea's. The apps (desktop and phone) **do not** use the system
+root). It is distinct from the root of any other service on the host. The apps (desktop and phone) **do not** use the system
 store: they pin the root on their own, by fingerprint, on first run or at
 pairing ([server-mcp-e-dispositivos.md](../standards/code/server-mcp-e-dispositivos.md#ca-pinning-by-the-apps)).
-Only the browser, Claude Desktop/Code (MCP) and lumea need the root installed.
+Only the browser, Claude Desktop/Code (MCP) and any API integration (such as a transcript importer) need the root installed.
 
 eclume's own root (`ECLUME_TLS_CA=eclume`) has a critical name constraint: it is only valid for the
 IP of `ECLUME_PUBLIC_HOST` and the names in `ECLUME_CA_NAMES` (currently `workstation.local`), and only for TLS
@@ -462,8 +472,9 @@ rotation below.
 - **Windows:** `certutil -addstore -f Root eclume-root.crt`, as administrator.
 - **macOS:** `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain eclume-root.crt`.
 - **Firefox:** import in Settings → Certificates, because it uses its own store.
-- **lumea:** mount the PEM in the `api` container and point `LUMEA_ECLUME_CA_BUNDLE` to it, with
-  `LUMEA_ECLUME_URL=https://192.168.15.199:8443` (lumea's `deploy/.env.remote`).
+- **API integrations** (a transcript importer, for example): give the integration the PEM as its CA bundle
+  and point its eclume URL setting at `https://192.168.15.199:8443`; the variable names belong to the
+  integration, not to eclume.
 - **Proof of the constraint** on a station: `bash deploy/prove-restricted-ca.sh` generates a
   throwaway root for `127.0.0.1`, brings up `127.0.0.1:18445` (inside) and `127.0.0.2:18446` (outside) and checks
   `curl`; with the throwaway root installed, Chrome, Edge and Firefox open the first and refuse the
@@ -484,10 +495,10 @@ they have already stored the next root.
    (carries `"ca_next_sha256":"<64 hex>"`). The apps store the next one on the probe (phone) or within
    6 h (desktop).
 2. **Switch**, on the decided date. Beforehand, install the next root
-   (`https://192.168.15.199:8443/downloads/eclume-root-proxima.crt`) on the stations, in lumea and in the
+   (`https://192.168.15.199:8443/downloads/eclume-root-proxima.crt`) on the stations, in the integrations and in the
    MCP clients, **beside** the current one. During the window, whoever uses a PEM bundle gets both
    roots in one file: `cat eclume-root.crt eclume-root-proxima.crt > eclume-raizes.pem`, for
-   `LUMEA_ECLUME_CA_BUNDLE` and `NODE_EXTRA_CA_CERTS` (Claude Desktop/Code). Then put
+   an integration's CA bundle and `NODE_EXTRA_CA_CERTS` (Claude Desktop/Code). Then put
    `ECLUME_TLS_CA=eclume` in `deploy/.env.prod` and deploy: Caddy issues from the own root,
    `publish-ca` publishes the own one as `eclume-root.crt` and deletes the next one, and the end of the deploy
    checks that the published one is the own root. Then change the variable
@@ -495,7 +506,7 @@ they have already stored the next root.
    ([desktop-distribuicao.md](../standards/code/desktop-distribuicao.md#server-embedded-in-the-installer)):
    the old installers in `/downloads` embed the old fingerprint. Check desktop and phone
    syncing without a new sign-in; whoever fell behind signs in or pairs again.
-3. **Retire**, after the window: remove the old root from the stations, lumea and the MCP clients
+3. **Retire**, after the window: remove the old root from the stations, the integrations and the MCP clients
    (the bundle goes back to having only the new one) and delete the `local` root from the host:
    `ssh holetz@192.168.15.199 'sudo rm -rf /srv/eclume/caddy/data/caddy/pki/authorities/local'`.
    Check: `ssh holetz@192.168.15.199 '! sudo test -e /srv/eclume/caddy/data/caddy/pki/authorities/local/root.key'`.
@@ -689,10 +700,11 @@ bash deploy/deploy.sh --context gpu-host --services "server caddy"   # only serv
   `docker --context gpu-host builder prune -f --filter until=720h`; never do `image prune -a`,
   because it would delete images of the personal services.
 
-## Coexistence with lumea
+## Coexistence with other services on the host
 
-lumea uses 443, the `lumea` project, the `lumea-*` containers and the data in `/srv/lumea`. eclume
+In the reference deployment another application uses 443, its own compose project, its own containers and its data in
+`/srv/<application>`. eclume
 uses 8443, the `eclume` project, the `eclume-prod-*` volumes and the data in `/srv/eclume`,
 with its own CA, network and Caddy. No command here touches the containers, volumes or images of
-lumea or of the personal services (Jellyfin, *arr, qBittorrent, Samba). After a deploy,
-`curl --cacert lumea-root.crt https://192.168.15.199/api/health` must keep returning 200.
+that application or of the personal services (Jellyfin, *arr, qBittorrent, Samba). After a deploy,
+the other application's own health check must keep answering as before.

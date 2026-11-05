@@ -160,9 +160,9 @@ test("Server: account sign-out, address, extra CA dialog and connection test", a
   await page.locator('#open-settings').click()
   await page.locator('[data-tab="server"]').click()
   await expect(page.locator('#server-account')).toHaveText('ana@exemplo.com.br')
-  await expect(page.locator('#server-account-sub')).toHaveText('Conectado ao eclume em 192.168.15.199')
+  await expect(page.locator('#server-account-sub')).toHaveText('Conectado ao eclume em 192.0.2.10')
   await expect(page.locator('#server-sign-in')).toBeHidden()
-  await expect(page.locator('#server-address')).toHaveValue('https://192.168.15.199:8443')
+  await expect(page.locator('#server-address')).toHaveValue('https://192.0.2.10:8443')
   // The PAT paste field was removed from the screen.
   await expect(page.locator('#server-token')).toHaveCount(0)
 

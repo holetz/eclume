@@ -9,7 +9,7 @@ test("without an account, first run uses the installer server and signs in by pa
 
   const options = page.locator('#first-run-servers .choice')
   await expect(options).toHaveCount(2)
-  await expect(options.first().locator('strong')).toHaveText('eclume em 192.168.15.199')
+  await expect(options.first().locator('strong')).toHaveText('eclume em 192.0.2.10')
   await expect(options.first().locator('small')).toHaveText('Veio com este instalador · Usar outro')
   await expect(options.nth(1).locator('strong')).toHaveText('Escritório em 10.0.0.2')
   await expect(options.nth(1).locator('small')).toContainText('Encontrado na rede')
@@ -33,7 +33,7 @@ test("without an account, first run uses the installer server and signs in by pa
   expect(made).toContainEqual({
     command: 'prepare_server',
     args: {
-      url: 'https://192.168.15.199:8443',
+      url: 'https://192.0.2.10:8443',
       caSha256: '98e209f5457514b7b12ec349d22b3b0d93c03c3f10e52350ea5f9e0b3d97792f',
     },
   })
@@ -97,7 +97,7 @@ test("Create one on the web opens sign-up on the selected server", async ({ open
   await page.locator('#first-run-signup').click()
   await expect
     .poll(async () => (await calls(page)).find((c) => c.command === 'open_signup')?.args)
-    .toEqual({ url: 'https://192.168.15.199:8443' })
+    .toEqual({ url: 'https://192.0.2.10:8443' })
 })
 
 test("a changed CA returns to first run with a notice and disables window keys", async ({ open }) => {

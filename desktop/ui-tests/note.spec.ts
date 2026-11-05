@@ -92,5 +92,5 @@ test("automatic recording shows the app policy and allows changing it", async ({
   const input = (saved[0].args as { input: { policies: Record<string, string>; web_url: string } }).input
   expect(input.policies.teams).toBe('auto')
   expect(input.policies.zoom).toBe('ask')
-  expect(input.web_url).toBe('https://192.168.15.199:8443')
+  expect(input.web_url).toBe('https://192.0.2.10:8443')
 })

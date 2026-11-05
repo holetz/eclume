@@ -208,8 +208,8 @@ urwVrn2LuMQiFhpsFqzijXlyfFPQmgIhALpw58Bg8XjfqCOaXRJ53v7gVlG7SPkr
     #[test]
     fn endpoint_is_in_web_url_downloads() {
         assert_eq!(
-            endpoint("https://192.168.15.199:8443").unwrap().as_str(),
-            "https://192.168.15.199:8443/downloads/latest.json"
+            endpoint("https://192.0.2.10:8443").unwrap().as_str(),
+            "https://192.0.2.10:8443/downloads/latest.json"
         );
         assert_eq!(
             endpoint("https://eclume.local/").unwrap().as_str(),

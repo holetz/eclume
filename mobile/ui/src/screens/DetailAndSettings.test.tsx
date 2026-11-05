@@ -33,7 +33,7 @@ describe('recording detail', () => {
           { step: 'agenda_type', state: 'skipped', reason: 'set_by_user' },
           { step: 'summary', state: 'pending' },
         ],
-        endereco_na_web: 'https://192.168.15.199:8443/gravacoes/r1',
+        endereco_na_web: 'https://192.0.2.10:8443/gravacoes/r1',
       }
     })
     expect(await screen.findByRole('heading', { name: 'Reunião semanal' })).toBeInTheDocument()
@@ -79,7 +79,7 @@ describe('recording detail', () => {
           { step: 'fields', state: 'pending' },
           { step: 'summary', state: 'pending' },
         ],
-        endereco_na_web: 'https://192.168.15.199:8443/gravacoes/r1',
+        endereco_na_web: 'https://192.0.2.10:8443/gravacoes/r1',
       }
     })
     const steps = within(await screen.findByRole('list', { name: 'Etapas no servidor' })).getAllByRole('listitem')
@@ -97,7 +97,7 @@ describe('recording detail', () => {
         caminho: null,
         marcadores: [],
         etapas: [],
-        endereco_na_web: 'https://192.168.15.199:8443/gravacoes/r1',
+        endereco_na_web: 'https://192.0.2.10:8443/gravacoes/r1',
       }
     })
     expect(await screen.findByRole('heading', { name: '2026-09-26 09-00 gravação' })).toBeInTheDocument()
@@ -144,7 +144,7 @@ describe('recording detail', () => {
 describe('settings', () => {
   it('changes the sync, the quality and the retention', async () => {
     const bridge = openApp('/settings')
-    expect(await screen.findByText('192.168.15.199:8443')).toBeInTheDocument()
+    expect(await screen.findByText('192.0.2.10:8443')).toBeInTheDocument()
     expect(screen.getByText('Cerca de 11 MB por hora')).toBeInTheDocument()
     expect(screen.getByText('1,2 GB · 9 h livres')).toBeInTheDocument()
     expect(screen.getByLabelText('Só no Wi‑Fi do servidor')).toBeDisabled()

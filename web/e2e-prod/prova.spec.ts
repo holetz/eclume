@@ -14,9 +14,9 @@ const PASSWORD = process.env.ECLUME_PROD_PASSWORD
 const SHOTS = 'test-results/prod'
 test.use({ baseURL: URL_BASE })
 
-/** A produção (192.168.15.199:8443 ou ECLUME_PUBLIC_URL) não recebe provas que escrevem (#91). */
+/** A produção (ECLUME_PUBLIC_URL) não recebe provas que escrevem (#91). */
 function ehProducao(url: string): boolean {
-  const alvos = ['https://192.168.15.199:8443', process.env.ECLUME_PUBLIC_URL].filter((a): a is string => !!a)
+  const alvos = [process.env.ECLUME_PUBLIC_URL].filter((a): a is string => !!a)
   return alvos.some((a) => new URL(a).host === new URL(url).host)
 }
 

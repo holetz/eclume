@@ -8,7 +8,7 @@
 # Runs on the host (where `gh` is authenticated):
 #   deploy/publish-mobile.sh [mobile-v<version>]       # without a tag: the latest mobile-v* release
 # or, from the dev machine:
-#   ssh holetz@192.168.15.199 'bash -s -- mobile-v0.1.0' < deploy/publish-mobile.sh
+#   ssh <user>@<host> 'bash -s -- mobile-v0.1.0' < deploy/publish-mobile.sh
 #
 # Variables: DEST (default /srv/eclume/downloads), REPO (holetz/eclume), KEEP (versions kept, 3),
 # FORCE=1 to point movel.json at a version older than the current one, SWAP_CERTIFICATE="<reason>" to accept a

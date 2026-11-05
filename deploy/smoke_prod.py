@@ -11,12 +11,12 @@ workstation, `ssh -L 18444:127.0.0.1:18444`), with the disposable account in `~/
 
     python3 deploy/smoke_prod.py --ca ca.crt --email staging@eclume.invalid < password
 
-Against production (`ECLUME_PUBLIC_URL`, `https://192.168.15.199:8443`) only the read part runs —
+Against production (the address in `ECLUME_PUBLIC_URL`, for example `https://eclume.example:8443`) only the read part runs —
 health, SPA, `/downloads/`, signup and admin session — with `--read-only`; without it, it refuses
 with exit 2 before any request:
 
-    ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
-      | python3 deploy/smoke_prod.py --url https://192.168.15.199:8443 --ca eclume-root.crt --read-only
+    ssh <user>@<host> cat /srv/eclume/secrets/admin-password \
+      | python3 deploy/smoke_prod.py --url "$ECLUME_PUBLIC_URL" --ca eclume-root.crt --read-only
 
 With `--pipeline`, it proves the automatic processing (holetz/eclume#33): it retranscribes the
 recording (the one in `--recording`, a real library recording, or the fixture audio's) and waits for
@@ -64,7 +64,6 @@ if TYPE_CHECKING:
     from email.message import Message
 
 STAGING = "https://127.0.0.1:18444"
-PRODUCTION = "https://192.168.15.199:8443"
 FIXTURE = Path(__file__).resolve().parent.parent / "worker-gpu" / "tests" / "fixtures" / "two-voices.ogg"
 
 
@@ -470,9 +469,9 @@ def _states(recording: dict[str, Any]) -> str:
 
 
 def is_production(url: str) -> bool:
-    """Whether `url` points at production: the one in `PRODUCTION` or the one in `ECLUME_PUBLIC_URL`."""
-    targets = {PRODUCTION, os.environ.get("ECLUME_PUBLIC_URL") or PRODUCTION}
-    return urllib.parse.urlsplit(url).netloc.lower() in {urllib.parse.urlsplit(a).netloc.lower() for a in targets}
+    """Whether `url` points at production: the address in `ECLUME_PUBLIC_URL` (none set, no production to guard)."""
+    public = os.environ.get("ECLUME_PUBLIC_URL")
+    return bool(public) and urllib.parse.urlsplit(url).netloc.lower() == urllib.parse.urlsplit(public).netloc.lower()
 
 
 def main() -> int:

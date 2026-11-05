@@ -418,7 +418,7 @@ exist for it and do not change the desktop.
 
 | `config.json` field | Default | What it does |
 |---|---|---|
-| `web_url` | the embedded server, or `https://192.168.15.199:8443` in a build without it | server: the eclume web and, without `api_url`, the API; signing in writes the chosen server |
+| `web_url` | the embedded server, or empty (no server) in a build without it | server: the eclume web and, without `api_url`, the API; signing in writes the chosen server |
 | `account` | — | the account the computer signed in to |
 | `api_url` | — | API at another address (dev); `ECLUME_API_URL` overrides |
 | `ca_path` | — | PEM with Caddy's internal CA: the one pinned by the first run or one chosen in Server · Advanced ("Escolher…") |

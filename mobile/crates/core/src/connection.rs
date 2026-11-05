@@ -439,8 +439,8 @@ mod tests {
     #[test]
     fn typed_address_gets_https() {
         assert_eq!(
-            normalize_address(" 192.168.15.199:8443/ ").unwrap(),
-            "https://192.168.15.199:8443"
+            normalize_address(" 192.0.2.10:8443/ ").unwrap(),
+            "https://192.0.2.10:8443"
         );
         assert!(normalize_address("http://eclume.test").is_err());
         assert!(normalize_address("  ").is_err());

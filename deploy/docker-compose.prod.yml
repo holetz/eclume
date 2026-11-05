@@ -1,7 +1,7 @@
-# eclume's production stack on the GPU host (192.168.15.199), project `eclume`.
+# eclume's production stack on the GPU host, project `eclume`.
 #
-#   bash deploy/deploy.sh --plan --context gpu-host
-#   bash deploy/deploy.sh --context gpu-host
+#   bash deploy/deploy.sh --plan --context <context>
+#   bash deploy/deploy.sh --context <context>
 #
 # The daemon is the host's (Docker context): every bind mount resolves ON THE HOST, never on the
 # workstation. That is why the Caddyfile is a `content:` config (compose copies it into the container), never `file:`.

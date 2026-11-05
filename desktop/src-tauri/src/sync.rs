@@ -480,8 +480,8 @@ mod tests {
         std::fs::write(&path, br#"{"srv-a": 1727780000000}"#).unwrap();
         assert_eq!(load_mark(&path), None);
         assert_eq!(
-            recording_url("https://192.168.15.199:8443/", "srv-a"),
-            "https://192.168.15.199:8443/gravacoes/srv-a"
+            recording_url("https://192.0.2.10:8443/", "srv-a"),
+            "https://192.0.2.10:8443/gravacoes/srv-a"
         );
         std::fs::remove_dir_all(dir).unwrap();
     }

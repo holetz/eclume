@@ -19,9 +19,9 @@ const WEEK = '/?visao=semana&data=2026-09-21'
 // O creation_time do M4A é 12:00 UTC: 09:00 em Brasília, na segunda 21/09/2026.
 test.use({ timezoneId: 'America/Sao_Paulo', baseURL: URL_BASE })
 
-/** A produção (192.168.15.199:8443 ou ECLUME_PUBLIC_URL) não recebe provas que escrevem (#91). */
+/** A produção (ECLUME_PUBLIC_URL) não recebe provas que escrevem (#91). */
 function ehProducao(url: string): boolean {
-  const alvos = ['https://192.168.15.199:8443', process.env.ECLUME_PUBLIC_URL].filter((a): a is string => !!a)
+  const alvos = [process.env.ECLUME_PUBLIC_URL].filter((a): a is string => !!a)
   return alvos.some((a) => new URL(a).host === new URL(url).host)
 }
 

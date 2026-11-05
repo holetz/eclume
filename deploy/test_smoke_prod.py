@@ -15,6 +15,8 @@ assert _spec.loader is not None
 smoke = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(smoke)
 
+EXAMPLE_PRODUCTION = "https://192.0.2.10:8443"  # RFC 5737 documentation address
+
 
 def provider(pid: str, kind: str = "ollama", *, enabled: bool = True, used_for: tuple[str, ...] = ()) -> dict[str, Any]:
     return {"id": pid, "name": pid, "kind": kind, "model": "m", "enabled": enabled, "used_for": list(used_for)}
@@ -62,7 +64,8 @@ def test_none_fits_says_what_to_do(items: list[dict[str, Any]], wanted: str | No
 def test_production_without_read_only_refuses_before_any_request(
     monkeypatch: pytest.MonkeyPatch, flags: list[str]
 ) -> None:
-    monkeypatch.setattr("sys.argv", ["smoke_prod.py", "--url", smoke.PRODUCTION, *flags])
+    monkeypatch.setenv("ECLUME_PUBLIC_URL", EXAMPLE_PRODUCTION)
+    monkeypatch.setattr("sys.argv", ["smoke_prod.py", "--url", EXAMPLE_PRODUCTION, *flags])
     assert smoke.main() == 2
 
 
@@ -72,7 +75,8 @@ def test_read_only_and_its_deprecated_spelling_pass_the_production_guard(
 ) -> None:
     """Past the guard, the missing account is the next refusal (exit 1), not the production one (2)."""
     monkeypatch.delenv("ECLUME_ADMIN_EMAIL", raising=False)
-    monkeypatch.setattr("sys.argv", ["smoke_prod.py", "--url", smoke.PRODUCTION, flag])
+    monkeypatch.setenv("ECLUME_PUBLIC_URL", EXAMPLE_PRODUCTION)
+    monkeypatch.setattr("sys.argv", ["smoke_prod.py", "--url", EXAMPLE_PRODUCTION, flag])
     with pytest.raises(SystemExit) as exit_info:
         smoke.main()
     assert exit_info.value.code == 1

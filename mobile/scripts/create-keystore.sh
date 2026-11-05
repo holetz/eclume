@@ -11,7 +11,7 @@
 # required.
 #
 # Usage (from the dev machine):
-#   ssh holetz@192.168.15.199 'bash -s -- --dname "CN=eclume, O=<holder>, C=BR"' < mobile/scripts/create-keystore.sh
+#   ssh <user>@<host> 'bash -s -- --dname "CN=eclume, O=<holder>, C=BR"' < mobile/scripts/create-keystore.sh
 # Then: version the printed SHA-256 in mobile/certificado-release.sha256 and confirm the encrypted
 # copy of the keystore and the password off the host (holetz/eclume#91).
 set -euo pipefail

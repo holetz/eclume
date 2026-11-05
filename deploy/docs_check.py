@@ -41,7 +41,6 @@ _HYPOTHETICAL = "hypothetical example of a per-folder AGENTS.md"
 
 EXCEPTIONS: tuple[PathException, ...] = (
     PathException("docs/project/deploy-producao.md", "deploy/.deploy.lock.d", "lock created by a running deploy.sh"),
-    PathException("docs/project/deploy-producao.md", "deploy/.env.remote", "a file of the lumea repository"),
     PathException(
         "docs/standards/code/monorepo.md", "mobile/.cargo/config.toml", "example of what does not exist, on purpose"
     ),

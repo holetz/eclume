@@ -1,6 +1,6 @@
 // Proofs in the browser installed on the workstation:
 // - e2e-prod/admin.spec.ts, the read-only administration panel, on production (ECLUME_PROD_URL,
-//   https://192.168.15.199:8443): ECLUME_ADMIN_EMAIL and ECLUME_ADMIN_PASSWORD;
+//   the address of your deployment): ECLUME_ADMIN_EMAIL and ECLUME_ADMIN_PASSWORD;
 // - e2e-prod/prova.spec.ts, the user web (deploy/prove-web-prod.sh), which writes and so runs on
 //   staging (ECLUME_PROOF_URL, https://127.0.0.1:18444) and refuses production: ECLUME_PROD_EMAIL and
 //   ECLUME_PROD_PASSWORD.
@@ -18,7 +18,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: process.env.ECLUME_PROD_URL ?? 'https://192.168.15.199:8443',
+    baseURL: process.env.ECLUME_PROD_URL ?? process.env.ECLUME_PUBLIC_URL,
     ignoreHTTPSErrors: true,
     locale: 'pt-BR',
     trace: 'retain-on-failure',

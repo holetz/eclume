@@ -16,7 +16,7 @@ maintainer: holetz
 The contract lives in `contracts/`: `openapi-v1.yaml` and `transcript.schema.json` are the source
 of truth, `fixtures/` holds the examples and `openapi-v1.bundled.yaml` is the single-file
 derivative that the mock (Prism) and the type generators read. The server **conforms** to the
-contract; the contract is never generated from the code. The usage manual (mock, lumea, desktop,
+contract; the contract is never generated from the code. The usage manual (mock, integrations, desktop,
 mapping to `transcricao.md`) is in [contracts/README.md](/contracts/README.md).
 
 ## Conventions
@@ -30,7 +30,7 @@ mapping to `transcricao.md`) is in [contracts/README.md](/contracts/README.md).
   in force; an account without the current acceptance gets `notice_required: true` in `GET /me`
   and accepts through `POST /me/notice`. Since 2.3.0, that account's **session** gets **403**
   `notice_required` on every user route except `GET /me`, `POST /me/notice` and `/auth/*`; the PAT
-  is not blocked (the desktop and the lumea of migrated accounts keep working, and the web is what
+  is not blocked (the desktop and the integrations of migrated accounts keep working, and the web is what
   asks for the acceptance).
 - **Authentication.** Three schemes.
   - **User session** (`sessionCookie`): cookie `eclume_session` (HttpOnly, Secure,
@@ -238,7 +238,7 @@ mapping to `transcricao.md`) is in [contracts/README.md](/contracts/README.md).
   summary that finishes or is edited also moves the `updated_at` of the recording and of the
   transcript, so `?since=` notices a new or redone summary. Since 2.17.0, the `summary` step that
   ends `failed` or `skipped` moves the `updated_at` **of the recording only** (the transcript's only
-  moves with a new summary, so as not to wake the lumea importer), and the `?since=` of
+  moves with a new summary, so as not to wake a transcript importer), and the `?since=` of
   `GET /recordings` is how the desktop and the web read the end-of-processing notice
   (holetz/eclume#118). A cursor is valid
   only for the ordering (`sort`) that produced it.
@@ -251,7 +251,7 @@ mapping to `transcricao.md`) is in [contracts/README.md](/contracts/README.md).
   segment), `md` (`text/markdown`, title, date and the current summary; without a summary, 409
   `summary_missing`) and `docx` (Word, with the summary and the transcript). The file name comes in
   `Content-Disposition`, as a slug of the title. `GET /transcripts/{id}/export?format=md` stays as
-  the transcript export with frontmatter, which lumea reads.
+  the transcript export with frontmatter, which integrations read.
 - **Optimistic concurrency.** A write over a state the client read carries the version read
   (`base_version` in the summary edit); if the state changed, the answer is 409 with its own `code`
   (`summary_changed`) and nothing is overwritten.
@@ -337,8 +337,8 @@ mapping to `transcricao.md`) is in [contracts/README.md](/contracts/README.md).
   hand-edited versions, and replaces the filters of `GET /recordings` with repeatable lists,
   compatible with a single value; 2.3.0 requires `recordings:delete` on `DELETE /recordings/{id}`,
   with the migration granting the scope to every token that had `recordings:write`, and blocks the
-  session without the notice acceptance). The two clients outside the repository (desktop and
-  lumea) only use uploads, recordings, transcripts and `/me`, which stay compatible; keeping the
+  session without the notice acceptance). The clients outside the repository (the desktop and
+  integrations) only use uploads, recordings, transcripts and `/me`, which stay compatible; keeping the
   old v1 in parallel would require two RLS setups. That is why the 2.x line evolves under the same
   prefix until the redesign ends, and the contract tests require 2.x. After it, 2.x freezes, and
   the **next** break goes to `/api/v2`, with no other exception.
@@ -346,7 +346,7 @@ mapping to `transcricao.md`) is in [contracts/README.md](/contracts/README.md).
 ## Why
 
 The contract exists before the backend so that the server, the frontend, the desktop and the
-lumea importer develop in parallel against the same mock. That only works if nobody has to track
+integrations develop in parallel against the same mock. That only works if nobody has to track
 contract changes: hence the additive rule and the mandatory client tolerance. The upload is S3
 multipart and not tus because MinIO already speaks the protocol, the API stays out of the bytes'
 path and the Rust client and the browser only need HTTP `PUT`.

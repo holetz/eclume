@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { qrMatrix, qrRowPaths, QUIET_ZONE } from './qr'
 
 const PAIR_URL =
-  'https://192.168.15.199:8443/parear?codigo=K7Q4MX&ca=3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d'
+  'https://192.0.2.10:8443/parear?codigo=K7Q4MX&ca=3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d'
 
 /** Rasterizes the SVG paths (only `M x y h n v1 h-n z` rectangles) into RGBA, as the browser would. */
 function rasterize(rows: string[], size: number, scale = 4) {

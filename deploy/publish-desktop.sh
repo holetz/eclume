@@ -7,7 +7,7 @@
 # Runs on the host (where `gh` is authenticated):
 #   deploy/publish-desktop.sh [desktop-v<version>]       # without a tag: the latest desktop-v* release
 # or, from the dev machine:
-#   ssh holetz@192.168.15.199 'bash -s -- desktop-v0.1.0' < deploy/publish-desktop.sh
+#   ssh <user>@<host> 'bash -s -- desktop-v0.1.0' < deploy/publish-desktop.sh
 #
 # Variables: DEST (default /srv/eclume/downloads), REPO (holetz/eclume), KEEP (versions kept, 3),
 # FORCE=1 to point latest.json at a version older than the current one. The deprecated pt-BR names (DESTINO, MANTER,

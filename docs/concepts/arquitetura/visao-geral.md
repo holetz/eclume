@@ -25,7 +25,7 @@ flowchart LR
     nav[Browser]
     desk[Desktop app]
     cel[Phone app]
-    pat[PAT integration<br/>e.g. lumea]
+    pat[PAT integration<br/>e.g. a transcript importer]
     mcpc[Assistant over MCP]
   end
 
@@ -76,7 +76,7 @@ flowchart LR
 - **mdns** announces `_eclume._tcp` on the local network with the URL and the CA fingerprint, so the apps
   can find the server.
 - **Clients:** the browser (session), the desktop app and the phone app (device credential),
-  integrations such as lumea (PAT) and AI assistants over MCP (PAT with the group from the "MCP
+  integrations such as a transcript importer (PAT) and AI assistants over MCP (PAT with the group from the "MCP
   Connection" screen). All use the same contract.
 
 ## The queues

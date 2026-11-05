@@ -9,7 +9,7 @@ export function baseState(partial: Partial<AppState> = {}): AppState {
   return {
     conexao: {
       fase: 'conectado',
-      servidor: { url: 'https://192.168.15.199:8443', nome: 'eclume', ca_sha256: 'ab'.repeat(32) },
+      servidor: { url: 'https://192.0.2.10:8443', nome: 'eclume', ca_sha256: 'ab'.repeat(32) },
     },
     rede: { estado: 'on_network' },
     sessao: null,
@@ -59,7 +59,7 @@ export function fakeBridge(initial: AppState = baseState()): FakeBridge {
     list: [],
     detail: null,
     config: {
-      servidor: 'https://192.168.15.199:8443',
+      servidor: 'https://192.0.2.10:8443',
       preferencias: { sync_auto: true, qualidade: 'padrao', excluir_sincronizadas: false },
       reter_dias: 7,
       uso_bytes: 1_200_000_000,

@@ -433,8 +433,8 @@ mod tests {
     #[test]
     fn help_address() {
         assert_eq!(
-            help_url("https://192.168.15.199:8443/", None).unwrap(),
-            "https://192.168.15.199:8443/ajuda"
+            help_url("https://192.0.2.10:8443/", None).unwrap(),
+            "https://192.0.2.10:8443/ajuda"
         );
         assert_eq!(
             help_url("https://eclume.local", Some("first-recording")).unwrap(),

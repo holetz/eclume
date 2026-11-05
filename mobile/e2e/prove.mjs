@@ -17,7 +17,7 @@ import { _android as android } from 'playwright'
 
 const PACKAGE = 'io.github.holetz.eclume.movel'
 const SERVER_URL = process.env.ECLUME_URL ?? 'https://127.0.0.1:18444'
-const PRODUCTION = ['https://192.168.15.199:8443', process.env.ECLUME_PUBLIC_URL].filter(Boolean)
+const PRODUCTION = [process.env.ECLUME_PUBLIC_URL].filter(Boolean)
 const EMAIL = process.env.ECLUME_SMOKE_EMAIL ?? 'staging@eclume.invalid'
 const PASSWORD = process.env.ECLUME_SMOKE_PASSWORD
 const CA = readFileSync(process.env.ECLUME_CA ?? 'eclume-root.crt')

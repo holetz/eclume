@@ -72,7 +72,7 @@ ECLUME_MOCK_URL=http://127.0.0.1:4010 cargo test --manifest-path desktop/Cargo.t
 # the window in Chromium, with Tauri mocked (captures in ui-tests/capturas/)
 npm --prefix desktop/ui-tests ci && npm --prefix desktop/ui-tests test
 # a build with the embedded server, as the release does
-ECLUME_SERVER_URL=https://192.168.15.199:8443 ECLUME_SERVER_CA_SHA256=<sha256> cargo build --manifest-path desktop/Cargo.toml -p eclume-desktop
+ECLUME_SERVER_URL=https://eclume.example:8443 ECLUME_SERVER_CA_SHA256=<sha256> cargo build --manifest-path desktop/Cargo.toml -p eclume-desktop
 ```
 
 The server and the account (on the first run), the extra CA, the per-app policies, the

@@ -21,6 +21,7 @@ gate = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(gate)
 
 SHA = "a" * 40
+USAGE_ERROR = 2
 LOG = f"~/eclume-gate/logs/{SHA}.log"
 
 
@@ -483,3 +484,19 @@ def test_gate_prunes_logs_old_images_and_abandoned_trees() -> None:
     assert 'grep -vF ":$RUST"' in host
     assert "eclume-(gate|desktop-build|desktop-build-windows|mobile-build)" in host
     assert "-name 'src-*' -mtime +1" in host
+
+
+@pytest.mark.parametrize("script", ["gate.sh", "release-mobile.sh"])
+def test_host_scripts_have_no_default_docker_context(script: str) -> None:
+    """The host comes from `--context` or `ECLUME_DOCKER_CONTEXT`; without either the script refuses with exit 2."""
+    env = {k: v for k, v in os.environ.items() if k != "ECLUME_DOCKER_CONTEXT"}
+    r = subprocess.run(  # noqa: S603 — fixed script of the repository
+        ["bash", str(ROOT / "deploy" / script), "--plan"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+        timeout=30,
+    )
+    assert r.returncode == USAGE_ERROR
+    assert "ECLUME_DOCKER_CONTEXT" in r.stderr

@@ -5,5 +5,5 @@
   "token_id": null,
   "code": "K7Q4MX",
   "display": "K7Q-4MX",
-  "pair_url": "https://192.168.15.199:8443/parear?codigo=K7Q4MX&ca=3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d"
+  "pair_url": "https://192.0.2.10:8443/parear?codigo=K7Q4MX&ca=3f9a1c6e0b7d24f58e1a9c3b6d0f2e4a7c5b8d1e3f6a9c2b4d7e0f1a3c5e7b9d"
 }

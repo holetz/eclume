@@ -16,7 +16,7 @@
 #                   "superseded by <sha>"); the pre-push hook uses it, a manual request is never abandoned.
 #   --status        shows the commit's `eclume/gate` status and the tail of the host log.
 #   --plan          only shows what it would do (read-only).
-#   --context       the host's Docker context (default: $ECLUME_DOCKER_CONTEXT or gpu-host).
+#   --context       the host's Docker context (or $ECLUME_DOCKER_CONTEXT); required, no default.
 # Variables: ECLUME_SSH (when the context is not ssh://); ECLUME_DISK_LIMIT and ECLUME_GPU_E2E_WAIT
 #            (minutes gpu-e2e waits for a free GPU; the deprecated ECLUME_GPU_E2E_ESPERA still works)
 #            go on to the host.
@@ -25,7 +25,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-CONTEXT="${ECLUME_DOCKER_CONTEXT:-gpu-host}"
+CONTEXT="${ECLUME_DOCKER_CONTEXT:-}"
 REPO=holetz/eclume
 REF=HEAD
 PILLARS=""
@@ -54,6 +54,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+[[ -n "$CONTEXT" ]] || { echo "Missing the host's Docker context: --context NAME or ECLUME_DOCKER_CONTEXT." >&2; exit 2; }
 SHA="$(git rev-parse --verify "$REF^{commit}")"
 [[ -z "$PILLARS" || "$ALL" -eq 0 ]] || { echo "--all and --pillars do not go together." >&2; exit 2; }
 if [[ -n "$PILLARS" ]]; then

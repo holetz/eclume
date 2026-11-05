@@ -24,12 +24,12 @@ describe('MCP connection', () => {
     mockMcpApi()
     renderApp('/config/mcp')
     expect(await screen.findByRole('heading', { name: 'Conexão MCP' })).toBeInTheDocument()
-    expect(await screen.findByText('https://192.168.15.199:8443/mcp')).toBeInTheDocument()
+    expect(await screen.findByText('https://192.0.2.10:8443/mcp')).toBeInTheDocument()
     const steps = document.querySelector<HTMLElement>('ol.steps')!
     expect(steps).toHaveTextContent('Crie um token para o assistente')
     expect(within(steps).getByRole('link', { name: 'Tokens de acesso' })).toHaveAttribute('href', '/tokens')
     await userEvent.click(screen.getAllByRole('button', { name: 'Copiar' })[0])
-    expect(writeText).toHaveBeenCalledWith('https://192.168.15.199:8443/mcp')
+    expect(writeText).toHaveBeenCalledWith('https://192.0.2.10:8443/mcp')
   })
 
   it('suggests the assistant token without deleting recordings and with 90 days', async () => {
@@ -55,14 +55,14 @@ describe('MCP connection', () => {
     const http = mockMcpApi({ 'POST /api/v1/tokens': () => json(created, 201) })
     renderApp('/config/mcp')
     const panel = await screen.findByRole('region', { name: 'Novo token para um assistente' })
-    await screen.findByText('https://192.168.15.199:8443/mcp')
+    await screen.findByText('https://192.0.2.10:8443/mcp')
     await userEvent.click(within(panel).getByRole('button', { name: 'Criar token' }))
 
     expect(await within(panel).findByText(/Token “Claude Desktop” criado/)).toBeInTheDocument()
     expect(within(panel).getByText('eclp_7Hq2vN4kR8sT1wX6yZ3bC5dF0gJ9mP2a')).toBeInTheDocument()
     expect(
       within(panel).getByText(
-        'claude mcp add --transport http eclume https://192.168.15.199:8443/mcp --header "Authorization: Bearer eclp_7Hq2vN4kR8sT1wX6yZ3bC5dF0gJ9mP2a"',
+        'claude mcp add --transport http eclume https://192.0.2.10:8443/mcp --header "Authorization: Bearer eclp_7Hq2vN4kR8sT1wX6yZ3bC5dF0gJ9mP2a"',
       ),
     ).toBeInTheDocument()
     expect(within(panel).getByRole('link', { name: 'Como instalar o certificado' })).toHaveAttribute(

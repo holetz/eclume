@@ -35,7 +35,7 @@ test("idle: status, record, queue and account", async ({ open }) => {
   await expect(page.locator('#queue li').first().locator('.badge')).toHaveText('Enviada')
   await expect(page.locator('#queue-summary')).toHaveText('3 de 3 enviadas')
   await expect(page.locator('#account-name')).toHaveText('ana@exemplo.com.br')
-  await expect(page.locator('#account-server')).toHaveText('eclume em 192.168.15.199')
+  await expect(page.locator('#account-server')).toHaveText('eclume em 192.0.2.10')
   await expect(page.locator('#account-version')).toHaveText('v0.2.0')
   await expect(page.locator('#account-action')).toHaveText('Sair')
 })
