@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::account::{self, Login, Net, PreparedServer, SignedIn};
 use crate::capture::{AudioChoice, OpenedSources};
 use crate::config::{self, Account, Config, Connection, PendingUpdate};
+use crate::i18n::{self, Locale};
 use crate::shortcuts::{Registration, Registrations, ShortcutAction, ShortcutMode, Shortcuts};
 
 /// Version of this build.
@@ -152,6 +153,8 @@ impl From<AppKey> for MeetingView {
 /// State snapshot consumed by the UI and tray.
 #[derive(Clone, Debug, Serialize)]
 pub struct StatusView {
+    pub locale: Locale,
+    pub locale_choice: Option<String>,
     pub status: AppStatus,
     pub recording_id: Option<String>,
     pub recording_started_at: Option<i64>,
@@ -660,6 +663,8 @@ impl AppState {
             None => Vec::new(),
         };
         Ok(StatusView {
+            locale: resolved_locale(&inner.config),
+            locale_choice: inner.config.locale.clone(),
             status,
             recording_id: current.map(|(id, ..)| id.to_string()),
             recording_started_at: current.map(|(_, started_at, _)| started_at),
@@ -684,6 +689,68 @@ impl AppState {
             account: inner.config.account.clone(),
             mic_lost: inner.mic_lost,
         })
+    }
+
+    pub fn locale(&self) -> Result<Locale> {
+        Ok(resolved_locale(&self.inner()?.config))
+    }
+
+    pub fn set_locale(&self, choice: Option<String>) -> Result<()> {
+        let choice = choice
+            .map(|tag| match i18n::normalize(&tag) {
+                Some(locale) => Ok(locale.tag().to_string()),
+                None => bail!("unsupported locale: {tag}"),
+            })
+            .transpose()?;
+        let mut inner = self.inner()?;
+        let mut next = inner.config.clone();
+        next.locale = choice;
+        next.save(&self.config_path)?;
+        inner.config = next;
+        Ok(())
+    }
+
+    pub fn report_system_locale(&self, tag: &str) -> Result<()> {
+        let Some(locale) = i18n::normalize(tag) else {
+            return Ok(());
+        };
+        let mut inner = self.inner()?;
+        if inner.config.system_locale.as_deref() != Some(locale.tag()) {
+            let mut next = inner.config.clone();
+            next.system_locale = Some(locale.tag().to_string());
+            next.save(&self.config_path)?;
+            inner.config = next;
+        }
+        Ok(())
+    }
+
+    /// Stores the canonical account language, clearing an absent or unsupported preference.
+    fn store_account_locale(&self, tag: Option<&str>) -> Result<()> {
+        let locale = tag
+            .and_then(i18n::normalize)
+            .map(|locale| locale.tag().to_string());
+        let mut inner = self.inner()?;
+        if inner.config.account_locale != locale {
+            let mut next = inner.config.clone();
+            next.account_locale = locale;
+            next.save(&self.config_path)?;
+            inner.config = next;
+        }
+        Ok(())
+    }
+
+    /// Refreshes the account preference with the stored credential, if one is available.
+    pub fn refresh_account_locale(&self, net: &dyn Net) -> Result<()> {
+        let Some(config) = self.uploader_config()? else {
+            return Ok(());
+        };
+        let retry = RetryPolicy {
+            retries: 0,
+            ..RetryPolicy::default()
+        };
+        let transport = net.verified(&config.trust)?;
+        let me = Client::new(transport, &config.api_url, &config.pat, retry)?.me()?;
+        self.store_account_locale(me.user.locale.as_deref())
     }
 
     /// Starts a manual recording with the sources opened by `open`; the pending prompt for a
@@ -1442,7 +1509,11 @@ impl AppState {
             login,
             &eclume_sync::device_name(),
         )?;
-        self.apply_sign_in(signed)
+        self.apply_sign_in(signed)?;
+        if let Err(err) = self.refresh_account_locale(net) {
+            log::warn!("failed to refresh account locale after sign-in: {err:#}");
+        }
+        Ok(())
     }
 
     fn apply_sign_in(&self, signed: SignedIn) -> Result<()> {
@@ -1452,6 +1523,7 @@ impl AppState {
         next.api_url = None;
         next.ca_path = signed.ca_path;
         next.account = Some(signed.account);
+        next.account_locale = None;
         next.save(&self.config_path)?;
         let mut inner = self.inner()?;
         inner.config = next;
@@ -1467,6 +1539,7 @@ impl AppState {
         self.pat.clear()?;
         let mut next = self.inner()?.config.clone();
         next.account = None;
+        next.account_locale = None;
         next.save(&self.config_path)?;
         let mut inner = self.inner()?;
         inner.config = next;
@@ -1507,6 +1580,7 @@ impl AppState {
         };
         let transport = net.verified(&config.trust)?;
         let me = Client::new(transport, &config.api_url, &config.pat, retry)?.me()?;
+        self.store_account_locale(me.user.locale.as_deref())?;
         let last_upload_at = self
             .lock_queue()?
             .list(500)?
@@ -1518,6 +1592,16 @@ impl AppState {
             last_upload_at,
         })
     }
+}
+
+/// Resolves the desktop language, using the environment until the window reports its locale.
+fn resolved_locale(config: &Config) -> Locale {
+    let system = config.system_locale.clone().or_else(i18n::env_locale);
+    i18n::resolve(
+        config.locale.as_deref(),
+        config.account_locale.as_deref(),
+        system.as_deref(),
+    )
 }
 
 /// First run appears without a credential and when the pinned CA changed.
@@ -1578,6 +1662,74 @@ mod tests {
             ))],
             missing: vec!["áudio do sistema: teste".into()],
         })
+    }
+
+    #[test]
+    fn locale_choice_is_saved_and_reflected_in_status() {
+        let (state, dir) = state("locale-choice");
+        state.report_system_locale("en-US").unwrap();
+        state.set_locale(Some(" pt_BR ".into())).unwrap();
+        let view = state.view().unwrap();
+        assert_eq!(view.locale, Locale::PtBr);
+        assert_eq!(view.locale_choice.as_deref(), Some("pt-BR"));
+        assert_eq!(state.locale().unwrap(), Locale::PtBr);
+        assert_eq!(
+            Config::load(&state.config_path).locale.as_deref(),
+            Some("pt-BR")
+        );
+
+        assert_eq!(
+            state.set_locale(Some("fr".into())).unwrap_err().to_string(),
+            "unsupported locale: fr"
+        );
+        assert_eq!(state.locale().unwrap(), Locale::PtBr);
+        state.set_locale(None).unwrap();
+        assert_eq!(state.view().unwrap().locale, Locale::En);
+        assert_eq!(state.view().unwrap().locale_choice, None);
+        assert_eq!(Config::load(&state.config_path).locale, None);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn system_locale_is_normalized_and_unsupported_tags_are_ignored() {
+        let (state, dir) = state("system-locale");
+        state.report_system_locale("pt_BR").unwrap();
+        assert_eq!(
+            Config::load(&state.config_path).system_locale.as_deref(),
+            Some("pt-BR")
+        );
+        assert_eq!(state.view().unwrap().locale, Locale::PtBr);
+        // An unchanged or unsupported report must not attempt another save.
+        std::fs::remove_file(&state.config_path).unwrap();
+        std::fs::create_dir(&state.config_path).unwrap();
+        state.report_system_locale("pt-PT").unwrap();
+        state.report_system_locale("fr-FR").unwrap();
+        assert_eq!(state.locale().unwrap(), Locale::PtBr);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn account_locale_precedes_system_and_follows_desktop_choice() {
+        let (state, dir) = state("account-locale");
+        state.report_system_locale("en").unwrap();
+        state.store_account_locale(Some("pt-PT")).unwrap();
+        assert_eq!(
+            Config::load(&state.config_path).account_locale.as_deref(),
+            Some("pt-BR")
+        );
+        assert_eq!(state.locale().unwrap(), Locale::PtBr);
+        assert_eq!(state.view().unwrap().locale, Locale::PtBr);
+        state.set_locale(Some("en".into())).unwrap();
+        assert_eq!(state.locale().unwrap(), Locale::En);
+        state.set_locale(None).unwrap();
+        assert_eq!(state.locale().unwrap(), Locale::PtBr);
+        state.store_account_locale(Some("fr")).unwrap();
+        assert_eq!(Config::load(&state.config_path).account_locale, None);
+        assert_eq!(state.locale().unwrap(), Locale::En);
+        state.store_account_locale(Some("pt")).unwrap();
+        state.store_account_locale(None).unwrap();
+        assert_eq!(Config::load(&state.config_path).account_locale, None);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     /// Source whose drop takes 2 s, like a slow driver releasing the device.
@@ -2654,6 +2806,16 @@ mod tests {
                 .expect(
                     "verificado POST /api/v1/devices/login",
                     body(201, credential()),
+                )
+                .expect(
+                    "verificado GET /api/v1/me",
+                    body(
+                        200,
+                        serde_json::json!({
+                            "user": {"email": "ana@exemplo.com.br", "locale": "pt-PT"},
+                            "auth": {"method": "device", "token_id": "t-1"}
+                        }),
+                    ),
                 ),
         );
         let shared = Shared(std::sync::Arc::clone(&net));
@@ -2674,6 +2836,11 @@ mod tests {
 
         let view = state.view().unwrap();
         assert_eq!(view.connection, Connection::Account);
+        assert_eq!(view.locale, Locale::PtBr);
+        assert_eq!(
+            Config::load(&state.config_path).account_locale.as_deref(),
+            Some("pt-BR")
+        );
         assert_eq!(view.account.unwrap().email, "ana@exemplo.com.br");
         assert_eq!(view.web_url, URL);
         let pinned = dir.join(eclume_sync::pin::PINNED_FILE);
@@ -2701,6 +2868,7 @@ mod tests {
 
         // Signing out deletes the credential, but keeps the queue and server.
         state.sign_out().unwrap();
+        assert_eq!(Config::load(&state.config_path).account_locale, None);
         assert_eq!(state.view().unwrap().connection, Connection::FirstRun);
         assert!(state.uploader_config().unwrap().is_none());
         assert_eq!(Config::load(&dir.join("config.json")).account, None);
@@ -2725,6 +2893,99 @@ mod tests {
         clear.clear_pat = true;
         state.save_settings(clear).unwrap();
         assert_eq!(state.view().unwrap().connection, Connection::FirstRun);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn account_locale_refresh_and_connection_test_store_server_preference() {
+        use crate::account::tests::{body, ScriptNet, Shared, CA};
+
+        let (state, dir, _) = opened_with_pinned("locale-refresh", CA);
+        state.report_system_locale("en").unwrap();
+        let net = Arc::new(
+            ScriptNet::default()
+                .expect(
+                    "verificado GET /api/v1/me",
+                    body(
+                        200,
+                        serde_json::json!({
+                            "user": {"email": "user@example.org", "locale": "pt_BR"},
+                            "auth": {"method": "device", "token_id": "t-1"}
+                        }),
+                    ),
+                )
+                .expect(
+                    "verificado GET /api/v1/me",
+                    body(
+                        200,
+                        serde_json::json!({
+                            "user": {"email": "user@example.org", "locale": "en-US"},
+                            "auth": {"method": "device", "token_id": "t-1"}
+                        }),
+                    ),
+                )
+                .expect(
+                    "verificado GET /api/v1/me",
+                    Err(anyhow!("network unavailable")),
+                ),
+        );
+        let shared = Shared(Arc::clone(&net));
+        state.refresh_account_locale(&shared).unwrap();
+        assert_eq!(state.locale().unwrap(), Locale::PtBr);
+        assert_eq!(
+            Config::load(&state.config_path).account_locale.as_deref(),
+            Some("pt-BR")
+        );
+        assert_eq!(
+            state.test_connection(&shared).unwrap().email,
+            "user@example.org"
+        );
+        assert_eq!(
+            Config::load(&state.config_path).account_locale.as_deref(),
+            Some("en")
+        );
+        assert!(state.refresh_account_locale(&shared).is_err());
+        assert_eq!(state.locale().unwrap(), Locale::En);
+        assert!(net.done());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn sign_in_succeeds_when_account_locale_refresh_fails() {
+        use crate::account::tests::{body, credential, ScriptNet, Shared, URL};
+
+        let (state, dir) = state("locale-sign-in-failure");
+        state.inner().unwrap().prepared = Some(PreparedServer {
+            name: "eclume".into(),
+            url: URL.into(),
+            ca_sha256: None,
+            trusted_by: account::TrustedBy::System,
+            ca_path: None,
+            confirmed: true,
+        });
+        let net = Arc::new(
+            ScriptNet::default()
+                .expect(
+                    "verificado POST /api/v1/devices/login",
+                    body(201, credential()),
+                )
+                .expect(
+                    "verificado GET /api/v1/me",
+                    Err(anyhow!("network unavailable")),
+                ),
+        );
+        state
+            .sign_in(
+                &Shared(Arc::clone(&net)),
+                Login::Password {
+                    email: "user@example.org",
+                    password: "password",
+                },
+            )
+            .unwrap();
+        assert!(net.done());
+        assert_eq!(state.view().unwrap().connection, Connection::Account);
+        assert_eq!(Config::load(&state.config_path).account_locale, None);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

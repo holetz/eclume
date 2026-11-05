@@ -7,6 +7,7 @@ mod auto;
 pub mod capture;
 mod commands;
 pub mod config;
+pub mod i18n;
 mod import;
 mod mirror_sync;
 mod notify;
@@ -352,6 +353,16 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             spawn_reaper(app.handle().clone());
             sync::spawn(app.handle());
+            let locale_app = app.handle().clone();
+            std::thread::spawn(move || {
+                if let Err(err) = locale_app
+                    .state::<AppState>()
+                    .refresh_account_locale(&account::RealNet)
+                {
+                    log::warn!("failed to refresh account locale: {err:#}");
+                }
+                refresh_ui(&locale_app);
+            });
             mirror_sync::spawn(app.handle());
             recent::spawn(app.handle());
             auto::spawn(app.handle().clone());
@@ -394,6 +405,8 @@ pub fn run() {
             commands::open_web,
             commands::settings,
             commands::save_settings,
+            commands::set_locale,
+            commands::report_system_locale,
             commands::answer_meeting,
             commands::sync_now,
             commands::recent,

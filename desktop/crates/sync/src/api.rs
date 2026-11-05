@@ -186,6 +186,8 @@ pub struct Me {
 pub struct MeUser {
     pub email: String,
     #[serde(default)]
+    pub locale: Option<String>,
+    #[serde(default)]
     pub name: String,
 }
 
