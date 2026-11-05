@@ -47,11 +47,6 @@ EXCEPTIONS: tuple[PathException, ...] = (
     PathException("deploy/README.md", "deploy/.env", _COPIED_ENV),
     PathException("deploy/README.md", "deploy/.env.prod", _GENERATED_ENV),
     PathException("docs/project/deploy-producao.md", "deploy/.env.prod", _GENERATED_ENV),
-    PathException(
-        "docs/standards/code/mobile-distribuicao.md",
-        "mobile/certificado-release.sha256",
-        "versioned on the first release, with the keystore the owner creates (#108 5.1)",
-    ),
     PathException("docs/how-to/auto-hospedar.md", "deploy/.env.prod", _GENERATED_ENV),
     PathException("docs/how-to/desenvolver-sem-gpu.md", "deploy/.env", _COPIED_ENV),
     PathException(
