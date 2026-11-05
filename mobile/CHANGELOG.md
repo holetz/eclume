@@ -19,6 +19,8 @@ Ainda não publicada.
 - Posição na fila de transcrição e estado do processador.
 - Aviso quando o resumo fica pronto ou falha.
 - Idioma da transcrição escolhido por arquivo, além do padrão da conta.
+- App em inglês e português: as telas, as notificações da gravação e do envio e o atalho "Gravar
+  agora" seguem o idioma da conta, senão o do aparelho, senão o inglês.
 
 ### Mudado
 
