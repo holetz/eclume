@@ -96,9 +96,9 @@ INSERT INTO organizations (id, name, created_at) VALUES
     ('{ORG_B}', 'Outra', '2026-09-02T00:00:00Z'),
     ('{ORG_C}', 'Sem templates', '2026-09-03T00:00:00Z');
 INSERT INTO users (id, org_id, email, name, password_hash, role, created_at) VALUES
-    ('{ADMIN_A}', '{ORG_A}', 'admin.a@example.com', 'Admin A', 'hash-admin-a', 'admin', '2026-09-01T01:00:00Z'),
-    ('{MEMBER_A1}', '{ORG_A}', 'membro.a1@example.com', 'Membro A1', 'hash-a1', 'member', '2026-09-01T02:00:00Z'),
-    ('{MEMBER_A2}', '{ORG_A}', 'membro.a2@example.com', 'Membro A2', 'hash-a2', 'member', '2026-09-01T03:00:00Z'),
+    ('{ADMIN_A}', '{ORG_A}', 'admin.a@example.org', 'Admin A', 'hash-admin-a', 'admin', '2026-09-01T01:00:00Z'),
+    ('{MEMBER_A1}', '{ORG_A}', 'membro.a1@example.org', 'Membro A1', 'hash-a1', 'member', '2026-09-01T02:00:00Z'),
+    ('{MEMBER_A2}', '{ORG_A}', 'membro.a2@example.org', 'Membro A2', 'hash-a2', 'member', '2026-09-01T03:00:00Z'),
     ('{ADMIN_B}', '{ORG_B}', 'admin.b@example.net', 'Admin B', 'hash-admin-b', 'admin', '2026-09-02T01:00:00Z'),
     ('{MEMBER_B}', '{ORG_B}', 'membro.b@example.net', 'Membro B', 'hash-b', 'member', '2026-09-02T02:00:00Z'),
     ('{LONE_C}', '{ORG_C}', 'sozinho@c.test', 'Sozinho C', 'hash-c', 'member', '2026-09-03T01:00:00Z');
@@ -145,7 +145,7 @@ INSERT INTO recording_shares (org_id, recording_id, target_type, group_id, creat
 VALUES ('{ORG_A}', '{REC_1}', 'group', '{GROUP}', '{ADMIN_A}'),
        ('{ORG_A}', '{REC_2}', 'organization', NULL, '{MEMBER_A1}');
 INSERT INTO invitations (org_id, email, token_hash, expires_at, created_by)
-VALUES ('{ORG_A}', 'novo@example.com', 'convite', now() + interval '7 days', '{ADMIN_A}');
+VALUES ('{ORG_A}', 'novo@example.org', 'convite', now() + interval '7 days', '{ADMIN_A}');
 INSERT INTO voice_audit (org_id, person_id, event) VALUES ('{ORG_A}', '{PERSON_1}', 'consent_granted');
 INSERT INTO collections (org_id, owner_id, name) VALUES ('{ORG_A}', '{MEMBER_A1}', 'Cliente X');
 INSERT INTO uploads (org_id, owner_id, status, filename, content_type, size_bytes, sha256, part_size, part_count,
@@ -284,7 +284,7 @@ def test_organization_tables_columns_and_functions_are_dropped(migrated: dict[st
 def test_each_admin_becomes_an_admin_account_with_the_same_hash(migrated: dict[str, Any]) -> None:
     admins = dict(_query(migrated, "SELECT email, password_hash FROM admins"))
     assert admins == migrated["before"]["hashes"]
-    assert set(admins) == {"admin.a@example.com", "admin.b@example.net"}
+    assert set(admins) == {"admin.a@example.org", "admin.b@example.net"}
     # The admin's user account remains, with its session open.
     assert _query(migrated, "SELECT count(*) FROM sessions WHERE user_id = :u", u=ADMIN_A) == [(1,)]
 
@@ -393,7 +393,7 @@ def test_settings_and_secrets_come_from_the_oldest_organization(migrated: dict[s
     )
     assert summarization == {"default_provider_id": str(PROVIDER), "auto_summarize": True}
     assert voice == {"enabled": True, "suggestion_threshold": 0.61}
-    assert updated_by_email == "admin.a@example.com"
+    assert updated_by_email == "admin.a@example.org"
     assert _query(migrated, "SELECT name, value_encrypted FROM platform_secrets") == [("hf_token", "cifrado-hf-a")]
     assert _query(migrated, "SELECT id FROM agent_providers") == [(PROVIDER,)]
 
