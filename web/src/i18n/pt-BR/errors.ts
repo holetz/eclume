@@ -1,0 +1,63 @@
+import type en from '../en/errors'
+import type { Catalog } from '../locale'
+
+const errors: Catalog<typeof en> = {
+  code: {
+    unauthorized: 'Sua sessão expirou. Entre de novo.',
+    insufficient_scope: 'Seu acesso não inclui esta ação.',
+    forbidden: 'Você não tem permissão para esta ação.',
+    session_required: 'Esta ação só pode ser feita pelo navegador, com a sua sessão.',
+    notice_required: 'Aceite o aviso de privacidade para continuar.',
+    not_found: 'Não encontrado. Pode ter sido excluído.',
+    method_not_allowed: 'Esta ação não está disponível aqui.',
+    validation_failed: 'Confira os campos do formulário.',
+    conflict: 'Conflito com o estado atual. Recarregue a página e tente de novo.',
+    hash_mismatch: 'O arquivo chegou diferente do enviado. Tente importar de novo.',
+    upload_expired: 'O envio expirou. Recomece o import.',
+    upload_completing: 'O envio ainda está sendo concluído. Aguarde um instante e tente de novo.',
+    rate_limited: 'Muitas requisições seguidas. Aguarde um instante e tente de novo.',
+    email_taken: 'Este e-mail já está cadastrado.',
+    signup_closed: 'O cadastro está fechado neste servidor.',
+    summary_changed: 'O resumo mudou nesse meio-tempo. Recarregue e tente de novo.',
+    summary_missing: 'A gravação ainda não tem resumo.',
+    transcript_missing: 'A gravação ainda não tem transcrição.',
+    chat_busy: 'Já há um ajuste em andamento. Espere ele terminar.',
+    invalid_pairing_code: 'O código de pareamento é inválido ou expirou.',
+    invalid_reset_link: 'O link de redefinição de senha é inválido ou expirou.',
+    payload_too_large: 'O conteúdo passa do tamanho que o servidor aceita.',
+    unsupported_media_type: 'Este tipo de arquivo não é aceito.',
+    internal_error: 'O servidor não respondeu. Tente de novo em instantes.',
+    quota_exceeded: 'Sua conta chegou a um limite de uso. Fale com a administração.',
+    audio_deleted: 'O áudio desta gravação foi apagado.',
+    tag_exists: 'Já existe uma tag com este nome.',
+    skill_exists: 'Já existe uma habilidade com este nome.',
+    builtin_field: 'Um campo embutido não pode ser alterado assim.',
+    fallback_agenda_type: 'O tipo de agenda Geral não pode ser removido.',
+    not_auto: 'Este valor não foi preenchido automaticamente.',
+    too_many_files: 'Arquivos demais de uma vez.',
+    action_not_proposed: 'O agente não propôs esta ação.',
+    action_expired: 'Esta ação expirou. Peça de novo ao agente.',
+    action_cancelled: 'Esta ação foi cancelada.',
+    error: 'Algo deu errado.',
+  },
+  validation: {
+    fields: 'Confira os campos — {{fields}}.',
+    form: 'Confira os campos do formulário.',
+  },
+  quota: {
+    file_bytes: 'O arquivo passa do tamanho máximo da sua conta ({{limit}}).',
+    storage_bytes: 'Seu armazenamento chegou ao limite de {{limit}}. Exclua gravações antigas para importar mais.',
+    open_uploads: 'Sua conta envia até {{limit}} arquivos ao mesmo tempo. Espere um envio terminar e tente de novo.',
+    agent_requests_24h: 'Você chegou ao limite de {{limit}} pedidos ao agente em 24 horas. Tente de novo mais tarde.',
+    other: 'Sua conta chegou a um limite de uso. Fale com a administração.',
+  },
+  size: {
+    gigabytes: '{{value}} GB',
+    megabytes: '{{value}} MB',
+  },
+  http: 'O servidor respondeu com erro (HTTP {{status}}).',
+  network: 'Sem conexão com o servidor. Confira a rede e tente de novo.',
+  generic: 'Algo deu errado.',
+}
+
+export default errors

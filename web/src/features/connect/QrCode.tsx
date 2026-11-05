@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import styles from './Connect.module.css'
 
 type Qr = { size: number; rows: string[] }
@@ -8,6 +9,7 @@ type Qr = { size: number; rows: string[] }
  * frame. The `qrcode` package only loads with this component.
  */
 export function QrCode({ value, label }: { value: string; label: string }) {
+  const { t } = useTranslation('connect')
   const [qr, setQr] = useState<Qr | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -45,7 +47,7 @@ export function QrCode({ value, label }: { value: string; label: string }) {
           ))}
         </svg>
       ) : (
-        <span role="status">{failed ? 'Não deu para desenhar o QR: digite o código no app.' : 'Gerando o código…'}</span>
+        <span role="status">{failed ? t('qr.failed') : t('mobile.generating')}</span>
       )}
     </div>
   )

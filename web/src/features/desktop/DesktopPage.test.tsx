@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { setLocale } from '../../i18n'
 import { fixtures } from '../../test/fixtures'
 import { empty, json, mockFetch } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
@@ -8,8 +9,9 @@ import { detectOs, parseInstallers, PLATFORMS } from './installers'
 
 beforeAll(() => preloadRoute('/app-desktop'))
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals()
+  await setLocale('pt-BR')
   vi.restoreAllMocks()
 })
 
@@ -66,6 +68,18 @@ function cards() {
 }
 
 describe('desktop app', () => {
+  it('reads in English when the account chose English', async () => {
+    const me = fixtures.me()
+    mockDesktopApi({ 'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }) })
+    renderApp('/app-desktop')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Desktop app' })).toBeInTheDocument()
+    const systems = screen.getByRole('list', { name: 'Systems' })
+    expect(within(systems).getByText('Windows 10 or 11 · 64-bit')).toBeInTheDocument()
+    expect(await within(systems).findByRole('link', { name: 'Download for Windows' })).toBeInTheDocument()
+    expect(within(systems).getByRole('link', { name: /\.msi package/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Generate a link code' })).toBeInTheDocument()
+  })
+
   it('puts the system of this computer first, with the recommended installer and the other types', async () => {
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
     mockDesktopApi()

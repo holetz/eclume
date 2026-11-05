@@ -1,0 +1,88 @@
+import type en from '../en/account'
+import type { Catalog } from '../locale'
+
+const account: Catalog<typeof en> = {
+  page: {
+    kicker: 'Minhas configurações',
+    title: 'Conta',
+    name: 'Nome',
+    email: 'E-mail',
+  },
+  transcription: {
+    title: 'Idioma da transcrição',
+    label: 'Idioma das gravações',
+    hint: 'Vale para as próximas gravações. Cada arquivo pode pedir outro idioma ao importar, e uma gravação pode ser transcrita de novo em outro idioma.',
+  },
+  privacy: {
+    title: 'Privacidade e dados',
+    audio: 'Áudio e transcrição',
+    audioKept: 'Guardados neste servidor',
+    processors: 'Quem processa os resumos, os campos e o chat é o agente que a administração deste servidor escolheu. Fora do servidor, o texto da transcrição vai para esse fornecedor; o áudio não sai.',
+  },
+  voice: {
+    // pt-BR reads 0 as singular; the screens say "0 pessoas".
+    people_zero: '{{count}} pessoas',
+    people_one: '{{count}} pessoa',
+    people_other: '{{count}} pessoas',
+    samples_zero: '{{count}} amostras',
+    samples_one: '{{count}} amostra',
+    samples_other: '{{count}} amostras',
+    kept: 'Impressões de voz desta conta: {{people}} com impressão de voz, {{samples}}.',
+    keep: 'Guardar amostras de voz desta conta',
+    notKept: 'Esta conta não guarda amostras de voz: nada de voz é calculado, comparado ou guardado nas próximas gravações.',
+    confirmTitle: 'Deixar de guardar amostras de voz?',
+    confirmLabel: 'Apagar e deixar de guardar',
+    confirmText: 'As {{samples}} e as impressões de voz desta conta são apagadas agora, com as sugestões de pessoa pela voz. Os locutores já ligados às pessoas continuam ligados. Religar depois não recupera o que saiu.',
+  },
+  password: {
+    title: 'Trocar a senha',
+    current: 'Senha atual',
+    currentWrong: 'A senha atual não confere.',
+    next: 'Nova senha',
+    nextHint: 'Ao menos {{min}} caracteres.',
+    repeat: 'Repita a nova senha',
+    mismatch: 'As duas senhas não são iguais.',
+    revoke: 'Encerrar também aparelhos e tokens',
+    doneAll: 'Senha trocada. As outras sessões, os aparelhos ligados e os tokens desta conta foram encerrados.',
+    doneSessions: 'Senha trocada. As outras sessões abertas desta conta foram encerradas.',
+    submit: 'Trocar a senha',
+    submitting: 'Trocando…',
+  },
+  delete: {
+    title: 'Excluir a conta',
+    warning: 'Excluir a conta apaga <strong>para sempre</strong> tudo o que é seu neste servidor: as gravações e os áudios, as transcrições, os resumos e as versões deles, as pessoas e as impressões de voz, as coleções, as tags, os campos, os tipos de agenda, os tokens e os aparelhos vinculados.',
+    noUndo: 'Não há como desfazer. Se quiser guardar algo, exporte as gravações antes.',
+    open: 'Excluir minha conta',
+    dialogTitle: 'Excluir a conta?',
+    dialogMessage: 'Tudo o que é seu neste servidor será apagado agora, sem como desfazer.',
+    keep: 'Manter a conta',
+    submit: 'Excluir minha conta',
+    submitting: 'Excluindo…',
+    password: 'Sua senha',
+    passwordWrong: 'A senha não confere.',
+    understood: 'Entendo que tudo será apagado para sempre',
+    done: 'Sua conta foi excluída, com todos os dados dela.',
+  },
+  retention: {
+    title: 'Retenção do áudio',
+    text: 'O servidor pode apagar o áudio das suas gravações depois de um tempo. A transcrição, o resumo e o chat continuam; só o áudio some.',
+    toggle: 'Apagar o áudio automaticamente',
+    days: 'Dias até apagar o áudio',
+    hint: 'Conta a partir de quando o servidor recebeu o áudio.',
+    range: 'Entre {{min}} e {{max}} dias.',
+    capped: 'O administrador limitou a retenção a {{days}} dias.',
+    effective: ' Para a sua conta vale {{days}} dias.',
+    irreversible: 'Apagar o áudio é <strong>irreversível</strong>: não dá para transcrever de novo nem ouvir a gravação, e a identificação por voz não recebe amostras novas dela.',
+    backups: 'Cópias de segurança do servidor ainda podem guardar o áudio por até 14 dias depois de apagado, até a rotação delas.',
+    saved: 'Retenção salva.',
+  },
+  locale: {
+    title: 'Idioma',
+    label: 'Idioma da interface',
+    browser: 'Idioma do navegador',
+    hint: 'O idioma das telas, das mensagens e do que os agentes escrevem daqui em diante. Não muda o idioma da transcrição.',
+    saved: 'Idioma salvo.',
+  },
+}
+
+export default account

@@ -4,6 +4,7 @@ import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { ME_KEY } from '../../app/session'
 import { usePageTitle } from '../../app/usePageTitle'
+import { useTranslation } from 'react-i18next'
 import { AuthLayout } from './AuthLayout'
 import { useSignupInfo } from './signup'
 
@@ -12,7 +13,8 @@ import { useSignupInfo } from './signup'
  * version only reaches the app after `POST /me/notice`.
  */
 export function NoticePage({ onLogout, loggingOut }: { onLogout: () => void; loggingOut: boolean }) {
-  usePageTitle('Aceite do aviso')
+  const { t } = useTranslation('auth')
+  usePageTitle(t('notice.pageTitle'))
   const info = useSignupInfo()
   const queryClient = useQueryClient()
   const [accepted, setAccepted] = useState(false)
@@ -31,10 +33,10 @@ export function NoticePage({ onLogout, loggingOut }: { onLogout: () => void; log
     <AuthLayout>
       <form onSubmit={submit} noValidate>
         <div>
-          <h2>Antes de continuar</h2>
-          <p className="text-muted">O aviso do eclume mudou. Para usar a sua conta, aceite a versão em vigor.</p>
+          <h2>{t('notice.title')}</h2>
+          <p className="text-muted">{t('notice.text')}</p>
         </div>
-        {info.isPending && <p role="status">Carregando o aviso…</p>}
+        {info.isPending && <p role="status">{t('notice.loading')}</p>}
         {info.isError && (
           <p className="alert alert-error" role="alert">
             {errorMessage(info.error)}
@@ -55,10 +57,10 @@ export function NoticePage({ onLogout, loggingOut }: { onLogout: () => void; log
           </p>
         )}
         <button type="submit" className="btn btn-primary btn-block" disabled={!accepted || !notice || accept.isPending}>
-          {accept.isPending ? 'Registrando…' : 'Aceitar e continuar'}
+          {accept.isPending ? t('notice.submitting') : t('notice.submit')}
         </button>
         <button type="button" className="btn btn-secondary btn-block" onClick={onLogout} disabled={loggingOut}>
-          {loggingOut ? 'Saindo…' : 'Sair'}
+          {loggingOut ? t('notice.loggingOut') : t('notice.logout')}
         </button>
       </form>
     </AuthLayout>

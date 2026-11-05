@@ -1,6 +1,7 @@
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
 import { onUnauthorized } from '../api/client'
+import { LocaleSync } from '../i18n/sync'
 import { clearUserQueries } from './accountScope'
 import { ME_KEY } from './session'
 
@@ -17,5 +18,10 @@ export function AppProviders({ client, children }: { client: QueryClient; childr
       }),
     [client],
   )
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return (
+    <QueryClientProvider client={client}>
+      <LocaleSync />
+      {children}
+    </QueryClientProvider>
+  )
 }

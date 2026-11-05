@@ -3,16 +3,18 @@ import { useState } from 'react'
 import { api, type Schemas } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
+import { useTranslation } from 'react-i18next'
+import { activeLocale, i18n } from '../../i18n'
 import { TOKENS_KEY, type DevicePlatform } from '../tokens/scopes'
 import styles from './Connect.module.css'
 import { useDeviceTokens } from './pairing'
 
 type Token = Schemas['Token']
 
-const dayMonth = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' })
-const hourMinute = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })
+const dayMonth = () => new Intl.DateTimeFormat(activeLocale(), { day: '2-digit', month: '2-digit' })
+const hourMinute = () => new Intl.DateTimeFormat(activeLocale(), { hour: '2-digit', minute: '2-digit' })
 
-/** "hoje 09:58", "ontem 16:40" or "12/09 09:58". */
+/** "today 09:58", "yesterday 16:40" or "09/12 09:58", in the active locale. */
 function formatSync(iso: string, now: Date = new Date()): string {
   const date = new Date(iso)
   const days = Math.round(
@@ -20,8 +22,9 @@ function formatSync(iso: string, now: Date = new Date()): string {
       new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) /
       86_400_000,
   )
-  const day = days === 0 ? 'hoje' : days === 1 ? 'ontem' : dayMonth.format(date)
-  return `${day} ${hourMinute.format(date)}`
+  const day =
+    days === 0 ? i18n.t('connect:devices.today') : days === 1 ? i18n.t('connect:devices.yesterday') : dayMonth().format(date)
+  return `${day} ${hourMinute().format(date)}`
 }
 
 interface DevicesListProps {
@@ -32,8 +35,9 @@ interface DevicesListProps {
   unpairMessage: string
 }
 
-/** The paired devices of these platforms, with Desvincular (revokes the device's credential). */
+/** The paired devices of these platforms, with Unpair (revokes the device's credential). */
 export function DevicesList({ title, platforms, empty, unpairMessage }: DevicesListProps) {
+  const { t } = useTranslation('connect')
   const devices = useDeviceTokens()
   const [unpairing, setUnpairing] = useState<Token | null>(null)
   const items = (devices.data?.items ?? []).filter(
@@ -43,7 +47,7 @@ export function DevicesList({ title, platforms, empty, unpairMessage }: DevicesL
   return (
     <section className={styles.devices} aria-label={title}>
       <h4>{title}</h4>
-      {devices.isPending && <p role="status">Carregando aparelhos…</p>}
+      {devices.isPending && <p role="status">{t('devices.loading')}</p>}
       {devices.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(devices.error)}
@@ -56,17 +60,19 @@ export function DevicesList({ title, platforms, empty, unpairMessage }: DevicesL
             <li key={token.id} className="list-row">
               <span className="list-row-title">{token.name}</span>
               <span className="list-row-sub">
-                Pareado em {dayMonth.format(new Date(token.created_at))} ·{' '}
-                {token.last_used_at ? `última sincronização ${formatSync(token.last_used_at)}` : 'ainda sem sincronização'}
+                {t('devices.paired', { date: dayMonth().format(new Date(token.created_at)) })} ·{' '}
+                {token.last_used_at
+                  ? t('devices.lastSync', { when: formatSync(token.last_used_at) })
+                  : t('devices.neverSynced')}
               </span>
               <span className="list-row-actions">
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm btn-danger"
                   onClick={() => setUnpairing(token)}
-                  aria-label={`Desvincular ${token.name}`}
+                  aria-label={t('devices.unpairName', { name: token.name })}
                 >
-                  Desvincular
+                  {t('devices.unpair')}
                 </button>
               </span>
             </li>
@@ -79,6 +85,7 @@ export function DevicesList({ title, platforms, empty, unpairMessage }: DevicesL
 }
 
 function UnpairDialog({ token, message, onClose }: { token: Token; message: string; onClose: () => void }) {
+  const { t } = useTranslation('connect')
   const queryClient = useQueryClient()
   const unpair = useMutation({
     mutationFn: () => unwrap(api.DELETE('/api/v1/tokens/{token_id}', { params: { path: { token_id: token.id } } })),
@@ -89,8 +96,8 @@ function UnpairDialog({ token, message, onClose }: { token: Token; message: stri
   })
   return (
     <ConfirmDialog
-      title={`Desvincular ${token.name}?`}
-      confirmLabel="Desvincular"
+      title={t('devices.unpairTitle', { name: token.name })}
+      confirmLabel={t('devices.unpair')}
       onConfirm={() => unpair.mutate()}
       onCancel={onClose}
       busy={unpair.isPending}

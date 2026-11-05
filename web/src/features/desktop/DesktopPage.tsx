@@ -1,4 +1,5 @@
 import { Download } from 'lucide-react'
+import { Trans, useTranslation } from 'react-i18next'
 import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
@@ -7,11 +8,12 @@ import { useCreatePairingCode } from '../connect/pairing'
 import { PairingCode } from '../connect/PairingCode'
 
 import styles from './DesktopPage.module.css'
-import { detectOs, PLATFORMS, TYPE_LABELS, useInstallers, type Installer, type Platform } from './installers'
+import { detectOs, PLATFORMS, typeLabel, useInstallers, type Installer, type Platform } from './installers'
 import { formatBytes } from '../../shared/format'
 
 export function DesktopPage() {
   useHelpTopic('app-desktop')
+  const { t } = useTranslation('desktop')
   const current = detectOs(navigator.userAgent)
   const platforms = [...PLATFORMS].sort((a, b) => Number(b.os === current) - Number(a.os === current))
   const installers = useInstallers()
@@ -19,13 +21,10 @@ export function DesktopPage() {
 
   return (
     <section className={styles.page}>
-      <PageHead kicker="Minhas configurações" title="App desktop" />
-      <p className={styles.lead}>
-        Grava reuniões e notas de voz no computador e envia para este servidor. O instalador abaixo já conhece este
-        servidor: você só entra com seu e-mail e senha.
-      </p>
+      <PageHead kicker={t('kicker')} title={t('title')} />
+      <p className={styles.lead}>{t('lead')}</p>
 
-      <ul className={styles.platforms} aria-label="Sistemas">
+      <ul className={styles.platforms} aria-label={t('systems')}>
         {platforms.map((platform) => (
           <PlatformCard
             key={platform.os}
@@ -37,10 +36,8 @@ export function DesktopPage() {
       </ul>
 
       <section className={styles.link} aria-labelledby="desktop-vincular">
-        <h4 id="desktop-vincular">Instalou de outro lugar?</h4>
-        <p className="text-muted">
-          Abra o app, escolha Vincular com um código e digite este código. Ele vence em 10 minutos.
-        </p>
+        <h4 id="desktop-vincular">{t('link.title')}</h4>
+        <p className="text-muted">{t('link.text')}</p>
         {pairing.data ? (
           <PairingCode
             key={pairing.data.code.id}
@@ -51,7 +48,7 @@ export function DesktopPage() {
         ) : (
           <div>
             <button type="button" className="btn btn-secondary" onClick={() => pairing.mutate()} disabled={pairing.isPending}>
-              Gerar código de vínculo
+              {t('link.generate')}
             </button>
           </div>
         )}
@@ -63,10 +60,10 @@ export function DesktopPage() {
       </section>
 
       <DevicesList
-        title="Computadores vinculados"
+        title={t('devices')}
         platforms={['windows', 'macos', 'linux']}
-        empty="Nenhum computador vinculado ainda."
-        unpairMessage="O computador para de enviar gravações até entrar de novo."
+        empty={t('empty')}
+        unpairMessage={t('unpair')}
       />
     </section>
   )
@@ -81,6 +78,7 @@ function PlatformCard({
   loading: boolean
   installers: Installer[] | null
 }) {
+  const { t } = useTranslation('desktop')
   const recommended = installers?.find((i) => i.recomendado) ?? installers?.[0]
   const others = installers?.filter((i) => i !== recommended) ?? []
 
@@ -91,29 +89,34 @@ function PlatformCard({
       </span>
       <span className="card-body">{platform.requirements}</span>
       {loading ? (
-        <span className="text-muted">Procurando os instaladores…</span>
+        <span className="text-muted">{t('searching')}</span>
       ) : recommended ? (
         <>
           <span className={`mono text-muted ${styles.file}`}>{recommended.arquivo}</span>
           <a className={`btn btn-primary ${styles.download}`} href={recommended.url} download>
             <Download size={14} aria-hidden />
-            Baixar <span className="visually-hidden">para {platform.name}</span>
+            <Trans
+              t={t}
+              i18nKey="download"
+              values={{ platform: platform.name }}
+              components={{ hidden: <span className="visually-hidden" /> }}
+            />
           </a>
           {others.length > 0 && (
             <span className={styles.others}>
               {others.map((i) => (
                 <a key={i.arquivo} href={i.url} download>
-                  {TYPE_LABELS[i.tipo] ?? i.tipo} · {formatBytes(i.tamanho)}
+                  {typeLabel(i.tipo) ?? i.tipo} · {formatBytes(i.tamanho)}
                 </a>
               ))}
             </span>
           )}
         </>
       ) : (
-        <span className="text-muted">Os instaladores ainda não foram publicados neste servidor.</span>
+        <span className="text-muted">{t('unpublished')}</span>
       )}
       <details className="disclosure">
-        <summary>Primeira vez?</summary>
+        <summary>{t('firstTime')}</summary>
         <p className={styles.note}>{platform.firstRun}</p>
       </details>
     </li>

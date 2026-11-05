@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { onlineManager } from '@tanstack/react-query'
 import { useEffect, useSyncExternalStore } from 'react'
 import { backoffDelay } from './polling'
@@ -20,6 +21,7 @@ function useOnline() {
  * until it returns, every 10 s and doubling up to 60 s.
  */
 export function ConnectionBanner() {
+  const { t } = useTranslation('shell')
   const online = useOnline()
   const me = useMe()
   const serverDown = me.isError && !!me.data
@@ -49,7 +51,7 @@ export function ConnectionBanner() {
   if (online && !serverDown) return null
   return (
     <p className="alert alert-warning" role="status">
-      Sem conexão com o servidor. O que está na tela pode estar desatualizado; tentando de novo…
+      {t('connection.offline')}
     </p>
   )
 }

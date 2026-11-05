@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { setLocale } from '../../i18n'
 import { expiresAt, EXPIRATIONS, SCOPE_GROUPS, SCOPES, summarizeScopes } from './scopes'
 
 describe('scopes', () => {
@@ -25,5 +26,17 @@ describe('scopes', () => {
     const now = new Date('2026-09-24T12:00:00Z')
     expect(expiresAt(null, now)).toBeNull()
     expect(expiresAt(30, now)).toBe('2026-10-24T12:00:00.000Z')
+  })
+
+  it('reads the labels and the summary in the active locale', async () => {
+    await setLocale('en')
+    try {
+      expect(EXPIRATIONS.map((e) => e.label)).toEqual(['30 days', '90 days', 'Never'])
+      expect(SCOPE_GROUPS[0].label).toBe('Search and read recordings')
+      expect(SCOPES[0].description).toBe('List and search recordings, see their state and play the audio.')
+      expect(summarizeScopes(['recordings:read', 'transcripts:read', 'people:read'])).toBe('read, +1')
+    } finally {
+      await setLocale('pt-BR')
+    }
   })
 })

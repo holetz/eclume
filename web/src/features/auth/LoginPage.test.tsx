@@ -2,6 +2,7 @@ import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { safeReturnPath } from '../../app/session'
+import { setLocale } from '../../i18n'
 import { fixtures } from '../../test/fixtures'
 import { empty, mockFetch, problem } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
@@ -20,6 +21,29 @@ async function fillLogin(password = 'segredo-forte') {
 }
 
 describe('login', () => {
+  it('reads in English when the browser language is English', async () => {
+    mockFetch({
+      'GET /api/v1/me': () => problem('unauthorized', 401),
+      'POST /api/v1/auth/login': () => problem('unauthorized', 401),
+    })
+    const browser = (languages: string[]) =>
+      Object.defineProperty(navigator, 'languages', { configurable: true, get: () => languages })
+    browser(['en-US', 'en'])
+    await act(() => setLocale('en'))
+    try {
+      renderApp('/entrar')
+      expect(await screen.findByRole('heading', { name: 'Log in' })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Create an account' })).toBeInTheDocument()
+      await userEvent.type(screen.getByLabelText('Email'), 'mariana.couto@example.com')
+      await userEvent.type(screen.getByLabelText('Password'), 'wrong-password')
+      await userEvent.click(screen.getByRole('button', { name: 'Log in' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('Wrong email or password.')
+    } finally {
+      browser(['pt-BR'])
+      await act(() => setLocale('pt-BR'))
+    }
+  })
+
   it('a protected route without a session leads to the login and returns to it afterwards', async () => {
     let loggedIn = false
     const http = mockFetch({

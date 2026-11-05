@@ -1,6 +1,7 @@
 import { lazy, Suspense, useId, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { CircleHelp, LogOut, Settings } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import styles from './AppShell.module.css'
 import { Brand } from './Brand'
 import { ConnectionBanner } from './ConnectionBanner'
@@ -10,7 +11,16 @@ import { useHasAnyRecording } from '../features/library/anyRecording'
 import { useHelp } from './help'
 import { HelpProvider } from './HelpProvider'
 import { MenuButton, type MenuEntry } from './MenuButton'
-import { featuredItem, isItemActive, navGroups, type FeaturedItem, type NavGroupEntry } from './nav'
+import {
+  featuredItem,
+  groupLabel,
+  isItemActive,
+  itemLabel,
+  navGroups,
+  partLabel,
+  type FeaturedItem,
+  type NavGroupEntry,
+} from './nav'
 import { useProcessingWatch } from './processingWatch'
 import { ShellFrame } from './ShellFrame'
 
@@ -29,12 +39,13 @@ interface AppShellProps {
 }
 
 function NavGroups({ groups }: { groups: NavGroupEntry[] }) {
+  useTranslation('shell')
   const baseId = useId()
   const { pathname } = useLocation()
   return groups.map(({ group, items }, index) => (
     <div key={group} className="nav-group" role="group" aria-labelledby={`${baseId}-${index}`}>
       <span className="nav-group-title" id={`${baseId}-${index}`}>
-        {group}
+        {groupLabel(group)}
       </span>
       {items.map((item) => (
         <Link
@@ -43,7 +54,7 @@ function NavGroups({ groups }: { groups: NavGroupEntry[] }) {
           className="nav-link"
           aria-current={isItemActive(item, pathname) ? 'page' : undefined}
         >
-          {item.label}
+          {itemLabel(item)}
         </Link>
       ))}
     </div>
@@ -55,6 +66,7 @@ function NavGroups({ groups }: { groups: NavGroupEntry[] }) {
  * While the account has no recording there is little to ask: it stays in the same place, as secondary.
  */
 function FeaturedLink({ item }: { item: FeaturedItem }) {
+  useTranslation('shell')
   const { pathname } = useLocation()
   const anyRecording = useHasAnyRecording()
   const Icon = item.icon
@@ -65,7 +77,7 @@ function FeaturedLink({ item }: { item: FeaturedItem }) {
       aria-current={isItemActive(item, pathname) ? 'page' : undefined}
     >
       <Icon size={16} aria-hidden="true" />
-      {item.label}
+      {itemLabel(item)}
     </Link>
   )
 }
@@ -77,25 +89,26 @@ function FeaturedLink({ item }: { item: FeaturedItem }) {
  * the upload stops.
  */
 function Account({ user, onLogout, loggingOut }: AppShellProps) {
+  const { t } = useTranslation('shell')
   const help = useHelp()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const { header } = navGroups()
   const { sending } = useImportContext()
   const [confirmLogout, setConfirmLogout] = useState(false)
-  const itemsOf = (group: string): MenuEntry[] =>
+  const itemsOf = (group: NavGroupEntry['group']): MenuEntry[] =>
     (header.find((entry) => entry.group === group)?.items ?? []).flatMap((item, index, list) => {
       const entry: MenuEntry = {
         key: item.to,
-        label: isItemActive(item, pathname) ? <strong>{item.label}</strong> : item.label,
+        label: isItemActive(item, pathname) ? <strong>{itemLabel(item)}</strong> : itemLabel(item),
         onSelect: () => navigate(item.to),
       }
       // Each part of the gear menu opens with its own label.
-      return item.part && item.part !== list[index - 1]?.part ? [{ heading: item.part }, entry] : [entry]
+      return item.part && item.part !== list[index - 1]?.part ? [{ heading: partLabel(item.part) }, entry] : [entry]
     })
   const helpItems: MenuEntry[] = [
-    { key: 'pagina', label: 'Ajuda desta página', kbd: '?', onSelect: () => help?.openHelp() },
-    ...itemsOf('Ajuda'),
+    { key: 'pagina', label: t('account.helpThisPage'), kbd: '?', onSelect: () => help?.openHelp() },
+    ...itemsOf('help'),
   ]
 
   return (
@@ -105,14 +118,14 @@ function Account({ user, onLogout, loggingOut }: AppShellProps) {
         <span className="text-muted">{user.email}</span>
       </div>
       <div className={styles.actions}>
-        <MenuButton className="btn btn-secondary btn-icon" buttonLabel="Ajuda" label="Ajuda" items={helpItems}>
+        <MenuButton className="btn btn-secondary btn-icon" buttonLabel={t('account.help')} label={groupLabel('help')} items={helpItems}>
           <CircleHelp size={16} aria-hidden="true" />
         </MenuButton>
         <MenuButton
           className="btn btn-secondary btn-icon"
-          buttonLabel="Configurações"
-          label="Minhas configurações"
-          items={itemsOf('Minhas configurações')}
+          buttonLabel={t('account.settings')}
+          label={groupLabel('settings')}
+          items={itemsOf('settings')}
         >
           <Settings size={16} aria-hidden="true" />
         </MenuButton>
@@ -120,8 +133,8 @@ function Account({ user, onLogout, loggingOut }: AppShellProps) {
         <button
           type="button"
           className="btn btn-secondary btn-icon"
-          aria-label={loggingOut ? 'Saindo…' : 'Sair'}
-          title="Sair"
+          aria-label={loggingOut ? t('account.loggingOut') : t('account.logout')}
+          title={t('account.logout')}
           onClick={() => (sending ? setConfirmLogout(true) : onLogout())}
           disabled={loggingOut}
         >
@@ -131,15 +144,15 @@ function Account({ user, onLogout, loggingOut }: AppShellProps) {
       {confirmLogout && (
         <Suspense fallback={null}>
           <ConfirmDialog
-            title="Sair durante o envio?"
-            confirmLabel="Sair"
+            title={t('account.logoutDuringUpload')}
+            confirmLabel={t('account.logout')}
             onCancel={() => setConfirmLogout(false)}
             onConfirm={() => {
               setConfirmLogout(false)
               onLogout()
             }}
           >
-            <p>O envio em andamento será interrompido.</p>
+            <p>{t('account.uploadInterrupted')}</p>
           </ConfirmDialog>
         </Suspense>
       )}
@@ -148,6 +161,7 @@ function Account({ user, onLogout, loggingOut }: AppShellProps) {
 }
 
 export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) {
+  const { t } = useTranslation('shell')
   const { main } = navGroups()
   const featured = featuredItem()
   useProcessingWatch()
@@ -159,7 +173,7 @@ export function AppShell({ user, onLogout, loggingOut = false }: AppShellProps) 
           brand={<Brand to="/" />}
           account={<Account user={user} onLogout={onLogout} loggingOut={loggingOut} />}
           sidebar={
-            <nav aria-label="Principal" className={styles.nav}>
+            <nav aria-label={t('nav.primary')} className={styles.nav}>
               {featured && <FeaturedLink item={featured} />}
               <NavGroups groups={main} />
             </nav>

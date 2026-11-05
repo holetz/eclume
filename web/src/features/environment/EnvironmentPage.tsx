@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import {
@@ -30,34 +31,10 @@ interface Option<T extends string> {
   label: string
 }
 
-const THEMES: Option<ThemePreference>[] = [
-  { value: 'system', label: 'Sistema' },
-  { value: 'light', label: 'Claro' },
-  { value: 'dark', label: 'Escuro' },
-]
-
-const DENSITIES: Option<DensityPreference>[] = [
-  { value: 'comfortable', label: 'Confortável' },
-  { value: 'compact', label: 'Compacta' },
-]
-
-const MOTIONS: Option<MotionPreference>[] = [
-  { value: 'system', label: 'Seguir o sistema' },
-  { value: 'reduce', label: 'Reduzir' },
-]
-
-const OPENINGS: Option<LibraryOpening>[] = [
-  { value: 'ultima', label: 'Última usada' },
-  { value: 'semana', label: 'Semana' },
-  { value: 'mes', label: 'Mês' },
-  { value: 'lista', label: 'Lista' },
-]
-
-const SHORTCUTS: { keys: string[]; action: string }[] = [
-  { keys: ['?'], action: 'Abre a ajuda da página em que você está' },
-  { keys: ['Esc'], action: 'Fecha a ajuda ou o diálogo aberto' },
-  { keys: ['Ctrl', 'roda do mouse'], action: 'Aproxima ou afasta as horas na semana da biblioteca' },
-]
+const THEMES: readonly ThemePreference[] = ['system', 'light', 'dark']
+const DENSITIES: readonly DensityPreference[] = ['comfortable', 'compact']
+const MOTIONS: readonly MotionPreference[] = ['system', 'reduce']
+const OPENINGS: readonly LibraryOpening[] = ['ultima', 'semana', 'mes', 'lista']
 
 const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
 
@@ -112,6 +89,7 @@ function Segmented<T extends string>({
 /** Settings for this browser: appearance, agenda and shortcuts. Nothing here goes to the account or the server. */
 export function EnvironmentPage() {
   useHelpTopic('ambiente')
+  const { t } = useTranslation('environment')
   const id = useId()
   const [theme, setTheme] = useState(readThemePreference)
   const [density, setDensity] = useState(readDensity)
@@ -137,7 +115,7 @@ export function EnvironmentPage() {
     setOpening(readLibraryOpening())
     setWork(readWorkHours())
     setNotify(false)
-    setNotice('Tudo voltou ao padrão.')
+    setNotice(t('restored'))
   }
 
   async function changeNotify(on: boolean) {
@@ -153,20 +131,25 @@ export function EnvironmentPage() {
   }
 
   const unsupported = notifyPermission() === 'unsupported'
+  const options = <T extends string>(values: readonly T[], label: (value: T) => string): Option<T>[] =>
+    values.map((value) => ({ value, label: label(value) }))
+  const shortcuts: { keys: string[]; action: string }[] = [
+    { keys: ['?'], action: t('keys.help') },
+    { keys: ['Esc'], action: t('keys.close') },
+    { keys: ['Ctrl', t('keys.wheel')], action: t('keys.zoom') },
+  ]
 
   return (
     <section className={styles.page}>
-      <PageHead kicker="Minhas configurações" title="Ambiente" />
-      <p className={styles.lead}>
-        Ajustes deste navegador. Eles valem aqui, sem mudar a sua conta nem os outros computadores e celulares.
-      </p>
+      <PageHead kicker={t('kicker')} title={t('title')} />
+      <p className={styles.lead}>{t('lead')}</p>
 
       <div className={styles.sections}>
         <section className="panel" aria-labelledby={`${id}-look`}>
-          <h4 id={`${id}-look`}>Aparência</h4>
+          <h4 id={`${id}-look`}>{t('look.title')}</h4>
           <Segmented
-            label="Tema"
-            options={THEMES}
+            label={t('look.theme')}
+            options={options(THEMES, (value) => t(`look.themes.${value}`))}
             value={theme}
             onChange={(value) => {
               setTheme(value)
@@ -175,9 +158,9 @@ export function EnvironmentPage() {
             }}
           />
           <Segmented
-            label="Densidade"
-            hint="Compacta aperta os espaços entre blocos para caber mais na tela; o tamanho do texto não muda."
-            options={DENSITIES}
+            label={t('look.density')}
+            hint={t('look.densityHint')}
+            options={options(DENSITIES, (value) => t(`look.densities.${value}`))}
             value={density}
             onChange={(value) => {
               setDensity(value)
@@ -186,9 +169,9 @@ export function EnvironmentPage() {
             }}
           />
           <Segmented
-            label="Movimento"
-            hint="Reduzir desliga as animações e transições, mesmo que o sistema não peça."
-            options={MOTIONS}
+            label={t('look.motion')}
+            hint={t('look.motionHint')}
+            options={options(MOTIONS, (value) => t(`look.motions.${value}`))}
             value={motion}
             onChange={(value) => {
               setMotion(value)
@@ -199,12 +182,12 @@ export function EnvironmentPage() {
         </section>
 
         <section className="panel" aria-labelledby={`${id}-agenda`}>
-          <h4 id={`${id}-agenda`}>Agenda</h4>
+          <h4 id={`${id}-agenda`}>{t('agenda.title')}</h4>
           <fieldset className={styles.hours} aria-describedby={`${id}-work-hint`}>
-            <legend className="field-label">Expediente</legend>
+            <legend className="field-label">{t('agenda.workHours')}</legend>
             <div className={styles.hourPair}>
               <label className="field">
-                <span className="field-label">Início</span>
+                <span className="field-label">{t('agenda.start')}</span>
                 <select
                   className="input"
                   value={work.start}
@@ -221,7 +204,7 @@ export function EnvironmentPage() {
                 </select>
               </label>
               <label className="field">
-                <span className="field-label">Fim</span>
+                <span className="field-label">{t('agenda.end')}</span>
                 <select
                   className="input"
                   value={work.end}
@@ -239,14 +222,16 @@ export function EnvironmentPage() {
               </label>
             </div>
             <span className="field-hint" id={`${id}-work-hint`}>
-              A faixa destacada na semana da biblioteca, que ela mostra inteira ao abrir. O padrão é{' '}
-              {hourLabel(DEFAULT_WORK_HOURS.start)} às {hourLabel(DEFAULT_WORK_HOURS.end)}.
+              {t('agenda.workHint', {
+                start: hourLabel(DEFAULT_WORK_HOURS.start),
+                end: hourLabel(DEFAULT_WORK_HOURS.end),
+              })}
             </span>
           </fieldset>
           <Segmented
-            label="Abrir a biblioteca em"
-            hint="Última usada volta à visão e aos filtros da sua última visita."
-            options={OPENINGS}
+            label={t('agenda.opening')}
+            hint={t('agenda.openingHint')}
+            options={options(OPENINGS, (value) => t(`agenda.openings.${value}`))}
             value={opening}
             onChange={(value) => {
               setOpening(value)
@@ -257,23 +242,23 @@ export function EnvironmentPage() {
         </section>
 
         <section className="panel" aria-labelledby={`${id}-notices`}>
-          <h4 id={`${id}-notices`}>Avisos</h4>
+          <h4 id={`${id}-notices`}>{t('notices.title')}</h4>
           <Switch checked={notify} disabled={unsupported} onChange={(on) => void changeNotify(on)}>
-            Avisar no navegador quando uma gravação terminar de processar
+            {t('notices.toggle')}
           </Switch>
           <span className="field-hint">
             {unsupported
-              ? 'Este navegador não mostra avisos do sistema para este endereço.'
+              ? t('notices.unsupported')
               : blocked
-                ? 'O navegador bloqueou os avisos deste site: libere nas permissões do site e ligue de novo.'
-                : 'Resumo pronto, pronta sem resumo ou com falha, com a aba do eclume aberta. Com a aba em segundo plano, o título dela também conta os avisos.'}
+                ? t('notices.blocked')
+                : t('notices.hint')}
           </span>
         </section>
 
         <section className="panel" aria-labelledby={`${id}-keys`}>
-          <h4 id={`${id}-keys`}>Atalhos de teclado</h4>
+          <h4 id={`${id}-keys`}>{t('keys.title')}</h4>
           <dl className={styles.shortcuts}>
-            {SHORTCUTS.map((shortcut) => (
+            {shortcuts.map((shortcut) => (
               <div key={shortcut.action} className={styles.shortcut}>
                 <dt>
                   {shortcut.keys.map((key, index) => (
@@ -292,7 +277,7 @@ export function EnvironmentPage() {
 
       <div className={styles.footer}>
         <button type="button" className="btn btn-secondary" onClick={restore}>
-          Restaurar os padrões
+          {t('restore')}
         </button>
         {notice && (
           <span role="status" className="text-muted">

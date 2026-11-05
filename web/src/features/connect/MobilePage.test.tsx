@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setLocale } from '../../i18n'
 import { fixtures } from '../../test/fixtures'
 import { empty, json, mockFetch } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
@@ -17,9 +18,10 @@ beforeEach(() => {
   vi.setSystemTime(new Date(SERVER_DATE))
 })
 
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
+  await setLocale('pt-BR')
 })
 
 function devicePage() {
@@ -50,6 +52,18 @@ function mockMobileApi(extra: Parameters<typeof mockFetch>[0] = {}) {
 }
 
 describe('mobile app', () => {
+  it('reads in English, device dates included, when the account chose English', async () => {
+    const me = fixtures.me()
+    mockMobileApi({ 'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }) })
+    renderApp('/app-movel')
+    expect(await screen.findByRole('heading', { name: 'Mobile app' })).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: 'QR code to pair the phone' })).toBeInTheDocument()
+    expect(screen.getByText(/Valid for 9:42/)).toBeInTheDocument()
+    const phones = screen.getByRole('region', { name: 'Linked phones' })
+    expect(within(phones).getByText(/Paired on 09\/12 · not synced yet/)).toBeInTheDocument()
+    expect(within(phones).getByRole('button', { name: 'Unpair Pixel 8 · Mariana' })).toBeInTheDocument()
+  })
+
   it('generates the code on opening and shows the QR, the steps, the expiry and the text code', async () => {
     const http = mockMobileApi()
     renderApp('/app-movel')

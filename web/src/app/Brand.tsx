@@ -20,6 +20,7 @@ export function Brand({ to, className }: { to?: string; className?: string }) {
     return (
       <span className={classes}>
         <Mark />
+        {/* i18n-ignore: the brand name */}
         eclume
       </span>
     )
@@ -27,6 +28,7 @@ export function Brand({ to, className }: { to?: string; className?: string }) {
   return (
     <Link className={classes} to={to}>
       <Mark />
+      {/* i18n-ignore: the brand name */}
       eclume
     </Link>
   )

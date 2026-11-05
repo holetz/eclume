@@ -1,7 +1,9 @@
 // API errors in application/problem+json (RFC 9457). The UI decides by `code`, never by `title`.
+import { activeLocale, i18n } from '../i18n'
 import type { Schemas } from './client'
 
 export type Problem = Schemas['Problem']
+type ProblemCode = Schemas['ProblemCode']
 
 export class ApiError extends Error {
   readonly status: number
@@ -32,22 +34,11 @@ export async function unwrap<T>(
   return data as T
 }
 
-const MESSAGES: Record<string, string> = {
-  unauthorized: 'Sua sessão expirou. Entre de novo.',
-  insufficient_scope: 'Seu acesso não inclui esta ação.',
-  forbidden: 'Você não tem permissão para esta ação.',
-  session_required: 'Esta ação só pode ser feita pelo navegador, com a sua sessão.',
-  not_found: 'Não encontrado. Pode ter sido excluído.',
-  conflict: 'Conflito com o estado atual. Recarregue a página e tente de novo.',
-  hash_mismatch: 'O arquivo chegou diferente do enviado. Tente importar de novo.',
-  upload_expired: 'O envio expirou. Recomece o import.',
-  rate_limited: 'Muitas requisições seguidas. Aguarde um instante e tente de novo.',
-}
-
 function formatBytes(bytes: number): string {
+  const number = new Intl.NumberFormat(activeLocale(), { maximumFractionDigits: 1 })
   const gib = bytes / 1024 ** 3
-  if (gib >= 1) return `${gib.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} GB`
-  return `${Math.round(bytes / 1024 ** 2).toLocaleString('pt-BR')} MB`
+  if (gib >= 1) return i18n.t('errors:size.gigabytes', { value: number.format(gib) })
+  return i18n.t('errors:size.megabytes', { value: number.format(Math.round(bytes / 1024 ** 2)) })
 }
 
 /** Message for an exceeded quota (`quota_exceeded`), from the problem's `quota` and `limit`. */
@@ -55,30 +46,53 @@ function quotaMessage(problem: Problem): string {
   const limit = problem.limit ?? 0
   switch (problem.quota) {
     case 'file_bytes':
-      return `O arquivo passa do tamanho máximo da sua conta (${formatBytes(limit)}).`
     case 'storage_bytes':
-      return `Seu armazenamento chegou ao limite de ${formatBytes(limit)}. Exclua gravações antigas para importar mais.`
+      return i18n.t(`errors:quota.${problem.quota}`, { limit: formatBytes(limit) })
     case 'open_uploads':
-      return `Sua conta envia até ${limit} arquivos ao mesmo tempo. Espere um envio terminar e tente de novo.`
     case 'agent_requests_24h':
-      return `Você chegou ao limite de ${limit} pedidos ao agente em 24 horas. Tente de novo mais tarde.`
+      return i18n.t(`errors:quota.${problem.quota}`, { limit })
     default:
-      return 'Sua conta chegou a um limite de uso. Fale com a administração.'
+      return i18n.t('errors:quota.other')
   }
 }
 
-/** pt-BR message for any error coming from an API call. */
+function isKnownCode(code: string): code is ProblemCode {
+  // The active locale's bundle: only that locale is loaded, and every locale has every code.
+  const codes = (i18n.getResourceBundle(activeLocale(), 'errors') as { code?: object } | undefined)?.code
+  return codes !== undefined && Object.hasOwn(codes, code)
+}
+
+/** The code an unknown problem stands for, read by its HTTP status as the contract asks. */
+function codeOfStatus(status: number): ProblemCode | null {
+  if (status === 401) return 'unauthorized'
+  if (status === 403) return 'forbidden'
+  if (status === 404) return 'not_found'
+  if (status === 409) return 'conflict'
+  if (status === 413) return 'payload_too_large'
+  if (status === 415) return 'unsupported_media_type'
+  if (status === 422) return 'validation_failed'
+  if (status === 429) return 'rate_limited'
+  if (status >= 500) return 'internal_error'
+  return null
+}
+
+/**
+ * The message, in the active locale, for any error coming from an API call. It reads the problem's
+ * `code`; `title` and `detail` are English and informative only, never shown. An unknown code (the
+ * contract only grows) is read by its HTTP status.
+ */
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const problem = error.problem
     if (problem?.code === 'validation_failed') {
       const fields = problem.errors?.map((e) => `${e.field}: ${e.message}`).join('; ')
-      return fields ? `Confira os campos — ${fields}.` : 'Confira os campos do formulário.'
+      return fields ? i18n.t('errors:validation.fields', { fields }) : i18n.t('errors:validation.form')
     }
     if (problem?.code === 'quota_exceeded') return quotaMessage(problem)
-    if (problem && MESSAGES[problem.code]) return MESSAGES[problem.code]
-    return problem?.detail ?? `O servidor respondeu com erro (HTTP ${error.status}).`
+    const known = problem && isKnownCode(problem.code) ? problem.code : null
+    const code = known ?? (problem ? codeOfStatus(error.status) : null)
+    return code ? i18n.t(`errors:code.${code}`) : i18n.t('errors:http', { status: error.status })
   }
-  if (error instanceof TypeError) return 'Sem conexão com o servidor. Confira a rede e tente de novo.'
-  return error instanceof Error ? error.message : 'Algo deu errado.'
+  if (error instanceof TypeError) return i18n.t('errors:network')
+  return error instanceof Error ? error.message : i18n.t('errors:generic')
 }

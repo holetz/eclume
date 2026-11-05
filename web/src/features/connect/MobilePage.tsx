@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { errorMessage } from '../../api/problem'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
@@ -9,6 +10,7 @@ import { QrCode } from './QrCode'
 
 export function MobilePage() {
   useHelpTopic('app-movel')
+  const { t } = useTranslation(['connect', 'common'])
   const create = useCreatePairingCode()
   const { mutate } = create
   // The last code stays on screen while another is generated (the mutation's `data` resets on each request).
@@ -19,28 +21,26 @@ export function MobilePage() {
 
   return (
     <section className={styles.page}>
-      <PageHead kicker="Minhas configurações" title="App móvel" />
-      <p className={styles.lead}>
-        Use o celular como gravador portátil. Ele grava sem rede e sincroniza pelo Wi-Fi quando volta a esta rede.
-      </p>
+      <PageHead kicker={t('kicker')} title={t('mobile.title')} />
+      <p className={styles.lead}>{t('mobile.lead')}</p>
       {create.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(create.error)}{' '}
           <button type="button" className="btn btn-secondary btn-sm" onClick={generate}>
-            Tentar de novo
+            {t('common:retry')}
           </button>
         </p>
       )}
       {pairing ? (
         <MobilePairing key={pairing.code.id} pairing={pairing} onRegenerate={generate} regenerating={create.isPending} />
       ) : (
-        !create.isError && <p role="status">Gerando o código…</p>
+        !create.isError && <p role="status">{t('mobile.generating')}</p>
       )}
       <DevicesList
-        title="Celulares vinculados"
+        title={t('mobile.devices')}
         platforms={['ios', 'android']}
-        empty="Nenhum celular vinculado ainda."
-        unpairMessage="O celular para de sincronizar até entrar de novo."
+        empty={t('mobile.empty')}
+        unpairMessage={t('mobile.unpair')}
       />
     </section>
   )
@@ -55,6 +55,7 @@ function MobilePairing({
   onRegenerate: () => void
   regenerating: boolean
 }) {
+  const { t } = useTranslation('connect')
   const state = usePairingState(pairing)
   const display = pairing.code.display ?? pairing.code.code
 
@@ -62,47 +63,58 @@ function MobilePairing({
     <>
       <div className={styles.mobileGrid}>
         {state.phase === 'pending' && pairing.code.pair_url ? (
-          <QrCode value={pairing.code.pair_url} label="Código QR para parear o celular" />
+          <QrCode value={pairing.code.pair_url} label={t('mobile.qr')} />
         ) : (
           <div className={`qr-slot ${styles.qrDone}`}>
-            {state.phase === 'used' ? 'Pareado' : state.phase === 'expired' ? 'Código vencido' : 'Digite o código no app'}
+            {state.phase === 'used'
+              ? t('pairing.paired')
+              : state.phase === 'expired'
+                ? t('pairing.expired')
+                : t('mobile.typeCode')}
           </div>
         )}
         <ol className="steps">
           <li>
-            <strong>Instale o eclume no celular</strong>
+            <strong>{t('mobile.install')}</strong>
           </li>
           <li>
-            <strong>Toque em Ler um código</strong>
-            <span className="text-muted">Na primeira tela do app.</span>
+            <strong>{t('mobile.tap')}</strong>
+            <span className="text-muted">{t('mobile.tapText')}</span>
           </li>
           <li>
-            <strong>Aponte a câmera aqui</strong>
+            <strong>{t('mobile.point')}</strong>
             {state.phase === 'pending' && (
               <span className="text-muted" aria-live="off">
-                Válido por {state.left}
+                {t('mobile.validFor', { left: state.left })}
               </span>
             )}
-            {state.phase === 'expired' && <span className="text-muted">Código vencido</span>}
+            {state.phase === 'expired' && <span className="text-muted">{t('pairing.expired')}</span>}
           </li>
         </ol>
       </div>
       {state.phase === 'used' && (
         <p className="alert alert-success">
-          <span className="alert-title">Pareado{state.deviceName ? `: ${state.deviceName}` : ''}</span>
+          <span className="alert-title">
+            {state.deviceName ? t('pairing.pairedName', { name: state.deviceName }) : t('pairing.paired')}
+          </span>
         </p>
       )}
       <div className={styles.codeRow}>
         {state.phase === 'pending' && (
           <span>
-            Sem câmera? Digite <strong className="mono">{display}</strong> no app.
+            <Trans
+              t={t}
+              i18nKey="mobile.noCamera"
+              values={{ code: display ?? '' }}
+              components={{ code: <strong className="mono" /> }}
+            />
           </span>
         )}
         <button type="button" className="btn btn-secondary btn-sm" onClick={onRegenerate} disabled={regenerating}>
-          Gerar outro código
+          {t('mobile.another')}
         </button>
       </div>
-      <span className="visually-hidden" role="status" aria-label="Validade do código">
+      <span className="visually-hidden" role="status" aria-label={t('pairing.validity')}>
         {state.announce}
       </span>
     </>

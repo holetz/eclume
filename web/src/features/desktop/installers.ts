@@ -2,6 +2,7 @@
 // deploy/publicar-desktop.sh publishes on the host (standard desktop-distribuicao.md). Only what the
 // page uses is validated; the rest of the manifest is ignored.
 import { useQuery } from '@tanstack/react-query'
+import { i18n } from '../../i18n'
 
 type DesktopOs = 'windows' | 'macos' | 'linux'
 
@@ -22,40 +23,30 @@ interface InstallerManifest {
 export interface Platform {
   os: DesktopOs
   name: string
-  requirements: string
+  readonly requirements: string
   /** First-install warning: the installers are not signed. */
-  firstRun: string
+  readonly firstRun: string
 }
 
-export const PLATFORMS: readonly Platform[] = [
-  {
-    os: 'macos',
-    name: 'macOS',
-    requirements: 'Apple Silicon e Intel · macOS 15 ou mais novo',
-    firstRun:
-      'Na primeira abertura, clique no app com o botão direito e escolha “Abrir”, ou libere em Ajustes do Sistema › Privacidade e Segurança › “Abrir mesmo assim”. O macOS também pede acesso ao microfone e à gravação de áudio do sistema.',
+/** A platform whose `requirements` and `firstRun` read the `desktop` catalog in the active locale. */
+const platform = (os: DesktopOs, name: string): Platform => ({
+  os,
+  name,
+  get requirements() {
+    return i18n.t(`desktop:platform.${os}.requirements`)
   },
-  {
-    os: 'windows',
-    name: 'Windows',
-    requirements: 'Windows 10 ou 11 · 64 bits',
-    firstRun:
-      'O Windows pode avisar que “protegeu o computador”. Clique em “Mais informações” e depois em “Executar assim mesmo”: o instalador não tem assinatura digital.',
+  get firstRun() {
+    return i18n.t(`desktop:platform.${os}.firstRun`)
   },
-  {
-    os: 'linux',
-    name: 'Linux',
-    requirements: 'x86-64 · PipeWire ou PulseAudio',
-    firstRun: 'Dê permissão de execução ao AppImage (chmod +x) antes de abrir.',
-  },
-]
+})
 
-export const TYPE_LABELS: Record<string, string> = {
-  nsis: 'Instalador .exe',
-  msi: 'Pacote .msi',
-  appimage: 'AppImage',
-  deb: 'Pacote .deb',
-  dmg: 'Imagem .dmg',
+export const PLATFORMS: readonly Platform[] = [platform('macos', 'macOS'), platform('windows', 'Windows'), platform('linux', 'Linux')]
+
+const TYPES = ['nsis', 'msi', 'appimage', 'deb', 'dmg'] as const
+
+/** The installer type in words ("Instalador .exe"), or `null` for a type this page does not know. */
+export function typeLabel(type: string): string | null {
+  return (TYPES as readonly string[]).includes(type) ? i18n.t(`desktop:type.${type as (typeof TYPES)[number]}`) : null
 }
 
 export function detectOs(userAgent: string): DesktopOs | null {

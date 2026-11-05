@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect } from 'react'
 import { useRouteError } from 'react-router'
 import { PageHead } from './PageHead'
@@ -13,17 +14,19 @@ function isChunkError(error: unknown): boolean {
 }
 
 function useErrorCopy() {
+  const { t } = useTranslation('shell')
   const error = useRouteError()
   useEffect(() => console.error(error), [error])
   return isChunkError(error)
-    ? { title: 'O eclume foi atualizado', text: 'Esta tela mudou desde que a aba foi aberta. Recarregue para usar a versão nova.' }
-    : { title: 'Algo deu errado nesta tela', text: 'Recarregue a página; se o erro continuar, avise quem administra o eclume.' }
+    ? { title: t('routeError.updatedTitle'), text: t('routeError.updatedText') }
+    : { title: t('routeError.failedTitle'), text: t('routeError.failedText') }
 }
 
 function ReloadButton() {
+  const { t } = useTranslation('shell')
   return (
     <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
-      Recarregar
+      {t('routeError.reload')}
     </button>
   )
 }

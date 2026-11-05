@@ -4,6 +4,7 @@ import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
 import { pollWhile } from '../../app/polling'
 import { TOKENS_KEY } from '../tokens/scopes'
+import { i18n } from '../../i18n'
 
 type PairingCode = Schemas['PairingCode']
 
@@ -124,9 +125,9 @@ export function usePairingState(pairing: Pairing): PairingState {
   const status = polled?.status ?? 'pending'
   if (status === 'used') {
     const device = devices.data?.items.find((token) => token.id === polled?.token_id)
-    return { phase: 'used', deviceName: device?.name ?? null, announce: 'Pareado' }
+    return { phase: 'used', deviceName: device?.name ?? null, announce: i18n.t('connect:pairing.paired') }
   }
-  if (status === 'expired' || left === 0) return { phase: 'expired', announce: 'Código vencido' }
+  if (status === 'expired' || left === 0) return { phase: 'expired', announce: i18n.t('connect:pairing.expired') }
   // The screen reader only hears the last minute, not every second.
-  return { phase: 'pending', left: formatCountdown(left), announce: left <= 60_000 ? 'Falta 1 minuto' : '' }
+  return { phase: 'pending', left: formatCountdown(left), announce: left <= 60_000 ? i18n.t('connect:pairing.oneMinute') : '' }
 }

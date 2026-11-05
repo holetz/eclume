@@ -1,0 +1,73 @@
+import type en from '../en/tokens'
+import type { Catalog } from '../locale'
+
+const tokens: Catalog<typeof en> = {
+  group: {
+    ler: { label: 'Buscar e ler gravações', short: 'ler' },
+    resumos: { label: 'Ler e editar resumos', short: 'resumos' },
+    campos: { label: 'Editar campos e tags', short: 'campos' },
+    excluir: { label: 'Excluir gravações', short: 'excluir' },
+  },
+  scope: {
+    recordings_read: { label: 'Ler gravações', description: 'Listar e buscar gravações, ver o estado e ouvir o áudio.' },
+    recordings_write: { label: 'Enviar e editar gravações', description: 'Subir áudio e editar título, campos e tags.' },
+    recordings_delete: { label: 'Excluir gravações', description: 'Excluir gravações, o áudio e a transcrição.' },
+    transcripts_read: { label: 'Ler transcrições', description: 'Ler e exportar transcrições.' },
+    transcripts_write: { label: 'Editar transcrições', description: 'Renomear locutores e corrigir falas.' },
+    people_read: { label: 'Ler pessoas', description: 'Consultar as suas pessoas.' },
+    people_write: { label: 'Editar pessoas', description: 'Cadastrar e alterar pessoas.' },
+    summaries_read: { label: 'Ler resumos', description: 'Ler resumos e as versões deles.' },
+    summaries_write: { label: 'Editar resumos', description: 'Gerar e editar resumos.' },
+  },
+  preset: {
+    lumea: 'lumea — importador',
+  },
+  expiration: {
+    '30': '30 dias',
+    '90': '90 dias',
+    never: 'Nunca',
+  },
+  form: {
+    name: 'Nome',
+    namePlaceholder: 'Ex.: Claude Desktop',
+    scopes: 'Escopos',
+    individual: 'Escopos individuais',
+    individualSubject: 'os escopos individuais',
+    individualHint: 'Para integrações que pedem um escopo fora dos grupos, como o importador do lumea.',
+    presets: 'Combinações prontas:',
+    expiry: 'Validade',
+    submit: 'Criar token',
+    submitting: 'Criando…',
+  },
+  page: {
+    kicker: 'Minhas configurações',
+    title: 'Tokens de acesso',
+    new: 'Novo token',
+    lead: 'Um token dá acesso à API em seu nome, limitado aos escopos escolhidos. Trate-o como uma senha. As rotas, os escopos de cada uma e os formatos estão na <api>Referência da API</api>. Para assistentes de IA, use <mcp>Conexão MCP</mcp>. O app desktop e o celular entram com e-mail e senha ou com um código.',
+    loading: 'Carregando tokens…',
+    empty: 'Você ainda não criou nenhum token.',
+    name: 'Nome',
+    scopes: 'Escopos',
+    expiry: 'Validade',
+    lastUsed: 'Último uso',
+    actions: 'Ações',
+    more: 'Carregar mais',
+    created: 'Token “{{name}}” criado',
+    createdCopy: 'Token criado · copie agora',
+    once: 'Ele só aparece uma vez.',
+    done: 'Pronto, já guardei',
+    device: 'Aparelho',
+    devicePlatform: 'Aparelho · {{platform}}',
+    revokedOn: 'Revogado em {{date}}',
+    expired: 'Expirado',
+    never: 'Nunca',
+    neverUsed: 'Nunca usado',
+    revoke: 'Revogar',
+    revokeName: 'Revogar {{name}}',
+    revokeTitle: 'Revogar {{name}}?',
+    revokeDevice: 'O aparelho para de sincronizar até entrar de novo.',
+    revokeToken: 'Quem usa este token perde o acesso.',
+  },
+}
+
+export default tokens

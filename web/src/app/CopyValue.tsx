@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Copy } from 'lucide-react'
 import { useState } from 'react'
 
@@ -7,16 +8,17 @@ interface CopyValueProps {
   size?: 'lg'
 }
 
-/** The Design System `.code-block`: the value, the "Copiar" button and the "Copiado" announcement. */
+/** The Design System `.code-block`: the value, the copy button and its announcement. */
 export function CopyValue({ value, size }: CopyValueProps) {
+  const { t } = useTranslation(['common', 'shell'])
   const [status, setStatus] = useState('')
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(value)
-      setStatus('Copiado')
+      setStatus(t('copied'))
     } catch {
-      setStatus('Não foi possível copiar. Selecione o texto e copie.')
+      setStatus(t('shell:copy.failed'))
     }
   }
 
@@ -25,7 +27,7 @@ export function CopyValue({ value, size }: CopyValueProps) {
       <span>{value}</span>
       <button type="button" className="btn btn-ghost btn-sm" onClick={copy}>
         <Copy size={14} aria-hidden />
-        Copiar
+        {t('copy')}
       </button>
       <span className="visually-hidden" role="status">
         {status}

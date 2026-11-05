@@ -1,5 +1,8 @@
 // The 100 languages of the Whisper tokenizer (whisper/tokenizer.py, `LANGUAGES`), by the code the
-// model accepts. The names come from Intl in pt-BR; the code is the fallback when Intl does not know it.
+// model accepts. The names come from Intl in the active locale; the code is the fallback when Intl does
+// not know it.
+import { activeLocale, i18n } from '../i18n'
+
 export const WHISPER_LANGUAGE_CODES = [
   'en', 'zh', 'de', 'es', 'ru', 'ko', 'fr', 'ja', 'pt', 'tr', 'pl', 'ca', 'nl', 'ar', 'sv', 'it', 'id', 'hi', 'fi', 'vi',
   'he', 'uk', 'el', 'ms', 'cs', 'ro', 'da', 'hu', 'ta', 'no', 'th', 'ur', 'hr', 'bg', 'lt', 'la', 'mi', 'ml', 'cy', 'sk',
@@ -19,25 +22,27 @@ interface LanguageOption {
   label: string
 }
 
-function languageName(names: Intl.DisplayNames, code: string): string {
+function languageName(names: Intl.DisplayNames, code: string, locale: string): string {
   const name = names.of(ISO_CODE[code] ?? code) ?? code
-  return name.charAt(0).toLocaleUpperCase('pt-BR') + name.slice(1)
+  return name.charAt(0).toLocaleUpperCase(locale) + name.slice(1)
 }
 
-/** The Whisper languages named in pt-BR and in alphabetical order. */
+/** The Whisper languages named in the active locale and in its alphabetical order. */
 export function whisperLanguages(): LanguageOption[] {
-  const names = new Intl.DisplayNames(['pt-BR'], { type: 'language', fallback: 'code' })
-  return WHISPER_LANGUAGE_CODES.map((code) => ({ value: code, label: languageName(names, code) })).sort((a, b) =>
-    a.label.localeCompare(b.label, 'pt-BR'),
+  const locale = activeLocale()
+  const names = new Intl.DisplayNames([locale], { type: 'language', fallback: 'code' })
+  return WHISPER_LANGUAGE_CODES.map((code) => ({ value: code, label: languageName(names, code, locale) })).sort(
+    (a, b) => a.label.localeCompare(b.label, locale),
   )
 }
 
-/** The name of a requested or detected language: `pt-BR` → "Português", `auto` → "Detectar automaticamente". */
+/** The name of a requested or detected language: `pt-BR` → "Portuguese", `auto` → "Detect automatically". */
 export function languageLabel(code: string): string {
-  if (code === AUTO_LANGUAGE) return 'Detectar automaticamente'
-  const names = new Intl.DisplayNames(['pt-BR'], { type: 'language', fallback: 'code' })
+  if (code === AUTO_LANGUAGE) return i18n.t('shared:language.auto')
+  const locale = activeLocale()
+  const names = new Intl.DisplayNames([locale], { type: 'language', fallback: 'code' })
   try {
-    return languageName(names, code.split('-', 1)[0])
+    return languageName(names, code.split('-', 1)[0], locale)
   } catch {
     return code
   }

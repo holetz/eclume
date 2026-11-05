@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, type ReactNode } from 'react'
 import { useBlocker } from 'react-router'
 import { Dialog } from './Dialog'
@@ -9,14 +10,14 @@ interface LeaveOptions {
   onDiscard?: () => void
 }
 
-const DEFAULT_OPTIONS: LeaveOptions = { title: 'Descartar alterações?', message: 'As alterações ainda não foram salvas.' }
-
 /**
  * Leave guard of a form with unsaved changes: closing or reloading the tab fires the
  * browser's warning, and going to another app route asks for confirmation. Changing only the search or the `#` of the
  * same route (the recording's `?t=`, the selection in the URL) asks nothing. Returns the dialog to render.
  */
-export function useLeaveGuard(dirty: boolean, options: LeaveOptions = DEFAULT_OPTIONS): ReactNode {
+export function useLeaveGuard(dirty: boolean, custom?: LeaveOptions): ReactNode {
+  const { t } = useTranslation('shell')
+  const options = custom ?? { title: t('leave.title'), message: t('leave.message') }
   useEffect(() => {
     if (!dirty) return
     const warn = (event: BeforeUnloadEvent) => event.preventDefault()
@@ -36,14 +37,14 @@ export function useLeaveGuard(dirty: boolean, options: LeaveOptions = DEFAULT_OP
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={() => blocker.reset()}>
-            Continuar editando
+            {t('leave.keepEditing')}
           </button>
           <button type="button" className="btn btn-danger" onClick={() => {
               options.onDiscard?.()
               blocker.proceed()
             }}
           >
-            Descartar
+            {t('leave.discard')}
           </button>
         </>
       }
