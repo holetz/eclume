@@ -94,7 +94,7 @@ test('MCP connection: descriptor address and assistant token', async ({ page }) 
   await expect(panel.getByRole('checkbox', { name: 'Excluir gravações' })).not.toBeChecked()
   await expect(panel.getByRole('radio', { name: '90 dias' })).toBeChecked()
   await panel.getByRole('button', { name: 'Criar token' }).click()
-  await expect(panel).toContainText(/claude mcp add --transport http eclume https:\/\/192\.168\.15\.199:8443\/mcp/)
+  await expect(panel).toContainText(/claude mcp add --transport http eclume https:\/\/192\.0\.2\.10:8443\/mcp/)
 })
 
 test('access tokens: table with device and revoke with confirmation', async ({ page }) => {
