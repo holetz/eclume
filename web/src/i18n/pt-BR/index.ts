@@ -2,6 +2,7 @@
 // Add a new namespace as one import and one entry here, in both locales.
 import account from './account'
 import admin from './admin'
+import agent from './agent'
 import auth from './auth'
 import common from './common'
 import connect from './connect'
@@ -41,6 +42,7 @@ const catalogs: { [K in keyof typeof en]: unknown } = {
   collections,
   tags,
   admin,
+  agent,
 }
 
 export default catalogs

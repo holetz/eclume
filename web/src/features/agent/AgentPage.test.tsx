@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setLocale } from '../../i18n'
 import { fixtures } from '../../test/fixtures'
 import { empty, mockFetch, problem } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
@@ -9,9 +10,10 @@ import { AGENT_POLL_MS } from './agent'
 beforeAll(() => preloadRoute('/agente'))
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
+  await setLocale('pt-BR')
 })
 
 const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
@@ -43,6 +45,18 @@ async function ask(text: string) {
 }
 
 describe('Agent', () => {
+  it('reads in English when the account chose English', async () => {
+    const me = fixtures.me()
+    mockAgent({ 'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }) })
+    renderApp('/agente')
+    expect(await screen.findByRole('heading', { level: 1, name: 'New conversation' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Which decisions were made/ })).toBeInTheDocument()
+    const recent = screen.getByRole('navigation', { name: 'Recent conversations' })
+    expect(await within(recent).findByRole('link', { name: 'Untitled conversation' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Question' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
+  })
+
   it('opens the new conversation with examples and the recent conversations beside it', async () => {
     mockAgent()
     renderApp('/agente')
