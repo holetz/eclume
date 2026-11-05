@@ -7,6 +7,7 @@ import connect from './connect'
 import desktop from './desktop'
 import environment from './environment'
 import errors from './errors'
+import people from './people'
 import search from './search'
 import importCatalog from './import'
 import transcript from './transcript'
@@ -31,6 +32,7 @@ const catalogs: { [K in keyof typeof en]: unknown } = {
   transcript,
   import: importCatalog,
   search,
+  people,
 }
 
 export default catalogs

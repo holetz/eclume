@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
@@ -11,10 +12,11 @@ import { formatDate, formatDuration } from '../../shared/format'
 
 /** The person's "Amostras de voz" tab: listen to and remove each sample of the voiceprint, and "Esquecer a voz". */
 export function VoiceSection({ person }: { person: Person }) {
+  const { t } = useTranslation('people')
   const voiceprint = useVoiceprint(person.id)
   return (
     <div className={styles.voice}>
-      {voiceprint.isPending && <p role="status">Carregando as amostras de voz…</p>}
+      {voiceprint.isPending && <p role="status">{t('voice.loading')}</p>}
       {voiceprint.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(voiceprint.error)}
@@ -26,6 +28,7 @@ export function VoiceSection({ person }: { person: Person }) {
 }
 
 function VoiceDetail({ person, voiceprint }: { person: Person; voiceprint: Voiceprint }) {
+  const { t } = useTranslation('people')
   const [confirming, setConfirming] = useState(false)
   const [notice, setNotice] = useState('')
   const remove = useDeleteVoiceprint(person.id)
@@ -60,16 +63,16 @@ function VoiceDetail({ person, voiceprint }: { person: Person; voiceprint: Voice
     <>
       {!voiceprint.enabled && (
         <p className="alert alert-warning">
-          A identificação por voz está desligada neste servidor: nada é comparado e nenhuma amostra é guardada.
+          {t('voice.off')}
         </p>
       )}
       {voiceprint.samples.length > 0 ? (
-        <ul className={`list ${styles.samples}`} aria-label="Amostras de voz">
+        <ul className={`list ${styles.samples}`} aria-label={t('tab.amostras')}>
           {voiceprint.samples.map((sample) => (
             <li key={sampleKey(sample)} className="list-row">
-              <span className="list-row-title">{sample.recording_title ?? 'Gravação excluída'}</span>
+              <span className="list-row-title">{sample.recording_title ?? t('voice.deletedRecording')}</span>
               <span className="list-row-sub mono">
-                {formatDuration(sample.talk_ms)} de fala · confirmada em {formatDate(sample.created_at)}
+                {t('voice.sampleLine', { duration: formatDuration(sample.talk_ms), date: formatDate(sample.created_at) })}
               </span>
               <span className="list-row-actions">
                 {sample.recording_id && sample.excerpt && (
@@ -78,8 +81,8 @@ function VoiceDetail({ person, voiceprint }: { person: Person; voiceprint: Voice
                     className="btn btn-secondary btn-icon"
                     aria-label={
                       playing && sampleKey(playing) === sampleKey(sample)
-                        ? 'Pausar a amostra'
-                        : `Ouvir a amostra de ${sample.recording_title ?? 'gravação'}`
+                        ? t('voice.pause')
+                        : t('voice.listen', { title: sample.recording_title ?? t('voice.recording') })
                     }
                     aria-pressed={playing ? sampleKey(playing) === sampleKey(sample) : false}
                     onClick={() => toggle(sample)}
@@ -100,20 +103,20 @@ function VoiceDetail({ person, voiceprint }: { person: Person; voiceprint: Voice
                             audio.current?.pause()
                             setPlaying(null)
                           }
-                          setNotice('Amostra removida.')
+                          setNotice(t('voice.removed'))
                         },
                       },
                     )
                   }
                 >
-                  Remover
+                  {t('voice.remove')}
                 </button>
               </span>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="text-muted">Nenhuma amostra de voz ainda.</p>
+        <p className="text-muted">{t('voice.none')}</p>
       )}
       <audio ref={audio} preload="none" onTimeUpdate={stopAtEnd} onEnded={() => setPlaying(null)} hidden />
       {removeSample.isError && (
@@ -122,17 +125,15 @@ function VoiceDetail({ person, voiceprint }: { person: Person; voiceprint: Voice
         </p>
       )}
       <p className={styles.detail}>
-        Uma amostra entra quando você liga um locutor a esta pessoa na página da gravação.{' '}
-        <Link to="/ajuda/sugestoes-por-voz">Como funcionam as sugestões por voz</Link>{' '}
-        <HelpHint subject="a impressão de voz" title="Impressão de voz" article="esquecer-a-voz">
-          As amostras são os trechos em que você confirmou que um locutor era esta pessoa. Esquecer a voz
-          apaga todas, e os vínculos confirmados ficam.
+        {t('voice.detail')} <Link to="/ajuda/sugestoes-por-voz">{t('voice.howItWorks')}</Link>{' '}
+        <HelpHint subject={t('voice.hintSubject')} title={t('voice.hintTitle')} article="esquecer-a-voz">
+          {t('voice.hint')}
         </HelpHint>
       </p>
       {voiceprint.sample_count > 0 && (
         <div>
           <button type="button" className="btn btn-secondary btn-danger" onClick={() => setConfirming(true)}>
-            Esquecer a voz
+            {t('voice.forget')}
           </button>
         </div>
       )}
@@ -142,13 +143,13 @@ function VoiceDetail({ person, voiceprint }: { person: Person; voiceprint: Voice
       {confirming && (
         <Dialog
           plain
-          title="Esquecer a voz?"
-          message="Apaga todas as amostras e as sugestões pendentes desta pessoa. Os vínculos já confirmados ficam."
+          title={t('voice.forgetTitle')}
+          message={t('voice.forgetText')}
           onClose={() => setConfirming(false)}
           actions={
             <>
               <button type="button" className="btn btn-secondary" onClick={() => setConfirming(false)}>
-                Manter
+                {t('person.keep')}
               </button>
               <button
                 type="button"
@@ -158,12 +159,12 @@ function VoiceDetail({ person, voiceprint }: { person: Person; voiceprint: Voice
                   remove.mutate(undefined, {
                     onSuccess: () => {
                       setConfirming(false)
-                      setNotice('Voz esquecida.')
+                      setNotice(t('voice.forgotten'))
                     },
                   })
                 }
               >
-                Esquecer a voz
+                {t('voice.forget')}
               </button>
             </>
           }
