@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { setLocale } from '../../i18n'
 import { stepLabel, stepNote } from './steps'
 
 describe('steps in words', () => {
@@ -17,5 +18,15 @@ describe('steps in words', () => {
   it('done, the speakers step carries only the name', () => {
     expect(stepLabel({ step: 'speakers', state: 'done' })).toBe('Locutores')
     expect(stepNote({ state: 'done', reason: null, error: null })).toBeNull()
+  })
+
+  it('in English, the step label and its state come from the shared catalog', async () => {
+    await setLocale('en')
+    try {
+      expect(stepLabel({ step: 'speakers', state: 'skipped' })).toBe(`${stepLabel({ step: 'speakers', state: 'done' })} · skipped`)
+      expect(stepLabel({ step: 'summary', state: 'active' })).toBe('Summarizing')
+    } finally {
+      await setLocale('pt-BR')
+    }
   })
 })

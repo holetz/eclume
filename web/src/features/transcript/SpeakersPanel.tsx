@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { api } from '../../api/client'
 import { errorMessage, unwrap } from '../../api/problem'
@@ -12,6 +13,7 @@ import styles from './SpeakersPanel.module.css'
 import { formatDuration } from '../../shared/format'
 
 export function SpeakersPanel({ transcript }: { transcript: Transcript }) {
+  const { t } = useTranslation('transcript')
   const [merging, setMerging] = useState(false)
   const [notice, setNotice] = useState('')
   const titleId = useId()
@@ -20,7 +22,7 @@ export function SpeakersPanel({ transcript }: { transcript: Transcript }) {
   return (
     <section id="locutores" tabIndex={-1} className={styles.panel} aria-labelledby={titleId}>
       <h6 id={titleId} className="visually-hidden">
-        Locutores
+        {t('speakers.title')}
       </h6>
       <ul className={styles.list}>
         {speakers.map((speaker) => (
@@ -46,7 +48,7 @@ export function SpeakersPanel({ transcript }: { transcript: Transcript }) {
           />
         ) : (
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => setMerging(true)}>
-            Mesclar locutores
+            {t('speakers.merge')}
           </button>
         ))}
     </section>
@@ -54,6 +56,7 @@ export function SpeakersPanel({ transcript }: { transcript: Transcript }) {
 }
 
 function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; speaker: Speaker; color: number }) {
+  const { t } = useTranslation(['transcript', 'common'])
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [linking, setLinking] = useState(false)
@@ -67,9 +70,9 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
       }),
     )
   const apply = (updated: Speaker) =>
-    updateTranscriptCache(queryClient, transcriptId, (t) => ({
-      ...t,
-      speakers: t.speakers.map((s) => (s.id === updated.id ? updated : s)),
+    updateTranscriptCache(queryClient, transcriptId, (transcript) => ({
+      ...transcript,
+      speakers: transcript.speakers.map((s) => (s.id === updated.id ? updated : s)),
     }))
   const rename = useMutation({
     mutationFn: (newLabel: string) => patch({ label: newLabel }),
@@ -116,42 +119,48 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
           <span className={styles.name}>{name}</span>
           <span className={styles.detail}>
             {speaker.person ? (
-              <>
-                Pessoa: <Link to={`/pessoas/${speaker.person.id}`}>{speaker.person.name}</Link>
-              </>
+              <Trans
+                t={t}
+                i18nKey="speakers.person"
+                values={{ name: speaker.person.name }}
+                components={{ person: <Link to={`/pessoas/${speaker.person.id}`} /> }}
+              />
             ) : (
-              'Sem pessoa ligada'
+              t('speakers.noPerson')
             )}
           </span>
           {speaker.talk_ms != null && (
-            <span className={styles.detail}>{formatDuration(speaker.talk_ms)} de fala</span>
+            <span className={styles.detail}>{t('speakers.talk', { duration: formatDuration(speaker.talk_ms) })}</span>
           )}
         </div>
       </div>
       {idle && speaker.person && speaker.auto_score != null && (
         <div className={styles.suggestion}>
-          <span>
-            Atribuído pela voz — {Math.round(speaker.auto_score * 100)}%
-          </span>
+          <span>{t('speakers.auto', { percent: Math.round(speaker.auto_score * 100) })}</span>
           <span className={styles.buttons}>
             <button
               type="button"
               className="btn btn-secondary btn-sm"
               onClick={() => link.mutate(speaker.person!.id)}
               disabled={deciding}
-              aria-label={`Confirmar ${speaker.person.name} para ${name}`}
+              aria-label={t('speakers.confirmLabel', { person: speaker.person.name, name })}
             >
-              Confirmar
+              {t('speakers.confirm')}
             </button>
           </span>
         </div>
       )}
       {idle && suggestions.length > 0 && (
-        <ul className={styles.suggestions} aria-label={`Sugestões por voz para ${name}`}>
+        <ul className={styles.suggestions} aria-label={t('speakers.suggestions', { name })}>
           {suggestions.map((suggestion) => (
             <li key={suggestion.person.id} className={styles.suggestion}>
               <span>
-                Parece ser <strong>{suggestion.person.name}</strong> — {Math.round(suggestion.score * 100)}%
+                <Trans
+                  t={t}
+                  i18nKey="speakers.looksLike"
+                  values={{ name: suggestion.person.name, percent: Math.round(suggestion.score * 100) }}
+                  components={{ person: <strong /> }}
+                />
               </span>
               <span className={styles.buttons}>
                 <button
@@ -159,18 +168,18 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
                   className="btn btn-secondary btn-sm"
                   onClick={() => link.mutate(suggestion.person.id)}
                   disabled={deciding}
-                  aria-label={`Aceitar ${suggestion.person.name} para ${name}`}
+                  aria-label={t('speakers.acceptLabel', { person: suggestion.person.name, name })}
                 >
-                  Aceitar
+                  {t('speakers.accept')}
                 </button>
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
                   onClick={() => reject.mutate(suggestion.person.id)}
                   disabled={deciding}
-                  aria-label={`Recusar ${suggestion.person.name} para ${name}`}
+                  aria-label={t('speakers.rejectLabel', { person: suggestion.person.name, name })}
                 >
-                  Recusar
+                  {t('speakers.reject')}
                 </button>
               </span>
             </li>
@@ -187,9 +196,9 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
               rename.reset()
               setEditing(true)
             }}
-            aria-label={`Renomear ${name}`}
+            aria-label={t('speakers.renameLabel', { name })}
           >
-            Renomear
+            {t('speakers.rename')}
           </button>
           {speaker.person ? (
             <button
@@ -197,9 +206,9 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
               className="btn btn-ghost btn-sm"
               onClick={() => link.mutate(null)}
               disabled={link.isPending}
-              aria-label={`Desligar ${name} de ${speaker.person.name}`}
+              aria-label={t('speakers.unlinkLabel', { name, person: speaker.person.name })}
             >
-              Desligar pessoa
+              {t('speakers.unlink')}
             </button>
           ) : (
             <button
@@ -209,16 +218,16 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
                 link.reset()
                 setLinking(true)
               }}
-              aria-label={`Ligar ${name} a uma pessoa`}
+              aria-label={t('speakers.linkLabel', { name })}
             >
-              Ligar a pessoa
+              {t('speakers.link')}
             </button>
           )}
         </div>
       )}
       {linking && (
         <PersonCombobox
-          label={`Pessoa para ${name}`}
+          label={t('speakers.personFor', { name })}
           onSelect={(person) => link.mutate(person.id)}
           onCancel={() => setLinking(false)}
         />
@@ -231,7 +240,7 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
       {editing && (
         <form className={styles.form} onSubmit={submit}>
           <label htmlFor={inputId} className="visually-hidden">
-            Novo nome de {name}
+            {t('speakers.newName', { name })}
           </label>
           <input
             id={inputId}
@@ -243,10 +252,10 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
           />
           <div className={styles.actions}>
             <button type="submit" className="btn btn-primary btn-sm" disabled={rename.isPending || !label.trim()}>
-              Salvar
+              {t('common:save')}
             </button>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditing(false)}>
-              Cancelar
+              {t('common:cancel')}
             </button>
           </div>
           {rename.isError && (
@@ -261,6 +270,7 @@ function SpeakerItem({ transcriptId, speaker, color }: { transcriptId: string; s
 }
 
 function MergeForm({ transcript, onDone }: { transcript: Transcript; onDone: (message: string) => void }) {
+  const { t } = useTranslation(['transcript', 'common'])
   const queryClient = useQueryClient()
   const { speakers } = transcript
   const [target, setTarget] = useState(speakers[0].id)
@@ -278,7 +288,7 @@ function MergeForm({ transcript, onDone }: { transcript: Transcript; onDone: (me
       queryClient.setQueryData(transcriptKey(transcript.id), merged)
       const names = speakers.filter((s) => sources.includes(s.id)).map(speakerName)
       const into = speakerName(speakers.find((s) => s.id === target))
-      onDone(`${names.join(', ')} mesclado em ${into}.`)
+      onDone(t('speakers.merged', { names: names.join(', '), into }))
     },
   })
   const candidates = speakers.filter((s) => s.id !== target)
@@ -297,7 +307,7 @@ function MergeForm({ transcript, onDone }: { transcript: Transcript; onDone: (me
       }}
     >
       <div className="field">
-        <label htmlFor={targetId}>Manter o locutor</label>
+        <label htmlFor={targetId}>{t('speakers.keep')}</label>
         <select
           id={targetId}
           className="input"
@@ -315,7 +325,7 @@ function MergeForm({ transcript, onDone }: { transcript: Transcript; onDone: (me
         </select>
       </div>
       <fieldset className={styles.sources}>
-        <legend className="field-label">Juntar a ele</legend>
+        <legend className="field-label">{t('speakers.join')}</legend>
         {candidates.map((s) => (
           <label key={s.id} className={styles.check}>
             <input type="checkbox" checked={chosen.includes(s.id)} onChange={(e) => toggle(s.id, e.target.checked)} />
@@ -324,7 +334,7 @@ function MergeForm({ transcript, onDone }: { transcript: Transcript; onDone: (me
         ))}
       </fieldset>
       <p className={styles.detail}>
-        As falas dos locutores marcados passam para o que fica, e eles deixam de existir. Não dá para desfazer.
+        {t('speakers.mergeText')}
       </p>
       {merge.isError && (
         <p className="alert alert-error" role="alert">
@@ -333,10 +343,10 @@ function MergeForm({ transcript, onDone }: { transcript: Transcript; onDone: (me
       )}
       <div className={styles.actions}>
         <button type="submit" className="btn btn-primary btn-sm" disabled={merge.isPending || chosen.length === 0}>
-          Mesclar
+          {t('speakers.mergeSubmit')}
         </button>
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => onDone('')}>
-          Cancelar
+          {t('common:cancel')}
         </button>
       </div>
     </form>

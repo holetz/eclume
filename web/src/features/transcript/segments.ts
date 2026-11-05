@@ -1,5 +1,6 @@
 // Pure transcript functions: types, current segment by time and clock.
 import type { operations } from '../../api/schema.gen'
+import { i18n } from '../../i18n'
 
 export type Transcript = operations['getTranscript']['responses'][200]['content']['application/json']
 export type Segment = Transcript['segments'][number]
@@ -28,7 +29,7 @@ export function findSegmentAt(segments: readonly Pick<Segment, 'start_ms'>[], ms
 
 /** The speaker's displayed name: the linked person or, without a person, the label. */
 export function speakerName(speaker: Pick<Speaker, 'label' | 'person'> | undefined): string {
-  if (!speaker) return 'Locutor desconhecido'
+  if (!speaker) return i18n.t('transcript:segment.unknownSpeaker')
   return speaker.person?.name ?? speaker.label
 }
 

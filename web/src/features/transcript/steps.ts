@@ -1,7 +1,11 @@
 // The recording's seven processing steps in words, with the reason for a step that was skipped or that
-// failed. The names come from the vocabulary shared with the desktop and the phone (lib/vocabulario.js).
+// failed. The names are the pipeline vocabulary of the `shared` catalog, which in pt-BR is the one the desktop
+// and the phone show (lib/vocabulario.js).
 import type { Schemas } from '../../api/client'
-import { ESTADOS_ETAPA, ETAPAS, motivo, nomeDaEtapa } from '../../lib/vocabulario.js'
+import { i18n } from '../../i18n'
+import { reasonText, stepName, stepStateLabel, type StepState } from '../../shared/format'
+
+const STATES: readonly string[] = ['pending', 'active', 'done', 'skipped', 'failed', 'waiting']
 
 export type PipelineStep = Schemas['PipelineStep']
 type Step = PipelineStep['step']
@@ -11,16 +15,17 @@ type Step = PipelineStep['step']
  * when active and "name · state" in the others.
  */
 export function stepLabel(step: Pick<PipelineStep, 'step' | 'state'>): string {
-  if (step.state === 'done') return nomeDaEtapa(step.step)
-  if (step.state === 'active') return ETAPAS.find((item) => item.etapa === step.step)?.andamento ?? step.step
-  const state = ESTADOS_ETAPA[step.state as keyof typeof ESTADOS_ETAPA] ?? step.state
-  return `${nomeDaEtapa(step.step)} · ${state}`
+  const name = stepName(step.step)
+  if (step.state === 'done') return name
+  if (step.state === 'active') return name === step.step ? step.step : i18n.t(`shared:busy.${step.step}`)
+  const state = STATES.includes(step.state) ? stepStateLabel(step.state as StepState) : step.state
+  return `${name} · ${state}`
 }
 
 /** Why the step was skipped, failed or waits for the owner; `null` in the others. */
 export function stepNote(step: Pick<PipelineStep, 'state' | 'reason' | 'error'>): string | null {
   if (step.state === 'failed') return step.error?.message ?? null
-  if (step.state === 'skipped' || step.state === 'waiting') return step.reason ? motivo(step.reason) : null
+  if (step.state === 'skipped' || step.state === 'waiting') return step.reason ? reasonText(step.reason) : null
   return null
 }
 

@@ -1,5 +1,6 @@
 import { ChevronDown, Download } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { errorMessage } from '../../api/problem'
 import { MenuButton } from '../../app/MenuButton'
 import { downloadExport, type ExportFormat } from './exports'
@@ -14,6 +15,7 @@ interface ExportMenuProps {
 
 /** The header's Exportar menu: transcript (TXT, SRT), summary (MD) and both together (DOCX). */
 export function ExportMenu({ recordingId, hasSummary, onError }: ExportMenuProps) {
+  const { t } = useTranslation('transcript')
   const [busy, setBusy] = useState(false)
 
   async function run(format: ExportFormat) {
@@ -30,17 +32,17 @@ export function ExportMenu({ recordingId, hasSummary, onError }: ExportMenuProps
 
   return (
     <MenuButton
-      label="Exportar"
+      label={t('export.label')}
       items={[
-        { key: 'txt', label: 'Transcrição', kbd: 'TXT', onSelect: () => void run('txt') },
-        { key: 'srt', label: 'Transcrição com tempos', kbd: 'SRT', onSelect: () => void run('srt') },
-        { key: 'md', label: 'Resumo', kbd: 'MD', disabled: !hasSummary, onSelect: () => void run('md') },
+        { key: 'txt', label: t('export.txt'), kbd: 'TXT', onSelect: () => void run('txt') },
+        { key: 'srt', label: t('export.srt'), kbd: 'SRT', onSelect: () => void run('srt') },
+        { key: 'md', label: t('export.md'), kbd: 'MD', disabled: !hasSummary, onSelect: () => void run('md') },
         'separator',
-        { key: 'docx', label: 'Transcrição e resumo', kbd: 'DOCX', onSelect: () => void run('docx') },
+        { key: 'docx', label: t('export.docx'), kbd: 'DOCX', onSelect: () => void run('docx') },
       ]}
     >
       <Download size={16} aria-hidden />
-      {busy ? 'Exportando…' : 'Exportar'}
+      {busy ? t('export.busy') : t('export.label')}
       <ChevronDown size={16} aria-hidden />
     </MenuButton>
   )
