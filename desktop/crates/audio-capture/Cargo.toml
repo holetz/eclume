@@ -6,7 +6,7 @@ name = "eclume-audio-capture"
 description = "Mic and system audio capture for the eclume desktop app."
 version.workspace = true
 edition = "2024"
-license.workspace = true
+license = "MIT"  # adapted from Anarlog (MIT, see VENDOR.md), not the GPL workspace licence
 rust-version.workspace = true
 publish = false
 
