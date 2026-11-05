@@ -106,6 +106,12 @@ v1) has its own line and each entry cites it.
   `ECLUME_SKIPS`, `ECLUME_BACKUP_DAY`, `ECLUME_REHEARSAL_DAY`, `ECLUME_DEPLOYS_KEPT`,
   `ECLUME_STAGING_BATCH`, `WATCHDOG_*`, `DEST` and `KEEP` (#244).
 
+### Security
+
+- Dependencies bumped past open Dependabot advisories: DOMPurify 3.4.17 (through Redoc, in the API
+  reference page), nltk 3.10.4 and, in the web and phone app toolchains, Vite 8.3.6, Vitest 5.1.0,
+  undici 8.12.4 and zod 4.6.7. torch stays at 2.8 because WhisperX 3.8.6 pins `torch~=2.8.0`.
+
 ### For those who host
 
 - **Migrations**, none destructive: `030_marcacao_dos_locutores` (swaps the step `CHECK`s),
