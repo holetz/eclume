@@ -3,12 +3,13 @@
 import { el, replace, $ } from "../dom.js";
 import { version } from "../tauri.js";
 import { MAC, keys } from "./home.js";
+import { t } from "../i18n.js";
 
 /** Window keys (global ones come from settings). */
 const WINDOW_SHORTCUTS = [
-  ["Importar arquivo", "O"],
-  ["Configurações", ","],
-  ["Atalhos de teclado", "/"],
+  ["help.import", "O"],
+  ["help.settings", ","],
+  ["help.shortcuts", "/"],
 ];
 
 /** A combination as separate keys: ["⌘", "⇧", "N"] or ["Ctrl", "Alt", "N"]. */
@@ -76,8 +77,14 @@ export function wireMenu(app) {
   $("#help-problem").addEventListener("click", () => execute("open_log_dir"));
   $("#help-shortcuts-tecla").textContent = MAC ? "⌘/" : "Ctrl+/";
 
+  let currentVersion = null;
+  function drawVersion() {
+    if (currentVersion != null) $("#help-version").textContent = t("help.version", { version: currentVersion });
+  }
+  app.onLocaleChange(drawVersion);
   version().then((number) => {
-    $("#help-version").textContent = `eclume ${number} · atualizado`;
+    currentVersion = number;
+    drawVersion();
   });
 
   return { close: () => open(false) };
@@ -91,19 +98,26 @@ export function mount(section, app) {
     app.go("settings", { tab: "audio" });
   });
   const modifier = MAC ? "Cmd" : "Ctrl";
-  replace(
-    $("#shortcuts-window", section),
-    WINDOW_SHORTCUTS.map(([label, key]) => row(label, `${modifier}+${key}`)),
-  );
+  let shortcuts = [];
+  function drawShortcuts() {
+    replace(
+      $("#shortcuts-window", section),
+      WINDOW_SHORTCUTS.map(([labelKey, key]) => row(t(labelKey), `${modifier}+${key}`)),
+    );
+    replace(
+      $("#shortcuts-global", section),
+      shortcuts.map((shortcut) => row(t(`help.shortcut.${shortcut.action}`), shortcut.keys)),
+    );
+  }
+  drawShortcuts();
+  app.onLocaleChange(drawShortcuts);
 
   return {
     async enter() {
       try {
         const config = await app.invoke("settings");
-        replace(
-          $("#shortcuts-global", section),
-          config.shortcuts.map((shortcut) => row(shortcut.label, shortcut.keys)),
-        );
+        shortcuts = config.shortcuts;
+        drawShortcuts();
       } catch (failure) {
         console.error(failure);
       }

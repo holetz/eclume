@@ -4,20 +4,24 @@
 import { el, replace, $ } from "../dom.js";
 import { version } from "../tauri.js";
 import { serverLabel } from "./first-run.js";
-import { ESTADOS_APARELHO as DEVICE_STATES, fraseDaEspera as waitPhrase } from "../vocabulario.js";
+import { deviceStates, waitingPhrase as waitPhrase } from "../vocabulary.js";
+import { activeLocale, t } from "../i18n.js";
 import { mountRecent } from "../recent.js";
 
 const MIN = 60_000;
 const DAY = 24 * 60 * MIN;
 
 /** Queue state in the shared vocabulary (device states): `.badge` label and tone. */
-const STATUSES = {
-  recording: DEVICE_STATES.recording,
-  pending: DEVICE_STATES.pending,
-  syncing: DEVICE_STATES.uploading,
-  synced: DEVICE_STATES.uploaded,
-  failed: DEVICE_STATES.failed,
-};
+function queueStatuses() {
+  const states = deviceStates();
+  return {
+    recording: states.recording,
+    pending: states.pending,
+    syncing: states.uploading,
+    synced: states.uploaded,
+    failed: states.failed,
+  };
+}
 
 export const MAC = /Mac/.test(navigator.platform || navigator.userAgent);
 
@@ -40,16 +44,14 @@ export function keys(shortcut, mac = MAC) {
 /** Meter bars below this level appear as silence. */
 const QUIET_LEVEL = 0.15;
 
-const hourMinute = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
-const dayMonth = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
 
 /** Today, yesterday or a date, followed by the time. */
 export function when(ms, now = Date.now()) {
   const dayStart = new Date(now).setHours(0, 0, 0, 0);
-  const time = hourMinute.format(ms);
-  if (ms >= dayStart) return `Hoje, ${time}`;
-  if (ms >= dayStart - DAY) return `Ontem, ${time}`;
-  return `${dayMonth.format(ms)}, ${time}`;
+  const time = new Intl.DateTimeFormat(activeLocale(), { hour: "2-digit", minute: "2-digit" }).format(ms);
+  if (ms >= dayStart) return t("home.today", { time });
+  if (ms >= dayStart - DAY) return t("home.yesterday", { time });
+  return `${new Intl.DateTimeFormat(activeLocale(), { day: "2-digit", month: "2-digit" }).format(ms)}, ${time}`;
 }
 
 /** "42 s", "54 min" or "1 h 05 min". */
@@ -80,36 +82,36 @@ export function clock(ms) {
 export function statusLine(state, detecting, now = Date.now()) {
   const remaining = state.counts.pending + state.counts.syncing + state.counts.failed;
   if (state.status === "recording" && state.recording_kind === "note") {
-    const stop = state.note_silence_s ? ` · para depois de ${state.note_silence_s} s de silêncio` : "";
-    return ["recording", `Gravando uma nota${stop}`];
+    const stop = state.note_silence_s ? t("note.stopAfter", { seconds: state.note_silence_s }) : "";
+    return ["recording", t("note.recording", { stop })];
   }
   if (state.status === "recording") {
     const elapsed = state.recording_started_at ? ` · ${timer(now - state.recording_started_at)}` : "";
     const origin = state.recording_app ? ` ${state.recording_app.label}` : "";
-    return ["recording", `Gravando${origin}${elapsed}`];
+    return ["recording", t("home.recording", { origin, elapsed })];
   }
   if (state.status === "syncing") {
-    return ["syncing", remaining === 1 ? "Enviando 1 gravação" : `Enviando ${remaining} gravações`];
+    return ["syncing", t("home.uploading", { count: remaining })];
   }
-  if (state.meeting) return ["idle", `Reunião no ${state.meeting.label}`];
-  if (detecting) return ["idle", "Ocioso, atento a reuniões"];
-  if (remaining === 0) return ["synced", "Tudo enviado"];
-  return ["idle", remaining === 1 ? "Ocioso · 1 gravação na fila" : `Ocioso · ${remaining} gravações na fila`];
+  if (state.meeting) return ["idle", t("home.meeting", { app: state.meeting.label })];
+  if (detecting) return ["idle", t("home.detecting")];
+  if (remaining === 0) return ["synced", t("home.allUploaded")];
+  return ["idle", t("home.idleQueue", { count: remaining })];
 }
 
 function recordingLabel(recording, now) {
   // The title given when stopping, otherwise the one the server gave after processing (queue v5).
   const title = recording.title ?? recording.server_title ?? recording.original_name;
   const parts = [title ?? when(recording.started_at, now)];
-  if (recording.kind === "note") parts.push("Nota");
+  if (recording.kind === "note") parts.push(t("note.label"));
   parts.push(duration(recording.duration_ms));
-  if (recording.interrupted) parts.push("interrompida");
+  if (recording.interrupted) parts.push(t("home.interrupted"));
   return parts.filter(Boolean).join(" · ");
 }
 
 /** Singular or plural marker count. */
 export function markerCount(n) {
-  return n === 1 ? "1 marcador" : `${n} marcadores`;
+  return t("note.markerCount", { count: n });
 }
 
 export function mount(section, app) {
@@ -141,7 +143,7 @@ export function mount(section, app) {
         id: "updated-close",
         on: { click: () => execute("dismiss_update_notice") },
       },
-      "Entendi",
+      t("home.gotIt"),
     ),
   );
   $(".tray-section", section).prepend(updated);
@@ -150,7 +152,8 @@ export function mount(section, app) {
     const newUpdate = state.updated;
     updated.hidden = !newUpdate;
     if (!newUpdate) return;
-    $("#updated-title", updated).textContent = `Atualizado para ${newUpdate.version}`;
+    $("#updated-close", updated).textContent = t("home.gotIt");
+    $("#updated-title", updated).textContent = t("home.updated", { version: newUpdate.version });
     $("#updated-notes", updated).textContent = newUpdate.notes ?? "";
   }
   /** The last window command error; cleared by the next successful command. */
@@ -171,14 +174,17 @@ export function mount(section, app) {
   }
   drawShortcuts();
 
+  let lastReading = null;
+
   function drawMeter(reading) {
+    lastReading = reading;
     reading.levels.forEach((level, i) => {
       bars[i].style.setProperty("--h", `${Math.round(Math.max(0.08, level) * 100)}%`);
       bars[i].toggleAttribute("data-quiet", level < QUIET_LEVEL);
     });
     $("#note-silence", section).textContent =
-      reading.stops_in_ms == null ? "" : `Silêncio · para em ${Math.max(1, Math.ceil(reading.stops_in_ms / 1000))} s`;
-    record.textContent = `Parar nota · ${clock(reading.position_ms)}`;
+      reading.stops_in_ms == null ? "" : t("note.silence", { seconds: Math.max(1, Math.ceil(reading.stops_in_ms / 1000)) });
+    record.textContent = t("note.stop", { time: clock(reading.position_ms) });
   }
 
   async function pollMeter() {
@@ -202,10 +208,10 @@ export function mount(section, app) {
 
   function drawNotice(state) {
     const [title, text, tone] = error
-      ? ["Não deu certo", error, "alert-error"]
+      ? [t("home.error"), error, "alert-error"]
       : state.notice
-        ? ["Aviso", state.notice, "alert-warning"]
-        : ["Envio", state.sync_notice, "alert-warning"];
+        ? [t("home.notice"), state.notice, "alert-warning"]
+        : [t("home.upload"), state.sync_notice, "alert-warning"];
     notice.hidden = !text;
     notice.className = `alert ${tone}`;
     $("#notice-title", notice).textContent = title;
@@ -294,7 +300,7 @@ export function mount(section, app) {
     const isRecording = state.status === "recording";
     const inNote = isRecording && state.recording_kind === "note";
     record.setAttribute("aria-pressed", String(isRecording));
-    if (!inNote) record.textContent = isRecording ? "Parar gravação" : "Iniciar gravação";
+    if (!inNote) record.textContent = isRecording ? t("home.stopRecording") : t("home.startRecording");
     note.hidden = !inNote;
     watchNote(inNote);
 
@@ -309,13 +315,13 @@ export function mount(section, app) {
       editedMarker = last;
       markerText.value = last.note ?? "";
     }
-    if (last) $("#note-marker-label", section).textContent = `Nota do marcador em ${timer(last.at_ms)}`;
+    if (last) $("#note-marker-label", section).textContent = t("note.markerLabel", { time: timer(last.at_ms) });
     if (!isRecording) editedMarker = null;
 
     const appAuto = isRecording && state.recording_auto ? state.recording_app : null;
     policy.hidden = !appAuto;
     if (appAuto) {
-      $("#policy-title", policy).textContent = `Reuniões no ${appAuto.label.replace(/^Microsoft /, "")}`;
+      $("#policy-title", policy).textContent = t("home.policyTitle", { app: appAuto.label.replace(/^Microsoft /, "") });
       $("#policy-options", policy).setAttribute("aria-label", appAuto.label);
       const current = settings?.apps.find((a) => a.app === appAuto.app)?.policy;
       for (const option of policy.querySelectorAll("input")) option.checked = option.value === current;
@@ -325,16 +331,16 @@ export function mount(section, app) {
   /** The account, as in frame "Main window": email and server label, version and sign-out. */
   function drawAccount(state) {
     const account = state.account;
-    $("#account-name", section).textContent = account?.email ?? "Conectado com um token pessoal";
+    $("#account-name", section).textContent = account?.email ?? t("home.tokenAccount");
     $("#account-server", section).textContent = serverLabel({ name: account?.server_name, url: state.web_url });
-    $("#account-action", section).textContent = state.connection === "account" ? "Sair" : "Servidor";
+    $("#account-action", section).textContent = state.connection === "account" ? t("home.signOut") : t("home.server");
   }
 
   function drawQueue(recordings, waits, now) {
     replace(
       queue,
       recordings.map((recording) => {
-        const { rotulo: label, tom: tone } = STATUSES[recording.status] ?? { rotulo: recording.status, tom: "neutral" };
+        const { rotulo: label, tom: tone } = queueStatuses()[recording.status] ?? { rotulo: recording.status, tom: "neutral" };
         const error = recording.status === "failed" && recording.last_error;
         // Uploaded less than 24 h ago with transcription queued on the server: why it waits.
         const wait = recording.status === "synced" && waitPhrase(waits?.[recording.remote_id], new Date(now));
@@ -350,10 +356,15 @@ export function mount(section, app) {
     );
     $("#queue-empty", section).hidden = recordings.length > 0;
     const uploaded = recordings.filter((g) => g.status === "synced").length;
-    $("#queue-summary", section).textContent = recordings.length ? `${uploaded} de ${recordings.length} enviadas` : "";
+    $("#queue-summary", section).textContent = recordings.length ? t("home.queueSummary", { uploaded, count: recordings.length }) : "";
   }
 
-  return {
+  app.onLocaleChange(() => {
+    if (app.state) view.refresh(app.state, app.queue);
+    if (meterPoll && lastReading) drawMeter(lastReading);
+  });
+
+  const view = {
     leave() {
       watchNote(false);
     },
@@ -378,7 +389,7 @@ export function mount(section, app) {
 
       prompt.hidden = !state.pending_ask;
       if (state.pending_ask) {
-        $("#prompt-text", prompt).textContent = `${state.pending_ask.label} está usando o microfone. Gravar?`;
+        $("#prompt-text", prompt).textContent = t("home.prompt", { app: state.pending_ask.label });
       }
 
       drawNotice(state);
@@ -388,4 +399,5 @@ export function mount(section, app) {
       recent.draw(app.recent);
     },
   };
+  return view;
 }

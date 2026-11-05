@@ -6,43 +6,15 @@
 // with Sign out, the address and, under Advanced, the API and extra CA). Tabs save each change,
 // except Server, which saves with a button.
 import { el, replace, $ } from "../dom.js";
+import { activeLocale, t } from "../i18n.js";
 import { keys } from "./home.js";
 import { serverLabel } from "./first-run.js";
 
-/** The subtitle of each app, as in frame "Settings · Meetings". */
-const APPS = {
-  teams: ["Microsoft Teams", "App ou aba do navegador"],
-  zoom: ["Zoom", "App ou aba do navegador"],
-  meet: ["Google Meet", "Aba do navegador"],
-  webex: ["Webex", "App ou aba do navegador"],
-  slack: ["Slack", "Chamadas"],
-  whatsapp: ["WhatsApp", "App ou aba do WhatsApp Web"],
-  navegador: ["Navegador", "Microfone em uso, reunião não reconhecida"],
-  outro: ["Outro app", "Ditado, gravadores de voz, jogos"],
-};
-
-/** The test button label for each source while idle (Stop during a test). */
-const TEST_LABELS = {
-  mic: "Fale para testar",
-  system: "Toque algo para testar",
-};
-
-/** The languages named by the Audio tab to show the account default. */
-const LANGUAGE_NAMES = {
-  auto: "Detectar automaticamente",
-  pt: "Português",
-  es: "Español",
-  en: "English",
-};
-
-/** None for the microphone or system audio. */
+/** Catalog keys use the app IDs returned by Rust. */
+const APPS = new Set(["teams", "zoom", "meet", "webex", "slack", "whatsapp", "navegador", "outro"]);
+const LANGUAGE_CODES = new Set(["auto", "pt", "es", "en"]);
 const NONE = "none";
-
-const POLICIES = [
-  ["auto", "Gravar"],
-  ["ask", "Confirmar"],
-  ["ignore", "Ignorar"],
-];
+const POLICIES = ["auto", "ask", "ignore"];
 
 /** The main key of a `KeyboardEvent.code`, in `global-hotkey` format; `null` if invalid. */
 function keyFromCode(code) {
@@ -68,19 +40,19 @@ export function combination(event) {
 /** The line explaining how shortcuts reach the app in this session; `null` in the usual
  * global mode. `created`: all GNOME shortcuts already exist. */
 export function modeText(mode, created) {
-  if (mode.mode === "portal") return "Pelo portal de atalhos do sistema. Se ele pedir, confirme as combinações.";
+  if (mode.mode === "portal") return t("settings.mode.portal");
   if (mode.mode !== "system") return null;
-  if (!mode.gnome) return "Nesta sessão (Wayland), crie no sistema um atalho para cada comando abaixo.";
+  if (!mode.gnome) return t("settings.mode.system");
   return created
-    ? "Nesta sessão (Wayland), os atalhos são do GNOME e chamam o eclume."
-    : "Nesta sessão (Wayland), o eclume não ouve o teclado sozinho: crie os atalhos no GNOME.";
+    ? t("settings.mode.created")
+    : t("settings.mode.create");
 }
 
 /** The connected status with last upload time, from the `test_connection` result. */
 export function connectionText(result) {
-  if (!result.last_upload_at) return "Conectado · nenhum envio ainda";
-  const time = new Date(result.last_upload_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  return `Conectado · último envio ${time}`;
+  if (!result.last_upload_at) return t("settings.connection.empty");
+  const time = new Date(result.last_upload_at).toLocaleTimeString(activeLocale(), { hour: "2-digit", minute: "2-digit" });
+  return t("settings.connection.upload", { time });
 }
 
 /** "41 MB", "1,2 GB". */
@@ -93,20 +65,20 @@ export function size(bytes) {
     i += 1;
   }
   const decimals = i >= 3 && value < 10 ? 1 : 0;
-  return `${value.toLocaleString("pt-BR", { maximumFractionDigits: decimals })} ${units[i]}`;
+  return `${value.toLocaleString(activeLocale(), { maximumFractionDigits: decimals })} ${units[i]}`;
 }
 
 /** The synced folder status line text, from the `mirror_status` result. */
 export function folderText(config, state) {
-  if (!config.mirror_enabled) return ["idle", "Desligada"];
-  if (!config.mirror_dir) return ["idle", "Escolha a pasta para começar"];
-  if (state?.running) return ["syncing", "Sincronizando…"];
+  if (!config.mirror_enabled) return ["idle", t("settings.folder.off")];
+  if (!config.mirror_dir) return ["idle", t("settings.folder.choose")];
+  if (state?.running) return ["syncing", t("settings.folder.syncing")];
   if (state?.last_error) return ["away", state.last_error];
-  if (!state?.last_sync_ms) return ["syncing", "Aguardando o primeiro ciclo"];
-  const time = new Date(state.last_sync_ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  if (!state?.last_sync_ms) return ["syncing", t("settings.folder.waiting")];
+  const time = new Date(state.last_sync_ms).toLocaleTimeString(activeLocale(), { hour: "2-digit", minute: "2-digit" });
   const n = state.last?.recordings ?? 0;
-  const loaded = n === 1 ? "1 gravação lida" : `${n} gravações lidas`;
-  return ["synced", `Sincronizada às ${time} · ${loaded} no último ciclo`];
+  const loaded = t("settings.folder.recordings", { count: n });
+  return ["synced", t("settings.folder.synced", { time, loaded })];
 }
 
 /** What `save_settings` receives, from the `settings` result and the changes. */
@@ -154,6 +126,7 @@ export function mount(section, app) {
   function openTab(name) {
     for (const tab of tabs) tab.setAttribute("aria-selected", String(tab.dataset.tab === name));
     for (const panel of panels) panel.hidden = panel.dataset.panel !== name;
+    drawLocale();
     showNotice(null);
     if (name !== "folder") stopFolderPoll();
     if (name === "storage") readStorage();
@@ -168,8 +141,9 @@ export function mount(section, app) {
   /** Name the default using the actual account language (Account default: Portuguese). */
   async function readAccountLanguage() {
     const language = await app.invoke("account_language").catch(() => null);
-    const name = language && (LANGUAGE_NAMES[language] ?? LANGUAGE_NAMES[language.split("-")[0]] ?? language);
-    $("#language-default", section).textContent = name ? `Padrão da conta: ${name}` : "Padrão da conta";
+    const code = language && (LANGUAGE_CODES.has(language) ? language : language.split("-")[0]);
+    const name = language && (LANGUAGE_CODES.has(code) ? t(`settings.languages.${code}`) : language);
+    $("#language-default", section).textContent = name ? t("settings.accountDefaultNamed", { name }) : t("settings.accountDefault");
   }
 
   async function save(changes, success) {
@@ -184,8 +158,9 @@ export function mount(section, app) {
   }
 
   function appRow(item) {
-    const [title, sub] = APPS[item.app] ?? [item.label, ""];
-    const name = `politica-${item.app}`;
+    const title = APPS.has(item.app) ? t(`settings.apps.${item.app}.title`) : item.label;
+    const sub = APPS.has(item.app) ? t(`settings.apps.${item.app}.subtitle`) : "";
+    const name = `policy-${item.app}`;
     return el(
       "div",
       { class: "list-row", dataset: { app: item.app } },
@@ -197,7 +172,7 @@ export function mount(section, app) {
         el(
           "span",
           { class: "seg", role: "radiogroup", "aria-label": title },
-          POLICIES.map(([value, label]) =>
+          POLICIES.map((value) =>
             el(
               "label",
               { class: "seg-opt" },
@@ -208,7 +183,7 @@ export function mount(section, app) {
                 checked: item.policy === value,
                 on: { change: () => changePolicy(item.app, value) },
               }),
-              label,
+              t(`settings.policy.${value}`),
             ),
           ),
         ),
@@ -225,14 +200,16 @@ export function mount(section, app) {
     const isCapturing = capturing === shortcut.action;
     const mode = config?.shortcut_mode ?? { mode: "global" };
     const command = mode.mode === "system" && !mode.gnome ? mode.commands.find((c) => c.action === shortcut.action) : null;
+    const registration = ["in_use", "unavailable", "system"].includes(shortcut.registration)
+      ? t(`settings.registration.${shortcut.registration}`) : shortcut.problem;
     return el(
       "div",
       { class: "list-row", dataset: { shortcut: shortcut.action } },
-      el("span", { class: "list-row-title" }, shortcut.label),
+      el("span", { class: "list-row-title" }, t(`settings.shortcut.${shortcut.action}`)),
       el(
         "span",
-        { class: "list-row-sub", "data-problem": Boolean(shortcut.problem) },
-        shortcut.problem ?? "Funciona com o eclume em segundo plano",
+        { class: "list-row-sub", "data-problem": Boolean(registration) },
+        registration ?? t("settings.shortcutBackground"),
       ),
       command ? el("code", { class: "code-block shortcut-command" }, command.command) : null,
       el(
@@ -241,7 +218,7 @@ export function mount(section, app) {
         el(
           "kbd",
           { class: "code-block kbd-shortcut", "data-capturing": isCapturing },
-          isCapturing ? "Pressione a combinação…" : keys(shortcut.keys),
+          isCapturing ? t("settings.capture") : keys(shortcut.keys),
         ),
         el(
           "button",
@@ -250,7 +227,7 @@ export function mount(section, app) {
             class: "btn btn-secondary btn-sm",
             on: { click: () => capture(isCapturing ? null : shortcut.action) },
           },
-          isCapturing ? "Cancelar" : "Alterar",
+          isCapturing ? t("settings.cancel") : t("settings.change"),
         ),
       ),
     );
@@ -271,7 +248,7 @@ export function mount(section, app) {
     row.textContent = text ?? "";
     const gnome = $("#shortcuts-gnome", section);
     gnome.hidden = !(mode.mode === "system" && mode.gnome);
-    gnome.textContent = created ? "Remover atalhos do GNOME" : "Criar atalhos no GNOME";
+    gnome.textContent = created ? t("settings.gnome.remove") : t("settings.gnome.create");
     gnome.dataset.create = String(!created);
     replace($("#shortcuts", section), shortcuts.map(shortcutRow));
   }
@@ -280,10 +257,10 @@ export function mount(section, app) {
     const button = $("#shortcuts-gnome", section);
     const create = button.dataset.create === "true";
     button.disabled = true;
-    button.textContent = create ? "Criando atalhos…" : "Removendo atalhos…";
+    button.textContent = create ? t("settings.gnome.creating") : t("settings.gnome.removing");
     try {
       config = await app.invoke("system_shortcuts", { install: create });
-      showNotice(create ? "Atalhos criados no GNOME." : "Atalhos removidos do GNOME.", "alert-success");
+      showNotice(create ? t("settings.gnome.created") : t("settings.gnome.removed"), "alert-success");
     } catch (failure) {
       showNotice(String(failure));
     }
@@ -304,7 +281,7 @@ export function mount(section, app) {
     const newKeys = combination(event);
     if (!newKeys) return;
     if (!/\+/.test(newKeys)) {
-      showNotice("Use Ctrl, Alt, Shift ou ⌘ junto da tecla.");
+      showNotice(t("settings.modifierRequired"));
       return;
     }
     const currentSettings = Object.fromEntries(config.shortcuts.map((a) => [a.action, a.keys]));
@@ -317,12 +294,12 @@ export function mount(section, app) {
     try {
       const list = await app.invoke("list_input_devices");
       const chosen = config?.mic ?? "";
-      const options = [el("option", { value: "" }, list.default ? `Padrão do sistema · ${list.default}` : "Padrão do sistema")];
+      const options = [el("option", { value: "" }, list.default ? t("settings.systemDefaultNamed", { name: list.default }) : t("settings.systemDefault"))];
       for (const name of list.names) options.push(el("option", { value: name }, name));
       if (chosen && chosen !== NONE && !list.names.includes(chosen)) {
-        options.push(el("option", { value: chosen }, `${chosen} (desconectado)`));
+        options.push(el("option", { value: chosen }, t("settings.disconnectedMic", { name: chosen })));
       }
-      options.push(el("option", { value: NONE }, "Nenhum"));
+      options.push(el("option", { value: NONE }, t("settings.none")));
       replace(microphone, options);
       microphone.value = chosen;
     } catch (failure) {
@@ -335,12 +312,12 @@ export function mount(section, app) {
       const list = await app.invoke("list_output_devices");
       const chosen = config?.system_source ?? "follow";
       const ids = list.devices.map((output) => output.id);
-      const options = [el("option", { value: "follow" }, "Seguir a saída em uso")];
+      const options = [el("option", { value: "follow" }, t("settings.followOutput"))];
       for (const output of list.devices) options.push(el("option", { value: output.id }, output.name));
       if (chosen !== "follow" && chosen !== NONE && !ids.includes(chosen)) {
-        options.push(el("option", { value: chosen }, `${chosen} (desconectada)`));
+        options.push(el("option", { value: chosen }, t("settings.disconnectedOutput", { name: chosen })));
       }
-      options.push(el("option", { value: NONE }, "Nenhum"));
+      options.push(el("option", { value: NONE }, t("settings.none")));
       replace(systemAudio, options);
       systemAudio.value = chosen;
     } catch (failure) {
@@ -360,7 +337,7 @@ export function mount(section, app) {
     const disabled = { mic: config?.mic === NONE, system: config?.system_source === NONE };
     for (const button of testButtons) {
       const source = button.dataset.source;
-      button.textContent = testing === source ? "Parar" : TEST_LABELS[source];
+      button.textContent = testing === source ? t("settings.stop") : t(`settings.test.${source}`);
       button.disabled = disabled[source] && testing !== source;
     }
   }
@@ -402,7 +379,14 @@ export function mount(section, app) {
     }, 100);
   }
 
+  function drawLocale() {
+    for (const option of section.querySelectorAll('input[name="locale"]')) {
+      option.checked = option.value === (app.state?.locale_choice ?? "");
+    }
+  }
+
   function draw() {
+    drawLocale();
     if (!config) return;
     // A rejected choice (both sources set to None) reverts to the saved values.
     if (microphone.options.length) microphone.value = config.mic ?? "";
@@ -413,10 +397,10 @@ export function mount(section, app) {
     $("#recent-count", section).value = String(config.recent_count ?? 5);
     $("#recent-tray-count", section).value = String(config.tray_recent_count ?? 1);
     $("#start-with-the-system", section).checked = config.autostart ?? true;
-    const tema = config.theme ?? "system";
-    for (const option of section.querySelectorAll('input[name="theme"]')) option.checked = option.value === tema;
-    const silencio = String(config.note_silence_s ?? 0);
-    for (const option of section.querySelectorAll('input[name="silence"]')) option.checked = option.value === silencio;
+    const theme = config.theme ?? "system";
+    for (const option of section.querySelectorAll('input[name="theme"]')) option.checked = option.value === theme;
+    const silence = String(config.note_silence_s ?? 0);
+    for (const option of section.querySelectorAll('input[name="silence"]')) option.checked = option.value === silence;
     drawShortcuts();
     $("#detect", section).checked = config.detection_enabled;
     replace($("#apps", section), config.apps.map(appRow));
@@ -435,7 +419,7 @@ export function mount(section, app) {
   }
 
   function drawCa() {
-    $("#server-ca", section).textContent = caPath ?? "Nenhuma";
+    $("#server-ca", section).textContent = caPath ?? t("settings.noneFemale");
     $("#server-ca-clear", section).hidden = !caPath;
   }
 
@@ -446,13 +430,13 @@ export function mount(section, app) {
     $("#server-account", section).textContent = account
       ? account.email
       : personal
-        ? "Conectado com um token pessoal"
-        : "Nenhuma conta neste computador";
+        ? t("settings.account.personal")
+        : t("settings.account.empty");
     $("#server-account-sub", section).textContent = account
-      ? `Conectado ao ${server}`
+      ? t("settings.account.connected", { server })
       : personal
-        ? "Entre com e-mail e senha para trocar o token pela conta"
-        : "Entre para enviar as gravações";
+        ? t("settings.account.replaceToken")
+        : t("settings.account.signInHint");
     $("#server-sign-in", section).hidden = config.connection === "account";
     $("#server-sign-out", section).hidden = config.connection === "first_run";
     $("#server-connection", section).hidden = true;
@@ -478,7 +462,7 @@ export function mount(section, app) {
     if (!config) return;
     $("#folder-enable", section).checked = config.mirror_enabled;
     $("#folder-transcripts", section).checked = config.mirror_transcripts;
-    $("#folder-path", section).textContent = config.mirror_dir ?? "Nenhuma";
+    $("#folder-path", section).textContent = config.mirror_dir ?? t("settings.noneFemale");
     const [status, text] = folderText(config, state);
     const row = $("#folder-estado", section);
     row.dataset.status = status;
@@ -491,7 +475,7 @@ export function mount(section, app) {
       const info = await app.invoke("storage_info");
       $("#folder-local", section).textContent = info.dir;
       const n = info.recordings;
-      $("#space-used", section).textContent = `${n === 1 ? "1 gravação" : `${n} gravações`} · ${size(info.bytes)} neste computador`;
+      $("#space-used", section).textContent = t("settings.storageUsed", { count: n, size: size(info.bytes) });
     } catch (failure) {
       showNotice(String(failure));
     }
@@ -521,6 +505,17 @@ export function mount(section, app) {
   $("#recent-tray-count", section).addEventListener("change", (event) =>
     save({ tray_recent_count: Number(event.target.value) }),
   );
+  for (const option of section.querySelectorAll('input[name="locale"]')) {
+    option.addEventListener("change", async () => {
+      try {
+        await app.invoke("set_locale", { choice: option.value || null });
+        await app.refresh();
+      } catch (failure) {
+        console.error(failure);
+        drawLocale();
+      }
+    });
+  }
   for (const option of section.querySelectorAll('input[name="theme"]')) {
     option.addEventListener("change", () => {
       app.setTheme(option.value);
@@ -549,7 +544,7 @@ export function mount(section, app) {
   days.addEventListener("change", () => {
     const value = Number(days.value);
     if (!Number.isInteger(value) || value < 1 || value > 3650) {
-      showNotice("Use de 1 a 3650 dias.");
+      showNotice(t("settings.invalidDays"));
       return;
     }
     save({ retention_days: value });
@@ -564,7 +559,7 @@ export function mount(section, app) {
   $("#retry", section).addEventListener("click", async () => {
     try {
       await app.invoke("sync_now");
-      showNotice("As falhas vão ser enviadas de novo.", "alert-success");
+      showNotice(t("settings.retrySuccess"), "alert-success");
     } catch (failure) {
       showNotice(String(failure));
     }
@@ -606,7 +601,7 @@ export function mount(section, app) {
         api_url: $("#server-api", section).value.trim() || null,
         ca_path: caPath,
       },
-      "Configurações do servidor salvas.",
+      t("settings.serverSaved"),
     );
   });
   $("#server-ca-choose", section).addEventListener("click", async () => {
@@ -626,7 +621,7 @@ export function mount(section, app) {
     const row = $("#server-connection", section);
     row.hidden = false;
     row.dataset.status = "syncing";
-    row.textContent = "Testando…";
+    row.textContent = t("settings.testing");
     try {
       const result = await app.invoke("test_connection");
       row.dataset.status = "synced";
@@ -648,7 +643,21 @@ export function mount(section, app) {
   });
   $("#server-sign-in", section).addEventListener("click", () => app.go("first-run"));
 
+  app.onLocaleChange(() => {
+    draw();
+    const activeTab = tabs.find((tab) => tab.getAttribute("aria-selected") === "true")?.dataset.tab;
+    if (activeTab === "audio") {
+      readMicrophones();
+      readOutputs();
+      readAccountLanguage();
+    }
+    if (activeTab === "storage") readStorage();
+  });
+
   return {
+    refresh() {
+      drawLocale();
+    },
     leave() {
       capturing = null;
       stopFolderPoll();

@@ -426,3 +426,79 @@ test("Sync: Sync now requests a cycle and displays its result; help opens the ar
     { command: 'open_help', args: { article: 'synced-folder' } },
   ])
 })
+
+test("General: language changes immediately and Automatic restores the resolved locale", async ({ open }) => {
+  const page = await open()
+  await page.locator('#open-settings').click()
+  const automatic = page.locator('input[name="locale"][value=""]')
+  const english = page.locator('input[name="locale"][value="en"]')
+  await expect(automatic).toBeChecked()
+  // A document marker survives locale changes, proving the window was not reloaded.
+  await page.evaluate(() => { document.documentElement.dataset.localeTest = 'same-document' })
+  await page.locator('#locale .seg-opt', { has: english }).click()
+  await expect(english).toBeChecked()
+  await expect(page.locator('[role="tab"]')).toHaveText(['General', 'Meetings', 'Audio', 'Storage', 'Folder', 'Server'])
+  expect((await calls(page)).filter((c) => c.command === 'set_locale')).toEqual([
+    { command: 'set_locale', args: { choice: 'en' } },
+  ])
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  await expect(page.locator('html')).toHaveAttribute('data-locale-test', 'same-document')
+
+  // Entering Settings again reflects the persisted explicit choice.
+  await page.locator('#config-back').click()
+  await page.locator('#open-settings').click()
+  await expect(english).toBeChecked()
+  await page.locator('#locale .seg-opt', { has: automatic }).click()
+  await expect(automatic).toBeChecked()
+  await expect(page.locator('[role="tab"]')).toHaveText(['Geral', 'Reuniões', 'Áudio', 'Armazenamento', 'Pasta', 'Servidor'])
+  await expect(page.locator('html')).toHaveAttribute('lang', 'pt-BR')
+  await expect(page.locator('html')).toHaveAttribute('data-locale-test', 'same-document')
+  expect((await calls(page)).filter((c) => c.command === 'set_locale')).toEqual([
+    { command: 'set_locale', args: { choice: 'en' } },
+    { command: 'set_locale', args: { choice: null } },
+  ])
+})
+
+test("Audio: shortcut labels and registration codes follow locale changes while unknown problems pass through", async ({ open }) => {
+  const page = await open('shortcutInUse')
+  await page.locator('#open-settings').click()
+  await page.locator('#locale .seg-opt', { hasText: 'English' }).click()
+  await page.locator('[data-tab="audio"]').click()
+  const rows = page.locator('#shortcuts .list-row')
+  await expect(rows.locator('.list-row-title')).toHaveText(['Start or stop recording', 'New note', 'Add marker'])
+  await expect(rows.nth(1).locator('.list-row-sub')).toHaveText('In use by another app')
+
+  // Simulate a resolved locale update while Audio is open.
+  await page.evaluate(() => {
+    const mock = (window as unknown as { __mock: {
+      state: { status: { locale: string; locale_choice: string | null } }
+      emit: (event: string) => void
+    } }).__mock
+    mock.state.status.locale = 'pt-BR'
+    mock.state.status.locale_choice = 'pt-BR'
+    mock.emit('status-changed')
+  })
+  await expect(rows.locator('.list-row-title')).toHaveText(['Iniciar ou parar a gravação', 'Nova nota', 'Adicionar marcador'])
+  await expect(rows.nth(1).locator('.list-row-sub')).toHaveText('Em uso por outro app')
+  await page.locator('[data-tab="general"]').click()
+  await expect(page.locator('input[name="locale"][value="pt-BR"]')).toBeChecked()
+
+  // A choice update with the same resolved locale must also refresh the radio group.
+  await page.evaluate(() => {
+    const mock = (window as unknown as { __mock: {
+      state: {
+        status: { locale_choice: string | null }
+        settings: { shortcuts: { registration: string; problem: string }[] }
+      }
+      emit: (event: string) => void
+    } }).__mock
+    mock.state.status.locale_choice = null
+    Object.assign(mock.state.settings.shortcuts[1], { registration: 'future_code', problem: 'Backend detail' })
+    mock.emit('status-changed')
+  })
+  await expect(page.locator('input[name="locale"][value=""]')).toBeChecked()
+  await page.locator('#config-back').click()
+  await page.locator('#open-settings').click()
+  await page.locator('[data-tab="audio"]').click()
+  await expect(rows.nth(1).locator('.list-row-sub')).toHaveText('Backend detail')
+})
