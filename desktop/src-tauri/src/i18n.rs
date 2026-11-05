@@ -237,6 +237,63 @@ pub struct Texts {
     pub state_awaiting_speakers: &'static str,
     pub state_ready: &'static str,
     pub state_cancelled: &'static str,
+    pub err_no_active_recording: &'static str,
+    pub err_import_running: &'static str,
+    pub err_no_audio: &'static str,
+    pub err_import_lost: &'static str,
+    pub err_server_not_configured: &'static str,
+    pub err_sign_out_first: &'static str,
+    pub err_choose_server: &'static str,
+    pub err_sign_in_to_test: &'static str,
+    pub err_url_not_https: &'static str,
+    pub err_server_changed: &'static str,
+    pub err_confirm_fingerprint: &'static str,
+    pub err_write_file: &'static str,
+    pub err_read_file: &'static str,
+    pub err_create_dir: &'static str,
+    pub err_queue_poisoned: &'static str,
+    pub err_mirror_dir_unset: &'static str,
+    pub err_choose_mirror_dir: &'static str,
+    pub err_mirror_dir_not_absolute: &'static str,
+    pub err_mirror_dir_root: &'static str,
+    pub err_mirror_dir_is_file: &'static str,
+    pub err_mirror_dir_home: &'static str,
+    pub err_api_address: &'static str,
+    pub err_retention: &'static str,
+    pub err_note_silence: &'static str,
+    pub err_theme: &'static str,
+    pub err_recent_window: &'static str,
+    pub err_recent_tray: &'static str,
+    pub err_transcription_language: &'static str,
+    pub err_choose_source: &'static str,
+    pub err_invalid_url: &'static str,
+    pub err_no_mic_chosen: &'static str,
+    pub err_no_output_chosen: &'static str,
+    pub err_note_needs_mic: &'static str,
+    pub err_open_mic: &'static str,
+    pub err_no_source_opened: &'static str,
+    pub missing_mic: &'static str,
+    pub missing_output: &'static str,
+    pub missing_mic_error: &'static str,
+    pub missing_system_error: &'static str,
+    pub notice_mic_lost: &'static str,
+    pub notice_config_unreadable: &'static str,
+    pub notice_recovered_one: &'static str,
+    pub notice_recovered_other: &'static str,
+    pub notice_recording_without: &'static str,
+    pub notice_close_failed: &'static str,
+    pub notice_stopped_sources: &'static str,
+    pub notice_stopped_failed: &'static str,
+    pub notice_keyring_unavailable: &'static str,
+    pub notice_ca_changed: &'static str,
+    pub notice_ca_trimmed: &'static str,
+    pub notice_sync_failed: &'static str,
+    pub notice_sign_in_one: &'static str,
+    pub notice_sign_in_other: &'static str,
+    pub notice_mirror_sign_in: &'static str,
+    pub mirror_transcripts_denied: &'static str,
+    pub mirror_failed_one: &'static str,
+    pub mirror_failed_other: &'static str,
 }
 
 pub const EN: Texts = Texts {
@@ -342,6 +399,63 @@ pub const EN: Texts = Texts {
     state_awaiting_speakers: "Awaiting speakers",
     state_ready: "Ready",
     state_cancelled: "Cancelled",
+    err_no_active_recording: "no recording in progress",
+    err_import_running: "An import is already in progress",
+    err_no_audio: "{path} has no audio",
+    err_import_lost: "import {id} vanished from the queue",
+    err_server_not_configured: "server not configured",
+    err_sign_out_first: "Sign out before changing the server or the CA",
+    err_choose_server: "Choose the server before signing in",
+    err_sign_in_to_test: "Sign in to test the connection",
+    err_url_not_https: "address without https: use https:// (http:// is only accepted on localhost)",
+    err_server_changed: "The chosen server changed; check the fingerprint again",
+    err_confirm_fingerprint: "Check the server fingerprint before signing in",
+    err_write_file: "failed to write {path}: {cause}",
+    err_read_file: "failed to read {path}: {cause}",
+    err_create_dir: "failed to create {path}: {cause}",
+    err_queue_poisoned: "the queue was poisoned by a panic",
+    err_mirror_dir_unset: "synced folder not chosen",
+    err_choose_mirror_dir: "Choose the summaries folder to turn on syncing",
+    err_mirror_dir_not_absolute: "The summaries folder must be a full path",
+    err_mirror_dir_root: "Choose a folder, not the disk root",
+    err_mirror_dir_is_file: "The summaries folder is a file",
+    err_mirror_dir_home: "Choose a subfolder, not the home folder",
+    err_api_address: "API address: {cause}",
+    err_retention: "retention above {days} days",
+    err_note_silence: "note silence stop: use 2, 4 or 8 s, or Never",
+    err_theme: "theme: use system, light or dark",
+    err_recent_window: "recent recordings in the window: at most {max}",
+    err_recent_tray: "recent recordings in the tray menu: at most {max}",
+    err_transcription_language: "transcription language: use pt, es, en or auto, or the account default",
+    err_choose_source: "Choose at least one audio source",
+    err_invalid_url: "invalid address: use http:// or https:// followed by the host",
+    err_no_mic_chosen: "No microphone chosen",
+    err_no_output_chosen: "No audio output chosen",
+    err_note_needs_mic: "A note needs a microphone",
+    err_open_mic: "failed to open the microphone: {cause}",
+    err_no_source_opened: "no audio source opened ({missing})",
+    missing_mic: "the microphone {name} (using the system default)",
+    missing_output: "the output {name} (following the output in use)",
+    missing_mic_error: "microphone: {error}",
+    missing_system_error: "system audio: {error}",
+    notice_mic_lost: "recording without the microphone: trying to reconnect",
+    notice_config_unreadable: "The settings were unreadable and went back to the defaults; the copy is at {path}",
+    notice_recovered_one: "{count} interrupted recording recovered",
+    notice_recovered_other: "{count} interrupted recordings recovered",
+    notice_recording_without: "recording without {missing}",
+    notice_close_failed: "failed to close the recording: {error}",
+    notice_stopped_sources: "the recording stopped: the audio sources disconnected",
+    notice_stopped_failed: "the recording stopped: recording failed",
+    notice_keyring_unavailable: "system keyring unavailable: the credential went to a file only you can read, in the configuration directory",
+    notice_ca_changed: "The server certificate changed",
+    notice_ca_trimmed: "The stored certificate of this server had one extra certificate: the first connection may have been intercepted. Sign in again and, on the web, change your password and unlink this device's old sign-in.",
+    notice_sync_failed: "Sync failed: {error}",
+    notice_sign_in_one: "Sign in to send {count} recording",
+    notice_sign_in_other: "Sign in to send {count} recordings",
+    notice_mirror_sign_in: "Sign in to sync the folder",
+    mirror_transcripts_denied: "Summaries synced, but the server does not yet let the app read transcripts (needs contract 2.8.0): update the server",
+    mirror_failed_one: "{count} recording could not be read; trying again in the next cycle",
+    mirror_failed_other: "{count} recordings could not be read; trying again in the next cycle",
 };
 
 pub const PT_BR: Texts = Texts {
@@ -448,6 +562,63 @@ pub const PT_BR: Texts = Texts {
     state_awaiting_speakers: "Aguardando locutores",
     state_ready: "Pronta",
     state_cancelled: "Cancelada",
+    err_no_active_recording: "nenhuma gravação em andamento",
+    err_import_running: "Já há uma importação em andamento",
+    err_no_audio: "{path} não tem áudio",
+    err_import_lost: "importação {id} sumiu da fila",
+    err_server_not_configured: "servidor não configurado",
+    err_sign_out_first: "Saia da conta antes de trocar o servidor ou a CA",
+    err_choose_server: "Escolha o servidor antes de entrar",
+    err_sign_in_to_test: "Entre para testar a conexão",
+    err_url_not_https: "endereço sem https: use https:// (http:// só vale em localhost)",
+    err_server_changed: "O servidor escolhido mudou; confira a impressão digital de novo",
+    err_confirm_fingerprint: "Confira a impressão digital do servidor antes de entrar",
+    err_write_file: "falha ao gravar {path}: {cause}",
+    err_read_file: "falha ao ler {path}: {cause}",
+    err_create_dir: "falha ao criar {path}: {cause}",
+    err_queue_poisoned: "fila envenenada por um pânico",
+    err_mirror_dir_unset: "pasta dos resumos não escolhida",
+    err_choose_mirror_dir: "Escolha a pasta dos resumos para ligar a sincronização",
+    err_mirror_dir_not_absolute: "A pasta dos resumos precisa ser um caminho completo",
+    err_mirror_dir_root: "Escolha uma pasta, não a raiz do disco",
+    err_mirror_dir_is_file: "A pasta dos resumos é um arquivo",
+    err_mirror_dir_home: "Escolha uma subpasta, não a pasta pessoal",
+    err_api_address: "endereço da API: {cause}",
+    err_retention: "retenção acima de {days} dias",
+    err_note_silence: "parada por silêncio da nota: use 2, 4 ou 8 s, ou Nunca",
+    err_theme: "tema: use system, light ou dark",
+    err_recent_window: "gravações recentes na janela: no máximo {max}",
+    err_recent_tray: "gravações recentes no menu da bandeja: no máximo {max}",
+    err_transcription_language: "idioma da transcrição: use pt, es, en ou auto, ou o padrão da conta",
+    err_choose_source: "Escolha ao menos uma fonte de áudio",
+    err_invalid_url: "endereço inválido: use http:// ou https:// seguido do host",
+    err_no_mic_chosen: "Nenhum microfone escolhido",
+    err_no_output_chosen: "Nenhuma saída de áudio escolhida",
+    err_note_needs_mic: "A nota precisa de um microfone",
+    err_open_mic: "falha ao abrir o microfone: {cause}",
+    err_no_source_opened: "nenhuma fonte de áudio abriu ({missing})",
+    missing_mic: "o microfone {name} (usando o padrão do sistema)",
+    missing_output: "a saída {name} (seguindo a saída em uso)",
+    missing_mic_error: "mic: {error}",
+    missing_system_error: "áudio do sistema: {error}",
+    notice_mic_lost: "gravando sem microfone: tentando reconectar",
+    notice_config_unreadable: "A configuração estava ilegível e voltou ao padrão; a cópia está em {path}",
+    notice_recovered_one: "{count} gravação interrompida recuperada",
+    notice_recovered_other: "{count} gravações interrompidas recuperadas",
+    notice_recording_without: "gravando sem {missing}",
+    notice_close_failed: "falha ao fechar a gravação: {error}",
+    notice_stopped_sources: "a gravação parou: as fontes de áudio caíram",
+    notice_stopped_failed: "a gravação parou: falha ao gravar",
+    notice_keyring_unavailable: "chaveiro do sistema indisponível: a credencial ficou num arquivo só seu, no diretório de configuração",
+    notice_ca_changed: "O certificado do servidor mudou",
+    notice_ca_trimmed: "O certificado guardado deste servidor tinha um certificado a mais: a primeira conexão pode ter sido interceptada. Entre de novo e, na web, troque a senha e desvincule a entrada antiga deste aparelho.",
+    notice_sync_failed: "Falha ao sincronizar: {error}",
+    notice_sign_in_one: "Entre para enviar {count} gravação",
+    notice_sign_in_other: "Entre para enviar {count} gravações",
+    notice_mirror_sign_in: "Entre na conta para sincronizar a pasta",
+    mirror_transcripts_denied: "Resumos sincronizados, mas o servidor ainda não permite que o app leia transcrições (precisa do contrato 2.8.0): atualize o servidor",
+    mirror_failed_one: "{count} gravação não pôde ser lida; nova tentativa no próximo ciclo",
+    mirror_failed_other: "{count} gravações não puderam ser lidas; nova tentativa no próximo ciclo",
 };
 
 impl Locale {
@@ -491,9 +662,252 @@ pub fn fill(text: &str, vars: &[(&str, &str)]) -> String {
     result
 }
 
+/// A catalog message with named arguments, raised as an error or kept as a notice. The raise
+/// site never knows the language: the window boundary (`commands.rs`) or the setter of a notice
+/// renders it with [`Msg::text`] in the resolved locale. `Display` is English, for logs and tests.
+pub struct Msg {
+    pick: fn(&Texts) -> &'static str,
+    args: Vec<(&'static str, Arg)>,
+}
+
+enum Arg {
+    Text(String),
+    List(Vec<Msg>),
+    Cause(std::sync::Arc<anyhow::Error>),
+}
+
+impl Msg {
+    pub fn new(pick: fn(&Texts) -> &'static str) -> Self {
+        Self {
+            pick,
+            args: Vec::new(),
+        }
+    }
+
+    /// A plain value (a path, a count, an OS error text).
+    pub fn arg(mut self, name: &'static str, value: impl std::fmt::Display) -> Self {
+        self.args.push((name, Arg::Text(value.to_string())));
+        self
+    }
+
+    /// Several messages, joined by `; ` in the rendered locale.
+    pub fn list(mut self, name: &'static str, items: Vec<Msg>) -> Self {
+        self.args.push((name, Arg::List(items)));
+        self
+    }
+
+    /// An underlying error, rendered as a chain in the rendered locale.
+    pub fn cause(mut self, name: &'static str, err: impl Into<anyhow::Error>) -> Self {
+        self.args
+            .push((name, Arg::Cause(std::sync::Arc::new(err.into()))));
+        self
+    }
+
+    pub fn text(&self, locale: Locale) -> String {
+        let rendered: Vec<(&str, String)> = self
+            .args
+            .iter()
+            .map(|(name, arg)| {
+                let value = match arg {
+                    Arg::Text(text) => text.clone(),
+                    Arg::List(items) => items
+                        .iter()
+                        .map(|item| item.text(locale))
+                        .collect::<Vec<_>>()
+                        .join("; "),
+                    Arg::Cause(err) => render(err, locale),
+                };
+                (*name, value)
+            })
+            .collect();
+        let vars: Vec<(&str, &str)> = rendered
+            .iter()
+            .map(|(name, value)| (*name, value.as_str()))
+            .collect();
+        fill((self.pick)(locale.texts()), &vars)
+    }
+}
+
+impl std::fmt::Debug for Msg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Msg({:?})", self.text(Locale::En))
+    }
+}
+
+impl std::fmt::Display for Msg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.text(Locale::En))
+    }
+}
+
+impl std::error::Error for Msg {}
+
+/// The error chain as `{err:#}` prints it (links joined by `: `), with every [`Msg`], the busy
+/// error and the pinned-CA constants of the sync crate written in `locale`.
+pub fn render(err: &anyhow::Error, locale: Locale) -> String {
+    err.chain()
+        .map(|link| link_text(link, locale))
+        .collect::<Vec<_>>()
+        .join(": ")
+}
+
+fn link_text(link: &(dyn std::error::Error + 'static), locale: Locale) -> String {
+    let texts = locale.texts();
+    if let Some(msg) = link.downcast_ref::<Msg>() {
+        return msg.text(locale);
+    }
+    if link.is::<crate::state::Busy>() {
+        return texts.busy_title.into();
+    }
+    let plain = link.to_string();
+    if plain == eclume_sync::pin::CA_CHANGED {
+        texts.notice_ca_changed.into()
+    } else if plain == eclume_sync::pin::CA_TRIMMED {
+        texts.notice_ca_trimmed.into()
+    } else {
+        plain
+    }
+}
+
 #[cfg(test)]
 mod catalog_tests {
     use super::*;
+    macro_rules! keys {
+        ($($key:ident),* $(,)?) => {
+            vec![$((stringify!($key), (|t: &Texts| t.$key) as fn(&Texts) -> &'static str)),*]
+        };
+    }
+
+    type Pick = fn(&Texts) -> &'static str;
+
+    fn message_keys() -> Vec<(&'static str, Pick)> {
+        keys![
+            err_no_active_recording,
+            err_import_running,
+            err_no_audio,
+            err_import_lost,
+            err_server_not_configured,
+            err_sign_out_first,
+            err_choose_server,
+            err_sign_in_to_test,
+            err_url_not_https,
+            err_server_changed,
+            err_confirm_fingerprint,
+            err_write_file,
+            err_read_file,
+            err_create_dir,
+            err_queue_poisoned,
+            err_mirror_dir_unset,
+            err_choose_mirror_dir,
+            err_mirror_dir_not_absolute,
+            err_mirror_dir_root,
+            err_mirror_dir_is_file,
+            err_mirror_dir_home,
+            err_api_address,
+            err_retention,
+            err_note_silence,
+            err_theme,
+            err_recent_window,
+            err_recent_tray,
+            err_transcription_language,
+            err_choose_source,
+            err_invalid_url,
+            err_no_mic_chosen,
+            err_no_output_chosen,
+            err_note_needs_mic,
+            err_open_mic,
+            err_no_source_opened,
+            missing_mic,
+            missing_output,
+            missing_mic_error,
+            missing_system_error,
+            notice_mic_lost,
+            notice_config_unreadable,
+            notice_recovered_one,
+            notice_recovered_other,
+            notice_recording_without,
+            notice_close_failed,
+            notice_stopped_sources,
+            notice_stopped_failed,
+            notice_keyring_unavailable,
+            notice_ca_changed,
+            notice_ca_trimmed,
+            notice_sync_failed,
+            notice_sign_in_one,
+            notice_sign_in_other,
+            notice_mirror_sign_in,
+            mirror_transcripts_denied,
+            mirror_failed_one,
+            mirror_failed_other
+        ]
+    }
+
+    fn placeholders(text: &str) -> Vec<String> {
+        let mut found: Vec<String> = text
+            .split('{')
+            .skip(1)
+            .filter_map(|part| part.split('}').next().map(str::to_string))
+            .collect();
+        found.sort();
+        found
+    }
+
+    #[test]
+    fn messages_are_filled_with_the_same_placeholders_in_both_locales() {
+        for (key, pick) in message_keys() {
+            let (en, pt) = (pick(&EN), pick(&PT_BR));
+            assert!(!en.is_empty() && !pt.is_empty(), "{key}");
+            assert_eq!(placeholders(en), placeholders(pt), "{key}");
+        }
+    }
+
+    #[test]
+    fn msg_renders_in_the_requested_locale_and_displays_english() {
+        let msg = Msg::new(|t| t.err_retention).arg("days", 30);
+        assert_eq!(msg.text(Locale::En), "retention above 30 days");
+        assert_eq!(msg.text(Locale::PtBr), "retenção acima de 30 dias");
+        assert_eq!(msg.to_string(), "retention above 30 days");
+    }
+
+    #[test]
+    fn render_translates_every_link_of_the_chain() {
+        let cause = anyhow::Error::new(Msg::new(|t| t.err_invalid_url));
+        let err = anyhow::Error::new(Msg::new(|t| t.err_api_address).cause("cause", cause));
+        assert_eq!(
+            render(&err, Locale::En),
+            "API address: invalid address: use http:// or https:// followed by the host"
+        );
+        assert_eq!(
+            render(&err, Locale::PtBr),
+            "endereço da API: endereço inválido: use http:// ou https:// seguido do host"
+        );
+    }
+
+    #[test]
+    fn render_keeps_foreign_text_and_maps_known_constants() {
+        let foreign = anyhow::anyhow!("disk full");
+        assert_eq!(render(&foreign, Locale::PtBr), "disk full");
+        let pinned = anyhow::anyhow!(eclume_sync::pin::CA_CHANGED);
+        assert_eq!(render(&pinned, Locale::En), EN.notice_ca_changed);
+        let busy = anyhow::Error::new(crate::state::Busy);
+        assert_eq!(render(&busy, Locale::PtBr), PT_BR.busy_title);
+    }
+
+    #[test]
+    fn list_arguments_join_the_rendered_items() {
+        let msg = Msg::new(|t| t.err_no_source_opened).list(
+            "missing",
+            vec![
+                Msg::new(|t| t.err_no_mic_chosen),
+                Msg::new(|t| t.err_no_output_chosen),
+            ],
+        );
+        assert_eq!(
+            msg.text(Locale::En),
+            "no audio source opened (No microphone chosen; No audio output chosen)"
+        );
+    }
+
     #[test]
     fn catalogs_are_complete() {
         for texts in [&EN, &PT_BR] {

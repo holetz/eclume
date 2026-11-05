@@ -1,10 +1,11 @@
 //! Tauri commands called by the window (`window.__TAURI__.core.invoke`).
 
 use eclume_recorder::{Marker, QueuedRecording};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::account::{Login, PreparedServer, RealNet, ServerChoice};
 use crate::capture::TestSource;
+use crate::i18n::{self, Locale};
 use crate::import::ImportPreview;
 
 use crate::state::{
@@ -13,13 +14,23 @@ use crate::state::{
 
 type CommandResult<T> = Result<T, String>;
 
-fn to_js<T>(result: anyhow::Result<T>) -> CommandResult<T> {
+/// The error text for the window, in the language the app resolved.
+fn to_js<T>(locale: Locale, result: anyhow::Result<T>) -> CommandResult<T> {
+    result.map_err(|err| i18n::render(&err, locale))
+}
+
+/// For commands that never raise catalog messages (device lists, import probe): the text as it is.
+fn to_js_plain<T>(result: anyhow::Result<T>) -> CommandResult<T> {
     result.map_err(|err| format!("{err:#}"))
+}
+
+fn locale_of(state: &AppState) -> Locale {
+    state.locale().unwrap_or(Locale::En)
 }
 
 #[tauri::command]
 pub fn status(state: State<'_, AppState>) -> CommandResult<StatusView> {
-    to_js(state.view())
+    to_js(locale_of(&state), state.view())
 }
 
 #[tauri::command]
@@ -27,7 +38,7 @@ pub fn recordings(
     state: State<'_, AppState>,
     limit: Option<u32>,
 ) -> CommandResult<Vec<QueuedRecording>> {
-    to_js(state.recordings(limit.unwrap_or(50)))
+    to_js(locale_of(&state), state.recordings(limit.unwrap_or(50)))
 }
 
 // `async`: opening devices can take seconds and must not block the UI thread.
@@ -38,19 +49,22 @@ pub fn toggle_recording(app: AppHandle, state: State<'_, AppState>) -> CommandRe
         .and_then(|choice| state.toggle_recording(|| crate::capture::open_sources(&choice)));
     crate::sync::nudge(&app);
     crate::refresh_ui(&app);
-    to_js(result.and_then(|()| state.view()))
+    to_js(locale_of(&state), result.and_then(|()| state.view()))
 }
 
 /// "New voice note": starts a note or stops the current one.
 #[tauri::command(async)]
 pub fn new_note(app: AppHandle) -> CommandResult<()> {
-    to_js(crate::toggle_note(&app))
+    to_js(
+        locale_of(&app.state::<AppState>()),
+        crate::toggle_note(&app),
+    )
 }
 
 /// The current voice note meter (`null` without a note), polled by the window every 100 ms.
 #[tauri::command]
 pub fn note_meter(state: State<'_, AppState>) -> CommandResult<Option<NoteMeter>> {
-    to_js(state.note_meter())
+    to_js(locale_of(&state), state.note_meter())
 }
 
 /// Marks the current recording time, with an optional note.
@@ -62,7 +76,7 @@ pub fn add_marker(
 ) -> CommandResult<Marker> {
     let result = state.add_marker(note);
     crate::refresh_ui(&app);
-    to_js(result)
+    to_js(locale_of(&state), result)
 }
 
 /// Changes the note of a marker in the current recording.
@@ -72,7 +86,7 @@ pub fn set_marker_note(
     client_id: String,
     note: Option<String>,
 ) -> CommandResult<Marker> {
-    to_js(state.set_marker_note(&client_id, note))
+    to_js(locale_of(&state), state.set_marker_note(&client_id, note))
 }
 
 /// The native import dialog; `null` when the user cancels.
@@ -84,7 +98,7 @@ pub fn pick_import_file(app: AppHandle) -> Option<String> {
 /// Reads file duration and date before confirmation.
 #[tauri::command(async)]
 pub fn probe_import(path: String) -> CommandResult<ImportPreview> {
-    to_js(crate::import::preview(std::path::Path::new(&path)))
+    to_js_plain(crate::import::preview(std::path::Path::new(&path)))
 }
 
 /// Converts and queues in the background; completion arrives through an event.
@@ -96,6 +110,7 @@ pub fn import_file(
     recorded_at_source: String,
 ) -> CommandResult<()> {
     to_js(
+        locale_of(&app.state::<AppState>()),
         crate::import::parse_source(&recorded_at_source)
             .and_then(|source| crate::import::spawn(&app, path.into(), recorded_at, source)),
     )
@@ -103,7 +118,7 @@ pub fn import_file(
 
 #[tauri::command]
 pub fn cancel_import(state: State<'_, AppState>) -> CommandResult<()> {
-    to_js(state.cancel_import())
+    to_js(locale_of(&state), state.cancel_import())
 }
 
 /// Opens a server help center article (`<web_url>/ajuda/<artigo>`), or the help center itself.
@@ -115,6 +130,7 @@ pub fn open_help(
 ) -> CommandResult<()> {
     use tauri_plugin_opener::OpenerExt;
     to_js(
+        locale_of(&state),
         state
             .web_url()
             .and_then(|web| crate::help_url(&web, article.as_deref()))
@@ -129,9 +145,9 @@ pub fn open_help(
 /// "Report a problem…": opens the log folder to attach `eclume.log`.
 #[tauri::command(async)]
 pub fn open_log_dir(app: AppHandle) -> CommandResult<()> {
-    use tauri::Manager;
     use tauri_plugin_opener::OpenerExt;
     to_js(
+        locale_of(&app.state::<AppState>()),
         app.path()
             .app_log_dir()
             .map_err(anyhow::Error::from)
@@ -145,7 +161,7 @@ pub fn open_log_dir(app: AppHandle) -> CommandResult<()> {
 
 #[tauri::command]
 pub fn open_web(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
-    to_js(crate::open_web(&app, &state))
+    to_js(locale_of(&state), crate::open_web(&app, &state))
 }
 
 /// The effective account transcription language (`GET /me/transcription`), so the Audio tab
@@ -162,7 +178,7 @@ pub fn account_language(state: State<'_, AppState>) -> Option<String> {
 
 #[tauri::command(async)]
 pub fn settings(state: State<'_, AppState>) -> CommandResult<SettingsView> {
-    to_js(state.settings())
+    to_js(locale_of(&state), state.settings())
 }
 
 #[tauri::command(async)]
@@ -186,7 +202,7 @@ pub fn save_settings(
         crate::recent::nudge(&app);
     }
     crate::refresh_ui(&app);
-    to_js(result.and_then(|_| state.settings()))
+    to_js(locale_of(&state), result.and_then(|_| state.settings()))
 }
 
 #[tauri::command]
@@ -197,7 +213,7 @@ pub fn set_locale(
 ) -> CommandResult<()> {
     let result = state.set_locale(choice);
     crate::refresh_ui(&app);
-    to_js(result)
+    to_js(locale_of(&state), result)
 }
 
 #[tauri::command]
@@ -208,7 +224,7 @@ pub fn report_system_locale(
 ) -> CommandResult<()> {
     let result = state.report_system_locale(&tag);
     crate::refresh_ui(&app);
-    to_js(result)
+    to_js(locale_of(&state), result)
 }
 
 /// "Create GNOME shortcuts" (`install`) or remove them, in Wayland `sistema` mode.
@@ -226,7 +242,7 @@ pub fn system_shortcuts(
         crate::shortcuts::remove_system()
     };
     crate::shortcuts::register(&app);
-    to_js(result.and_then(|()| state.settings()))
+    to_js(locale_of(&state), result.and_then(|()| state.settings()))
 }
 
 /// The window's answer to the detected meeting prompt.
@@ -244,7 +260,7 @@ pub struct MicDevices {
 
 #[tauri::command(async)]
 pub fn list_input_devices() -> CommandResult<MicDevices> {
-    to_js(
+    to_js_plain(
         eclume_audio_capture::list_input_devices().map(|devices| MicDevices {
             default: devices.default,
             names: devices.names,
@@ -267,7 +283,7 @@ pub struct OutputDevice {
 
 #[tauri::command(async)]
 pub fn list_output_devices() -> CommandResult<OutputDevices> {
-    to_js(eclume_audio_capture::list_output_devices().map(|devices| {
+    to_js_plain(eclume_audio_capture::list_output_devices().map(|devices| {
         OutputDevices {
             default: devices.default,
             devices: devices
@@ -287,24 +303,28 @@ pub fn list_output_devices() -> CommandResult<OutputDevices> {
 #[tauri::command(async)]
 pub fn source_test(state: State<'_, AppState>, source: TestSource) -> CommandResult<()> {
     let choice = state.audio_choice();
-    to_js(choice.and_then(|choice| {
-        state.start_source_test(
-            move || crate::capture::open_test_source(&choice, source),
-            crate::state::SOURCE_TEST,
-        )
-    }))
+    to_js(
+        locale_of(&state),
+        choice.and_then(|choice| {
+            state.start_source_test(
+                move || crate::capture::open_test_source(&choice, source),
+                crate::state::SOURCE_TEST,
+            )
+        }),
+    )
 }
 
 /// "Stop": ends the level test immediately.
 #[tauri::command]
 pub fn source_test_stop(state: State<'_, AppState>) -> CommandResult<()> {
-    to_js(state.stop_source_test())
+    to_js(locale_of(&state), state.stop_source_test())
 }
 
 /// The level test meter (`null` when finished), polled by the window every 100 ms.
 #[tauri::command]
 pub fn source_test_meter(state: State<'_, AppState>) -> CommandResult<Option<Vec<f32>>> {
     to_js(
+        locale_of(&state),
         state
             .source_test_meter()
             .map(|m| m.map(|levels| levels.to_vec())),
@@ -314,7 +334,7 @@ pub fn source_test_meter(state: State<'_, AppState>) -> CommandResult<Option<Vec
 /// How many recordings and how much space remain on this computer.
 #[tauri::command(async)]
 pub fn storage_info(state: State<'_, AppState>) -> CommandResult<StorageInfo> {
-    to_js(state.storage_info())
+    to_js(locale_of(&state), state.storage_info())
 }
 
 /// "Show": opens the recording folder in the file manager.
@@ -323,6 +343,7 @@ pub fn open_data_dir(app: AppHandle, state: State<'_, AppState>) -> CommandResul
     use tauri_plugin_opener::OpenerExt;
     let dir = state.data_dir();
     to_js(
+        locale_of(&state),
         std::fs::create_dir_all(dir)
             .map_err(anyhow::Error::from)
             .and_then(|()| {
@@ -338,18 +359,24 @@ pub fn open_data_dir(app: AppHandle, state: State<'_, AppState>) -> CommandResul
 pub fn dismiss_update_notice(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
     let result = state.dismiss_update_notice();
     crate::refresh_ui(&app);
-    to_js(result)
+    to_js(locale_of(&state), result)
 }
 
 #[tauri::command]
 pub fn sync_now(app: AppHandle) -> CommandResult<()> {
-    to_js(crate::sync::sync_now(&app))
+    to_js(
+        locale_of(&app.state::<AppState>()),
+        crate::sync::sync_now(&app),
+    )
 }
 
 /// The recent recordings panel at the top of the main window.
 #[tauri::command]
 pub fn recent(app: AppHandle) -> CommandResult<crate::recent::RecentView> {
-    to_js(crate::recent::view(&app))
+    to_js(
+        locale_of(&app.state::<AppState>()),
+        crate::recent::view(&app),
+    )
 }
 
 /// Requests a recent recordings refresh now (the main window just opened).
@@ -361,13 +388,19 @@ pub fn recent_refresh(app: AppHandle) {
 /// "Copy summary": places the current summary Markdown on the clipboard.
 #[tauri::command(async)]
 pub fn copy_summary(app: AppHandle, recording_id: String) -> CommandResult<()> {
-    to_js(crate::recent::copy_summary(&app, &recording_id))
+    to_js(
+        locale_of(&app.state::<AppState>()),
+        crate::recent::copy_summary(&app, &recording_id),
+    )
 }
 
 /// "Open on web": the recording page.
 #[tauri::command]
 pub fn open_recording(app: AppHandle, recording_id: String) -> CommandResult<()> {
-    to_js(crate::recent::open_recording(&app, &recording_id))
+    to_js(
+        locale_of(&app.state::<AppState>()),
+        crate::recent::open_recording(&app, &recording_id),
+    )
 }
 
 /// First-run servers: the installer server and, for up to 3 s, those announced on the network.
@@ -388,7 +421,10 @@ pub fn prepare_server(
     url: String,
     ca_sha256: Option<String>,
 ) -> CommandResult<PreparedServer> {
-    to_js(state.prepare_server(&RealNet, &url, ca_sha256.as_deref()))
+    to_js(
+        locale_of(&state),
+        state.prepare_server(&RealNet, &url, ca_sha256.as_deref()),
+    )
 }
 
 /// The user checked the chosen server fingerprint.
@@ -398,7 +434,10 @@ pub fn confirm_server(
     url: String,
     ca_sha256: Option<String>,
 ) -> CommandResult<()> {
-    to_js(state.confirm_server(&url, ca_sha256.as_deref()))
+    to_js(
+        locale_of(&state),
+        state.confirm_server(&url, ca_sha256.as_deref()),
+    )
 }
 
 /// Signs in to the chosen server with email and password.
@@ -434,7 +473,7 @@ fn signed_in(app: &AppHandle, result: anyhow::Result<()>) -> CommandResult<()> {
         }
     }
     crate::refresh_ui(app);
-    to_js(result)
+    to_js(locale_of(&app.state::<AppState>()), result)
 }
 
 /// "Sign out": deletes this computer's credential; the queue waits for the next sign-in.
@@ -442,13 +481,13 @@ fn signed_in(app: &AppHandle, result: anyhow::Result<()>) -> CommandResult<()> {
 pub fn sign_out(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
     let result = state.sign_out();
     crate::refresh_ui(&app);
-    to_js(result)
+    to_js(locale_of(&state), result)
 }
 
 /// "Test connection".
 #[tauri::command(async)]
 pub fn test_connection(state: State<'_, AppState>) -> CommandResult<ConnectionTest> {
-    to_js(state.test_connection(&RealNet))
+    to_js(locale_of(&state), state.test_connection(&RealNet))
 }
 
 /// "Choose…" for the extra CA: native dialog with a PEM filter; `null` when the user cancels.
@@ -480,7 +519,7 @@ pub fn pick_mirror_dir(app: AppHandle) -> Option<String> {
 /// Synced folder status: current cycle, last result and error.
 #[tauri::command]
 pub fn mirror_status(state: State<'_, AppState>) -> CommandResult<crate::state::MirrorStatus> {
-    to_js(state.mirror_status())
+    to_js(locale_of(&state), state.mirror_status())
 }
 
 /// "Sync now" for the synced folder: runs a cycle now, also checking the whole library.
@@ -493,10 +532,13 @@ pub fn mirror_sync_now(app: AppHandle) {
 #[tauri::command]
 pub fn open_signup(app: AppHandle, url: String) -> CommandResult<()> {
     use tauri_plugin_opener::OpenerExt;
-    to_js(crate::config::validate_web_url(url.trim()).and_then(|()| {
-        let signup = format!("{}/cadastro", url.trim().trim_end_matches('/'));
-        app.opener()
-            .open_url(&signup, None::<&str>)
-            .map_err(anyhow::Error::from)
-    }))
+    to_js(
+        locale_of(&app.state::<AppState>()),
+        crate::config::validate_web_url(url.trim()).and_then(|()| {
+            let signup = format!("{}/cadastro", url.trim().trim_end_matches('/'));
+            app.opener()
+                .open_url(&signup, None::<&str>)
+                .map_err(anyhow::Error::from)
+        }),
+    )
 }

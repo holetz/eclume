@@ -24,6 +24,7 @@ use eclume_sync::{Client, LibrarySummary, MissingScope, UploaderConfig};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
+use crate::i18n::{self, Locale, Msg};
 use crate::state::AppState;
 
 /// Interval between cycles.
@@ -383,20 +384,18 @@ pub fn sync_library(
 }
 
 /// What the tab shows besides Synced: nothing if all succeeded, or what was left out.
-pub fn status_note(report: &Report) -> Option<String> {
+pub fn status_note(report: &Report, locale: Locale) -> Option<String> {
     let mut notes = Vec::new();
     if report.transcripts_denied {
-        notes.push(
-            "Resumos sincronizados, mas o servidor ainda não permite que o app leia transcrições \
-             (precisa do contrato 2.8.0): atualize o servidor"
-                .to_string(),
-        );
+        notes.push(locale.texts().mirror_transcripts_denied.to_string());
     }
     if report.failed > 0 {
-        notes.push(format!(
-            "{} gravações não puderam ser lidas; nova tentativa no próximo ciclo",
-            report.failed
-        ));
+        let msg = if report.failed == 1 {
+            Msg::new(|t| t.mirror_failed_one)
+        } else {
+            Msg::new(|t| t.mirror_failed_other)
+        };
+        notes.push(msg.arg("count", report.failed).text(locale));
     }
     (!notes.is_empty()).then(|| notes.join(" · "))
 }
@@ -444,6 +443,7 @@ pub fn nudge(app: &AppHandle, sweep: bool) {
 
 fn tick(app: &AppHandle, sweep: bool) -> Result<()> {
     let state = app.state::<AppState>();
+    let locale = state.locale()?;
     let config = state.mirror_config()?;
     if !config.enabled {
         return Ok(());
@@ -451,11 +451,11 @@ fn tick(app: &AppHandle, sweep: bool) -> Result<()> {
     let dir = config
         .dir
         .clone()
-        .ok_or_else(|| anyhow!("pasta dos resumos não escolhida"))?;
+        .ok_or_else(|| anyhow!(Msg::new(|t| t.err_mirror_dir_unset)))?;
     let Some(uploader) = state.uploader_config()? else {
         state.update_mirror(|status| {
             status.running = false;
-            status.last_error = Some("Entre na conta para sincronizar a pasta".into());
+            status.last_error = Some(locale.texts().notice_mirror_sign_in.into());
         })?;
         return Ok(());
     };
@@ -476,10 +476,10 @@ fn tick(app: &AppHandle, sweep: bool) -> Result<()> {
     state.update_mirror(|status| match &result {
         Ok(report) => {
             status.last_sync_ms = Some(now_ms());
-            status.last_error = status_note(report);
+            status.last_error = status_note(report, locale);
             status.last = Some(*report);
         }
-        Err(err) => status.last_error = Some(format!("{err:#}")),
+        Err(err) => status.last_error = Some(i18n::render(err, locale)),
     })?;
     result.map(|_| ())
 }
@@ -844,7 +844,9 @@ mod tests {
         // The cursor advances and the failed item stays pending: retry it, rather than everything.
         assert_eq!(mirror.since(), Some("2026-09-19T11:58:00Z"));
         assert!(mirror.pending().contains("aaaaaaaa-1"));
-        assert!(status_note(&report).unwrap().contains("1 gravações"));
+        assert!(status_note(&report, Locale::En)
+            .unwrap()
+            .contains("1 recording could not be read"));
 
         // Still broken: another cycle retries only the pending item, without rereading the library.
         fake.calls.borrow_mut().clear();
@@ -989,9 +991,11 @@ mod tests {
         assert_eq!(*fake.transcript_calls.borrow(), 1);
         // The cursor advances (no full reread every minute) and the tab explains what is missing.
         assert_eq!(mirror.since(), Some("2026-09-19T11:58:00Z"));
-        let note = status_note(&report).unwrap();
+        let note = status_note(&report, Locale::En).unwrap();
+        assert!(note.contains("transcripts") && note.contains("contract 2.8.0"));
+        assert!(!note.contains("could not be read"));
+        let note = status_note(&report, Locale::PtBr).unwrap();
         assert!(note.contains("transcrições") && note.contains("contrato 2.8.0"));
-        assert!(!note.contains("não puderam ser lidas"));
 
         // The server is updated: the sweep fills in the missing transcripts.
         *fake.denied_transcripts.borrow_mut() = false;
@@ -1008,18 +1012,21 @@ mod tests {
                 .count(),
             3
         );
-        assert_eq!(status_note(&sweep), None);
+        assert_eq!(status_note(&sweep, Locale::En), None);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
     fn tab_note_combines_denial_and_failures() {
-        assert_eq!(status_note(&Report::default()), None);
+        assert_eq!(status_note(&Report::default(), Locale::En), None);
         let only_failures = Report {
             failed: 2,
             ..Report::default()
         };
-        assert!(status_note(&only_failures)
+        assert!(status_note(&only_failures, Locale::En)
+            .unwrap()
+            .starts_with("2 recordings could not"));
+        assert!(status_note(&only_failures, Locale::PtBr)
             .unwrap()
             .starts_with("2 gravações não puderam"));
         let both = Report {
@@ -1027,8 +1034,8 @@ mod tests {
             transcripts_denied: true,
             ..Report::default()
         };
-        let note = status_note(&both).unwrap();
-        assert!(note.contains("contrato 2.8.0") && note.contains(" · 1 gravações"));
+        let note = status_note(&both, Locale::En).unwrap();
+        assert!(note.contains("contract 2.8.0") && note.contains(" · 1 recording could not"));
     }
 
     #[test]
