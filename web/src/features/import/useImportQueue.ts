@@ -244,7 +244,7 @@ export function useImportQueue(): ImportQueue {
       const entry = runtime.current.get(id)
       if (entry) {
         entry.canceled = true
-        entry.controller?.abort(new DOMException('Import cancelado.', 'AbortError'))
+        entry.controller?.abort(new DOMException('Import cancelled.', 'AbortError'))
         if (entry.uploadId) void cancelUpload(entry.uploadId).catch(() => {})
         runtime.current.delete(id)
       }

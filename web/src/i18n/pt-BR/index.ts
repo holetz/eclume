@@ -7,6 +7,7 @@ import connect from './connect'
 import desktop from './desktop'
 import environment from './environment'
 import errors from './errors'
+import importCatalog from './import'
 import transcript from './transcript'
 import library from './library'
 import shared from './shared'
@@ -27,6 +28,7 @@ const catalogs: { [K in keyof typeof en]: unknown } = {
   desktop,
   library,
   transcript,
+  import: importCatalog,
 }
 
 export default catalogs
