@@ -12,6 +12,7 @@ v1) has its own line and each entry cites it.
 
 ### Added
 
+- Community files for the public repository: `SECURITY.md`, project rules in `CONTRIBUTING.md` and issue forms (#255).
 - Required speaker naming: with the account preference turned on, the agent chain waits for every
   speaker to have a name, with the `speakers` step and the "Aguardando locutores" notice (contract
   2.22.0, #144).
