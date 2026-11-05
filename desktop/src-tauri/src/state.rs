@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::account::{self, Login, Net, PreparedServer, SignedIn};
 use crate::capture::{AudioChoice, OpenedSources};
 use crate::config::{self, Account, Config, Connection, PendingUpdate};
-use crate::i18n::{self, Locale};
+use crate::i18n::{self, Locale, Msg};
 use crate::shortcuts::{Registration, Registrations, ShortcutAction, ShortcutMode, Shortcuts};
 
 /// Version of this build.
@@ -58,7 +58,7 @@ pub struct Busy;
 
 impl std::fmt::Display for Busy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Já há uma gravação em andamento")
+        f.write_str(i18n::EN.busy_title)
     }
 }
 
@@ -75,8 +75,11 @@ pub enum NoteToggle {
 /// How long the microphone can be unavailable before the notice: Bluetooth profile switching
 /// usually takes 1 to 3 s.
 const MIC_LOST_AFTER: Duration = Duration::from_secs(5);
-/// Window notice while the microphone is unavailable.
-const MIC_LOST_NOTICE: &str = "gravando sem microfone: tentando reconectar";
+/// Whether the window notice is the "microphone lost" one, in either language: it is cleared by
+/// equality, and the language may have changed since it was set.
+fn is_mic_lost_notice(notice: &str) -> bool {
+    notice == i18n::EN.notice_mic_lost || notice == i18n::PT_BR.notice_mic_lost
+}
 
 /// Microphone transition in the current recording, observed by [`AppState::watch_sources`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -554,18 +557,22 @@ impl AppState {
             config,
             pat,
         );
+        let locale = state.locale()?;
         let mut notices = Vec::new();
         if let Some(copy) = unreadable {
-            notices.push(format!(
-                "A configuração estava ilegível e voltou ao padrão; a cópia está em {}",
-                copy.display()
-            ));
+            notices.push(
+                Msg::new(|t| t.notice_config_unreadable)
+                    .arg("path", copy.display())
+                    .text(locale),
+            );
         }
         if !recovered.is_empty() {
-            notices.push(format!(
-                "{} gravação(ões) interrompida(s) recuperada(s)",
-                recovered.len()
-            ));
+            let notice = if recovered.len() == 1 {
+                Msg::new(|t| t.notice_recovered_one)
+            } else {
+                Msg::new(|t| t.notice_recovered_other)
+            };
+            notices.push(notice.arg("count", recovered.len()).text(locale));
         }
         let mut inner = state.inner()?;
         inner.update_to_notify = just_updated;
@@ -573,7 +580,7 @@ impl AppState {
         if ca_trimmed {
             // Same state as a changed CA: sync stopped and first run with the notice.
             inner.ca_changed = true;
-            inner.sync_notice = Some(eclume_sync::pin::CA_TRIMMED.into());
+            inner.sync_notice = Some(locale.texts().notice_ca_trimmed.into());
         }
         drop(inner);
         Ok(state)
@@ -826,7 +833,7 @@ impl AppState {
         let active = inner
             .active
             .as_ref()
-            .ok_or_else(|| anyhow!("nenhuma gravação em andamento"))?;
+            .ok_or_else(|| anyhow!(Msg::new(|t| t.err_no_active_recording)))?;
         let at_ms = active.progress().position_ms();
         self.lock_queue()?
             .add_marker(active.id(), at_ms, note.as_deref())
@@ -876,7 +883,7 @@ impl AppState {
         let opened = match opened {
             Ok(opened) => opened,
             Err(err) => {
-                inner.notice = Some(format!("{err:#}"));
+                inner.notice = Some(i18n::render(&err, resolved_locale(&inner.config)));
                 return Err(err);
             }
         };
@@ -886,8 +893,12 @@ impl AppState {
             queue.set_meeting_app(active.id(), app.meeting_app())?;
         }
         drop(queue);
-        inner.notice = (!opened.missing.is_empty())
-            .then(|| format!("gravando sem {}", opened.missing.join("; ")));
+        let locale = resolved_locale(&inner.config);
+        inner.notice = (!opened.missing.is_empty()).then(|| {
+            Msg::new(|t| t.notice_recording_without)
+                .list("missing", opened.missing)
+                .text(locale)
+        });
         inner.active = Some(active);
         inner.mic_lost = false;
         inner.origin = Some(origin);
@@ -905,7 +916,7 @@ impl AppState {
                 if inner.stopping.is_some() {
                     return Err(Busy.into());
                 }
-                bail!("nenhuma gravação em andamento");
+                bail!(Msg::new(|t| t.err_no_active_recording));
             };
             inner.stopping = Some(Stopping {
                 id: active.id().to_string(),
@@ -922,7 +933,12 @@ impl AppState {
         inner.mic_lost = false;
         inner.origin = None;
         if let Err(err) = &result {
-            inner.notice = Some(format!("falha ao fechar a gravação: {err:#}"));
+            let locale = resolved_locale(&inner.config);
+            inner.notice = Some(
+                Msg::new(|t| t.notice_close_failed)
+                    .arg("error", i18n::render(err, locale))
+                    .text(locale),
+            );
         }
         result
     }
@@ -958,7 +974,9 @@ impl AppState {
                 Reaped::NoteDiscarded
             }
             Some(StopReason::SourcesEnded) => {
-                self.inner()?.notice = Some("a gravação parou: as fontes de áudio caíram".into());
+                let mut inner = self.inner()?;
+                let locale = resolved_locale(&inner.config);
+                inner.notice = Some(locale.texts().notice_stopped_sources.into());
                 Reaped::Stopped {
                     recording,
                     reason: StopReason::SourcesEnded,
@@ -966,7 +984,9 @@ impl AppState {
             }
             // Without a reason, the recording thread panicked: counts as a failure.
             _ => {
-                self.inner()?.notice = Some("a gravação parou: falha ao gravar".into());
+                let mut inner = self.inner()?;
+                let locale = resolved_locale(&inner.config);
+                inner.notice = Some(locale.texts().notice_stopped_failed.into());
                 Reaped::Stopped {
                     recording,
                     reason: StopReason::Failed,
@@ -1000,7 +1020,8 @@ impl AppState {
                 self.lock_queue()?
                     .add_marker(&id, at_ms, Some("microfone perdido"))?;
                 inner.mic_lost = true;
-                inner.notice = Some(MIC_LOST_NOTICE.into());
+                let locale = resolved_locale(&inner.config);
+                inner.notice = Some(locale.texts().notice_mic_lost.into());
                 log::warn!("recording {id}: microphone unavailable for {out_ms} ms");
                 MicChange::Lost
             }
@@ -1008,7 +1029,7 @@ impl AppState {
                 self.lock_queue()?
                     .add_marker(&id, position_ms, Some("microfone de volta"))?;
                 inner.mic_lost = false;
-                if inner.notice.as_deref() == Some(MIC_LOST_NOTICE) {
+                if inner.notice.as_deref().is_some_and(is_mic_lost_notice) {
                     inner.notice = None;
                 }
                 log::info!("recording {id}: microphone back");
@@ -1247,7 +1268,7 @@ impl AppState {
     pub fn begin_import(&self) -> Result<Arc<AtomicBool>> {
         let mut inner = self.inner()?;
         if inner.importing.is_some() {
-            bail!("Já há uma importação em andamento");
+            bail!(Msg::new(|t| t.err_import_running));
         }
         let cancel = Arc::new(AtomicBool::new(false));
         inner.importing = Some(Arc::clone(&cancel));
@@ -1274,7 +1295,7 @@ impl AppState {
     ) -> Result<QueuedRecording> {
         let probe = eclume_import::probe(src)?;
         if !probe.has_audio {
-            bail!("{} não tem áudio", src.display());
+            bail!(Msg::new(|t| t.err_no_audio).arg("path", src.display()));
         }
         let id = import_id();
         let converted = eclume_import::convert(src, &self.recorder.dir, &id, cancel, progress)?;
@@ -1296,7 +1317,7 @@ impl AppState {
         })?;
         queue
             .get(&id)?
-            .ok_or_else(|| anyhow!("importação {id} sumiu da fila"))
+            .ok_or_else(|| anyhow!(Msg::new(|t| t.err_import_lost).arg("id", &id)))
     }
 
     /// Recordings folder.
@@ -1337,7 +1358,7 @@ impl AppState {
     pub fn web_url(&self) -> Result<String> {
         let url = self.view()?.web_url;
         if url.is_empty() {
-            bail!("servidor não configurado");
+            bail!(Msg::new(|t| t.err_server_not_configured));
         }
         Ok(url)
     }
@@ -1466,7 +1487,7 @@ impl AppState {
         };
         if moved && !input.clear_pat {
             // The device credential and pinned CA apply to this server, not another.
-            bail!("Saia da conta antes de trocar o servidor ou a CA");
+            bail!(Msg::new(|t| t.err_sign_out_first));
         }
 
         let saved = if input.clear_pat {
@@ -1492,11 +1513,9 @@ impl AppState {
     fn save_secret(&self, secret: &str) -> Result<PatSource> {
         let source = self.pat.save(secret)?;
         if source == PatSource::File {
-            self.inner()?.notice = Some(
-                "chaveiro do sistema indisponível: a credencial ficou num arquivo só seu, no \
-                 diretório de configuração"
-                    .into(),
-            );
+            let mut inner = self.inner()?;
+            let locale = resolved_locale(&inner.config);
+            inner.notice = Some(locale.texts().notice_keyring_unavailable.into());
         }
         Ok(source)
     }
@@ -1519,7 +1538,7 @@ impl AppState {
     pub fn confirm_server(&self, url: &str, ca_sha256: Option<&str>) -> Result<()> {
         match self.inner()?.prepared.as_mut() {
             Some(server) => account::confirm(server, url, ca_sha256),
-            None => bail!("Escolha o servidor antes de entrar"),
+            None => bail!(Msg::new(|t| t.err_choose_server)),
         }
     }
 
@@ -1589,7 +1608,8 @@ impl AppState {
     pub fn mark_ca_changed(&self) -> Result<()> {
         let mut inner = self.inner()?;
         inner.ca_changed = true;
-        inner.sync_notice = Some(eclume_sync::pin::CA_CHANGED.into());
+        let locale = resolved_locale(&inner.config);
+        inner.sync_notice = Some(locale.texts().notice_ca_changed.into());
         Ok(())
     }
 
@@ -1597,7 +1617,7 @@ impl AppState {
     pub fn test_connection(&self, net: &dyn Net) -> Result<ConnectionTest> {
         let account = self.inner()?.config.account.clone();
         let Some(config) = self.uploader_config()? else {
-            bail!("Entre para testar a conexão");
+            bail!(Msg::new(|t| t.err_sign_in_to_test));
         };
         let retry = RetryPolicy {
             retries: 0,
@@ -1677,6 +1697,13 @@ mod tests {
         (state, dir)
     }
 
+    /// A state whose language is English, so the notices do not depend on the test machine.
+    fn state_en(name: &str) -> (AppState, PathBuf) {
+        let (state, dir) = state(name);
+        state.set_locale(Some("en".into())).unwrap();
+        (state, dir)
+    }
+
     fn sine_sources(seconds: u64) -> Result<OpenedSources> {
         Ok(OpenedSources {
             sources: vec![Box::new(SineSource::new(
@@ -1685,7 +1712,7 @@ mod tests {
                 0.3,
                 Duration::from_secs(seconds),
             ))],
-            missing: vec!["áudio do sistema: teste".into()],
+            missing: vec![Msg::new(|t| t.missing_system_error).arg("error", "teste")],
         })
     }
 
@@ -1822,7 +1849,7 @@ mod tests {
             });
         }
 
-        let (state, dir) = state("microfone");
+        let (state, dir) = state_en("microfone");
         let stop = Arc::new(AtomicBool::new(false));
         let back = Arc::new(AtomicBool::new(false));
         let (writer, first) = ring::channel(1 << 14, 16_000);
@@ -1866,7 +1893,7 @@ mod tests {
         assert_eq!(lost, Some(MicChange::Lost));
         let view = state.view().unwrap();
         assert!(view.mic_lost);
-        assert_eq!(view.notice.as_deref(), Some(MIC_LOST_NOTICE));
+        assert_eq!(view.notice.as_deref(), Some(i18n::EN.notice_mic_lost));
         let marker = view.last_marker.unwrap();
         assert_eq!(marker.note.as_deref(), Some("microfone perdido"));
         // At disconnection (~0.5 s of audio), rather than at the notice.
@@ -1981,7 +2008,7 @@ mod tests {
 
     #[test]
     fn state_toggles_between_idle_recording_and_idle() {
-        let (state, dir) = state("alterna");
+        let (state, dir) = state_en("alterna");
         assert_eq!(state.status().unwrap(), AppStatus::Idle);
 
         state.toggle_recording(|| sine_sources(60)).unwrap();
@@ -1991,7 +2018,7 @@ mod tests {
         assert!(!view.recording_auto);
         assert_eq!(
             view.notice.as_deref(),
-            Some("gravando sem áudio do sistema: teste")
+            Some("recording without system audio: teste")
         );
         assert!(state.start_recording(|| sine_sources(1)).is_err());
 
@@ -2122,9 +2149,10 @@ mod tests {
 
         let state = AppState::open(&dir, &dir).unwrap();
         let notice = state.view().unwrap().notice.unwrap();
+        // The language comes from the environment of the test machine.
         assert!(
-            notice
-                .starts_with("A configuração estava ilegível e voltou ao padrão; a cópia está em"),
+            notice.starts_with("The settings were unreadable and went back to the defaults")
+                || notice.starts_with("A configuração estava ilegível e voltou ao padrão"),
             "{notice}"
         );
         let copies = std::fs::read_dir(&dir)
@@ -2247,7 +2275,7 @@ mod tests {
         state.start_recording(|| sine_sources(60)).unwrap();
         let err = state.toggle_note(|| mic(0, 1)).unwrap_err();
         assert!(err.is::<Busy>());
-        assert_eq!(err.to_string(), "Já há uma gravação em andamento");
+        assert_eq!(err.to_string(), "A recording is already in progress");
         assert_eq!(state.view().unwrap().recording_kind, Some(Kind::Meeting));
         assert!(state.note_meter().unwrap().is_none());
         state.stop_recording().unwrap();
@@ -2256,7 +2284,7 @@ mod tests {
 
     #[test]
     fn state_records_notice_without_sources() {
-        let (state, _dir) = state("sem-fontes");
+        let (state, _dir) = state_en("sem-fontes");
         assert!(state.start_recording(|| bail!("nenhuma fonte")).is_err());
         assert_eq!(state.status().unwrap(), AppStatus::Idle);
         assert_eq!(
@@ -2322,7 +2350,7 @@ mod tests {
 
     #[test]
     fn settings_save_config_and_pat_and_validate() {
-        let (state, dir) = state("config");
+        let (state, dir) = state_en("config");
         assert!(state.uploader_config().unwrap().is_none());
         assert_eq!(state.settings().unwrap().pat_source, None);
 
@@ -2344,7 +2372,7 @@ mod tests {
         assert!(!serde_json::to_string(&settings)
             .unwrap()
             .contains("eclp_segredo"));
-        assert!(state.view().unwrap().notice.unwrap().contains("chaveiro"));
+        assert!(state.view().unwrap().notice.unwrap().contains("keyring"));
         let uploader = state.uploader_config().unwrap().unwrap();
         assert_eq!(uploader.pat, "eclp_segredo");
         assert_eq!(uploader.client_version, CLIENT_VERSION);
@@ -2492,7 +2520,7 @@ mod tests {
 
     #[test]
     fn import_without_audio_or_cancelled_is_not_queued() {
-        let (state, dir) = state("importa-nao");
+        let (state, dir) = state_en("importa-nao");
         let err = state
             .import_file(
                 &fixture("no-audio.mp4"),
@@ -2502,7 +2530,7 @@ mod tests {
                 |_| {},
             )
             .unwrap_err();
-        assert!(err.to_string().contains("não tem áudio"), "{err}");
+        assert!(err.to_string().contains("has no audio"), "{err}");
 
         let cancel = state.begin_import().unwrap();
         state.cancel_import().unwrap();
@@ -2588,7 +2616,7 @@ mod tests {
 
     #[test]
     fn audio_selects_microphone_system_and_silence() {
-        let (state, dir) = state("audio");
+        let (state, dir) = state_en("audio");
         assert_eq!(state.audio_choice().unwrap(), AudioChoice::default());
         let mut input = settings_input(&state);
         input.mic = Some("Jabra Evolve2 65".into());
@@ -2634,7 +2662,7 @@ mod tests {
         input.mic = Some(config::SOURCE_NONE.into());
         input.system_source = Some(config::SOURCE_NONE.into());
         let err = state.save_settings(input).unwrap_err();
-        assert_eq!(err.to_string(), "Escolha ao menos uma fonte de áudio");
+        assert_eq!(err.to_string(), "Choose at least one audio source");
         let mut input = settings_input(&state);
         input.mic = Some(config::SOURCE_NONE.into());
         input.system_source = Some(String::new());
@@ -2839,7 +2867,7 @@ mod tests {
             body, credential, info, pem, ScriptNet, Shared, CA_SHA256, SECRET, URL,
         };
 
-        let (state, dir) = state("conta");
+        let (state, dir) = state_en("conta");
         std::fs::create_dir_all(&dir).unwrap();
         assert_eq!(state.view().unwrap().connection, Connection::FirstRun);
         let err = state
@@ -2848,7 +2876,7 @@ mod tests {
                 Login::Code("K7Q4MX"),
             )
             .unwrap_err();
-        assert_eq!(err.to_string(), "Escolha o servidor antes de entrar");
+        assert_eq!(err.to_string(), "Choose the server before signing in");
 
         let net = std::sync::Arc::new(
             ScriptNet::default()
@@ -2917,7 +2945,7 @@ mod tests {
         assert_eq!(view.connection, Connection::FirstRun);
         assert_eq!(
             view.sync_notice.as_deref(),
-            Some("O certificado do servidor mudou")
+            Some(i18n::EN.notice_ca_changed)
         );
 
         // Signing out deletes the credential, but keeps the queue and server.
@@ -3062,6 +3090,7 @@ mod tests {
                 token_id: Some("t-1".into()),
                 server_name: None,
             }),
+            locale: Some("en".into()),
             ..Config::default()
         }
         .save(&dir.join("config.json"))
@@ -3081,7 +3110,7 @@ mod tests {
         assert_eq!(view.connection, Connection::FirstRun);
         assert_eq!(
             view.sync_notice.as_deref(),
-            Some(eclume_sync::pin::CA_TRIMMED)
+            Some(i18n::EN.notice_ca_trimmed)
         );
         assert!(state.uploader_config().unwrap().is_none());
         assert!(!dir.join(eclume_sync::pat::PAT_FILE).exists());
