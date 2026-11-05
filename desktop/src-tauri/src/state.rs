@@ -677,7 +677,10 @@ impl AppState {
             recording_app: origin
                 .and_then(|o| o.app)
                 .map(|app| MeetingView::new(app, locale)),
-            meeting: inner.auto.meeting().map(|app| MeetingView::new(app, locale)),
+            meeting: inner
+                .auto
+                .meeting()
+                .map(|app| MeetingView::new(app, locale)),
             pending_ask: inner
                 .auto
                 .pending_ask()

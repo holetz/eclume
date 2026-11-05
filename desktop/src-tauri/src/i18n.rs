@@ -78,7 +78,11 @@ mod tests {
             Some("C")
         );
         assert_eq!(
-            resolve(None, None, first_set(env(&[("LC_ALL", "C"), ("LANG", "pt_BR.UTF-8")])).as_deref()),
+            resolve(
+                None,
+                None,
+                first_set(env(&[("LC_ALL", "C"), ("LANG", "pt_BR.UTF-8")])).as_deref()
+            ),
             Locale::En
         );
         assert_eq!(
