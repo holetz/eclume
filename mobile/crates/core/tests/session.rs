@@ -1,11 +1,11 @@
 //! The recording session through the core, with a synthetic source in place of the microphone.
 
-mod comum;
+mod common;
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use comum::{temp_dirs, FakeTransports, Script};
+use common::{temp_dirs, FakeTransports, Script};
 use eclume_mobile_core::session::MicState;
 use eclume_mobile_core::{Badge, Core, StopReason};
 use eclume_recorder::source::SineSource;

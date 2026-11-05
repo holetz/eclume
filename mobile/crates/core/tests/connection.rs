@@ -1,10 +1,10 @@
 //! The link with the server through the three paths, with scripted transports.
 
-mod comum;
+mod common;
 
 use std::sync::Arc;
 
-use comum::{json, temp_dirs, FakeTransports, Script, CA_PEM, CA_SHA256};
+use common::{json, temp_dirs, FakeTransports, Script, CA_PEM, CA_SHA256};
 use eclume_mobile_core::config::Config;
 use eclume_mobile_core::connection::{Connection, ConnectionState};
 
@@ -22,7 +22,7 @@ fn server_ok(script: &Script) {
     );
 }
 
-fn credential() -> comum::Reply {
+fn credential() -> common::Reply {
     json(
         201,
         serde_json::json!({
@@ -40,7 +40,7 @@ fn typed_address_checks_trusts_and_signs_in() {
     script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::text(200, CA_PEM),
+        common::text(200, CA_PEM),
     );
     server_ok(&script);
     script.reply("POST", "/api/v1/devices/login", credential());
@@ -100,7 +100,7 @@ fn discovered_with_a_ca_other_than_announced_is_refused() {
     script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::text(200, CA_PEM),
+        common::text(200, CA_PEM),
     );
     let config = Config::default();
     let mut connection = Connection::new(dirs, Arc::new(FakeTransports(script)));
@@ -127,7 +127,7 @@ fn qr_pairs_without_password_or_check() {
     script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::text(200, CA_PEM),
+        common::text(200, CA_PEM),
     );
     server_ok(&script);
     script.reply("POST", "/api/v1/devices/pair", credential());
@@ -162,7 +162,7 @@ fn token_stays_in_memory_until_sign_out_or_refusal() {
     script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::text(200, CA_PEM),
+        common::text(200, CA_PEM),
     );
     server_ok(&script);
     script.reply("POST", "/api/v1/devices/pair", credential());
@@ -213,7 +213,7 @@ fn root_served_with_two_certificates_writes_only_the_first() {
     script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::text(200, &format!("{CA_PEM}{other}")),
+        common::text(200, &format!("{CA_PEM}{other}")),
     );
     server_ok(&script);
     let mut config = Config::default();
@@ -232,7 +232,7 @@ fn ca_swapped_on_the_server_is_refused_on_trust() {
     script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::text(200, CA_PEM),
+        common::text(200, CA_PEM),
     );
     script.reply(
         "GET",
@@ -260,7 +260,7 @@ fn qr_without_ca_waits_for_the_check_before_the_code() {
     script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::text(200, CA_PEM),
+        common::text(200, CA_PEM),
     );
     server_ok(&script);
     script.reply("POST", "/api/v1/devices/pair", credential());
@@ -297,7 +297,7 @@ fn refused_login_shows_the_reason() {
     script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::text(200, CA_PEM),
+        common::text(200, CA_PEM),
     );
     server_ok(&script);
     script.reply(

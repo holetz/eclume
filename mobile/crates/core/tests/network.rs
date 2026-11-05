@@ -1,12 +1,12 @@
 //! Eclume's network and the sync, without a network: the state machine, the probe and a full sync
 //! pass through the scripted transport.
 
-mod comum;
+mod common;
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use comum::{json, temp_dirs, Script, CA_SHA256};
+use common::{json, temp_dirs, Script, CA_SHA256};
 use eclume_mobile_core::config::Server;
 use eclume_mobile_core::network::{probe, Network, NetworkState, Probe, Progress};
 use eclume_mobile_core::sync::{
@@ -96,12 +96,12 @@ fn probe_checks_the_fingerprint() {
     assert_eq!(probe(Arc::new(script.clone()), &server()), Probe::Ok);
     script.reply("GET", "/api/v1/server", info(&"11".repeat(32)));
     assert_eq!(probe(Arc::new(script.clone()), &server()), Probe::CaChanged);
-    script.reply("GET", "/api/v1/server", comum::failure("tempo esgotado"));
+    script.reply("GET", "/api/v1/server", common::failure("tempo esgotado"));
     assert_eq!(probe(Arc::new(script.clone()), &server()), Probe::NoAnswer);
     script.reply(
         "GET",
         "/api/v1/server",
-        comum::failure("invalid peer certificate: UnknownIssuer"),
+        common::failure("invalid peer certificate: UnknownIssuer"),
     );
     assert_eq!(probe(Arc::new(script), &server()), Probe::CaChanged);
 }
@@ -427,7 +427,7 @@ fn update_through_movel_json_checks_the_apk() {
     let script = Script::default();
     assert_eq!(
         {
-            script.reply("GET", "/downloads/movel.json", comum::text(404, ""));
+            script.reply("GET", "/downloads/movel.json", common::text(404, ""));
             fetch_manifest(&script, &server()).unwrap()
         },
         None
@@ -485,7 +485,13 @@ fn update_through_movel_json_checks_the_apk() {
 }
 
 /// A connected core with a credential, over a script with the probe and the agenda types.
-fn connected_core(name: &str) -> (Arc<Mutex<eclume_mobile_core::Core>>, Script, comum::Cleanup) {
+fn connected_core(
+    name: &str,
+) -> (
+    Arc<Mutex<eclume_mobile_core::Core>>,
+    Script,
+    common::Cleanup,
+) {
     use eclume_mobile_core::{lock, Core};
 
     let (dirs, guard) = temp_dirs(name);
@@ -493,7 +499,7 @@ fn connected_core(name: &str) -> (Arc<Mutex<eclume_mobile_core::Core>>, Script, 
     script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::text(200, comum::CA_PEM),
+        common::text(200, common::CA_PEM),
     );
     script.reply(
         "GET",
@@ -528,12 +534,12 @@ fn connected_core(name: &str) -> (Arc<Mutex<eclume_mobile_core::Core>>, Script, 
             serde_json::json!({"language": null, "platform_default": "pt"}),
         ),
     );
-    script.reply("GET", "/downloads/movel.json", comum::text(404, ""));
+    script.reply("GET", "/downloads/movel.json", common::text(404, ""));
     let core = Arc::new(Mutex::new(
         Core::open(
             dirs,
             "0.1.0",
-            Arc::new(comum::FakeTransports(script.clone())),
+            Arc::new(common::FakeTransports(script.clone())),
         )
         .unwrap(),
     ));
@@ -662,14 +668,14 @@ fn credential_revoked_on_a_read_goes_back_to_sign_in() {
 }
 
 /// Reopens the connected core with `ca` in place of `ca.pem`.
-fn reopened_with_ca(name: &str, ca: &str) -> (eclume_mobile_core::Core, comum::Cleanup) {
+fn reopened_with_ca(name: &str, ca: &str) -> (eclume_mobile_core::Core, common::Cleanup) {
     use eclume_mobile_core::{lock, Core};
 
     let (core, script, guard) = connected_core(name);
     let dirs = lock(&core).unwrap().dirs().clone();
     drop(core);
     std::fs::write(dirs.ca(), ca).unwrap();
-    let transports = Arc::new(comum::FakeTransports(script));
+    let transports = Arc::new(common::FakeTransports(script));
     let core = Core::open(dirs, "0.1.0", transports).unwrap();
     (core, guard)
 }
@@ -679,24 +685,24 @@ fn stored_ca_with_an_extra_certificate_asks_for_a_new_sign_in() {
     use eclume_mobile_core::connection::ConnectionState;
 
     let other = include_str!("../../../../server/tests/fixtures/ca-test.pem");
-    let (core, _guard) = reopened_with_ca("ca-a-mais", &format!("{}{other}", comum::CA_PEM));
+    let (core, _guard) = reopened_with_ca("ca-a-mais", &format!("{}{other}", common::CA_PEM));
     let ConnectionState::NoCredential { reason, .. } = core.state().unwrap().connection else {
         panic!("expected the sign-in screen");
     };
     assert_eq!(reason.as_deref(), Some(eclume_sync::pin::CA_TRIMMED));
     assert!(!core.dirs().token().exists());
     let ca = std::fs::read_to_string(core.dirs().ca()).unwrap();
-    assert_eq!(ca, comum::CA_PEM);
+    assert_eq!(ca, common::CA_PEM);
 
     // With a single certificate, nothing changes.
-    let (core, _guard) = reopened_with_ca("ca-unica", comum::CA_PEM);
+    let (core, _guard) = reopened_with_ca("ca-unica", common::CA_PEM);
     assert!(matches!(
         core.state().unwrap().connection,
         ConnectionState::Connected { .. }
     ));
     assert_eq!(
         std::fs::read_to_string(core.dirs().ca()).unwrap(),
-        comum::CA_PEM
+        common::CA_PEM
     );
 }
 
@@ -726,7 +732,7 @@ fn ca_swapped_for_the_next_without_pairing_again() {
     script.reply(
         "GET",
         "/downloads/eclume-root-proxima.crt",
-        comum::text(200, OTHER_CA),
+        common::text(200, OTHER_CA),
     );
     lock(&core).unwrap().network_changed(true);
     assert!(probe_core(&core, true).unwrap().on_network);
@@ -739,7 +745,7 @@ fn ca_swapped_for_the_next_without_pairing_again() {
     let (counter, switched) = (Arc::clone(&calls), other.clone());
     script.reply_with("GET", "/api/v1/server", move || {
         if counter.fetch_add(1, Ordering::SeqCst) % 2 == 0 {
-            comum::failure("invalid peer certificate: UnknownIssuer")
+            common::failure("invalid peer certificate: UnknownIssuer")
         } else {
             json(
                 200,
@@ -760,7 +766,7 @@ fn ca_swapped_for_the_next_without_pairing_again() {
     script.reply(
         "GET",
         "/api/v1/server",
-        comum::failure("invalid peer certificate: UnknownIssuer"),
+        common::failure("invalid peer certificate: UnknownIssuer"),
     );
     assert!(!probe_core(&core, true).unwrap().on_network);
     let core = lock(&core).unwrap();
