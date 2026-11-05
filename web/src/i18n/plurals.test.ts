@@ -47,8 +47,7 @@ describe('plural categories', () => {
 
   it('an exact million in pt-BR reads as text, not as the bare key', async () => {
     await loadLocale('pt-BR')
-    const t = i18n.getFixedT('pt-BR')
-    expect(t('library:list.items', { count: 1_000_000 })).toBe('1000000 itens')
-    expect(t('search:total.passages', { count: 2_000_000 })).toBe('2000000 trechos')
+    expect(i18n.getFixedT('pt-BR', 'library')('list.items', { count: 1_000_000 })).toBe('1000000 itens')
+    expect(i18n.getFixedT('pt-BR', 'search')('total.passages', { count: 2_000_000 })).toBe('2000000 trechos')
   })
 })
