@@ -22,13 +22,18 @@ cp deploy/.env.example deploy/.env
 docker compose -f deploy/docker-compose.dev.yml --env-file deploy/.env up -d
 docker compose -f deploy/docker-compose.dev.yml down
 
-docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml up -d --build --wait
-docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml down -v
+docker --context <context> compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml up -d --build --wait
+docker --context <context> compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml down -v
 
 docker compose -f deploy/docker-compose.mock.yml up -d --wait
 bash contracts/tests/smoke-mock.sh
 docker compose -f deploy/docker-compose.mock.yml down
 ```
+
+## Operator variables
+
+The scripts never default to a host: the Docker context, the SSH target and the public URL come from
+the operator's shell. [operator.env.example](operator.env.example) lists them with placeholders.
 
 ## Quality gate
 
@@ -56,7 +61,7 @@ the gate from that SHA's own checkout.
 
 ## Production
 
-The production stack on the GPU host (`https://192.168.15.199:8443`), with the full runbook in
+The production stack on the GPU host (`$ECLUME_PUBLIC_URL`, port 8443 by default), with the full runbook in
 [docs/project/deploy-producao.md](../docs/project/deploy-producao.md):
 
 - `docker-compose.prod.yml`: project `eclume` — caddy (the edge with the SPA, the only published
@@ -80,12 +85,12 @@ The production stack on the GPU host (`https://192.168.15.199:8443`), with the f
   `publish-desktop.sh`: publishes that release to `/srv/eclume/downloads/`.
 
 ```bash
-bash deploy/deploy.sh --plan --context gpu-host
-bash deploy/deploy.sh --context gpu-host
+bash deploy/deploy.sh --plan --context <context>
+bash deploy/deploy.sh --context <context>
 bash deploy/release-desktop.sh --plan
 bash deploy/bootstrap-admin.sh
-ssh <user>@192.168.15.199 cat /srv/eclume/secrets/admin-password | python3 deploy/smoke_prod.py --ca eclume-root.crt
-ssh <user>@192.168.15.199 cat /srv/eclume/secrets/admin-password | uv run python deploy/smoke_mcp.py --ca eclume-root.crt
+ssh <user>@<host> cat /srv/eclume/secrets/admin-password | python3 deploy/smoke_prod.py --url "$ECLUME_PUBLIC_URL" --ca eclume-root.crt
+ssh <user>@<host> cat /srv/eclume/secrets/admin-password | uv run python deploy/smoke_mcp.py --base "$ECLUME_PUBLIC_URL" --ca eclume-root.crt
 ```
 
 The host runbook is in [docs/project/host-setup.md](../docs/project/host-setup.md).

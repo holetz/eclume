@@ -2,8 +2,8 @@
 # Not the production compose (spec holetz/eclume#14). Ports only on the host's 127.0.0.1: Docker
 # publishes around ufw.
 #
-#   docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml up -d --build --wait
-#   docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml down -v
+#   docker --context <context> compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml up -d --build --wait
+#   docker --context <context> compose -p eclume-gpu-test -f deploy/docker-compose.gpu-test.yml down -v
 #
 # Models in /srv/eclume/models (persistent, shared with production) and the Hugging Face token in
 # /srv/eclume/secrets/hf_token (mounted at /run/secrets). Without a token, the worker transcribes

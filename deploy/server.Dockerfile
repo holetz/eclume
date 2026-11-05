@@ -5,7 +5,7 @@
 #
 # Build from the repository ROOT, on the host daemon (the context is filtered by
 # deploy/server.Dockerfile.dockerignore, which BuildKit reads because it sits next to this file):
-#   docker --context gpu-host build -f deploy/server.Dockerfile -t eclume-server:prod .
+#   docker --context <context> build -f deploy/server.Dockerfile -t eclume-server:prod .
 
 # The `claude` CLI of the `claude-cli` provider (docs/standards/code/server-agentes.md) is optional and
 # not free software: it only goes in with --build-arg ECLUME_CLAUDE_CLI=1. The default (0) picks the
