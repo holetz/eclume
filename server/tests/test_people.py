@@ -42,7 +42,7 @@ def test_create_edit_and_delete(as_user: Callable[[Account], Api], make_user: Ca
     assert (person["voice_sample_count"], person["speaking_time_ms"]) == (0, 0)
     assert api.get(f"/api/v1/people/{person['id']}").json() == person
 
-    duplicate = api.post("/api/v1/people", json={"name": "Outro", "email": "rafael.lima@example.com"})
+    duplicate = api.post("/api/v1/people", json={"name": "Outro", "email": "rafael.lima@EXAMPLE.com"})
     assert duplicate.status_code == 409
     assert api.post("/api/v1/people", json={"name": ""}).status_code == 422
     assert api.post("/api/v1/people", json={"name": "X", "email": "sem-arroba"}).status_code == 422
