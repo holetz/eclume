@@ -315,7 +315,7 @@ ssh holetz@192.168.15.199 /srv/eclume/bin/staging.sh down
 and admin session) and the administration panel (`e2e-prod/admin.spec.ts`). Without
 `--read-only`, the smoke refuses the production URL with exit 2 (`https://192.168.15.199:8443` or
 `ECLUME_PUBLIC_URL`) before any request; `prova.spec.ts`, `producao.spec.ts` and
-`mobile/e2e/prova.mjs` refuse the same way.
+`mobile/e2e/prove.mjs` refuse the same way.
 
 ```bash
 ssh holetz@192.168.15.199 cat /srv/eclume/downloads/eclume-root.crt > /tmp/eclume-root.crt

@@ -190,7 +190,7 @@ tauri_android_intruders() {
 
 # The phone's release APK, verified: minified (R8) and signed with a throwaway key from this run,
 # with the unit tests and lint of the plugin and the app, the JNI bridge symbols in the .so and the
-# EclumeCore class in the dex (mobile/scripts/simbolos_jni.py). Only on the gate: the SDK, NDK and
+# EclumeCore class in the dex (mobile/scripts/jni_symbols.py). Only on the gate: the SDK, NDK and
 # JDK come from the host read-only (ECLUME_ANDROID_SDK, ECLUME_ANDROID_NDK, ECLUME_ANDROID_JDK), and
 # the build takes about 15 min.
 pillar_android() {
@@ -228,7 +228,7 @@ with zipfile.ZipFile(sys.argv[1]) as apk, open(sys.argv[2], "wb") as so:
 PY
   "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" -D --defined-only "$keys/lib.so" > "$keys/nm.txt"
   "$sdk/cmdline-tools/latest/bin/apkanalyzer" dex packages "$apk" > "$keys/dex.txt"
-  run python3 mobile/scripts/simbolos_jni.py --nm "$keys/nm.txt" --dex "$keys/dex.txt" \
+  run python3 mobile/scripts/jni_symbols.py --nm "$keys/nm.txt" --dex "$keys/dex.txt" \
     --kotlin mobile/plugins/gravador/android/src/main/java/io/github/holetz/eclume/movel/gravador/EclumeCore.kt
   rm -rf "$keys" "$gradle/keystore.properties"
 }
