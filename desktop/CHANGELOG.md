@@ -8,6 +8,13 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Unreleased]
 
+### Adicionado
+
+- The desktop app in English and Portuguese (Brazil): the window, the help view, the tray menu and
+  the notifications follow the account language, then the system language, with English as the
+  default; Settings → General has a language switcher (Automatic, English, Português (Brasil))
+  that applies at once, with no restart (holetz/eclume#253).
+
 ### Alterado
 
 - Dependencies raised to the releases that fix the RustSec advisories on rustls, tokio and the bundled
