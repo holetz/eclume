@@ -60,8 +60,7 @@ deploy/release-desktop.sh (na estação) ──► host: contêiner --cpus 2 ─
 ## Release on the host — `deploy/release-desktop.sh`
 
 - It runs **on the workstation** and operates the host through the Docker context and SSH, like
-  `deploy/deploy.sh`. The context has no default (`--context` or `ECLUME_DOCKER_CONTEXT`; in this
-  production, `gpu-host`), and without `ECLUME_DOWNLOADS_URL` (from the environment or the
+  `deploy/deploy.sh`. The context has no default (`--context` or `ECLUME_DOCKER_CONTEXT`), and without `ECLUME_DOWNLOADS_URL` (from the environment or the
   repository variable) the script refuses: a default would publish the updater pointing at someone
   else's server. `--plan` only shows version, tag, commit, targets, folders, disk and the
   blockers, without writing.

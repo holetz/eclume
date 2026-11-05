@@ -31,7 +31,7 @@ owner's decision and account. iOS is out of scope, with no open spec.
 Mirror of `release-desktop.sh` ([desktop-distribuicao.md](desktop-distribuicao.md)), with no GitHub
 Actions: the keystore **never** goes to the GitHub secrets.
 
-- It runs **on the workstation** and operates the host through the Docker context (`gpu-host`) and
+- It runs **on the workstation** and operates the host through the Docker context (`--context` or `ECLUME_DOCKER_CONTEXT`, with no default) and
   over SSH. `--plan` only shows version, tag, commit, expected certificate, disk and the blockers.
 - With `--publish`, it refuses a dirty tree, a commit GitHub does not have, a commit without the
   host gate's `eclume/gate` = `success` status ([monorepo.md](monorepo.md); the waiver is
@@ -112,7 +112,7 @@ The script refuses a folder without exactly one `eclume-<versão>.apk` APK, with
 ## Publishing on the host
 
 `deploy/publish-mobile.sh [mobile-v<versão>]`, mirror of `publish-desktop.sh`, runs on the host
-(where `gh` is authenticated; from the dev machine, `ssh holetz@192.168.15.199 'bash -s -- mobile-v0.1.0' <
+(where `gh` is authenticated; from the dev machine, `ssh <user>@<host> 'bash -s -- mobile-v0.1.0' <
 deploy/publish-mobile.sh`):
 
 - downloads the release to `/srv/eclume/downloads/movel/<versão>/` and checks `SHA256SUMS` before
