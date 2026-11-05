@@ -58,10 +58,12 @@ ENV PATH=/app/.venv/bin:$PATH \
     HOME=/tmp \
     MALLOC_ARENA_MAX=2
 
-# Modelo do RNNoise do pré-processamento (`arnndn`): o conjoined-burgers de GregorR/rnnoise-models,
-# treinado em fala geral com ruído de ambiente. Fixado pelo checksum.
+# RNNoise model for the preprocessing (`arnndn`): conjoined-burgers from GregorR/rnnoise-models,
+# trained on general speech with ambient noise. Pinned by upstream commit and checksum. Upstream
+# declares no licence, so eclume does not redistribute it: whoever builds this image fetches it from
+# upstream here, and a published image must not bake it in (NOTICE.md, section 8).
 ADD --chmod=644 --checksum=sha256:f1357c4e5be9dee8467bead486dfced2d75b640c26ad0b594fa7f102322371d9 \
-    https://raw.githubusercontent.com/GregorR/rnnoise-models/master/conjoined-burgers-2018-08-28/cb.rnnn \
+    https://raw.githubusercontent.com/GregorR/rnnoise-models/3eee541a283fd3b8f81b85b1748e3b9ccbefa04d/conjoined-burgers-2018-08-28/cb.rnnn \
     /opt/eclume/rnnoise/cb.rnnn
 ENV ECLUME_RNNOISE_MODEL=/opt/eclume/rnnoise/cb.rnnn
 
