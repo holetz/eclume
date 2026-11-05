@@ -9,13 +9,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use eclume_sync::api::ServerInfo;
 use eclume_sync::transport::{Transport, TrustMode, UreqTransport, REQUEST_TIMEOUT};
 use eclume_sync::{pin, Client, Devices, RetryPolicy};
 use serde::Serialize;
 
 use crate::config::{validate_web_url, Account, Config};
+use crate::i18n::Msg;
 use crate::state::CLIENT_VERSION;
 
 /// Where the CA of a chosen server stays until the person signs in.
@@ -163,7 +164,7 @@ pub fn prepare(
     validate_web_url(url)?;
     if url.starts_with("http://") {
         if !cfg!(debug_assertions) && !is_loopback(url) {
-            bail!("endereço sem https: use https:// (http:// só vale em localhost)");
+            bail!(Msg::new(|t| t.err_url_not_https));
         }
         let info = server_info(net.verified(&pending_trust(None))?, url)?;
         return Ok(prepared(info, url, None, TrustedBy::Unencrypted, None));
@@ -225,7 +226,7 @@ fn is_loopback(url: &str) -> bool {
 /// has already changed (a newer choice finished first).
 pub fn confirm(server: &mut PreparedServer, url: &str, ca_sha256: Option<&str>) -> Result<()> {
     if server.url != url.trim().trim_end_matches('/') || server.ca_sha256.as_deref() != ca_sha256 {
-        bail!("O servidor escolhido mudou; confira a impressão digital de novo");
+        bail!(Msg::new(|t| t.err_server_changed));
     }
     server.confirmed = true;
     Ok(())
@@ -256,7 +257,7 @@ pub fn sign_in(
     device_name: &str,
 ) -> Result<SignedIn> {
     if server.trusted_by == TrustedBy::FirstUse && !server.confirmed {
-        bail!("Confira a impressão digital do servidor antes de entrar");
+        bail!(Msg::new(|t| t.err_confirm_fingerprint));
     }
     let transport = net.verified(&pending_trust(server.ca_path.as_deref()))?;
     let devices = Devices::new(Arc::clone(&transport), &server.url)?;
@@ -284,8 +285,13 @@ pub fn sign_in(
     let ca_path = match &server.ca_path {
         Some(pending) => {
             let path = config_dir.join(pin::PINNED_FILE);
-            std::fs::rename(pending, &path)
-                .with_context(|| format!("falha ao gravar {}", path.display()))?;
+            std::fs::rename(pending, &path).map_err(|err| {
+                anyhow::Error::new(
+                    Msg::new(|t| t.err_write_file)
+                        .arg("path", path.display())
+                        .cause("cause", err),
+                )
+            })?;
             pin::forget_next(&path)?;
             Some(path)
         }
@@ -307,8 +313,13 @@ pub fn sign_in(
 /// one saved by [`learn_next`] and the descriptor, read with it pinned, agrees, it becomes the
 /// pinned CA (`rename`) and does not count as changed: sync and updater continue without sign-in.
 pub fn ca_changed(net: &dyn Net, web_url: &str, pinned: &Path) -> Result<bool> {
-    let pem =
-        std::fs::read(pinned).with_context(|| format!("falha ao ler {}", pinned.display()))?;
+    let pem = std::fs::read(pinned).map_err(|err| {
+        anyhow::Error::new(
+            Msg::new(|t| t.err_read_file)
+                .arg("path", pinned.display())
+                .cause("cause", err),
+        )
+    })?;
     let current = pin::root_from_pem(&pem)?;
     let served = pin::fetch_root(&*net.insecure(), web_url, None)?;
     if served.sha256 == current.sha256 {
@@ -360,7 +371,7 @@ pub fn repair_pinned(config_dir: &Path, config: &Config) -> Result<bool> {
 pub fn require(server: Option<PreparedServer>) -> Result<PreparedServer> {
     match server {
         Some(server) => Ok(server),
-        None => bail!("Escolha o servidor antes de entrar"),
+        None => bail!(Msg::new(|t| t.err_choose_server)),
     }
 }
 
@@ -558,7 +569,7 @@ pub(crate) mod tests {
         assert_eq!(server.trusted_by, TrustedBy::FirstUse);
         let err = sign_in(&shared, &dir, &server, Login::Code("K7Q-4MX"), "PC").unwrap_err();
         assert!(
-            err.to_string().contains("Confira a impressão digital"),
+            err.to_string().contains("Check the server fingerprint"),
             "{err:#}"
         );
         let other = confirm(&mut server.clone(), "https://outro:8443", Some(CA_SHA256));
@@ -871,6 +882,10 @@ pub(crate) mod tests {
         assert_eq!(choices[1].name, "Escritório");
         assert_eq!(
             require(None).unwrap_err().to_string(),
+            "Choose the server before signing in"
+        );
+        assert_eq!(
+            crate::i18n::render(&require(None).unwrap_err(), crate::i18n::Locale::PtBr),
             "Escolha o servidor antes de entrar"
         );
     }
