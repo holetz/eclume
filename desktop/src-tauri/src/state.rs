@@ -728,7 +728,10 @@ impl AppState {
         if tag.is_empty() {
             return Ok(());
         }
-        let stored = i18n::normalize(tag).map_or(tag, Locale::tag);
+        let stored: &str = match i18n::normalize(tag) {
+            Some(locale) => locale.tag(),
+            None => tag,
+        };
         let mut inner = self.inner()?;
         if inner.config.system_locale.as_deref() != Some(stored) {
             let mut next = inner.config.clone();
