@@ -118,6 +118,15 @@ pub struct Config {
     /// Account this computer signed in to; `null` before sign-in and with an old PAT.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<Account>,
+    /// Desktop language choice; `None` follows the account or system language.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+    /// Account language last read from `GET /api/v1/me`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_locale: Option<String>,
+    /// OS language last reported by the window.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_locale: Option<String>,
     /// API address when it differs from eclume web.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_url: Option<String>,
@@ -283,6 +292,9 @@ impl Default for Config {
         Self {
             web_url: default_web_url(),
             account: None,
+            locale: None,
+            account_locale: None,
+            system_locale: None,
             api_url: None,
             ca_path: None,
             detection: DetectionConfig::default(),

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -28,97 +28,97 @@
           >
           <div class="row row-tight">
             <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="open-help"
-              data-icon="help" aria-label="Ajuda" aria-haspopup="menu" aria-expanded="false"></button>
+              data-icon="help" aria-label="Help" data-i18n-aria-label="help.title" aria-haspopup="menu" aria-expanded="false"></button>
             <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="open-settings"
-              data-icon="settings" aria-label="Configurações"></button>
+              data-icon="settings" aria-label="Settings" data-i18n-aria-label="home.settings"></button>
           </div>
         </div>
-        <div class="menu help-menu" role="menu" id="menu-help" aria-label="Ajuda" hidden>
-          <button type="button" class="menu-item" role="menuitem" id="help-first-steps">Primeiros passos</button>
-          <button type="button" class="menu-item" role="menuitem" id="help-permissions">Permissões de microfone</button>
-          <button type="button" class="menu-item" role="menuitem" id="help-folder">Pasta sincronizada</button>
+        <div class="menu help-menu" role="menu" id="menu-help" aria-label="Help" data-i18n-aria-label="help.title" hidden>
+          <button type="button" class="menu-item" role="menuitem" id="help-first-steps" data-i18n="help.firstSteps">First steps</button>
+          <button type="button" class="menu-item" role="menuitem" id="help-permissions" data-i18n="help.permissions">Microphone permissions</button>
+          <button type="button" class="menu-item" role="menuitem" id="help-folder" data-i18n="help.folder">Synced folder</button>
           <button type="button" class="menu-item" role="menuitem" id="help-shortcuts">
-            Atalhos de teclado<kbd id="help-shortcuts-tecla"></kbd>
+            <span data-i18n="help.shortcuts">Keyboard shortcuts</span><kbd id="help-shortcuts-tecla"></kbd>
           </button>
           <button type="button" class="menu-item" role="menuitem" id="help-center">
-            Abrir a central de ajuda<kbd>↗</kbd>
+            <span data-i18n="help.center">Open the help center</span><kbd>↗</kbd>
           </button>
           <div class="menu-sep"></div>
           <button type="button" class="menu-item menu-item-hint" role="menuitem" id="help-problem">
-            Relatar um problema…<small>Anexe o eclume.log</small>
+            <span data-i18n="help.problem">Report a problem…</span><small data-i18n="help.attachLog">Attach eclume.log</small>
           </button>
           <div class="menu-sep"></div>
           <span class="menu-item" aria-disabled="true" id="help-version"></span>
         </div>
-        <div class="recent-panel" id="recent" aria-label="Gravações recentes" hidden>
+        <div class="recent-panel" id="recent" aria-label="Recent recordings" data-i18n-aria-label="recent.label" hidden>
           <div class="row row-between">
-            <span class="kicker">Recentes</span>
+            <span class="kicker" data-i18n="recent.title">Recent</span>
             <span class="badge badge-warning" id="recent-alert" role="status" hidden></span>
           </div>
           <ul class="recent-list" id="recent-list"></ul>
-          <span class="text-muted small" id="recent-empty" hidden>Nenhuma gravação ainda.</span>
+          <span class="text-muted small" id="recent-empty" hidden data-i18n="recent.empty">No recordings yet.</span>
         </div>
-        <span class="status-line" id="line-status" role="status">Carregando…</span>
+        <span class="status-line" id="line-status" role="status" data-i18n="home.loading">Loading…</span>
         <div class="row row-meter" id="note" hidden>
           <div class="meter" id="meter" aria-hidden="true"></div>
           <span class="mono tiny" id="note-silence"></span>
         </div>
-        <button type="button" class="btn btn-rec btn-rec-lg" id="record" aria-pressed="false">
-          Iniciar gravação
+        <button type="button" class="btn btn-rec btn-rec-lg" id="record" aria-pressed="false" data-i18n="home.startRecording">
+          Start recording
         </button>
-        <span class="text-muted small" id="recording-automatic" hidden
-          >Iniciada automaticamente. Para quando a reunião acabar.</span
+        <span class="text-muted small" id="recording-automatic" hidden data-i18n="home.automatic"
+          >Started automatically. Stops when the meeting ends.</span
         >
         <div class="stack-tight" id="markers" hidden>
           <div class="row">
             <button type="button" class="btn btn-secondary btn-sm" id="marker">
-              Marcador<kbd id="shortcut-marker"></kbd>
+              <span data-i18n="note.marker">Marker</span><kbd id="shortcut-marker"></kbd>
             </button>
             <span class="marker-count" id="count-markers"></span>
           </div>
           <div class="field" id="note-marker" hidden>
             <label for="note-marker-text" id="note-marker-label"></label>
-            <input class="input" id="note-marker-text" maxlength="500" placeholder="Nota curta (opcional)" />
+            <input class="input" id="note-marker-text" maxlength="500" placeholder="Short note (optional)" data-i18n-placeholder="note.placeholder" />
           </div>
         </div>
         <div class="grid-2">
           <button type="button" class="btn btn-secondary" id="new-note">
-            Nova nota<kbd id="shortcut-note"></kbd>
+            <span data-i18n="note.new">New note</span><kbd id="shortcut-note"></kbd>
           </button>
-          <button type="button" class="btn btn-secondary" id="import">Importar arquivo…</button>
+          <button type="button" class="btn btn-secondary" id="import" data-i18n="home.import">Import file…</button>
         </div>
       </div>
 
       <div class="tray-section" id="policy" hidden>
         <div class="row row-between">
           <span class="kicker" id="policy-title"></span>
-          <a href="#" class="small" id="policy-settings">Mudar nas configurações</a>
+          <a href="#" class="small" id="policy-settings" data-i18n="home.policySettings">Change in settings</a>
         </div>
         <span class="seg" role="radiogroup" id="policy-options">
-          <label class="seg-opt"><input type="radio" name="politica" value="auto" />Gravar</label>
-          <label class="seg-opt"><input type="radio" name="politica" value="ask" />Confirmar</label>
-          <label class="seg-opt"><input type="radio" name="politica" value="ignore" />Ignorar</label>
+          <label class="seg-opt"><input type="radio" name="politica" value="auto" /><span data-i18n="home.policy.record">Record</span></label>
+          <label class="seg-opt"><input type="radio" name="politica" value="ask" /><span data-i18n="home.policy.ask">Ask</span></label>
+          <label class="seg-opt"><input type="radio" name="politica" value="ignore" /><span data-i18n="home.policy.ignore">Ignore</span></label>
         </span>
       </div>
 
       <div class="tray-section" id="prompt" hidden>
         <div class="alert alert-warning">
-          <span class="alert-title">Reunião detectada</span>
+          <span class="alert-title" data-i18n="home.meetingDetected">Meeting detected</span>
           <span id="prompt-text"></span>
         </div>
         <div class="row">
-          <button type="button" class="btn btn-primary" id="prompt-record">Gravar</button>
-          <button type="button" class="btn btn-secondary" id="prompt-now-no">Agora não</button>
+          <button type="button" class="btn btn-primary" id="prompt-record" data-i18n="home.policy.record">Record</button>
+          <button type="button" class="btn btn-secondary" id="prompt-now-no" data-i18n="home.notNow">Not now</button>
         </div>
       </div>
 
       <div class="tray-section">
         <div class="row row-between">
-          <span class="kicker">Fila de envio</span>
+          <span class="kicker" data-i18n="home.uploadQueue">Upload queue</span>
           <span class="text-muted tiny" id="queue-summary"></span>
         </div>
         <ul class="queue" id="queue"></ul>
-        <span class="text-muted small" id="queue-empty" hidden>Nenhuma gravação ainda.</span>
+        <span class="text-muted small" id="queue-empty" hidden data-i18n="recent.empty">No recordings yet.</span>
       </div>
 
       <div class="tray-section stack-tight">
@@ -130,7 +130,7 @@
       </div>
     </section>
 
-    <section class="tray tray-window" data-view="first-run" aria-label="Bem-vindo" hidden>
+    <section class="tray tray-window" data-view="first-run" aria-label="Welcome" data-i18n-aria-label="firstRun.title" hidden>
       <div class="tray-section">
         <div class="row row-between">
           <span class="brand brand-sm"
@@ -143,71 +143,71 @@
             >eclume</span
           >
           <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="first-run-back"
-            data-icon="close" aria-label="Voltar" hidden></button>
+            data-icon="close" aria-label="Back" data-i18n-aria-label="firstRun.back" hidden></button>
         </div>
-        <h4 class="flush">Bem-vindo</h4>
+        <h4 class="flush" data-i18n="firstRun.title">Welcome</h4>
         <div class="alert alert-error" id="first-run-notice" role="alert" hidden>
           <span id="first-run-notice-text"></span>
         </div>
-        <span class="text-muted small" id="first-run-searching">Procurando o servidor na rede…</span>
-        <div class="stack stack-tight" id="first-run-servers" role="radiogroup" aria-label="Servidor"></div>
+        <span class="text-muted small" id="first-run-searching" data-i18n="firstRun.searching">Looking for the server on the network…</span>
+        <div class="stack stack-tight" id="first-run-servers" role="radiogroup" aria-label="Server" data-i18n-aria-label="firstRun.server"></div>
         <div class="alert alert-warning" id="first-run-trust" hidden>
-          <span class="alert-title">Confira com quem administra o servidor</span>
-          <span>A impressão digital do certificado de <span id="first-run-trust-server"></span> é:</span>
+          <span class="alert-title" data-i18n="firstRun.trustTitle">Check with your server administrator</span>
+          <span><span data-i18n="firstRun.fingerprintPrefix">The certificate fingerprint for </span><span id="first-run-trust-server"></span><span data-i18n="firstRun.fingerprintSuffix"> is:</span></span>
           <span class="code-block"><span id="first-run-fingerprint"></span></span>
           <div class="row">
-            <button type="button" class="btn btn-primary btn-sm" id="first-run-trust-continue">Confiar e continuar</button>
+            <button type="button" class="btn btn-primary btn-sm" id="first-run-trust-continue" data-i18n="firstRun.trustContinue">Trust and continue</button>
           </div>
         </div>
       </div>
       <form class="tray-section" id="first-run-sign-in-form">
         <div class="field">
-          <label for="first-run-email">E-mail</label>
+          <label for="first-run-email" data-i18n="firstRun.email">Email</label>
           <input class="input" type="email" id="first-run-email" autocomplete="username" required />
         </div>
         <div class="field">
-          <label for="first-run-password">Senha</label>
+          <label for="first-run-password" data-i18n="firstRun.password">Password</label>
           <input class="input" type="password" id="first-run-password" autocomplete="current-password" required />
         </div>
-        <button type="submit" class="btn btn-primary btn-block" id="first-run-sign-in">Entrar</button>
-        <span class="text-muted small">Sem conta? <a href="#" id="first-run-signup">Crie uma na web</a></span>
+        <button type="submit" class="btn btn-primary btn-block" id="first-run-sign-in" data-i18n="firstRun.signIn">Sign in</button>
+        <span class="text-muted small"><span data-i18n="firstRun.noAccount">No account?</span> <a href="#" id="first-run-signup" data-i18n="firstRun.signUp">Create one on the web</a></span>
       </form>
       <div class="tray-section">
         <details class="disclosure" id="first-run-advanced">
-          <summary>Avançado<span class="text-muted">Entrar com um código ou digitar o endereço</span></summary>
+          <summary><span data-i18n="firstRun.advanced">Advanced</span><span class="text-muted" data-i18n="firstRun.advancedHint">Sign in with a code or enter the address</span></summary>
           <div class="stack">
             <div class="field">
-              <label for="first-run-code">Código de pareamento</label>
+              <label for="first-run-code" data-i18n="firstRun.pairingCode">Pairing code</label>
               <div class="row">
                 <input class="input mono input-code" id="first-run-code" maxlength="7" autocomplete="off"
-                  placeholder="K7Q-4MX" />
-                <button type="button" class="btn btn-secondary" id="first-run-pair">Entrar com o código</button>
+                  placeholder="K7Q-4MX" data-i18n-placeholder="firstRun.pairingPlaceholder" />
+                <button type="button" class="btn btn-secondary" id="first-run-pair" data-i18n="firstRun.pair">Sign in with the code</button>
               </div>
-              <span class="text-muted tiny">Gere o código na web, em Minhas configurações › App desktop. Vale por 10 minutos.</span>
+              <span class="text-muted tiny" data-i18n="firstRun.pairingHint">Generate the code on the web, under My settings › Desktop app. Valid for 10 minutes.</span>
             </div>
             <div class="field">
-              <label for="first-run-address">Endereço do servidor</label>
+              <label for="first-run-address" data-i18n="firstRun.address">Server address</label>
               <div class="row">
-                <input class="input mono input-address" id="first-run-address" placeholder="servidor.local:8443" />
-                <button type="button" class="btn btn-secondary" id="first-run-use-address">Usar este endereço</button>
+                <input class="input mono input-address" id="first-run-address" placeholder="server.local:8443" data-i18n-placeholder="firstRun.addressPlaceholder" />
+                <button type="button" class="btn btn-secondary" id="first-run-use-address" data-i18n="firstRun.useAddress">Use this address</button>
               </div>
-              <a href="#" class="small" id="first-run-search">Procurar na rede de novo</a>
+              <a href="#" class="small" id="first-run-search" data-i18n="firstRun.searchAgain">Search the network again</a>
             </div>
           </div>
         </details>
       </div>
     </section>
 
-    <section class="tray tray-window" data-view="import" aria-label="Importar um arquivo" hidden>
+    <section class="tray tray-window" data-view="import" aria-label="Import a file" data-i18n-aria-label="import.title" hidden>
       <div class="tray-section">
         <div class="row row-between">
-          <h4 class="flush">Importar um arquivo</h4>
+          <h4 class="flush" data-i18n="import.title">Import a file</h4>
           <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="import-close"
-            data-icon="close" aria-label="Fechar"></button>
+            data-icon="close" aria-label="Close" data-i18n-aria-label="import.close"></button>
         </div>
         <label class="dropzone" id="import-target">
-          <strong>Solte o áudio ou o vídeo aqui</strong>
-          <span class="text-muted">ou <a href="#" id="import-choose">escolha um arquivo</a></span>
+          <strong data-i18n="import.drop">Drop audio or video here</strong>
+          <span class="text-muted"><span data-i18n="import.or">or</span> <a href="#" id="import-choose" data-i18n="import.choose">choose a file</a></span>
         </label>
       </div>
 
@@ -219,58 +219,58 @@
         </div>
         <div class="stack-tight" id="import-conversion" hidden>
           <progress class="progress" id="import-progress" max="1" value="0"></progress>
-          <span class="progress-row"><span>Convertendo para Opus…</span><span id="import-percent"></span></span>
+          <span class="progress-row"><span data-i18n="import.converting">Converting to Opus…</span><span id="import-percent"></span></span>
         </div>
         <div class="row">
-          <button type="button" class="btn btn-primary" id="import-confirm">Pôr na fila de envio</button>
-          <button type="button" class="btn btn-secondary" id="import-cancel">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="import-confirm" data-i18n="import.confirm">Add to upload queue</button>
+          <button type="button" class="btn btn-secondary" id="import-cancel" data-i18n="import.cancel">Cancel</button>
         </div>
       </div>
 
       <div class="tray-section" id="import-error" hidden>
         <div class="alert alert-error" role="alert">
-          <span class="alert-title">Não deu para importar</span>
+          <span class="alert-title" data-i18n="import.errorTitle">Could not import</span>
           <span id="import-error-text"></span>
         </div>
       </div>
     </section>
 
-    <section class="tray tray-window" data-view="shortcuts" aria-label="Atalhos de teclado" hidden>
+    <section class="tray tray-window" data-view="shortcuts" aria-label="Keyboard shortcuts" data-i18n-aria-label="help.shortcuts" hidden>
       <div class="tray-section">
         <div class="row row-between">
           <div>
-            <span class="kicker">Ajuda</span>
-            <h2 class="flush sheet-title">Atalhos de teclado</h2>
+            <span class="kicker" data-i18n="help.title">Help</span>
+            <h2 class="flush sheet-title" data-i18n="help.shortcuts">Keyboard shortcuts</h2>
           </div>
           <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="shortcuts-close"
-            data-icon="close" aria-label="Fechar"></button>
+            data-icon="close" aria-label="Close" data-i18n-aria-label="help.close"></button>
         </div>
       </div>
       <div class="tray-section">
-        <span class="kicker text-muted">Em qualquer lugar do computador</span>
+        <span class="kicker text-muted" data-i18n="help.global">Anywhere on this computer</span>
         <dl class="shortcuts" id="shortcuts-global"></dl>
-        <span class="kicker text-muted">Nesta janela</span>
+        <span class="kicker text-muted" data-i18n="help.window">In this window</span>
         <dl class="shortcuts" id="shortcuts-window"></dl>
       </div>
       <div class="tray-section">
-        <a href="#" class="small" id="shortcuts-change">Mudar os atalhos nas configurações</a>
+        <a href="#" class="small" id="shortcuts-change" data-i18n="help.change">Change shortcuts in settings</a>
       </div>
     </section>
 
-    <section class="tray tray-window" data-view="settings" aria-label="Configurações" hidden>
+    <section class="tray tray-window" data-view="settings" aria-label="Settings" data-i18n-aria-label="settings.title" hidden>
       <div class="tray-section tray-section-tabs">
         <div class="row">
           <button type="button" class="btn btn-ghost btn-icon btn-icon-sm" id="config-back"
-            data-icon="back" aria-label="Voltar"></button>
-          <h4 class="flush">Configurações</h4>
+            data-icon="back" aria-label="Back" data-i18n-aria-label="settings.back"></button>
+          <h4 class="flush" data-i18n="settings.title">Settings</h4>
         </div>
         <div class="tabs tabs-flush" role="tablist">
-          <button type="button" class="tab" role="tab" data-tab="general" aria-selected="true">Geral</button>
-          <button type="button" class="tab" role="tab" data-tab="meetings" aria-selected="false">Reuniões</button>
-          <button type="button" class="tab" role="tab" data-tab="audio" aria-selected="false">Áudio</button>
-          <button type="button" class="tab" role="tab" data-tab="storage" aria-selected="false">Armazenamento</button>
-          <button type="button" class="tab" role="tab" data-tab="folder" aria-selected="false">Pasta</button>
-          <button type="button" class="tab" role="tab" data-tab="server" aria-selected="false">Servidor</button>
+          <button type="button" class="tab" role="tab" data-tab="general" aria-selected="true" data-i18n="settings.tabs.general">General</button>
+          <button type="button" class="tab" role="tab" data-tab="meetings" aria-selected="false" data-i18n="settings.tabs.meetings">Meetings</button>
+          <button type="button" class="tab" role="tab" data-tab="audio" aria-selected="false" data-i18n="settings.tabs.audio">Audio</button>
+          <button type="button" class="tab" role="tab" data-tab="storage" aria-selected="false" data-i18n="settings.tabs.storage">Storage</button>
+          <button type="button" class="tab" role="tab" data-tab="folder" aria-selected="false" data-i18n="settings.tabs.folder">Folder</button>
+          <button type="button" class="tab" role="tab" data-tab="server" aria-selected="false" data-i18n="settings.tabs.server">Server</button>
         </div>
       </div>
 
@@ -282,25 +282,35 @@
 
       <div data-panel="general">
         <div class="tray-section">
-          <span class="kicker">Aparência</span>
+          <span class="kicker" data-i18n="settings.appearance">Appearance</span>
           <div class="list">
             <div class="list-row">
-              <span class="list-row-title">Tema</span>
-              <span class="list-row-sub">Claro, escuro ou como o sistema</span>
+              <span class="list-row-title" data-i18n="settings.theme">Theme</span>
+              <span class="list-row-sub" data-i18n="settings.themeHint">Light, dark or follow the system</span>
               <span class="list-row-actions">
-                <span class="seg" role="radiogroup" aria-label="Tema" id="theme">
-                  <label class="seg-opt"><input type="radio" name="theme" value="system" />Sistema</label>
-                  <label class="seg-opt"><input type="radio" name="theme" value="light" />Claro</label>
-                  <label class="seg-opt"><input type="radio" name="theme" value="dark" />Escuro</label>
+                <span class="seg" role="radiogroup" aria-label="Theme" data-i18n-aria-label="settings.theme" id="theme">
+                  <label class="seg-opt"><input type="radio" name="theme" value="system" /><span data-i18n="settings.themeSystem">System</span></label>
+                  <label class="seg-opt"><input type="radio" name="theme" value="light" /><span data-i18n="settings.themeLight">Light</span></label>
+                  <label class="seg-opt"><input type="radio" name="theme" value="dark" /><span data-i18n="settings.themeDark">Dark</span></label>
                 </span>
               </span>
             </div>
             <div class="list-row">
-              <label class="list-row-title" for="recent-count">Gravações recentes na janela</label>
-              <span class="list-row-sub">Estado, alertas e Copiar resumo no topo da janela principal</span>
+              <div class="stack stack-tight">
+                <span class="list-row-title" data-i18n="settings.locale.title">Language</span>
+                <span class="seg" role="radiogroup" aria-label="Language" data-i18n-aria-label="settings.locale.title" id="locale">
+                  <label class="seg-opt"><input type="radio" name="locale" value="" /><span data-i18n="settings.locale.automatic">Automatic (account, then system)</span></label>
+                  <label class="seg-opt"><input type="radio" name="locale" value="en" /><span data-i18n="settings.locale.en">English</span></label>
+                  <label class="seg-opt"><input type="radio" name="locale" value="pt-BR" /><span data-i18n="settings.locale.ptBR">Portugu&#234;s (Brasil)</span></label>
+                </span>
+              </div>
+            </div>
+            <div class="list-row">
+              <label class="list-row-title" for="recent-count" data-i18n="settings.recentWindow">Recent recordings in the window</label>
+              <span class="list-row-sub" data-i18n="settings.recentWindowHint">Status, alerts and Copy summary at the top of the main window</span>
               <span class="list-row-actions">
                 <select class="input" id="recent-count">
-                  <option value="0">Ocultar</option>
+                  <option value="0" data-i18n="settings.hide">Hide</option>
                   <option value="3">3</option>
                   <option value="5">5</option>
                   <option value="10">10</option>
@@ -308,11 +318,11 @@
               </span>
             </div>
             <div class="list-row">
-              <label class="list-row-title" for="recent-tray-count">Gravações recentes no menu da bandeja</label>
-              <span class="list-row-sub">Título, estado e ações no menu do ícone ao lado do relógio</span>
+              <label class="list-row-title" for="recent-tray-count" data-i18n="settings.recentTray">Recent recordings in the tray menu</label>
+              <span class="list-row-sub" data-i18n="settings.recentTrayHint">Title, status and actions in the icon menu next to the clock</span>
               <span class="list-row-actions">
                 <select class="input" id="recent-tray-count">
-                  <option value="0">Ocultar</option>
+                  <option value="0" data-i18n="settings.hide">Hide</option>
                   <option value="1">1</option>
                   <option value="3">3</option>
                   <option value="5">5</option>
@@ -322,101 +332,96 @@
           </div>
         </div>
         <div class="tray-section">
-          <span class="kicker">Início</span>
+          <span class="kicker" data-i18n="settings.startup">Startup</span>
           <label class="switch"
-            ><input type="checkbox" id="start-with-the-system" /><span class="track"></span>Iniciar com o
-            computador</label
+            ><input type="checkbox" id="start-with-the-system" /><span class="track"></span><span data-i18n="settings.startWithSystem">Start with the computer</span></label
           >
           <span class="text-muted small"
-            >O eclume abre sozinho, só na bandeja, quando você entra no computador, para não perder uma
-            reunião.</span
+            data-i18n="settings.startupHint">eclume opens automatically in the tray when you sign in to your computer, so you never miss a meeting.</span
           >
         </div>
         <div class="tray-section">
-          <span class="kicker">Avisos</span>
+          <span class="kicker" data-i18n="settings.notifications">Notifications</span>
           <label class="switch"
-            ><input type="checkbox" id="notify-summary" /><span class="track"></span>Avisar quando uma gravação
-            terminar de processar</label
+            ><input type="checkbox" id="notify-summary" /><span class="track"></span><span data-i18n="settings.notifySummary">Notify when a recording finishes processing</span></label
           >
           <span class="text-muted small"
-            >De todas as gravações da conta: resumo pronto (com "Copiar"), pronta sem resumo ou com falha.</span
+            data-i18n="settings.notificationsHint">For all recordings in the account: summary ready (with "Copy"), ready without a summary or failed.</span
           >
         </div>
       </div>
 
       <div data-panel="meetings" hidden>
         <div class="tray-section">
-          <label class="switch"><input type="checkbox" id="detect" /><span class="track"></span>Detectar reuniões</label>
+          <label class="switch"><input type="checkbox" id="detect" /><span class="track"></span><span data-i18n="settings.detect">Detect meetings</span></label>
           <span class="text-muted small"
-            >O eclume observa qual app usa o microfone. Nunca grava sem mostrar na bandeja.</span
+            data-i18n="settings.detectHint">eclume watches which app uses the microphone. Recording always appears in the tray.</span
           >
         </div>
         <div class="tray-section tray-section-list">
           <div class="row row-between">
-            <span class="kicker">Quando uma reunião começa no</span>
-            <a href="#" class="small" id="restore-defaults">Restaurar padrões</a>
+            <span class="kicker" data-i18n="settings.meetingStarts">When a meeting starts in</span>
+            <a href="#" class="small" id="restore-defaults" data-i18n="settings.restoreDefaults">Restore defaults</a>
           </div>
           <div class="list" id="apps"></div>
           <span class="text-muted small"
-            >Gravar para sozinho quando a reunião acaba. Uma gravação que você inicia segue até você
-            parar.</span
+            data-i18n="settings.meetingStopHint">Automatic recording stops when the meeting ends. A recording you start continues until you stop it.</span
           >
         </div>
       </div>
 
       <div data-panel="audio" hidden>
         <div class="tray-section">
-          <span class="kicker">Fontes</span>
+          <span class="kicker" data-i18n="settings.sources">Sources</span>
           <div class="field">
-            <label for="microphone">Microfone</label>
+            <label for="microphone" data-i18n="settings.microphone">Microphone</label>
             <select class="input" id="microphone"></select>
           </div>
           <div class="field">
-            <label for="audio-system">Áudio do sistema</label>
+            <label for="audio-system" data-i18n="settings.systemAudio">System audio</label>
             <select class="input" id="audio-system"></select>
           </div>
           <span class="text-muted small"
-            >Capta as outras pessoas da chamada pelos alto-falantes ou pelo fone. As duas fontes viram um
-            arquivo só; "Nenhum" deixa uma delas de fora.</span
+            data-i18n="settings.sourcesHint">Captures the other people on the call through the speakers or headphones. Both sources become one file; "None" leaves one out.</span
           >
           <div class="row row-meter">
             <div class="meter meter-accent" id="meter-test" aria-hidden="true"></div>
-            <button type="button" class="btn btn-ghost btn-sm" id="test-mic" data-source="mic">Fale para testar</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="test-system" data-source="system">Toque algo para testar</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="test-mic" data-source="mic" data-i18n="settings.test.mic">Speak to test</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="test-system" data-source="system" data-i18n="settings.test.system">Play something to test</button>
           </div>
         </div>
         <div class="tray-section">
-          <span class="kicker">Transcrição</span>
+          <span class="kicker" data-i18n="settings.transcription">Transcription</span>
           <div class="field">
-            <label for="language">Idioma da transcrição</label>
+            <label for="language" data-i18n="settings.transcriptionLanguage">Transcription language</label>
             <select class="input" id="language">
-              <option value="" id="language-default">Padrão da conta</option>
-              <option value="auto">Detectar automaticamente</option>
-              <option value="pt">Português</option>
-              <option value="es">Español</option>
-              <option value="en">English</option>
+              <option value="" id="language-default" data-i18n="settings.accountDefault">Account default</option>
+              <option value="auto" data-i18n="settings.languages.auto">Detect automatically</option>
+              <option value="pt" data-i18n="settings.languages.pt">Portuguese</option>
+              <option value="es" data-i18n="settings.languages.es">Spanish</option>
+              <option value="en" data-i18n="settings.languages.en">English</option>
             </select>
           </div>
-          <span class="text-muted small">Vale para as próximas reuniões e notas enviadas. O padrão da conta se escolhe na web, em Conta.</span>
+          <span class="text-muted small" data-i18n="settings.transcriptionHint">Applies to future meetings and notes you upload. Choose the account default on the web, under Account.</span>
         </div>
         <div class="tray-section">
-          <span class="kicker">Atalhos em qualquer lugar do computador</span>
+          <span class="kicker" data-i18n="settings.shortcutsTitle">Shortcuts anywhere on the computer</span>
           <p class="text-muted small" id="shortcuts-mode" hidden></p>
           <div class="list" id="shortcuts"></div>
           <button type="button" class="btn btn-secondary btn-sm" id="shortcuts-gnome" hidden></button>
         </div>
         <div class="tray-section">
-          <span class="kicker">Notas de voz</span>
+          <span class="kicker" data-i18n="settings.voiceNotes">Voice notes</span>
           <div class="list">
             <div class="list-row">
-              <span class="list-row-title">Parar depois de silêncio</span>
-              <span class="list-row-sub">Encerra a nota quando você para de falar</span>
+              <span class="list-row-title" data-i18n="settings.silence">Stop after silence</span>
+              <span class="list-row-sub" data-i18n="settings.silenceHint">Ends the note when you stop speaking</span>
               <span class="list-row-actions">
-                <span class="seg" role="radiogroup" aria-label="Parar depois de silêncio" id="silence">
+                <span class="seg" role="radiogroup" aria-label="Stop after silence" data-i18n-aria-label="settings.silence" id="silence">
                   <label class="seg-opt"><input type="radio" name="silence" value="2" />2 s</label>
                   <label class="seg-opt"><input type="radio" name="silence" value="4" />4 s</label>
                   <label class="seg-opt"><input type="radio" name="silence" value="8" />8 s</label>
-                  <label class="seg-opt"><input type="radio" name="silence" value="0" />Nunca</label>
+                  <label class="seg-opt"><input type="radio" name="silence" value="0" /><span data-i18n="settings.never">Never</span></label>
                 </span>
               </span>
             </div>
@@ -426,73 +431,72 @@
 
       <div data-panel="storage" hidden>
         <div class="tray-section">
-          <span class="kicker">Depois que o servidor confirma uma gravação</span>
+          <span class="kicker" data-i18n="settings.retentionTitle">After the server confirms a recording</span>
           <label class="choice"
             ><input type="radio" name="retention" value="delete" /><span class="dot"></span
-            ><strong>Apagar a cópia local</strong><small>Libera espaço na hora</small></label
+            ><strong data-i18n="settings.deleteLocal">Delete the local copy</strong><small data-i18n="settings.deleteLocalHint">Frees up space immediately</small></label
           >
           <label class="choice choice-days"
             ><input type="radio" name="retention" value="days" /><span class="dot"></span
-            ><strong>Manter por alguns dias</strong><small>Padrão · até 3650 dias</small
+            ><strong data-i18n="settings.keepDays">Keep for a few days</strong><small data-i18n="settings.keepDaysHint">Default · up to 3650 days</small
             ><span class="choice-days-field"
               ><input class="input mono input-days" id="retention-days" type="number" min="1" max="3650"
-                aria-label="Dias" /><span class="text-muted small">dias</span></span
+                aria-label="Days" data-i18n-aria-label="settings.daysLabel" /><span class="text-muted small" data-i18n="settings.days">days</span></span
             ></label
           >
           <label class="choice"
             ><input type="radio" name="retention" value="forever" /><span class="dot"></span
-            ><strong>Manter para sempre</strong><small>Nada é apagado deste computador</small></label
+            ><strong data-i18n="settings.keepForever">Keep forever</strong><small data-i18n="settings.keepForeverHint">Nothing is deleted from this computer</small></label
           >
-          <span class="text-muted small">Gravações ainda não enviadas nunca são apagadas.</span>
+          <span class="text-muted small" data-i18n="settings.retentionHint">Recordings that have not been uploaded are never deleted.</span>
         </div>
         <div class="tray-section">
           <div class="field">
-            <span class="field-label">Pasta local</span>
+            <span class="field-label" data-i18n="settings.localFolder">Local folder</span>
             <div class="code-block">
               <span id="folder-local"></span>
-              <button type="button" class="btn btn-ghost btn-sm" id="show-folder">Mostrar</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="show-folder" data-i18n="settings.showFolder">Show</button>
             </div>
           </div>
           <div class="row row-between">
             <span class="text-muted small" id="space-used"></span>
-            <button type="button" class="btn btn-secondary btn-sm" id="retry">Tentar de novo as falhas</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="retry" data-i18n="settings.retry">Retry failed uploads</button>
           </div>
         </div>
       </div>
 
       <div data-panel="folder" hidden>
         <div class="tray-section">
-          <label class="switch"><input type="checkbox" id="folder-enable" /><span class="track"></span>Sincronizar resumos numa pasta</label>
+          <label class="switch"><input type="checkbox" id="folder-enable" /><span class="track"></span><span data-i18n="settings.folderEnable">Sync summaries to a folder</span></label>
           <span class="text-muted small"
-            >O resumo de cada gravação vira um arquivo Markdown e a transcrição, um arquivo JSONL, numa pasta
-            deste computador. Vale para toda a sua biblioteca, não só para o que este computador gravou.</span
+            data-i18n="settings.folderHint">Each recording’s summary becomes a Markdown file and its transcript a JSONL file in a folder on this computer. Applies to your entire library, including recordings made elsewhere.</span
           >
         </div>
         <div class="tray-section">
           <div class="field">
-            <span class="field-label">Pasta de destino</span>
+            <span class="field-label" data-i18n="settings.folderDestination">Destination folder</span>
             <div class="code-block">
-              <span id="folder-path">Nenhuma</span>
-              <button type="button" class="btn btn-ghost btn-sm" id="folder-choose">Escolher pasta…</button>
+              <span id="folder-path" data-i18n="settings.noneFemale">None</span>
+              <button type="button" class="btn btn-ghost btn-sm" id="folder-choose" data-i18n="settings.folderChoose">Choose folder…</button>
             </div>
           </div>
-          <label class="switch"><input type="checkbox" id="folder-transcripts" /><span class="track"></span>Incluir as transcrições (.jsonl)</label>
+          <label class="switch"><input type="checkbox" id="folder-transcripts" /><span class="track"></span><span data-i18n="settings.folderTranscripts">Include transcripts (.jsonl)</span></label>
           <div class="row row-between">
-            <span class="status-line" id="folder-estado" role="status" data-status="idle">Desligada</span>
-            <button type="button" class="btn btn-secondary btn-sm" id="folder-now">Sincronizar agora</button>
+            <span class="status-line" id="folder-estado" role="status" data-status="idle" data-i18n="settings.folder.off">Off</span>
+            <button type="button" class="btn btn-secondary btn-sm" id="folder-now" data-i18n="settings.folderNow">Sync now</button>
           </div>
         </div>
         <div class="tray-section" id="folder-layout">
-          <span class="kicker">Como a pasta é organizada</span>
+          <span class="kicker" data-i18n="settings.folderLayout">How the folder is organized</span>
           <ul class="stack stack-tight small" id="folder-rules">
-            <li><strong>Coleções viram subpastas, e cada uma se divide por mês.</strong> Ex.: <code>Clientes/2026-09/</code>. Uma gravação em mais de uma coleção aparece em cada uma; as sem coleção ficam em <code>sem-colecao</code>. Organize as coleções no eclume web.</li>
-            <li><strong>Nome que ordena por data.</strong> <code>2026-09-18_1100_01928f3a.md</code>: data, hora e a referência da gravação (a mesma "ref." do eclume web). O título fica dentro do arquivo, não no nome.</li>
-            <li><strong>Resumo e transcrição lado a lado.</strong> O resumo é um <code>.md</code> com propriedades no topo; a transcrição é um <code>.jsonl</code> com o mesmo nome.</li>
-            <li><strong>Vault do Obsidian.</strong> Abra a pasta como vault: o Obsidian lê os <code>.md</code> e ignora os <code>.jsonl</code>, então as transcrições não poluem a busca nem o grafo.</li>
-            <li><strong>Pasta de trabalho de agente.</strong> O app mantém um <code>AGENTS.md</code> na raiz que explica a um agente (como o Claude Code) como ler e pesquisar os arquivos.</li>
-            <li><strong>É um espelho.</strong> O eclume sobrescreve os arquivos que gerou; edite uma cópia. Arquivos seus na pasta nunca são tocados.</li>
+            <li><strong data-i18n="settings.folderRules.collectionsTitle">Collections become subfolders, each divided by month.</strong> <span data-i18n="settings.folderRules.example">Example:</span> <code data-i18n="settings.folderRules.examplePath">Clients/2026-09/</code><span data-i18n="settings.folderRules.collectionsBody">. A recording in several collections appears in each; those without a collection go in</span> <code data-i18n="settings.folderRules.uncollected">sem-colecao</code><span data-i18n="settings.folderRules.collectionsEnd">. Organize collections in eclume on the web.</span></li>
+            <li><strong data-i18n="settings.folderRules.nameTitle">Names that sort by date.</strong> <code>2026-09-18_1100_01928f3a.md</code><span data-i18n="settings.folderRules.nameBody">: date, time and recording reference (the same "ref." as eclume on the web). The title goes inside the file, rather than in its name.</span></li>
+            <li><strong data-i18n="settings.folderRules.filesTitle">Summary and transcript side by side.</strong> <span data-i18n="settings.folderRules.summaryPrefix">The summary is a</span> <code>.md</code> <span data-i18n="settings.folderRules.transcriptPrefix">with properties at the top; the transcript is a</span> <code>.jsonl</code> <span data-i18n="settings.folderRules.filesEnd">with the same name.</span></li>
+            <li><strong data-i18n="settings.folderRules.obsidianTitle">Obsidian vault.</strong> <span data-i18n="settings.folderRules.obsidianPrefix">Open the folder as a vault: Obsidian reads</span> <code>.md</code> <span data-i18n="settings.folderRules.obsidianMiddle">and ignores</span> <code>.jsonl</code><span data-i18n="settings.folderRules.obsidianEnd">, so transcripts do not clutter search or the graph.</span></li>
+            <li><strong data-i18n="settings.folderRules.agentTitle">Agent workspace folder.</strong> <span data-i18n="settings.folderRules.agentPrefix">The app maintains an</span> <code>AGENTS.md</code> <span data-i18n="settings.folderRules.agentEnd">at the root explaining to an agent (such as Claude Code) how to read and search the files.</span></li>
+            <li><strong data-i18n="settings.folderRules.mirrorTitle">It is a mirror.</strong> <span data-i18n="settings.folderRules.mirrorBody">eclume overwrites the files it generated; edit a copy. Your own files in the folder are never touched.</span></li>
           </ul>
-          <a href="#" class="small" id="folder-help">Saiba mais na ajuda</a>
+          <a href="#" class="small" id="folder-help" data-i18n="settings.folderHelp">Learn more in help</a>
         </div>
       </div>
 
@@ -503,37 +507,37 @@
               <strong id="server-account"></strong>
               <span class="text-muted small" id="server-account-sub"></span>
             </div>
-            <button type="button" class="btn btn-secondary btn-sm" id="server-sign-in" hidden>Entrar com e-mail e senha</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="server-sign-out">Sair</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="server-sign-in" hidden data-i18n="settings.signIn">Sign in with email and password</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="server-sign-out" data-i18n="settings.signOut">Sign out</button>
           </div>
           <span class="status-line" id="server-connection" hidden></span>
         </div>
         <div class="tray-section">
           <div class="field">
-            <label for="server-address">Endereço do servidor</label>
+            <label for="server-address" data-i18n="settings.serverAddress">Server address</label>
             <input class="input mono" id="server-address" />
           </div>
           <details class="disclosure">
-            <summary>Avançado<span class="text-muted">Para servidores com API separada ou certificado próprio</span></summary>
+            <summary><span data-i18n="settings.advanced">Advanced</span><span class="text-muted" data-i18n="settings.advancedHint">For servers with a separate API or their own certificate</span></summary>
             <div class="stack">
               <div class="field">
-                <label for="server-api">Endereço da API</label>
-                <input class="input mono" id="server-api" placeholder="O mesmo do servidor" />
+                <label for="server-api" data-i18n="settings.apiAddress">API address</label>
+                <input class="input mono" id="server-api" placeholder="Same as the server" data-i18n-placeholder="settings.apiPlaceholder" />
               </div>
               <div class="field">
-                <span class="field-label">Autoridade certificadora extra</span>
+                <span class="field-label" data-i18n="settings.extraCa">Extra certificate authority</span>
                 <div class="code-block">
                   <span id="server-ca"></span>
-                  <button type="button" class="btn btn-ghost btn-sm" id="server-ca-clear" hidden>Remover</button>
-                  <button type="button" class="btn btn-ghost btn-sm" id="server-ca-choose">Escolher…</button>
+                  <button type="button" class="btn btn-ghost btn-sm" id="server-ca-clear" hidden data-i18n="settings.remove">Remove</button>
+                  <button type="button" class="btn btn-ghost btn-sm" id="server-ca-choose" data-i18n="settings.choose">Choose…</button>
                 </div>
-                <span class="text-muted tiny">Arquivo PEM. Só é preciso quando o servidor usa um certificado próprio.</span>
+                <span class="text-muted tiny" data-i18n="settings.caHint">PEM file. Only needed when the server uses its own certificate.</span>
               </div>
             </div>
           </details>
           <div class="row">
-            <button type="button" class="btn btn-primary" id="server-save">Salvar</button>
-            <button type="button" class="btn btn-secondary" id="server-test">Testar conexão</button>
+            <button type="button" class="btn btn-primary" id="server-save" data-i18n="settings.save">Save</button>
+            <button type="button" class="btn btn-secondary" id="server-test" data-i18n="settings.testConnection">Test connection</button>
           </div>
         </div>
       </div>

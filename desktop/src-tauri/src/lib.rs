@@ -7,6 +7,7 @@ mod auto;
 pub mod capture;
 mod commands;
 pub mod config;
+pub mod i18n;
 mod import;
 mod mirror_sync;
 mod notify;
@@ -109,7 +110,14 @@ pub(crate) fn toggle_note(app: &AppHandle) -> anyhow::Result<()> {
         Ok(NoteToggle::Started) => {}
         Ok(NoteToggle::Stopped(recording)) => notify::note_saved(recording.duration_ms),
         Err(err) if err.is::<Busy>() => notify::busy(),
-        Err(err) => notify::info("Não deu para gravar a nota", &format!("{err:#}")),
+        Err(err) => notify::info(
+            state
+                .locale()
+                .unwrap_or(i18n::Locale::En)
+                .texts()
+                .note_failed,
+            &format!("{err:#}"),
+        ),
     }
     sync::nudge(app);
     refresh_ui(app);
@@ -332,12 +340,14 @@ pub fn run() {
             app.manage(state);
             tray::build(app.handle())?;
             if let Some(update) = updated {
+                let texts = app
+                    .state::<AppState>()
+                    .locale()
+                    .unwrap_or(i18n::Locale::En)
+                    .texts();
                 notify::info(
-                    &format!("eclume atualizado para {}", update.version),
-                    update
-                        .notes
-                        .as_deref()
-                        .unwrap_or("Veja as novidades na janela do eclume."),
+                    &i18n::fill(texts.updated, &[("version", &update.version)]),
+                    update.notes.as_deref().unwrap_or(texts.update_notes),
                 );
             }
             reconcile_autostart(app.handle());
@@ -352,6 +362,16 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             spawn_reaper(app.handle().clone());
             sync::spawn(app.handle());
+            let locale_app = app.handle().clone();
+            std::thread::spawn(move || {
+                if let Err(err) = locale_app
+                    .state::<AppState>()
+                    .refresh_account_locale(&account::RealNet)
+                {
+                    log::warn!("failed to refresh account locale: {err:#}");
+                }
+                refresh_ui(&locale_app);
+            });
             mirror_sync::spawn(app.handle());
             recent::spawn(app.handle());
             auto::spawn(app.handle().clone());
@@ -394,6 +414,8 @@ pub fn run() {
             commands::open_web,
             commands::settings,
             commands::save_settings,
+            commands::set_locale,
+            commands::report_system_locale,
             commands::answer_meeting,
             commands::sync_now,
             commands::recent,

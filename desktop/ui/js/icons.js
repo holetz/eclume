@@ -30,7 +30,7 @@ const templates = new Map();
 function icon(name) {
   if (!templates.has(name)) {
     const shape = SHAPES[name];
-    if (!shape) throw new Error(`ícone desconhecido: ${name}`);
+    if (!shape) throw new Error(`unknown icon: ${name}`);
     const template = document.createElement("template");
     // Constant markup from this file, never external data.
     template.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">${shape}</svg>`;
