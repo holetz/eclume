@@ -50,7 +50,7 @@ stopped applying in the production build:
   ```
 
   `design-system/test_sync.py` fails when a copy diverges from the source; the desktop's
-  `ui_assets` and the phone's `copia.test.ts` check the copies against the web's. Then `npm --prefix
+  `ui_assets` and the phone's `copy.test.ts` check the copies against the web's. Then `npm --prefix
   web run build` and the visual verification screenshots (below) show what changed. A new DS class
   is available with nothing else; a renamed class breaks the screen that used it, and the E2E
   catches it.
@@ -167,5 +167,5 @@ diff: the comparison is reviewed.
   3:1 or more (1.4.11, which axe does not measure) and the secondary, warning, success, error and
   table-header texts at 4.5:1 or more. The value changes at the source (`design-system/styles.css`),
   never in a copy.
-- **Faithful copy on the phone.** `mobile/ui/src/styles/copia.test.ts` checks that the phone's
+- **Faithful copy on the phone.** `mobile/ui/src/styles/copy.test.ts` checks that the phone's
   `eclume.css` equals the web's, as `ui_assets` does with the desktop's.

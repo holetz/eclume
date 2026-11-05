@@ -2,7 +2,7 @@
 type: standard
 title: Mobile app distribution
 description: How the eclume mobile app becomes an APK and updates itself — version in tauri.conf.json, tag mobile-v<version>, release on the host through deploy/release-mobile.sh (container with the read-only keystore, signed universal APK, certificate checked against mobile/certificado-release.sha256, smoke of the minified APK on the emulator), keystore only on the host, movel.json and SHA256SUMS, publishing to /srv/eclume/downloads/movel through deploy/publish-mobile.sh, which refuses an undeclared certificate change, and the in-app update through the pinned CA.
-resource: mobile/src-tauri/tauri.conf.json, mobile/src-tauri/gen/android/app/build.gradle.kts, mobile/scripts/manifesto_movel.py, mobile/scripts/criar-keystore.sh, mobile/scripts/simbolos_jni.py, mobile/scripts/prova-emulador.sh, mobile/build.Dockerfile, mobile/INSTALACAO.md, deploy/release-mobile.sh, deploy/publish-mobile.sh
+resource: mobile/src-tauri/tauri.conf.json, mobile/src-tauri/gen/android/app/build.gradle.kts, mobile/scripts/mobile_manifest.py, mobile/scripts/create-keystore.sh, mobile/scripts/jni_symbols.py, mobile/scripts/prove-emulator.sh, mobile/build.Dockerfile, mobile/INSTALACAO.md, deploy/release-mobile.sh, deploy/publish-mobile.sh
 tags: [code, mobile, android, release, apk, host]
 timestamp: 2026-10-01
 audience: both
@@ -49,9 +49,9 @@ Actions: the keystore **never** goes to the GitHub secrets.
   same key, only for the smoke. `apksigner verify --print-certs` gives the certificate's SHA-256,
   which must match `mobile/certificado-release.sha256` (the versioned, public value: it already ships
   in `movel.json`); if it differs, the release stops.
-- `mobile/scripts/manifesto_movel.py` writes `movel.json` and `SHA256SUMS`, checked before
+- `mobile/scripts/mobile_manifest.py` writes `movel.json` and `SHA256SUMS`, checked before
   publishing.
-- **Smoke of the minified APK:** `mobile/scripts/prova-emulador.sh --fumaca <apk x86_64>` starts the
+- **Smoke of the minified APK:** `mobile/scripts/prove-emulator.sh --smoke <apk x86_64>` starts the
   host's AVD, installs, opens the Activity, waits for the core's log, forces the `SyncWorker` job
   (`cmd jobscheduler run -f`) and requires the sync log, with no `UnsatisfiedLinkError`,
   `ClassNotFoundException` or `FATAL EXCEPTION` in logcat. Playwright does not open the WebView of a
@@ -62,13 +62,13 @@ Actions: the keystore **never** goes to the GitHub secrets.
 
 The release APK is also proved on every gate, in the `android` pillar ([monorepo.md](monorepo.md)):
 minified and signed with a throwaway key, with the plugin's and the app's unit tests and lint and
-the JNI symbol check (`mobile/scripts/simbolos_jni.py`: every `external fun` of `EclumeCore.kt` with
+the JNI symbol check (`mobile/scripts/jni_symbols.py`: every `external fun` of `EclumeCore.kt` with
 its `Java_…` symbol in the `.so`, and the class with the native methods in the dex).
 
 ## Keystore and certificate
 
 - The keystore is created **once**, on the host, by
-  `mobile/scripts/criar-keystore.sh --dname "<titular>"` (the holder comes from the app's identity,
+  `mobile/scripts/create-keystore.sh --dname "<titular>"` (the holder comes from the app's identity,
   holetz/eclume#17): RSA 4096, 30-year validity, alias `eclume`, in
   `/srv/eclume/secrets/eclume-android.jks`, with the password in
   `/srv/eclume/secrets/android-keystore-password` (both 0600). The script refuses to overwrite an
