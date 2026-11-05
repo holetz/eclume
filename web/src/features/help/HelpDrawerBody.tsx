@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { isSearchShortcut } from '../../app/help'
 import { ARTICLES, articlesForPage } from './catalog'
@@ -10,6 +11,7 @@ const MAX_RESULTS = 6
 
 /** The help drawer body: search, the page's articles ("Nesta página") and the shortcuts. */
 export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | null }) {
+  const { t } = useTranslation('help')
   const [query, setQuery] = useState('')
   const input = useRef<HTMLInputElement>(null)
   const results = useMemo(() => searchArticles(query, ARTICLES, MAX_RESULTS), [query])
@@ -27,13 +29,13 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
 
   return (
     <>
-      <HelpSearch value={query} onChange={setQuery} inputRef={input} placeholder="Buscar na ajuda" />
+      <HelpSearch value={query} onChange={setQuery} inputRef={input} placeholder={t('search.label')} />
       <div className="help-drawer-body">
         {query.trim() ? (
           <div className="help-section">
-            <span className="kicker">Resultados</span>
+            <span className="kicker">{t('drawer.results')}</span>
             {results.length > 0 ? (
-              <ul className="help-links" aria-label="Resultados da busca na ajuda">
+              <ul className="help-links" aria-label={t('drawer.resultsLabel')}>
                 {results.map(({ article }) => (
                   <li key={article.slug}>
                     <Link to={`/ajuda/${article.slug}`}>{article.title}</Link>
@@ -42,7 +44,7 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
               </ul>
             ) : (
               <p className="text-muted" role="status">
-                Nada encontrado. Tente outras palavras.
+                {t('drawer.none')}
               </p>
             )}
           </div>
@@ -50,8 +52,8 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
           pageKey &&
           pageArticles.length > 0 && (
             <div className="help-section">
-              <span className="kicker">Nesta página · {HELP_PAGES[pageKey]}</span>
-              <ul className="help-links" aria-label={`Artigos sobre ${HELP_PAGES[pageKey]}`}>
+              <span className="kicker">{t('drawer.onThisPage', { page: HELP_PAGES[pageKey] })}</span>
+              <ul className="help-links" aria-label={t('drawer.articlesAbout', { page: HELP_PAGES[pageKey] })}>
                 {pageArticles.map((article) => (
                   <li key={article.slug}>
                     <Link to={`/ajuda/${article.slug}`}>{article.title}</Link>
@@ -62,24 +64,24 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
           )
         )}
         <div className="help-section">
-          <span className="kicker">Atalhos</span>
+          <span className="kicker">{t('drawer.shortcuts')}</span>
           <dl className="shortcuts">
             <div>
-              <dt>Abrir a ajuda</dt>
+              <dt>{t('drawer.open')}</dt>
               <dd>
                 <kbd className="kbd">?</kbd>
               </dd>
             </div>
             <div>
-              <dt>Buscar na ajuda</dt>
+              <dt>{t('drawer.search')}</dt>
               <dd>
                 <kbd className="kbd">/</kbd>
               </dd>
             </div>
             <div>
-              <dt>Fechar a ajuda</dt>
+              <dt>{t('drawer.close')}</dt>
               <dd>
-                <kbd className="kbd">Esc</kbd>
+                <kbd className="kbd">{t('drawer.esc')}</kbd>
               </dd>
             </div>
           </dl>

@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
@@ -13,6 +14,7 @@ type User = Schemas['AdminUser']
 
 /** Platform user accounts: recordings per account, deactivate or reactivate, password link. */
 export function UsersPage() {
+  const { t } = useTranslation('admin')
   const users = useAllUsers()
   const setActive = useSetUserActive()
   const [query, setQuery] = useState('')
@@ -31,8 +33,8 @@ export function UsersPage() {
 
   return (
     <>
-      <AdminPageHead title="Usuários" />
-      {users.isPending && <p role="status">Carregando usuários…</p>}
+      <AdminPageHead title={t('users.title')} />
+      {users.isPending && <p role="status">{t('users.loading')}</p>}
       {users.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(users.error)}
@@ -42,18 +44,18 @@ export function UsersPage() {
         <div className={styles.page}>
           <div className="toolbar">
             <label htmlFor={searchId} className="visually-hidden">
-              Buscar por nome ou e-mail
+              {t('users.search')}
             </label>
             <input
               id={searchId}
               className={`input ${styles.search}`}
               type="search"
-              placeholder="Buscar por nome ou e-mail"
+              placeholder={t('users.search')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
             <span className={`text-muted ${styles.count}`}>
-              {all.length === 1 ? '1 conta' : `${all.length} contas`} · {active === 1 ? '1 ativa' : `${active} ativas`}
+              {t('users.accounts', { count: all.length })} · {t('users.active', { count: active })}
             </span>
           </div>
           {setActive.isError && (
@@ -62,21 +64,21 @@ export function UsersPage() {
             </p>
           )}
           {all.length === 0 ? (
-            <p className="text-muted">Nenhuma conta ainda. O cadastro fica em /cadastro.</p>
+            <p className="text-muted">{t('users.none')}</p>
           ) : shown.length === 0 ? (
-            <p className="text-muted">Nenhuma conta com “{query.trim()}”.</p>
+            <p className="text-muted">{t('users.noMatch', { query: query.trim() })}</p>
           ) : (
             <div className={styles.scroll}>
               <table className="table">
                 <thead>
                   <tr>
-                    <th scope="col">Nome</th>
-                    <th scope="col">E-mail</th>
-                    <th scope="col">Cadastro</th>
-                    <th scope="col">Gravações</th>
-                    <th scope="col">Estado</th>
+                    <th scope="col">{t('users.name')}</th>
+                    <th scope="col">{t('users.email')}</th>
+                    <th scope="col">{t('users.created')}</th>
+                    <th scope="col">{t('users.recordings')}</th>
+                    <th scope="col">{t('users.state')}</th>
                     <th scope="col">
-                      <span className="visually-hidden">Ações</span>
+                      <span className="visually-hidden">{t('users.actions')}</span>
                     </th>
                   </tr>
                 </thead>
@@ -91,9 +93,9 @@ export function UsersPage() {
                       <td className="tabular">{user.recording_count}</td>
                       <td>
                         {user.active ? (
-                          <span className="badge badge-success">Ativa</span>
+                          <span className="badge badge-success">{t('users.activeBadge')}</span>
                         ) : (
-                          <span className="badge">Desativada</span>
+                          <span className="badge">{t('users.inactiveBadge')}</span>
                         )}
                       </td>
                       <td className={styles.actionsCell}>
@@ -102,29 +104,29 @@ export function UsersPage() {
                             <button
                               type="button"
                               className="btn btn-ghost btn-sm"
-                              aria-label={`Gerar link de senha para ${user.name}`}
+                              aria-label={t('users.resetFor', { name: user.name })}
                               onClick={() => setResetting(user)}
                             >
-                              Gerar link de senha
+                              {t('users.reset')}
                             </button>
                             <button
                               type="button"
                               className="btn btn-ghost btn-sm"
-                              aria-label={`Desativar ${user.name}`}
+                              aria-label={t('users.deactivateName', { name: user.name })}
                               onClick={() => setConfirming(user)}
                             >
-                              Desativar
+                              {t('users.deactivate')}
                             </button>
                           </>
                         ) : (
                           <button
                             type="button"
                             className="btn btn-ghost btn-sm"
-                            aria-label={`Reativar ${user.name}`}
+                            aria-label={t('users.reactivateName', { name: user.name })}
                             disabled={setActive.isPending}
                             onClick={() => setActive.mutate({ id: user.id, active: true })}
                           >
-                            Reativar
+                            {t('users.reactivate')}
                           </button>
                         )}
                       </td>
@@ -138,13 +140,13 @@ export function UsersPage() {
       )}
       {confirming && (
         <ConfirmDialog
-          title={`Desativar ${confirming.name}?`}
-          confirmLabel="Desativar"
+          title={t('users.deactivateTitle', { name: confirming.name })}
+          confirmLabel={t('users.deactivate')}
           busy={setActive.isPending}
           onConfirm={() => deactivate(confirming)}
           onCancel={() => setConfirming(null)}
         >
-          As sessões são encerradas e os tokens de acesso, revogados. As gravações ficam guardadas.
+          {t('users.deactivateBody')}
         </ConfirmDialog>
       )}
       {resetting && <PasswordResetDialog user={resetting} onClose={() => setResetting(null)} />}
@@ -157,6 +159,7 @@ export function UsersPage() {
  * expires the previous one; the admin hands the link over out of band, after confirming who asks.
  */
 function PasswordResetDialog({ user, onClose }: { user: User; onClose: () => void }) {
+  const { t } = useTranslation(['admin', 'common'])
   const create = useCreatePasswordReset()
   const link = create.data
 
@@ -164,12 +167,12 @@ function PasswordResetDialog({ user, onClose }: { user: User; onClose: () => voi
     return (
       <Dialog
         plain
-        title={`Link de senha de ${user.name}`}
-        message={`Copie e entregue por fora, pessoalmente, por telefone ou por mensagem, a ${user.name}. Vale por 24 horas e uma só vez; este link não aparece de novo.`}
+        title={t('users.linkTitle', { name: user.name })}
+        message={t('users.linkMessage', { name: user.name })}
         onClose={onClose}
         actions={
           <button type="button" className="btn btn-primary" onClick={onClose}>
-            Fechar
+            {t('common:close')}
           </button>
         }
       >
@@ -180,13 +183,13 @@ function PasswordResetDialog({ user, onClose }: { user: User; onClose: () => voi
   return (
     <Dialog
       plain
-      title={`Gerar link de senha para ${user.name}?`}
-      message={`Confirme antes que é ${user.name} quem pede. Quem abrir o link define uma senha nova, e as sessões abertas da conta são encerradas. Um link anterior ainda não usado deixa de valer.`}
+      title={t('users.confirmTitle', { name: user.name })}
+      message={t('users.confirmMessage', { name: user.name })}
       onClose={onClose}
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Cancelar
+            {t('common:cancel')}
           </button>
           <button
             type="button"
@@ -195,7 +198,7 @@ function PasswordResetDialog({ user, onClose }: { user: User; onClose: () => voi
             disabled={create.isPending}
             aria-busy={create.isPending}
           >
-            Gerar link
+            {t('users.make')}
           </button>
         </>
       }

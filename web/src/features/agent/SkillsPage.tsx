@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { errorMessage } from '../../api/problem'
 import { ConfirmDialog } from '../../app/ConfirmDialog'
@@ -10,8 +11,8 @@ import {
   MAX_SKILL_DESCRIPTION,
   MAX_SKILL_INSTRUCTIONS,
   SKILL_NAME,
-  TOOL_KIND,
   normalizeSkillName,
+  toolKindLabel,
   useAgentTools,
   useDeleteSkill,
   useSaveSkill,
@@ -21,6 +22,7 @@ import {
 } from './skills'
 
 function SkillDialog({ skill, onClose }: { skill: AgentSkill | null; onClose: () => void }) {
+  const { t } = useTranslation('agent')
   const save = useSaveSkill()
   const tools = useAgentTools()
   const [name, setName] = useState(skill?.name ?? '')
@@ -51,16 +53,16 @@ function SkillDialog({ skill, onClose }: { skill: AgentSkill | null; onClose: ()
 
   return (
     <Dialog
-      title={skill ? `Editar /${skill.name}` : 'Nova habilidade'}
+      title={skill ? t('skills.edit', { name: skill.name }) : t('skills.new')}
       size="lg"
       onClose={onClose}
       actions={
         <>
           <button type="button" className="btn btn-ghost" onClick={onClose}>
-            Cancelar
+            {t('cancel')}
           </button>
           <button type="submit" form={`${id}-form`} className="btn btn-primary" disabled={save.isPending || !ready}>
-            Salvar
+            {t('save')}
           </button>
         </>
       }
@@ -68,7 +70,7 @@ function SkillDialog({ skill, onClose }: { skill: AgentSkill | null; onClose: ()
       <form id={`${id}-form`} className={styles.skillForm} onSubmit={onSubmit}>
         <div className="field">
           <label htmlFor={`${id}-name`} className="field-label">
-            Nome
+            {t('skills.name')}
           </label>
           <input
             id={`${id}-name`}
@@ -80,17 +82,17 @@ function SkillDialog({ skill, onClose }: { skill: AgentSkill | null; onClose: ()
             onChange={(event) => setName(event.target.value)}
           />
           <span id={`${id}-name-hint`} className="field-hint">
-            Na conversa, digite /{normalized || 'nome'} no começo da mensagem. Use letras minúsculas, números e hífens.
+            {t('skills.nameHint', { name: normalized || t('skills.namePlaceholder') })}
           </span>
           {name.trim() !== '' && !validName && (
             <span className="field-hint" role="alert">
-              O nome precisa ter de 2 a 40 letras minúsculas, números ou hífens.
+              {t('skills.nameInvalid')}
             </span>
           )}
         </div>
         <div className="field">
           <label htmlFor={`${id}-description`} className="field-label">
-            Descrição
+            {t('skills.description')}
           </label>
           <input
             id={`${id}-description`}
@@ -101,12 +103,12 @@ function SkillDialog({ skill, onClose }: { skill: AgentSkill | null; onClose: ()
             onChange={(event) => setDescription(event.target.value)}
           />
           <span id={`${id}-description-hint`} className="field-hint">
-            O Agente lê a descrição para decidir quando usar a habilidade sozinho.
+            {t('skills.descriptionHint')}
           </span>
         </div>
         <div className="field">
           <label htmlFor={`${id}-instructions`} className="field-label">
-            Instruções
+            {t('skills.instructions')}
           </label>
           <textarea
             id={`${id}-instructions`}
@@ -118,15 +120,15 @@ function SkillDialog({ skill, onClose }: { skill: AgentSkill | null; onClose: ()
             onChange={(event) => setInstructions(event.target.value)}
           />
           <span id={`${id}-instructions-hint`} className="field-hint">
-            Em Markdown: o roteiro, o formato da resposta, o que conferir.
+            {t('skills.instructionsHint')}
           </span>
         </div>
         <fieldset className={styles.skillTools}>
-          <legend className="field-label">Ferramentas</legend>
+          <legend className="field-label">{t('skills.tools')}</legend>
           <label className="check">
             <input type="checkbox" checked={restrict} onChange={(event) => setRestrict(event.target.checked)} />
             <span className="box" />
-            <span>Limitar as ferramentas que a habilidade usa</span>
+            <span>{t('skills.restrict')}</span>
           </label>
           {restrict &&
             (tools.isError ? (
@@ -144,13 +146,13 @@ function SkillDialog({ skill, onClose }: { skill: AgentSkill | null; onClose: ()
                     />
                     <span className="box" />
                     <span>
-                      {tool.description} <span className="text-muted">({TOOL_KIND[tool.kind]})</span>
+                      {tool.description} <span className="text-muted">({toolKindLabel(tool.kind)})</span>
                     </span>
                   </label>
                 ))}
               </div>
             ))}
-          {restrict && allowed.length === 0 && <span className="field-hint">Escolha ao menos uma ferramenta.</span>}
+          {restrict && allowed.length === 0 && <span className="field-hint">{t('skills.pickOne')}</span>}
         </fieldset>
         {save.isError && (
           <p className="alert alert-error" role="alert">
@@ -165,6 +167,7 @@ function SkillDialog({ skill, onClose }: { skill: AgentSkill | null; onClose: ()
 /** The Habilidades page: the reusable instructions the Agent follows, in the menu's Agente group. */
 export function SkillsPage() {
   useHelpTopic('agente')
+  const { t } = useTranslation('agent')
   const skills = useSkills()
   const toggle = useToggleSkill()
   const remove = useDeleteSkill()
@@ -175,63 +178,62 @@ export function SkillsPage() {
   return (
     <div className={styles.page}>
       <PageHead
-        kicker="Agente"
-        title="Habilidades"
+        kicker={t('kicker')}
+        title={t('skills.title')}
         actions={
           <button type="button" className="btn btn-primary btn-sm" onClick={() => setEditing('new')}>
-            Nova habilidade
+            {t('skills.new')}
           </button>
         }
       />
       <p className="text-muted">
-        Uma habilidade guarda um jeito de trabalhar que você repete. Na <Link to="/agente">conversa</Link>, chame-a
-        com /nome ou pelo seletor; o Agente também a escolhe pela descrição.
+        <Trans t={t} i18nKey="skills.lede" components={{ chat: <Link to="/agente" /> }} />
       </p>
       {skills.isError ? (
         <p className="alert alert-error" role="alert">
           {errorMessage(skills.error)}
         </p>
       ) : skills.isPending ? (
-        <p className="text-muted">Carregando as habilidades…</p>
+        <p className="text-muted">{t('skills.loading')}</p>
       ) : items.length === 0 ? (
-        <p className="text-muted">Nenhuma habilidade ainda. Crie a primeira com Nova habilidade.</p>
+        <p className="text-muted">{t('skills.none')}</p>
       ) : (
-        <ul className={`list ${styles.sessions}`} aria-label="Habilidades">
+        <ul className={`list ${styles.sessions}`} aria-label={t('skills.title')}>
           {items.map((skill) => (
             <li key={skill.id} className="list-row">
               <span className="list-row-title">
                 /{skill.name}
-                {!skill.enabled && <span className="chip"> desligada</span>}
+                {!skill.enabled && <span className="chip">{t('skills.off')}</span>}
               </span>
               <span className="list-row-sub">
                 {skill.description}
-                {skill.allowed_tools && ` · ${skill.allowed_tools.length} ferramenta(s) permitida(s)`}
+                {skill.allowed_tools && t('skills.allowed', { n: skill.allowed_tools.length })}
               </span>
               <span className="list-row-actions">
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
-                  aria-label={`${skill.enabled ? 'Desligar' : 'Ligar'} /${skill.name}`}
+                  aria-label={t('skills.toggleName', { action: skill.enabled ? t('skills.turnOff') : t('skills.turnOn'), name: skill.name })}
                   disabled={toggle.isPending}
                   onClick={() => toggle.mutate({ id: skill.id, enabled: !skill.enabled })}
                 >
-                  {skill.enabled ? 'Desligar' : 'Ligar'}
+                  {skill.enabled ? t('skills.turnOff') : t('skills.turnOn')}
                 </button>
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
-                  aria-label={`Editar /${skill.name}`}
+                  aria-label={t('skills.edit', { name: skill.name })}
                   onClick={() => setEditing(skill)}
                 >
-                  Editar
+                  {t('skills.editAction')}
                 </button>
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
-                  aria-label={`Excluir /${skill.name}`}
+                  aria-label={t('skills.deleteName', { name: skill.name })}
                   onClick={() => setDeleting(skill)}
                 >
-                  Excluir
+                  {t('skills.delete')}
                 </button>
               </span>
             </li>
@@ -241,13 +243,13 @@ export function SkillsPage() {
       {editing && <SkillDialog skill={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
       {deleting && (
         <ConfirmDialog
-          title="Excluir habilidade"
-          confirmLabel="Excluir"
+          title={t('skills.deleteTitle')}
+          confirmLabel={t('skills.delete')}
           busy={remove.isPending}
           onCancel={() => setDeleting(null)}
           onConfirm={() => remove.mutate(deleting.id, { onSuccess: () => setDeleting(null) })}
         >
-          <p>/{deleting.name} deixa de existir. As conversas que a usaram continuam como estão.</p>
+          <p>{t('skills.deleteBody', { name: deleting.name })}</p>
         </ConfirmDialog>
       )}
     </div>

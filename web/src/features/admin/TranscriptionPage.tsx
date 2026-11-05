@@ -1,4 +1,5 @@
-import { useId, useMemo, useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
@@ -16,12 +17,13 @@ const FORM_ID = 'admin-transcricao'
 
 /** Transcription engine, model and language; diarization and identification live in Locutores. */
 export function TranscriptionPage() {
+  const { t } = useTranslation('admin')
   const settings = useAdminSettings()
   if (settings.data) return <TranscriptionForm settings={settings.data} />
   return (
     <>
-      <AdminPageHead title="Transcrição" />
-      {settings.isPending && <p role="status">Carregando a configuração…</p>}
+      <AdminPageHead title={t('transcription.title')} />
+      {settings.isPending && <p role="status">{t('settings.loading')}</p>}
       {settings.isError && (
         <p className="alert alert-error" role="alert">
           {errorMessage(settings.error)}
@@ -32,6 +34,7 @@ export function TranscriptionPage() {
 }
 
 function TranscriptionForm({ settings }: { settings: Settings }) {
+  const { t } = useTranslation('admin')
   const update = useUpdateSettings()
   const [engine, setEngine] = useState(settings.asr.engine)
   const [model, setModel] = useState(settings.asr.model)
@@ -42,7 +45,8 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
   const [endpoint, setEndpoint] = useState(settings.asr.endpoint_url ?? '')
   // What was saved last: the notice holds until the form changes again.
   const [sent, setSent] = useState<string | null>(null)
-  const languages = useMemo(() => whisperLanguages(), [])
+  // Rebuilt on each render, so the names follow the active locale.
+  const languages = whisperLanguages()
   const ids = {
     engine: useId(),
     endpoint: useId(),
@@ -81,19 +85,19 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
   return (
     <>
       <AdminPageHead
-        title="Transcrição"
+        title={t('transcription.title')}
         actions={
           // Outside the form, in the header: `form=` ties it to the form; Enter in the fields also saves.
           <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={!canSave}>
-            {update.isPending ? 'Salvando…' : 'Salvar'}
+            {update.isPending ? t('settings.saving') : t('settings.save')}
           </button>
         }
       />
       <ExternalDataNotice purposes={['transcription']} revision={settings.updated_at} />
-      <form id={FORM_ID} className={styles.narrowForm} onSubmit={submit} aria-label="Configuração de transcrição">
+      <form id={FORM_ID} className={styles.narrowForm} onSubmit={submit} aria-label={t('transcription.form')}>
         <div className="field">
           <span id={ids.engine} className={styles.label}>
-            Motor
+            {t('transcription.engine')}
           </span>
           <div className="seg" role="radiogroup" aria-labelledby={ids.engine}>
             {ENGINES.map((option) => (
@@ -113,7 +117,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
         </div>
         {remote && (
           <div className="field">
-            <label htmlFor={ids.endpoint}>Endereço do servidor remoto</label>
+            <label htmlFor={ids.endpoint}>{t('transcription.endpoint')}</label>
             <input
               id={ids.endpoint}
               className="input"
@@ -121,12 +125,12 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
               required
               value={endpoint}
               onChange={(e) => setEndpoint(e.target.value)}
-              placeholder="http://speaches:8000/v1"
+              placeholder="http://speaches:8000/v1" // i18n-ignore: a sample address
             />
           </div>
         )}
         <div className="field">
-          <label htmlFor={ids.model}>Modelo</label>
+          <label htmlFor={ids.model}>{t('transcription.model')}</label>
           <select id={ids.model} className="input" value={model} onChange={(e) => setModel(e.target.value)}>
             {!MODELS.includes(model as (typeof MODELS)[number]) && <option value={model}>{model}</option>}
             {MODELS.map((name) => (
@@ -137,13 +141,13 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
           </select>
         </div>
         <div className="field">
-          <label htmlFor={ids.language}>Idioma</label>
+          <label htmlFor={ids.language}>{t('transcription.language')}</label>
           <select id={ids.language} className="input" value={language} onChange={(e) => setLanguage(e.target.value)}>
             {language !== AUTO_LANGUAGE && !languages.some((option) => option.value === language) && (
               <option value={language}>{language}</option>
             )}
-            <option value={AUTO_LANGUAGE}>Detectar automaticamente</option>
-            <optgroup label={`Idiomas (${languages.length})`}>
+            <option value={AUTO_LANGUAGE}>{t('transcription.auto')}</option>
+            <optgroup label={t('transcription.languages', { count: languages.length })}>
               {languages.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -151,13 +155,13 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
               ))}
             </optgroup>
           </select>
-          <span className="field-hint">Os modelos Whisper aceitam um idioma por gravação, ou a detecção automática.</span>
+          <span className="field-hint">{t('transcription.languageHint')}</span>
         </div>
         <details className={styles.advanced}>
-          <summary>Avançado</summary>
+          <summary>{t('transcription.advanced')}</summary>
           <div className={styles.stack}>
             <div className="field">
-              <label htmlFor={ids.compute}>Tipo de computação</label>
+              <label htmlFor={ids.compute}>{t('transcription.compute')}</label>
               <select
                 id={ids.compute}
                 className="input"
@@ -175,7 +179,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
               </select>
             </div>
             <div className="field">
-              <label htmlFor={ids.batch}>Lote do ASR</label>
+              <label htmlFor={ids.batch}>{t('transcription.batch')}</label>
               <input
                 id={ids.batch}
                 className="input"
@@ -183,31 +187,31 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
                 min={1}
                 value={batchSize}
                 onChange={(e) => setBatchSize(e.target.value)}
-                placeholder="Automático"
+                placeholder={t('transcription.batchAuto')}
               />
-              <span className="field-hint">Vazio: pela VRAM livre.</span>
+              <span className="field-hint">{t('transcription.batchHint')}</span>
             </div>
             <div className="field">
-              <label htmlFor={ids.fallback}>Modelo de recuo</label>
+              <label htmlFor={ids.fallback}>{t('transcription.fallback')}</label>
               <input
                 id={ids.fallback}
                 className="input"
                 list={ids.models}
                 value={fallbackModel}
                 onChange={(e) => setFallbackModel(e.target.value)}
-                placeholder="medium"
+                placeholder="medium" // i18n-ignore: a model name
               />
               <datalist id={ids.models}>
                 {MODELS.map((name) => (
                   <option key={name} value={name} />
                 ))}
               </datalist>
-              <span className="field-hint">Usado se faltar VRAM mesmo com lote 1.</span>
+              <span className="field-hint">{t('transcription.fallbackHint')}</span>
             </div>
           </div>
         </details>
         <p className="text-muted">
-          A separação e a identificação de locutores ficam em <Link to="/admin/locutores">Locutores</Link>.
+          <Trans t={t} i18nKey="transcription.speakers" components={{ speakers: <Link to="/admin/locutores" /> }} />
         </p>
         {update.isError && (
           <p className="alert alert-error" role="alert">
@@ -215,7 +219,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
           </p>
         )}
         <p role="status" className="text-muted">
-          {sent === JSON.stringify(asr) ? 'Configuração salva.' : ''}
+          {sent === JSON.stringify(asr) ? t('settings.saved') : ''}
         </p>
         <p className={styles.meta}>{lastChangeText(settings)}</p>
       </form>

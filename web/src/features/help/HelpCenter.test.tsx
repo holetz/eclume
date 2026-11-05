@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { setLocale } from '../../i18n'
 import { fixtures } from '../../test/fixtures'
 import { mockFetch } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
@@ -8,7 +9,10 @@ import { articlesByTopic, TOPICS } from './catalog'
 
 beforeAll(() => preloadRoute('/pessoas'))
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(async () => {
+  vi.unstubAllGlobals()
+  await setLocale('pt-BR')
+})
 
 function openHelp(path: string) {
   mockFetch({ 'GET /api/v1/me': () => fixtures.me() })
@@ -16,6 +20,18 @@ function openHelp(path: string) {
 }
 
 describe('help center', () => {
+  it('reads its chrome in English when the account chose English', async () => {
+    const me = fixtures.me()
+    mockFetch({ 'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }) })
+    renderApp('/ajuda')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Help center' })).toBeInTheDocument()
+    const card = screen.getByRole('region', { name: 'First steps' })
+    expect(within(card).getByText('Start')).toBeInTheDocument()
+    expect(within(card).getAllByRole('link')[3]).toHaveTextContent(`All ${articlesByTopic('comecar').length} articles →`)
+    expect(screen.getByRole('region', { name: 'Frequently asked questions' })).toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: 'Search the help' })).toHaveAttribute('placeholder', 'Search articles and terms')
+  })
+
   it('shows the six topics with three articles, the total and the frequently asked questions', async () => {
     openHelp('/ajuda')
     expect(await screen.findByRole('heading', { level: 1, name: 'Central de ajuda' })).toBeInTheDocument()

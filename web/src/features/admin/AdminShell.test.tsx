@@ -1,13 +1,17 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { setLocale } from '../../i18n'
 import { fixtures } from '../../test/fixtures'
 import { empty, mockFetch, problem } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
 
 beforeAll(() => preloadRoute('/admin/entrar', '/admin/saude', '/admin/usuarios', '/admin', '/admin/nao-existe'))
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(async () => {
+  vi.unstubAllGlobals()
+  await setLocale('pt-BR')
+})
 
 function mockAdminApi(extra: Parameters<typeof mockFetch>[0] = {}) {
   return mockFetch({
@@ -28,6 +32,21 @@ async function signIn(email = 'mariana.couto@example.com', password = 'senha-do-
   await userEvent.type(screen.getByLabelText('Senha'), password)
   await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
 }
+
+describe('admin panel in English', () => {
+  it('reads in English when the browser is in English', async () => {
+    vi.stubGlobal('navigator', { ...navigator, language: 'en-US', languages: ['en-US'] })
+    await setLocale('en')
+    mockAdminApi()
+    renderApp('/admin/saude')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Health' })).toBeInTheDocument()
+    const nav = screen.getByRole('navigation', { name: 'Platform' })
+    expect(within(nav).getByRole('link', { name: 'Default agenda types' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+    expect(await screen.findByText('Processing steps · last 24 h')).toBeInTheDocument()
+    await waitFor(() => expect(document.title).toBe('Health — eclume Admin'))
+  })
+})
 
 describe('admin login', () => {
   it('has the panel variant, with no signup nor user session', async () => {
