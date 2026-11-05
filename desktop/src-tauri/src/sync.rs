@@ -21,6 +21,7 @@ use eclume_sync::api::LibraryRecording;
 use eclume_sync::{Client, Ended, HttpUploader, Outcome, UploaderConfig, Watermark};
 use tauri::{AppHandle, Manager};
 
+use crate::i18n::{self, Locale, Msg};
 use crate::state::AppState;
 
 const INTERVAL: Duration = Duration::from_secs(30);
@@ -116,11 +117,13 @@ pub fn library_since(
 }
 
 /// Without a device credential, recordings wait for the next sign-in.
-fn sign_in_to_send(pending: u32) -> String {
-    match pending {
-        1 => "Entre para enviar 1 gravação".into(),
-        n => format!("Entre para enviar {n} gravações"),
-    }
+fn sign_in_to_send(pending: u32, locale: Locale) -> String {
+    let msg = if pending == 1 {
+        Msg::new(|t| t.notice_sign_in_one)
+    } else {
+        Msg::new(|t| t.notice_sign_in_other)
+    };
+    msg.arg("count", pending).text(locale)
 }
 
 /// The channel for nudging the loop.
@@ -171,11 +174,12 @@ pub fn sync_now(app: &AppHandle) -> Result<()> {
 fn lock(queue: &Mutex<Queue>) -> Result<std::sync::MutexGuard<'_, Queue>> {
     queue
         .lock()
-        .map_err(|_| anyhow!("fila envenenada por um pânico"))
+        .map_err(|_| anyhow!(Msg::new(|t| t.err_queue_poisoned)))
 }
 
 fn run_once(app: &AppHandle) -> Result<()> {
     let state = app.state::<AppState>();
+    let locale = state.locale()?;
     let pending = {
         let queue = lock(state.queue())?;
         queue.retry_due(now_ms(), i64::MAX)?;
@@ -184,7 +188,7 @@ fn run_once(app: &AppHandle) -> Result<()> {
     if pending > 0 {
         match state.uploader_config()? {
             None if state.pinned_ca_changed()? => {}
-            None => state.set_sync_notice(Some(sign_in_to_send(pending)))?,
+            None => state.set_sync_notice(Some(sign_in_to_send(pending, locale)))?,
             Some(config) => {
                 let uploader = HttpUploader::new(&config, state.shared_queue())
                     .map(|uploader| uploader.with_language(state.language().ok().flatten()));
@@ -203,10 +207,14 @@ fn run_once(app: &AppHandle) -> Result<()> {
                             .transpose()?
                             .flatten()
                     }
-                    Err(err) => Some(format!("{err:#}")),
+                    Err(err) => Some(i18n::render(&err, locale)),
                 };
                 let failed = notice.is_some();
-                state.set_sync_notice(notice.map(|err| format!("Falha ao sincronizar: {err}")))?;
+                state.set_sync_notice(notice.map(|err| {
+                    Msg::new(|t| t.notice_sync_failed)
+                        .arg("error", err)
+                        .text(locale)
+                }))?;
                 if failed {
                     check_pinned_ca(&state)?;
                 }
@@ -488,8 +496,22 @@ mod tests {
 
     #[test]
     fn recordings_without_device_credential_wait_for_sign_in() {
-        assert_eq!(sign_in_to_send(1), "Entre para enviar 1 gravação");
-        assert_eq!(sign_in_to_send(2), "Entre para enviar 2 gravações");
+        assert_eq!(
+            sign_in_to_send(1, Locale::En),
+            "Sign in to send 1 recording"
+        );
+        assert_eq!(
+            sign_in_to_send(2, Locale::En),
+            "Sign in to send 2 recordings"
+        );
+        assert_eq!(
+            sign_in_to_send(1, Locale::PtBr),
+            "Entre para enviar 1 gravação"
+        );
+        assert_eq!(
+            sign_in_to_send(2, Locale::PtBr),
+            "Entre para enviar 2 gravações"
+        );
     }
 
     #[test]
