@@ -32,6 +32,8 @@ Ainda não publicada.
   com restrição de nome.
 - O identificador do app passa a ser `io.github.holetz.eclume.movel`, sem o domínio pessoal do
   autor. Como a versão ainda não foi publicada, nenhuma instalação existente é afetada.
+- O APK passa a ser assinado por uma chave nova, com o titular `CN=eclume, O=Israel Holetz, C=BR`
+  (SHA-256 do certificado em `mobile/certificado-release.sha256`).
 
 ## [0.1.0] - 2026-09-27
 
