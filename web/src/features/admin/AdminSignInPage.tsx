@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Navigate, useNavigate, useSearchParams } from 'react-router'
 import { ApiError, errorMessage } from '../../api/problem'
 import { AuthLayout } from '../auth/AuthLayout'
@@ -7,7 +8,8 @@ import { useAdminTitle } from './sections'
 
 /** Admin account login, in the `.auth-admin` variant: no signup nor "esqueci a senha" (that is through the CLI). */
 export function AdminSignInPage() {
-  useAdminTitle('Entrar')
+  const { t } = useTranslation('admin')
+  useAdminTitle(t('signIn.tabTitle'))
   const [params] = useSearchParams()
   const returnPath = adminReturnPath(params.get('volta'))
   const me = useAdminMe()
@@ -26,16 +28,16 @@ export function AdminSignInPage() {
 
   const error = login.error
     ? login.error instanceof ApiError && login.error.status === 401
-      ? 'E-mail ou senha incorretos.'
+      ? t('signIn.wrong')
       : errorMessage(login.error)
     : null
 
   return (
     <AuthLayout variant="admin">
       <form onSubmit={submit} noValidate>
-        <h2>Entrar como admin</h2>
+        <h2>{t('signIn.heading')}</h2>
         <div className="field">
-          <label htmlFor="admin-login-email">E-mail</label>
+          <label htmlFor="admin-login-email">{t('signIn.email')}</label>
           <input
             id="admin-login-email"
             className="input"
@@ -48,7 +50,7 @@ export function AdminSignInPage() {
           />
         </div>
         <div className="field">
-          <label htmlFor="admin-login-password">Senha</label>
+          <label htmlFor="admin-login-password">{t('signIn.password')}</label>
           <input
             id="admin-login-password"
             className="input"
@@ -66,7 +68,7 @@ export function AdminSignInPage() {
           </p>
         )}
         <button type="submit" className="btn btn-primary btn-block" disabled={login.isPending || !email || !password}>
-          {login.isPending ? 'Entrando…' : 'Entrar'}
+          {login.isPending ? t('signIn.submitting') : t('signIn.submit')}
         </button>
       </form>
     </AuthLayout>

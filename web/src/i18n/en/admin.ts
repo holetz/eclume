@@ -1,0 +1,126 @@
+const admin = {
+  kicker: 'Administration panel',
+  tabTitle: '{{title}} — eclume Admin',
+  badge: 'Admin',
+  platform: 'Platform',
+  signOut: 'Sign out',
+  signingOut: 'Signing out…',
+  section: {
+    usuarios: 'Users',
+    audio: 'Audio preprocessing',
+    transcricao: 'Transcription',
+    locutores: 'Speakers',
+    agentes: 'Agents',
+    'tipos-de-agenda': 'Default agenda types',
+    saude: 'Health',
+  },
+  signIn: {
+    tabTitle: 'Sign in',
+    heading: 'Sign in as admin',
+    email: 'Email',
+    password: 'Password',
+    wrong: 'Wrong email or password.',
+    submit: 'Sign in',
+    submitting: 'Signing in…',
+  },
+  notFound: {
+    title: 'Page not found',
+    home: 'Go to Users',
+  },
+  external: {
+    label: 'Data outside the server',
+    text: 'Leaving this server: {{list}}. Users see it in Account › Privacy and data and on the sign-up line.',
+    item: '{{purpose}} ({{processor}})',
+    service: 'external service',
+  },
+  secret: {
+    save: 'Save',
+    saving: 'Saving…',
+    cancel: 'Cancel',
+    stored: '•••••••• stored',
+    replace: 'Replace',
+    delete: 'Delete',
+    writeOnly: 'Write-only. ',
+    writeOnlyUpdated: 'Write-only · updated on {{date}}. ',
+    confirmTitle: 'Delete {{label}}?',
+    confirmBody: 'The stored value is removed from the server and does not come back.',
+  },
+  lastChange: 'Last changed by {{name}} on {{date}}.',
+  defaultSettings: 'Default configuration, not changed yet.',
+  option: {
+    engine: {
+      'whisperx-local': { hint: 'Default: on the server GPU, with word alignment and speaker separation.' },
+      'openai-compatible': { label: 'Remote (OpenAI-compatible)', hint: 'A server such as speaches; needs the address.' },
+      cpu: { hint: 'faster-whisper on the CPU, for development only: slow and with no speaker separation.' },
+    },
+    computeType: {
+      int8_float16: 'int8_float16 (recommended on the GTX 1660)',
+      float32: 'float32 (more VRAM)',
+    },
+    purpose: {
+      summaries: 'Summaries',
+      fields: 'Field filling',
+      chat: 'Summary chat',
+      agenda_detection: 'Agenda type detection',
+    },
+    providerKind: {
+      ollama: { hint: 'Runs only with the GPU queue empty; needs the address.' },
+      'openai-compatible': { label: 'OpenAI-compatible', hint: 'DeepSeek, Groq, OpenRouter or a local server; needs the address.' },
+      anthropic: { label: 'Anthropic API', hint: 'With no key of its own, it uses the anthropic_api_key secret.' },
+      'claude-cli': {
+        label: "The server's Claude Code",
+        hint: 'Runs claude -p on the server, authenticated by the Claude token; needs the image built with the CLI (ECLUME_CLAUDE_CLI=1); no address.',
+      },
+    },
+    apiKey: {
+      label: 'API key',
+      stored: 'Stored',
+      missing: 'No key',
+      clear: 'Delete the stored key',
+    },
+    claudeToken: {
+      label: 'Claude token',
+      stored: 'Token stored',
+      missing: 'No token',
+      clear: 'Delete the stored token',
+      help: 'On a computer with Claude Code signed in to the subscription, run claude setup-token, authorize it in the browser and paste here the sk-ant-oat01-… token it prints. It lasts 1 year: when the summaries fail on authentication, make another. An Anthropic API key (sk-ant-api…) also works.',
+    },
+    secretInfo: {
+      hf_token: {
+        label: 'Hugging Face token',
+        hint: 'Downloads the pyannote models. The account must have accepted the terms of pyannote/speaker-diarization-community-1.',
+      },
+      anthropic_api_key: {
+        label: 'Anthropic API key',
+        hint: 'Used by the “Anthropic API” providers registered with no key of their own.',
+      },
+    },
+    speakers: {
+      detect: 'Detect',
+      custom: 'Custom ({{min}}–{{max}})',
+    },
+    step: {
+      received: 'Received',
+      preprocessing: 'Preprocessing',
+      transcription: 'Transcription',
+      fields: 'Field filling',
+      agenda_type: 'Agenda type',
+      summary: 'Summary',
+    },
+    service: {
+      api: 'API server',
+      storage: 'Storage (MinIO)',
+      gpu_worker: 'GPU worker',
+      cpu_worker: 'CPU worker',
+      mcp: 'MCP server',
+    },
+    serviceStatus: {
+      healthy: 'Healthy',
+      degraded: 'Degraded',
+      down: 'Down',
+      absent: 'Absent',
+    },
+  },
+} as const
+
+export default admin
