@@ -5,7 +5,8 @@ eclume's runtime artifacts.
 ## Development and testing
 
 - `docker-compose.dev.yml`: supporting services for local development — Postgres with pgvector,
-  Redis (Valkey, `valkey/valkey`, digest-pinned in every compose file) and MinIO. Every port is published only on `127.0.0.1`.
+  Redis (Valkey, `valkey/valkey`, digest-pinned in every compose file) and MinIO. Every port is
+  published only on `127.0.0.1`.
 - `.env.example`: the variables the dev compose reads; copy it to `deploy/.env` and adjust.
 - `docker-compose.gpu-test.yml`: GPU worker (`worker-gpu/Dockerfile`) with ephemeral Redis and
   MinIO, for dev and for the integration test on the GPU host (project `eclume-gpu-test`, Redis on

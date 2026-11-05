@@ -237,8 +237,8 @@ docker --context gpu-host compose -p eclume-gpu-test -f deploy/docker-compose.gp
 
 - **Heartbeat.** Every 15 s the worker writes `eclume:gpu:health` (TTL 45 s) with the GPU through NVML,
   the resident model and whether a job is running; it is what Administração → Saúde shows. To check on the
-  host: `valkey-cli HGETALL eclume:gpu:health` in the stack's Valkey (the `redis` service). Measured on the GTX 1660 SUPER on
-  2026-09-25: name, 6,144 MiB total and the production stack's VRAM (3,659 MiB) read correctly; the
+  host: `valkey-cli HGETALL eclume:gpu:health` in the stack's Valkey (the `redis` service).
+  Measured on the GTX 1660 SUPER on 2026-09-25: name, 6,144 MiB total and the production stack's VRAM (3,659 MiB) read correctly; the
   hash disappears within 45 s after a `kill` and immediately on a `docker stop`.
 - **VRAM shared with Jellyfin.** There are at most two models on the GPU: the ASR, resident between
   jobs, and the one of the current step (aligner or pyannote), which leaves at the end of the job, also when a
