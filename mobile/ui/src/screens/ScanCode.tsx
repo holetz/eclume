@@ -1,3 +1,4 @@
+import { useT } from '../i18n'
 import { useEffect, useState } from 'react'
 import { Back } from '../app/Back'
 import { errorMessage, useBridge } from '../bridge/bridge'
@@ -8,6 +9,7 @@ import { errorMessage, useBridge } from '../bridge/bridge'
  * core validates it (`parse_pair_url`) before any network.
  */
 export function ScanCode({ go, backTo }: { go: (route: string) => void; backTo: string }) {
+  const t = useT()
   const bridge = useBridge()
   const [error, setError] = useState<string | null>(null)
   const [reading, setReading] = useState(true)
@@ -36,12 +38,12 @@ export function ScanCode({ go, backTo }: { go: (route: string) => void; backTo: 
 
   return (
     <div className="m-body">
-      <Back label="Servidores" onBack={() => go(backTo)} />
+      <Back label={t('address.servers')} onBack={() => go(backTo)} />
       <div className="m-section gap-2">
-        <h1 className="m-title">Leia o código</h1>
+        <h1 className="m-title">{t('scan.title')}</h1>
       </div>
-      <div className="viewfinder margin-x" aria-label="Câmera">
-        {reading ? '' : 'câmera'}
+      <div className="viewfinder margin-x" aria-label={t('scan.camera')}>
+        {reading ? '' : t('scan.cameraIdle')}
       </div>
       <div className="m-section m-fill">
         {error && (
@@ -50,18 +52,18 @@ export function ScanCode({ go, backTo }: { go: (route: string) => void; backTo: 
               {error}
             </p>
             <button type="button" className="btn btn-secondary" onClick={readAgain}>
-              Tentar de novo
+              {t('scan.retry')}
             </button>
           </div>
         )}
         <ol className="steps">
           <li>
-            <strong>Abra a web</strong>
-            <span>Vá em Minhas configurações → App móvel.</span>
+            <strong>{t('scan.openWeb')}</strong>
+            <span>{t('scan.where')}</span>
           </li>
           <li>
-            <strong>Aponte a câmera para o código</strong>
-            <span>O celular se conecta e entra. O código vale 10 minutos.</span>
+            <strong>{t('scan.point')}</strong>
+            <span>{t('scan.help')}</span>
           </li>
         </ol>
       </div>

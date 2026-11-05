@@ -1,3 +1,4 @@
+import { t, useT } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { clock, duration, longDate, size } from '../app/formats'
 import { PauseIcon, PlayIcon } from '../app/Icons'
@@ -5,42 +6,45 @@ import { Back } from '../app/Back'
 import { errorMessage, useBridge } from '../bridge/bridge'
 import type { LocalDetail, Step } from '../bridge/types'
 import { RecordingBadge } from './PhoneList'
-import { ESTADOS_ETAPA, ETAPAS, fraseDaEspera, motivo } from '../app/vocabulario.js'
+import { stepName, stepStateLabel, reasonText, waitingPhrase } from '../i18n/vocabulary'
+
+const STEPS = ['received', 'preprocessing', 'transcription', 'speakers', 'agenda_type', 'fields', 'summary'] as const
 
 /** The step in words, readable without the color: the name when done, the progress when active and "name · state" otherwise. */
-function stepLabel(step: (typeof ETAPAS)[number], state: Step | undefined): string {
-  if (!state || state.state === 'done') return step.nome
-  if (state.state === 'active') return step.andamento
-  return `${step.nome} · ${ESTADOS_ETAPA[state.state] ?? state.state}`
+function stepLabel(step: (typeof STEPS)[number], state: Step | undefined): string {
+  if (!state || state.state === 'done') return stepName(step)
+  if (state.state === 'active') return t(`detail.active.${step}`)
+  return `${stepName(step)} · ${stepStateLabel(state.state)}`
 }
 
 /** Why the step was skipped, failed or waits for you (the speakers without a person); `null` otherwise. */
 function stepReason(state: Step | undefined): string | null {
   if (state?.state === 'failed') return state.error?.message ?? null
-  if (state?.state === 'skipped' || state?.state === 'waiting') return state.reason ? motivo(state.reason) : null
+  if (state?.state === 'skipped' || state?.state === 'waiting') return state.reason ? reasonText(state.reason) : null
   return null
 }
 
 /** The seven steps in the server's order, each with its state in words, and the reason of the skipped or failed ones. */
 function ServerSteps({ steps }: { steps: Step[] | null }) {
-  const rows = ETAPAS.map((step) => {
-    const state = steps?.find((e) => e.step === step.etapa)
+  const t = useT()
+  const rows = STEPS.map((step) => {
+    const state = steps?.find((e) => e.step === step)
     return { step, state, label: stepLabel(step, state), reason: stepReason(state) }
   })
   const reasons = rows.filter((row) => row.reason)
   return (
     <>
-      <ol className="pipeline" aria-label="Etapas no servidor">
+      <ol className="pipeline" aria-label={t('detail.steps')}>
         {rows.map(({ step, state, label }) => (
-          <li key={step.etapa} data-state={state?.state === 'pending' ? undefined : state?.state}>
+          <li key={step} data-state={state?.state === 'pending' ? undefined : state?.state}>
             {label}
           </li>
         ))}
       </ol>
       {reasons.length > 0 && (
-        <ul className="step-reasons" aria-label="Motivos das etapas">
+        <ul className="step-reasons" aria-label={t('detail.reasons')}>
           {reasons.map(({ step, label, reason }) => (
-            <li key={step.etapa}>
+            <li key={step}>
               {label}: {reason}
             </li>
           ))}
@@ -58,6 +62,7 @@ function fileBitrate(bytes: number | null, ms: number | null): string | null {
 
 /** A recording's detail: the local player, the markers, the steps on the server and the queue wait. */
 export function Detail({ id, go }: { id: string; go: (route: string) => void }) {
+  const t = useT()
   const bridge = useBridge()
   const [detail, setDetail] = useState<LocalDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -113,7 +118,7 @@ export function Detail({ id, go }: { id: string; go: (route: string) => void }) 
     : ''
   return (
     <div className="m-body m-scroll">
-      <Back label="Neste celular" onBack={() => go('/')} />
+      <Back label={t('detail.onPhone')} onBack={() => go('/')} />
       {error && (
         <p className="error-text m-section" role="alert">
           {error}
@@ -123,7 +128,7 @@ export function Detail({ id, go }: { id: string; go: (route: string) => void }) 
         <>
           <div className="m-section gap-tight top-1">
             <span className="kicker">{longDate(recording.iniciada_em)}</span>
-            <h1 className="m-title">{recording.titulo ?? recording.titulo_do_servidor ?? 'Sem título'}</h1>
+            <h1 className="m-title">{recording.titulo ?? recording.titulo_do_servidor ?? t('detail.untitled')}</h1>
             <span className="align-start">
               <RecordingBadge badge={recording.selo} />
             </span>
@@ -142,7 +147,7 @@ export function Detail({ id, go }: { id: string; go: (route: string) => void }) 
                 <button
                   type="button"
                   className="btn btn-primary btn-icon button-44"
-                  aria-label={playing ? 'Pausar' : 'Tocar'}
+                  aria-label={playing ? t('detail.pause') : t('detail.play')}
                   onClick={toggle}
                 >
                   {playing ? <PauseIcon /> : <PlayIcon />}
@@ -155,7 +160,7 @@ export function Detail({ id, go }: { id: string; go: (route: string) => void }) 
           )}
           <div className="m-section">
             <div className="row-between">
-              <span className="kicker">Marcadores</span>
+              <span className="kicker">{t('detail.markers')}</span>
               <span className="text-muted text-12">
                 {detail.marcadores.length}
               </span>
@@ -166,23 +171,23 @@ export function Detail({ id, go }: { id: string; go: (route: string) => void }) 
                   <button type="button" className="timecode text-button" onClick={() => seek(m.at_ms)}>
                     {clock(m.at_ms)}
                   </button>
-                  <span>{m.note ?? 'Marcador'}</span>
+                  <span>{m.note ?? t('common.marker')}</span>
                 </li>
               ))}
             </ul>
           </div>
           {recording.remote_id && (
             <div className="m-section gap-2">
-              <span className="kicker">No servidor</span>
+              <span className="kicker">{t('detail.onServer')}</span>
               <ServerSteps steps={detail.etapas} />
               {detail.espera && (
                 <p className="text-muted text-13" role="status">
-                  {fraseDaEspera(detail.espera)}
+                  {waitingPhrase(detail.espera)}
                 </p>
               )}
               {detail.endereco_na_web && (
                 <button type="button" className="btn btn-secondary button-start" onClick={openOnWeb}>
-                  Abrir na web
+                  {t('detail.openWeb')}
                 </button>
               )}
             </div>
@@ -198,17 +203,13 @@ export function Detail({ id, go }: { id: string; go: (route: string) => void }) 
                   className="btn btn-secondary btn-danger button-start"
                   onClick={remove}
                 >
-                  Excluir deste celular
+                  {t('detail.delete')}
                 </button>
-                <span className="text-muted text-12">
-                  O servidor mantém a cópia dele.
-                </span>
+                <span className="text-muted text-12">{t('detail.serverCopy')}</span>
               </>
             )}
             {recording.apagada && (
-              <span className="text-muted text-12">
-                O arquivo já saiu deste celular; a gravação está no servidor.
-              </span>
+              <span className="text-muted text-12">{t('detail.deleted')}</span>
             )}
           </div>
         </>

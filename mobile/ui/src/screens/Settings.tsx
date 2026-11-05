@@ -1,3 +1,4 @@
+import { useT } from '../i18n'
 import { useEffect, useState, type ReactNode } from 'react'
 import { size } from '../app/formats'
 import { Back } from '../app/Back'
@@ -45,6 +46,7 @@ function Switch({
 
 /** Settings: server, sync, audio, storage, sign out and the version. */
 export function Settings({ go, freeSpace }: { go: (route: string) => void; freeSpace: string | null }) {
+  const t = useT()
   const bridge = useBridge()
   const [data, setData] = useState<AppSettings | null>(null)
   const [update, setUpdate] = useState<Update | null>(null)
@@ -118,16 +120,16 @@ export function Settings({ go, freeSpace }: { go: (route: string) => void; freeS
   const preferences = data?.preferencias
   return (
     <div className="m-body m-scroll">
-      <Back label="Início" onBack={() => go('/')} />
+      <Back label={t('settings.home')} onBack={() => go('/')} />
       <div className="m-section no-top">
-        <h1 className="m-title">Configurações</h1>
+        <h1 className="m-title">{t('settings.title')}</h1>
       </div>
       {data && preferences && (
         <div className="m-section m-fill gap-3 top-1">
           <div className="m-group">
-            <span className="kicker">Servidor</span>
+            <span className="kicker">{t('settings.server')}</span>
             <ul className="m-rows">
-              <Row title="Endereço">
+              <Row title={t('settings.address')}>
                 <span className="mono text-muted text-14">
                   {data.servidor ? new URL(data.servidor).host : '—'}
                 </span>
@@ -135,25 +137,25 @@ export function Settings({ go, freeSpace }: { go: (route: string) => void; freeS
             </ul>
           </div>
           <div className="m-group">
-            <span className="kicker">Sincronização</span>
+            <span className="kicker">{t('settings.sync')}</span>
             <ul className="m-rows">
-              <Row title="Sincronizar automaticamente" sub="Na rede do servidor">
+              <Row title={t('settings.autoSync')} sub={t('settings.onNetwork')}>
                 <Switch
-                  label="Sincronizar automaticamente"
+                  label={t('settings.autoSync')}
                   on={preferences.sync_auto}
                   onToggle={(sync_auto) => change({ sync_auto })}
                 />
               </Row>
-              <Row title="Só no Wi‑Fi do servidor" sub="Nunca usa dados móveis">
-                <Switch label="Só no Wi‑Fi do servidor" on disabled />
+              <Row title={t('settings.wifiOnly')} sub={t('settings.noMobileData')}>
+                <Switch label={t('settings.wifiOnly')} on disabled />
               </Row>
             </ul>
           </div>
           <div className="m-group">
-            <span className="kicker">Áudio</span>
+            <span className="kicker">{t('settings.audio')}</span>
             <ul className="m-rows">
-              <Row title="Qualidade" sub={`Cerca de ${MB_PER_HOUR[preferences.qualidade]} MB por hora`}>
-                <div className="seg" role="radiogroup" aria-label="Qualidade">
+              <Row title={t('settings.quality')} sub={t('settings.qualityHelp', { size: size(MB_PER_HOUR[preferences.qualidade] * 1_000_000) })}>
+                <div className="seg" role="radiogroup" aria-label={t('settings.quality')}>
                   {(['padrao', 'alta'] as const).map((q) => (
                     <label className="seg-opt" key={q}>
                       <input
@@ -162,7 +164,7 @@ export function Settings({ go, freeSpace }: { go: (route: string) => void; freeS
                         checked={preferences.qualidade === q}
                         onChange={() => change({ qualidade: q })}
                       />
-                      {q === 'padrao' ? 'Padrão' : 'Alta'}
+                      {q === 'padrao' ? t('settings.standard') : t('settings.high')}
                     </label>
                   ))}
                 </div>
@@ -171,19 +173,19 @@ export function Settings({ go, freeSpace }: { go: (route: string) => void; freeS
           </div>
           {device && (
             <div className="m-group">
-              <span className="kicker">Gravação</span>
+              <span className="kicker">{t('settings.recording')}</span>
               <ul className="m-rows">
                 <Row
-                  title="Gravar com a tela bloqueada"
+                  title={t('settings.lockScreen')}
                   sub={
                     device.batteryExemption === 'concedida'
-                      ? 'Sem otimização de bateria'
-                      : 'A otimização de bateria pode parar a gravação'
+                      ? t('settings.noOptimization')
+                      : t('settings.optimizationWarning')
                   }
                 >
                   {device.batteryExemption !== 'concedida' && (
                     <button type="button" className="btn btn-secondary btn-sm" onClick={requestExemption}>
-                      Permitir
+                      {t('settings.allow')}
                     </button>
                   )}
                 </Row>
@@ -191,19 +193,19 @@ export function Settings({ go, freeSpace }: { go: (route: string) => void; freeS
             </div>
           )}
           <div className="m-group">
-            <span className="kicker">Armazenamento</span>
+            <span className="kicker">{t('settings.storage')}</span>
             <ul className="m-rows">
-              <Row title="Excluir depois de sincronizar" sub={`Mantém os últimos ${data.reter_dias} dias`}>
+              <Row title={t('settings.deleteSynced')} sub={t('settings.retention', { count: data.reter_dias })}>
                 <Switch
-                  label="Excluir depois de sincronizar"
+                  label={t('settings.deleteSynced')}
                   on={preferences.excluir_sincronizadas}
                   onToggle={(excluir_sincronizadas) => change({ excluir_sincronizadas })}
                 />
               </Row>
-              <Row title="Neste celular">
+              <Row title={t('settings.onPhone')}>
                 <span className="text-muted text-14">
                   {size(data.uso_bytes)}
-                  {freeSpace ? ` · ${freeSpace.replace(/^cerca de /, '')} livres` : ''}
+                  {freeSpace ? t('settings.free', { remaining: freeSpace.replace(/^cerca de /, '') }) : ''}
                 </span>
               </Row>
             </ul>
@@ -217,21 +219,20 @@ export function Settings({ go, freeSpace }: { go: (route: string) => void; freeS
           </p>
         )}
         {confirmingSignOut ? (
-          <div className="alert alert-warning" role="alertdialog" aria-label="Sair e esquecer o servidor">
-            <span className="alert-title">Sair e esquecer o servidor?</span>
+          <div className="alert alert-warning" role="alertdialog" aria-label={t('settings.signOut')}>
+            <span className="alert-title">{t('settings.confirmSignOut')}</span>
             <span>
               {pending > 0
-                ? `${pending === 1 ? '1 gravação aguarda' : `${pending} gravações aguardam`} o sync: elas ficam no celular e sobem no próximo servidor pareado. `
+                ? t('settings.pending', { count: pending })
                 : ''}
-              Desvincule este aparelho na web, em Minhas configurações → App móvel: o acesso dele não se
-              revoga sozinho.
+              {t('settings.unlink')}
             </span>
             <div className="two-columns margin-top-2">
               <button type="button" className="btn btn-secondary btn-danger" onClick={signOut}>
-                Sair
+                {t('settings.logOut')}
               </button>
               <button type="button" className="btn btn-secondary" onClick={() => setConfirmingSignOut(false)}>
-                Cancelar
+                {t('common.cancel')}
               </button>
             </div>
           </div>
@@ -241,15 +242,15 @@ export function Settings({ go, freeSpace }: { go: (route: string) => void; freeS
             className="btn btn-secondary btn-danger button-start"
             onClick={() => setConfirmingSignOut(true)}
           >
-            Sair e esquecer o servidor
+            {t('settings.signOut')}
           </button>
         )}
         <span className="text-muted text-12">
-          eclume para Android · v{data?.versao ?? ''}
+          {t('settings.version', { version: data?.versao ?? '' })}
         </span>
         {update && (
           <button type="button" className="btn btn-primary button-start" onClick={installUpdate}>
-            Nova versão disponível · v{update.versao}
+            {t('settings.update', { version: update.versao })}
           </button>
         )}
       </div>

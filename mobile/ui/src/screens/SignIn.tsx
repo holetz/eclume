@@ -1,3 +1,4 @@
+import { useT } from '../i18n'
 import { useState, type FormEvent } from 'react'
 import { Back } from '../app/Back'
 import { errorMessage, useBridge } from '../bridge/bridge'
@@ -13,6 +14,7 @@ export function SignIn({
   reason?: string
   go: (route: string) => void
 }) {
+  const t = useT()
   const bridge = useBridge()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -39,10 +41,10 @@ export function SignIn({
 
   return (
     <div className="m-body">
-      <Back label="Servidores" onBack={switchServer} />
+      <Back label={t('address.servers')} onBack={switchServer} />
       <div className="m-section gap-2">
-        <h1 className="m-title">Entrar</h1>
-        <p className="no-margin text-15">Use a conta que você tem na web.</p>
+        <h1 className="m-title">{t('signIn.title')}</h1>
+        <p className="no-margin text-15">{t('signIn.help')}</p>
         <div className="code-block">
           <span>{new URL(server.url).host}</span>
         </div>
@@ -56,7 +58,7 @@ export function SignIn({
       )}
       <form className="m-section m-fill gap-4 align-top" onSubmit={submit}>
         <div className="field">
-          <label htmlFor="email">E-mail</label>
+          <label htmlFor="email">{t('signIn.email')}</label>
           <input
             id="email"
             className="input"
@@ -68,7 +70,7 @@ export function SignIn({
           />
         </div>
         <div className="field">
-          <label htmlFor="password">Senha</label>
+          <label htmlFor="password">{t('signIn.password')}</label>
           <input
             id="password"
             className="input"
@@ -88,14 +90,14 @@ export function SignIn({
           className="btn btn-primary button-start"
           disabled={busy || !email.trim() || !password}
         >
-          {busy ? 'Entrando…' : 'Entrar'}
+          {busy ? t('signIn.busy') : t('signIn.title')}
         </button>
         <button
           type="button"
           className="btn btn-ghost button-start"
           onClick={() => go('/scan-code')}
         >
-          Ler um código da web
+          {t('server.scan')}
         </button>
       </form>
     </div>
