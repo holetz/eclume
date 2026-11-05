@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 12+: nada do app vai para o backup na nuvem nem na transferência entre aparelhos. -->
+<!-- Android 12+: nothing of the app goes to the cloud backup or to a device-to-device transfer. -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="root" path="." />

@@ -1,10 +1,10 @@
-//! O app móvel do eclume: a casca Tauri sobre o `eclume-mobile-core`. Os comandos
-//! ([`comandos`]) e o evento `estado` ([`eventos`]) ligam a UI ao núcleo do processo; no Android,
-//! a ponte JNI (`jni`) liga o plugin nativo (serviço de gravação, notificação, WorkManager) ao
-//! mesmo núcleo, sem depender do WebView.
+//! Eclume's mobile app: the Tauri shell over `eclume-mobile-core`. The commands ([`commands`]) and
+//! the `estado` event ([`events`]) link the UI to the process's core; on Android, the JNI bridge
+//! (`jni`) links the native plugin (recording service, notification, WorkManager) to the same
+//! core, without depending on the WebView.
 
-mod comandos;
-mod eventos;
+mod commands;
+mod events;
 #[cfg(target_os = "android")]
 mod jni;
 
@@ -12,144 +12,151 @@ use eclume_mobile_core::config::Dirs;
 use eclume_recorder::AudioSource;
 use tauri::{Manager, Runtime};
 
-/// A versão do app (`tauri.conf.json` e `Cargo.toml` andam juntos).
-pub const VERSAO: &str = env!("CARGO_PKG_VERSION");
+/// The app's version (`tauri.conf.json` and `Cargo.toml` move together).
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// O microfone padrão, a 16 kHz mono pelo mixer do gravador.
-pub(crate) fn microfone() -> anyhow::Result<Box<dyn AudioSource>> {
+/// The default microphone, at 16 kHz mono through the recorder's mixer.
+pub(crate) fn microphone() -> anyhow::Result<Box<dyn AudioSource>> {
     Ok(Box::new(eclume_audio_capture::MicSource::open()?))
 }
 
-/// A resposta de uma chamada da ponte JNI, isolada de pânico: um erro vira `{"erro": …}` e um
-/// pânico vira `{"erro": "pânico: …"}`, sem abortar o processo (o workspace não usa
-/// `panic = "abort"`). Fica fora do `cfg(android)` para ser testada no host.
-// Usada só pela ponte do Android; os testes a exercitam no host.
+/// The reply of a JNI bridge call, isolated from panics: an error becomes `{"erro": …}` and a panic
+/// becomes `{"erro": "<panic prefix>: …"}`, without aborting the process (the workspace does not use
+/// `panic = "abort"`). It stays outside `cfg(android)` so it is tested on the host. The `erro` key
+/// is the bridge's wire format with the Kotlin side and is kept.
+// Used only by the Android bridge; the tests exercise it on the host.
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
-pub(crate) fn responder(
-    f: impl FnOnce() -> anyhow::Result<serde_json::Value>,
-) -> serde_json::Value {
+pub(crate) fn reply(f: impl FnOnce() -> anyhow::Result<serde_json::Value>) -> serde_json::Value {
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
-        Ok(Ok(valor)) => valor,
+        Ok(Ok(value)) => value,
         Ok(Err(err)) => serde_json::json!({ "erro": format!("{err:#}") }),
-        Err(panico) => {
-            let mensagem = panico
+        Err(panic) => {
+            let message = panic
                 .downcast_ref::<&str>()
                 .map(|m| (*m).to_string())
-                .or_else(|| panico.downcast_ref::<String>().cloned())
+                .or_else(|| panic.downcast_ref::<String>().cloned())
                 .unwrap_or_else(|| "sem mensagem".into());
-            log::error!("pânico na ponte JNI: {mensagem}");
-            serde_json::json!({ "erro": format!("pânico: {mensagem}") })
+            log::error!("panic in the JNI bridge: {message}");
+            serde_json::json!({ "erro": format!("pânico: {message}") })
         }
     }
 }
 
-/// Os diretórios do núcleo a partir da pasta de dados do app: `eclume/` para config, CA, fila e
-/// gravações, e `no_backup/` (o `noBackupFilesDir` do Android) para o token.
-pub(crate) fn dirs_de(base: &std::path::Path) -> Dirs {
+/// The core's directories from the app's data folder: `eclume/` for config, CA, queue and
+/// recordings, and `no_backup/` (Android's `noBackupFilesDir`) for the token.
+pub(crate) fn dirs_from(base: &std::path::Path) -> Dirs {
     Dirs {
-        dados: base.join("eclume"),
-        sem_backup: base.join("no_backup"),
+        data: base.join("eclume"),
+        no_backup: base.join("no_backup"),
     }
 }
 
-/// O serviço em primeiro plano do Android (notificação e microfone com a tela bloqueada), pelo
-/// plugin `gravador`. O lado Kotlin responde na thread de quem chama: `iniciar` bloqueia (o
-/// `gravar` o chama numa thread de bloqueio) e as outras chamadas correm numa thread própria.
-pub(crate) mod servico {
+/// Android's foreground service (notification and microphone with the screen locked), through the
+/// `gravador` plugin. The Kotlin side answers on the caller's thread: `start` blocks (`gravar`
+/// calls it on a blocking thread) and the other calls run on a thread of their own.
+pub(crate) mod service {
     use tauri::{AppHandle, Runtime};
-    use tauri_plugin_eclume_gravador::GravadorExt;
+    use tauri_plugin_eclume_gravador::RecorderExt;
 
-    fn em_segundo_plano<R: Runtime>(
+    fn in_background<R: Runtime>(
         app: &AppHandle<R>,
-        o_que: &'static str,
+        what: &'static str,
         f: fn(
-            &tauri_plugin_eclume_gravador::Gravador<R>,
-        ) -> tauri_plugin_eclume_gravador::Resultado<()>,
+            &tauri_plugin_eclume_gravador::Recorder<R>,
+        ) -> tauri_plugin_eclume_gravador::PluginResult<()>,
     ) {
         let app = app.clone();
         std::thread::spawn(move || {
-            if let Err(err) = f(app.gravador()) {
-                log::warn!("serviço de gravação ({o_que}): {err}");
+            if let Err(err) = f(app.recorder()) {
+                log::warn!("recording service ({what}): {err}");
             }
         });
     }
 
-    /// Sobe o serviço e espera o primeiro plano (bloqueia; nunca na thread principal).
-    pub fn iniciar<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-        app.gravador()
-            .iniciar_servico()
+    /// Starts the service and waits for the foreground (blocks; never on the main thread).
+    pub fn start<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+        app.recorder()
+            .start_service()
             .map_err(|err| err.to_string())
     }
 
-    pub fn atualizar<R: Runtime>(app: &AppHandle<R>) {
-        em_segundo_plano(app, "atualizar", |g| g.atualizar_servico());
+    pub fn update<R: Runtime>(app: &AppHandle<R>) {
+        in_background(app, "update", |g| g.update_service());
     }
 
-    pub fn parar<R: Runtime>(app: &AppHandle<R>) {
-        em_segundo_plano(app, "parar", |g| g.parar_servico(None));
+    pub fn stop<R: Runtime>(app: &AppHandle<R>) {
+        in_background(app, "stop", |g| g.stop_service(None));
     }
 
-    /// Agenda o sync do WorkManager para subir com o app fechado (fora da thread do comando).
-    pub fn agendar_sync<R: Runtime>(app: &AppHandle<R>, atraso: std::time::Duration) {
+    /// Schedules the WorkManager sync to upload with the app closed (off the command's thread).
+    pub fn schedule_sync<R: Runtime>(app: &AppHandle<R>, delay: std::time::Duration) {
         let app = app.clone();
-        let atraso_ms = u64::try_from(atraso.as_millis()).unwrap_or(u64::MAX);
+        let delay_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX);
         std::thread::spawn(move || {
-            if let Err(err) = app.gravador().agendar_sync(atraso_ms) {
-                log::warn!("agendar o sync: {err}");
+            if let Err(err) = app.recorder().schedule_sync(delay_ms) {
+                log::warn!("scheduling the sync: {err}");
             }
         });
     }
 
-    /// A gravação parou sem pedido: o serviço avisa "A gravação parou" com o motivo e sai.
-    pub fn parar_com_aviso<R: Runtime>(app: &AppHandle<R>, motivo: &'static str, duracao_ms: i64) {
+    /// The recording stopped without being asked: the service shows the recording-stopped notice
+    /// with the reason and exits.
+    pub fn stop_with_warning<R: Runtime>(
+        app: &AppHandle<R>,
+        reason: &'static str,
+        duration_ms: i64,
+    ) {
         let app = app.clone();
         std::thread::spawn(move || {
-            if let Err(err) = app.gravador().parar_servico(Some((motivo, duracao_ms))) {
-                log::warn!("serviço de gravação (parar com aviso): {err}");
+            if let Err(err) = app.recorder().stop_service(Some((reason, duration_ms))) {
+                log::warn!("recording service (stop with warning): {err}");
             }
         });
     }
 }
 
-/// Um servidor achado na rede, já interpretado pelo parser do TXT do crate de sync.
+/// A server found on the network, already parsed by the sync crate's TXT parser. Serialized to the
+/// UI; the keys keep their names.
 #[derive(Clone, Debug, serde::Serialize)]
-pub struct Achado {
-    pub nome: String,
+pub struct Found {
+    #[serde(rename = "nome")]
+    pub name: String,
     pub url: String,
     pub ca_sha256: Option<String>,
 }
 
-/// Procura o servidor na rede por `segundos`: no Android, pelo `NsdManager` do plugin; no
-/// desenvolvimento, pelo mDNS do crate de sync.
+/// Looks for the server on the network for `segundos` seconds: on Android, through the plugin's
+/// `NsdManager`; in development, through the sync crate's mDNS. The command and argument names are
+/// the IPC contract and are kept.
 #[tauri::command]
 async fn descobrir<R: Runtime>(
     app: tauri::AppHandle<R>,
     segundos: u32,
-) -> Result<Vec<Achado>, String> {
+) -> Result<Vec<Found>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         #[cfg(mobile)]
-        let achados = {
-            use tauri_plugin_eclume_gravador::GravadorExt;
-            app.gravador()
-                .descobrir(segundos)
+        let found = {
+            use tauri_plugin_eclume_gravador::RecorderExt;
+            app.recorder()
+                .discover(segundos)
                 .map_err(|err| err.to_string())?
                 .into_iter()
-                .filter_map(|anuncio| {
-                    let txt: Vec<(String, String)> = anuncio.txt.into_iter().collect();
-                    eclume_sync::discovery::parse(&anuncio.nome, &txt)
+                .filter_map(|announcement| {
+                    let txt: Vec<(String, String)> = announcement.txt.into_iter().collect();
+                    eclume_sync::discovery::parse(&announcement.name, &txt)
                 })
                 .collect::<Vec<_>>()
         };
         #[cfg(not(mobile))]
-        let achados = {
+        let found = {
             let _ = &app;
             eclume_sync::discovery::discover(std::time::Duration::from_secs(u64::from(segundos)))
                 .map_err(|err| format!("{err:#}"))?
         };
-        Ok(achados
+        Ok(found
             .into_iter()
-            .map(|f| Achado {
-                nome: f.name,
+            .map(|f| Found {
+                name: f.name,
                 url: f.url,
                 ca_sha256: f.ca_sha256,
             })
@@ -159,45 +166,41 @@ async fn descobrir<R: Runtime>(
     .map_err(|err| err.to_string())?
 }
 
-/// Lê o aparelho a cada poucos segundos (bateria, espaço, Wi-Fi não medido) e leva ao núcleo; uma
-/// mudança de rede dispara o ciclo (a sonda roda de novo).
-fn acompanhar_aparelho<R: Runtime>(app: tauri::AppHandle<R>) {
-    use tauri_plugin_eclume_gravador::GravadorExt;
+/// Reads the device every few seconds (battery, space, unmetered Wi-Fi) and hands it to the core; a
+/// network change fires the cycle (the probe runs again).
+fn watch_device<R: Runtime>(app: tauri::AppHandle<R>) {
+    use tauri_plugin_eclume_gravador::RecorderExt;
 
     std::thread::spawn(move || {
-        let mut modelo_definido = false;
+        let mut model_set = false;
         loop {
-            match app.gravador().estado_do_dispositivo() {
-                Ok(estado) => {
-                    let mudou = eclume_mobile_core::global()
-                        .and_then(|nucleo| eclume_mobile_core::trancar(nucleo).ok())
+            match app.recorder().device_state() {
+                Ok(device) => {
+                    let changed = eclume_mobile_core::global()
+                        .and_then(|core| eclume_mobile_core::lock(core).ok())
                         .map(|mut core| {
-                            if !modelo_definido {
-                                modelo_definido = core.definir_aparelho(&estado.modelo).is_ok();
+                            if !model_set {
+                                model_set = core.set_device(&device.model).is_ok();
                             }
-                            core.atualizar_aparelho(
-                                estado.bateria,
-                                estado.carregando,
-                                estado.espaco_livre,
-                            );
-                            core.mudou_rede(estado.wifi_nao_medido)
+                            core.update_device(device.battery, device.charging, device.free_space);
+                            core.network_changed(device.unmetered_wifi)
                         })
                         .unwrap_or(false);
-                    if mudou {
-                        eventos::ciclo_em_segundo_plano(&app, false);
+                    if changed {
+                        events::cycle_in_background(&app, false);
                     }
                 }
-                Err(err) => log::warn!("estado do aparelho: {err}"),
+                Err(err) => log::warn!("device state: {err}"),
             }
-            std::thread::sleep(INTERVALO_DO_APARELHO);
+            std::thread::sleep(DEVICE_INTERVAL);
         }
     });
 }
 
-/// De quanto em quanto tempo o aparelho é lido.
-const INTERVALO_DO_APARELHO: std::time::Duration = std::time::Duration::from_secs(5);
+/// How often the device is read.
+const DEVICE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 
-fn iniciar_log() {
+fn init_log() {
     #[cfg(target_os = "android")]
     android_logger::init_once(
         android_logger::Config::default()
@@ -206,60 +209,60 @@ fn iniciar_log() {
     );
 }
 
-fn abrir_nucleo<R: Runtime>(app: &tauri::AppHandle<R>) -> anyhow::Result<()> {
+fn open_core<R: Runtime>(app: &tauri::AppHandle<R>) -> anyhow::Result<()> {
     let base = app.path().app_data_dir()?;
-    log::info!("dados do app em {}", base.display());
-    eclume_mobile_core::iniciar(dirs_de(&base), VERSAO)?;
+    log::info!("app data in {}", base.display());
+    eclume_mobile_core::init(dirs_from(&base), VERSION)?;
     Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    iniciar_log();
+    init_log();
     let builder = tauri::Builder::default().plugin(tauri_plugin_eclume_gravador::init());
-    // O leitor de QR (câmera) só existe no celular.
+    // The QR reader (camera) only exists on the phone.
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
     builder
         .setup(|app| {
-            abrir_nucleo(app.handle())?;
-            acompanhar_aparelho(app.handle().clone());
-            eventos::iniciar_laco(app.handle().clone());
+            open_core(app.handle())?;
+            watch_device(app.handle().clone());
+            events::start_loop(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             descobrir,
-            comandos::estado,
-            comandos::conectar_descoberto,
-            comandos::conectar_endereco,
-            comandos::confiar_ca,
-            comandos::cancelar_ca,
-            comandos::entrar,
-            comandos::parear,
-            comandos::gravar,
-            comandos::pausar,
-            comandos::continuar,
-            comandos::marcar,
-            comandos::anotar_marcador,
-            comandos::parar,
-            comandos::salvar,
-            comandos::sincronizar_agora,
-            comandos::gravacoes,
-            comandos::gravacao,
-            comandos::excluir_local,
-            comandos::excluir_sincronizadas,
-            comandos::tipos_de_agenda,
-            comandos::idiomas,
-            comandos::configuracoes,
-            comandos::salvar_configuracoes,
-            comandos::sair,
-            comandos::visibilidade,
-            comandos::verificar_atualizacao,
-            comandos::atualizar,
-            comandos::abrir_na_web,
+            commands::estado,
+            commands::conectar_descoberto,
+            commands::conectar_endereco,
+            commands::confiar_ca,
+            commands::cancelar_ca,
+            commands::entrar,
+            commands::parear,
+            commands::gravar,
+            commands::pausar,
+            commands::continuar,
+            commands::marcar,
+            commands::anotar_marcador,
+            commands::parar,
+            commands::salvar,
+            commands::sincronizar_agora,
+            commands::gravacoes,
+            commands::gravacao,
+            commands::excluir_local,
+            commands::excluir_sincronizadas,
+            commands::tipos_de_agenda,
+            commands::idiomas,
+            commands::configuracoes,
+            commands::salvar_configuracoes,
+            commands::sair,
+            commands::visibilidade,
+            commands::verificar_atualizacao,
+            commands::atualizar,
+            commands::abrir_na_web,
         ])
         .run(tauri::generate_context!())
-        .expect("falha ao iniciar o app móvel do eclume");
+        .expect("failed to start eclume's mobile app");
 }
 
 #[cfg(test)]
@@ -267,33 +270,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn responder_transforma_erro_e_panico_em_json() {
+    fn reply_turns_error_and_panic_into_json() {
         assert_eq!(
-            responder(|| Ok(serde_json::json!({ "ok": true }))),
+            reply(|| Ok(serde_json::json!({ "ok": true }))),
             serde_json::json!({ "ok": true })
         );
         assert_eq!(
-            responder(|| Err(anyhow::anyhow!("sem sessão"))),
+            reply(|| Err(anyhow::anyhow!("sem sessão"))),
             serde_json::json!({ "erro": "sem sessão" })
         );
         assert_eq!(
-            responder(|| panic!("núcleo quebrado")),
+            reply(|| panic!("núcleo quebrado")),
             serde_json::json!({ "erro": "pânico: núcleo quebrado" })
         );
-        let dinamica = String::from("índice 3");
+        let dynamic = String::from("índice 3");
         assert_eq!(
-            responder(move || panic!("{dinamica}")),
+            reply(move || panic!("{dynamic}")),
             serde_json::json!({ "erro": "pânico: índice 3" })
         );
     }
 
     #[test]
-    fn token_fica_fora_da_pasta_de_dados() {
-        let dirs = dirs_de(std::path::Path::new(
+    fn token_stays_outside_the_data_folder() {
+        let dirs = dirs_from(std::path::Path::new(
             "/data/user/0/io.github.holetz.eclume.movel",
         ));
-        assert!(dirs.dados.ends_with("eclume"));
-        assert!(dirs.token().starts_with(&dirs.sem_backup));
-        assert!(!dirs.token().starts_with(&dirs.dados));
+        assert!(dirs.data.ends_with("eclume"));
+        assert!(dirs.token().starts_with(&dirs.no_backup));
+        assert!(!dirs.token().starts_with(&dirs.data));
     }
 }

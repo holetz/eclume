@@ -1,5 +1,6 @@
-// Os comandos que a UI chama direto no plugin nativo; os demais o Rust do app chama por
-// `run_mobile_plugin`, sem passar por permissão de capability.
+// The commands the UI calls straight on the native plugin; the app's Rust calls the others through
+// `run_mobile_plugin`, without going through a capability permission. The names are the IPC
+// contract and are kept.
 const COMMANDS: &[&str] = &[
     "check_permissions",
     "request_permissions",

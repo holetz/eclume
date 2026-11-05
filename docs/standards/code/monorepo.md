@@ -346,7 +346,7 @@ receives the SDK, the NDK and the JDK from the host's `mobile/scripts/android-sd
 (`ECLUME_ANDROID_SDK`, `ECLUME_ANDROID_NDK`, `ECLUME_ANDROID_JDK`), and the Gradle cache in
 `~/eclume-gate/cache/gradle`; it compiles the minified (R8) release APK with a throwaway key
 of the run, runs `testDebugUnitTest` and `lintRelease` (with `lint-baseline.xml` and `abortOnError`)
-of the plugin and the app and checks the JNI bridge through `mobile/scripts/simbolos_jni.py` (each
+of the plugin and the app and checks the JNI bridge through `mobile/scripts/jni_symbols.py` (each
 `external fun` of `EclumeCore.kt` with its `Java_…` symbol in the `.so`, through the NDK's `llvm-nm`, and the
 class with the native methods in the dex, through the SDK's `apkanalyzer`).
 **The `gpu-e2e` pillar (gate-only, holetz/eclume#158).** It proves the CUDA path (WhisperX and diarization on the

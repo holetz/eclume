@@ -1,5 +1,5 @@
-# Workspace cargo do app móvel do eclume. Os crates de gravação e sync são os do desktop, por
-# caminho (`../desktop/crates`); o plugin nativo fica em `plugins/`. O Cargo.lock é deste
+# The cargo workspace of eclume's mobile app. The recording and sync crates are the desktop's, by
+# path (`../desktop/crates`); the native plugin lives in `plugins/`. The Cargo.lock belongs to this
 # workspace.
 [workspace]
 resolver = "2"

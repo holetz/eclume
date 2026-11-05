@@ -358,7 +358,7 @@ ssh holetz@192.168.15.199 'bash -s' < mobile/scripts/android-sdk.sh
   SDK takes ~7 GB, the JDK ~350 MB and the AVD ~250 MB (it grows with use). To free space, use
   `docker builder prune -af` and delete eclume's already-merged `~/build/*/target`; never delete
   other projects' images.
-- **Second run:** it only checks and prints "nada a fazer".
+- **Second run:** it only checks and prints "nothing to do".
 - **KVM:** `/dev/kvm` gives read and write to `holetz` through an ACL; without it, the script warns and the
   emulator runs without acceleration.
 - **Command-line tools pinned at 22.0:** 23 swaps `sdkmanager` for `android sdk` and changes the

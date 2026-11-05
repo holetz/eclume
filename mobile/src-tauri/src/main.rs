@@ -1,4 +1,4 @@
-// Sem console extra no Windows em release; o app móvel roda no desktop só para desenvolvimento.
+// No extra console on Windows in release; the mobile app runs on desktop only for development.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {

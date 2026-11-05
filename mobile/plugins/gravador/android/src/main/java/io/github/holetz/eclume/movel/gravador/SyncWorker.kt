@@ -24,126 +24,128 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * O sync em segundo plano: o WorkManager roda este worker a cada 15 min, uma vez ao abrir o app e
- * a cada Parar, Salvar e Pular (encadeado depois de um sync em curso), sempre no Wi-Fi não medido e
- * mesmo sem a Activity. O núcleo abre com a pasta de dados do app (a mesma do Tauri), faz a sonda
- * do `/server` e só sobe na rede do eclume. Com algo a subir, o worker roda em primeiro plano
- * (`dataSync`, "Enviando N gravações"), fora do limite de 10 min; se o Android recusar, roda como
- * trabalho comum e o próximo retoma das partes que faltam. Parado pelo sistema, o upload para na
- * próxima requisição (`EclumeCore.interromperSync`).
+ * The background sync: WorkManager runs this worker every 15 min, once when the app opens and on
+ * every Parar, Salvar and Pular (chained after a running sync), always on unmetered Wi-Fi and even
+ * without the Activity. The core opens with the app's data folder (the same as Tauri's), probes
+ * `/server` and only uploads on eclume's network. With something to upload, the worker runs in the
+ * foreground (`dataSync`, with the upload count), beyond the 10-min limit; if Android refuses, it
+ * runs as ordinary work and the next one resumes from the missing parts. Stopped by the system,
+ * the upload stops at the next request (`EclumeCore.interruptSync`).
  */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    /** O que fazer depois de uma passada. */
-    enum class Decisao { SUCESSO, REPETIR }
+    /** What to do after a pass. */
+    enum class Decision { SUCCESS, RETRY }
 
     companion object {
         private const val TAG = "eclume"
-        const val PERIODICO = "eclume-sync"
-        const val AO_CONECTAR = "eclume-sync-ao-conectar"
-        private const val ID_NOTIFICACAO = 4204
+        // The unique work names are persisted by WorkManager and keep their values.
+        const val PERIODIC = "eclume-sync"
+        const val ON_CONNECT = "eclume-sync-ao-conectar"
+        private const val NOTIFICATION_ID = 4204
 
-        /** Só no Wi-Fi não medido: nada sai pelos dados móveis. */
-        fun restricoes(): Constraints = Constraints.Builder()
+        /** Only on unmetered Wi-Fi: nothing goes out over mobile data. */
+        fun constraints(): Constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.UNMETERED)
             .build()
 
-        /** Na abertura: o periódico de 15 min e uma passada no próximo Wi-Fi (sem duplicar). */
-        fun agendar(context: Context) {
-            val trabalho = WorkManager.getInstance(context)
-            trabalho.enqueueUniquePeriodicWork(
-                PERIODICO,
+        /** On open: the 15-min periodic work and one pass on the next Wi-Fi (without duplicating). */
+        fun schedule(context: Context) {
+            val work = WorkManager.getInstance(context)
+            work.enqueueUniquePeriodicWork(
+                PERIODIC,
                 ExistingPeriodicWorkPolicy.KEEP,
                 PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES)
-                    .setConstraints(restricoes())
+                    .setConstraints(constraints())
                     .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
                     .build(),
             )
-            trabalho.enqueueUniqueWork(
-                AO_CONECTAR,
+            work.enqueueUniqueWork(
+                ON_CONNECT,
                 ExistingWorkPolicy.KEEP,
-                passada(0),
+                onePass(0),
             )
         }
 
         /**
-         * Parar (com o prazo da folha), Salvar e Pular: uma passada no próximo Wi-Fi, encadeada
-         * depois de um sync em curso, sem cancelá-lo.
+         * Parar (with the sheet's deadline), Salvar and Pular: one pass on the next Wi-Fi, chained
+         * after a running sync, without cancelling it.
          */
-        fun agendarAgora(context: Context, atrasoMs: Long) {
+        fun scheduleNow(context: Context, delayMs: Long) {
             WorkManager.getInstance(context).enqueueUniqueWork(
-                AO_CONECTAR,
+                ON_CONNECT,
                 ExistingWorkPolicy.APPEND_OR_REPLACE,
-                passada(atrasoMs),
+                onePass(delayMs),
             )
         }
 
-        private fun passada(atrasoMs: Long) = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(restricoes())
-            .setInitialDelay(atrasoMs.coerceAtLeast(0), TimeUnit.MILLISECONDS)
+        private fun onePass(delayMs: Long) = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(constraints())
+            .setInitialDelay(delayMs.coerceAtLeast(0), TimeUnit.MILLISECONDS)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
             .build()
 
         /**
-         * `success` quando subiu tudo ou não havia o que subir; `retry` quando o ciclo deu erro,
-         * foi interrompido ou alguma gravação falhou (o backoff do núcleo decide qual está vencida).
+         * `success` when everything was uploaded or there was nothing to upload; `retry` when the
+         * cycle failed, was interrupted or a recording failed (the core's backoff decides which is
+         * due). The JSON keys are the bridge's wire format.
          */
-        fun decidir(resposta: String?): Decisao {
-            val json = resposta?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return Decisao.REPETIR
-            if (json.has("erro")) return Decisao.REPETIR
-            if (json.optBoolean("interrompido")) return Decisao.REPETIR
-            if (json.optInt("falhas") > 0) return Decisao.REPETIR
-            return Decisao.SUCESSO
+        fun decide(reply: String?): Decision {
+            val json = reply?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return Decision.RETRY
+            if (json.has("erro")) return Decision.RETRY
+            if (json.optBoolean("interrompido")) return Decision.RETRY
+            if (json.optInt("falhas") > 0) return Decision.RETRY
+            return Decision.SUCCESS
         }
 
-        /** Quantas gravações aguardam na rede do eclume (zero fora dela ou com erro). */
-        fun aSubir(sondagem: String?): Int {
-            val json = sondagem?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return 0
+        /** How many recordings wait on eclume's network (zero off it or on error). */
+        fun toUpload(probe: String?): Int {
+            val json = probe?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return 0
             if (!json.optBoolean("na_rede")) return 0
             return json.optInt("pendentes").coerceAtLeast(0)
         }
 
-        /** "Enviando 1 gravação" ou "Enviando 3 gravações". */
-        fun textoDoEnvio(pendentes: Int): String =
-            if (pendentes == 1) "Enviando 1 gravação" else "Enviando $pendentes gravações"
+        /** The foreground notification's text, singular or plural (UI copy, pt-BR). */
+        fun uploadText(pending: Int): String =
+            if (pending == 1) "Enviando 1 gravação" else "Enviando $pending gravações"
     }
 
     override suspend fun doWork(): Result {
         val base = applicationContext.dataDir.absolutePath
-        // O callback de rede avisa o núcleo na hora, também neste processo aberto só pelo worker.
-        Conectividade.acompanhar(applicationContext)
-        val pendentes = aSubir(withContext(Dispatchers.IO) { EclumeCore.sondarPendentes(base) })
-        if (pendentes > 0) entrarEmPrimeiroPlano(pendentes)
-        val resposta = coroutineScope {
-            val sync = async(Dispatchers.IO) { EclumeCore.syncPendentes(base) }
+        // The network callback tells the core right away, also in this process opened only by the worker.
+        Connectivity.follow(applicationContext)
+        val pending = toUpload(withContext(Dispatchers.IO) { EclumeCore.probePending(base) })
+        if (pending > 0) enterForeground(pending)
+        val reply = coroutineScope {
+            val sync = async(Dispatchers.IO) { EclumeCore.syncPending(base) }
             try {
                 sync.await()
-            } catch (parado: CancellationException) {
-                // O WorkManager parou o worker (perdeu a rede, prazo, cancelamento): a chamada JNI
-                // não é interrompível, então o núcleo para o upload na próxima requisição.
-                EclumeCore.interromperSync()
-                throw parado
+            } catch (stopped: CancellationException) {
+                // WorkManager stopped the worker (lost network, deadline, cancellation): the JNI call
+                // cannot be interrupted, so the core stops the upload at the next request.
+                EclumeCore.interruptSync()
+                throw stopped
             }
         }
-        Log.i(TAG, "sync em segundo plano: $resposta")
-        return when (decidir(resposta)) {
-            Decisao.SUCESSO -> Result.success()
-            Decisao.REPETIR -> Result.retry()
+        Log.i(TAG, "background sync: $reply")
+        return when (decide(reply)) {
+            Decision.SUCCESS -> Result.success()
+            Decision.RETRY -> Result.retry()
         }
     }
 
-    private suspend fun entrarEmPrimeiroPlano(pendentes: Int) {
-        val notificacao = Notificacao.sincronizando(applicationContext, textoDoEnvio(pendentes))
+    private suspend fun enterForeground(pending: Int) {
+        val notification = RecordingNotification.syncing(applicationContext, uploadText(pending))
         val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ForegroundInfo(ID_NOTIFICACAO, notificacao, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            ForegroundInfo(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
-            ForegroundInfo(ID_NOTIFICACAO, notificacao)
+            ForegroundInfo(NOTIFICATION_ID, notification)
         }
         try {
             setForeground(info)
-        } catch (recusado: IllegalStateException) {
-            // ForegroundServiceStartNotAllowedException (Android 12+ sem a isenção de bateria):
-            // segue como trabalho comum, e o próximo retoma das partes que faltam.
-            Log.w(TAG, "sync sem primeiro plano: ${recusado.message}")
+        } catch (refused: IllegalStateException) {
+            // ForegroundServiceStartNotAllowedException (Android 12+ without the battery exemption):
+            // goes on as ordinary work, and the next one resumes from the missing parts.
+            Log.w(TAG, "sync without foreground: ${refused.message}")
         }
     }
 }

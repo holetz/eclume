@@ -18,8 +18,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
-    // O lint do release fecha o gate (pilar android): o que já existia na introdução fica no
-    // baseline; um aviso novo de erro falha.
+    // The release lint closes the gate (android pillar): what already existed when it was
+    // introduced stays in the baseline; a new error-level warning fails.
     lint {
         baseline = file("lint-baseline.xml")
         abortOnError = true
@@ -38,7 +38,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.work:work-runtime-ktx:2.10.5")
     testImplementation("junit:junit:4.13.2")
-    // O `JSONObject` do android.jar é stub na JVM: o real só nos testes.
+    // The android.jar `JSONObject` is a stub on the JVM: the real one only in the tests.
     testImplementation("org.json:json:20240303")
     implementation(project(":tauri-android"))
 }

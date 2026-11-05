@@ -14,10 +14,10 @@ val tauriProperties = Properties().apply {
     }
 }
 
-// A assinatura de release: deploy/release-movel.sh grava keystore.properties (fora do git) com a
-// keystore do host montada só leitura no contêiner, e o pilar android do gate, com uma chave
-// descartável. Sem ele, o release sai sem assinatura, e o de depuração usa a chave de debug do SDK.
-// Contrato: docs/standards/code/mobile-distribuicao.md.
+// The release signing: deploy/release-mobile.sh writes keystore.properties (outside git) with the
+// host keystore mounted read-only in the container, and the gate's android pillar does so with a
+// throwaway key. Without it, the release is unsigned, and the debug build uses the SDK debug key.
+// Contract: docs/standards/code/mobile-distribuicao.md.
 val keystoreProperties = Properties().apply {
     val propFile = rootProject.file("keystore.properties")
     if (propFile.exists()) {
@@ -79,8 +79,8 @@ android {
     buildFeatures {
         buildConfig = true
     }
-    // O lint do release fecha o gate (pilar android): o que já existia na introdução fica no
-    // baseline; um aviso novo de erro falha.
+    // The release lint closes the gate (android pillar): what already existed when it was
+    // introduced stays in the baseline; a new error-level warning fails.
     lint {
         baseline = file("lint-baseline.xml")
         abortOnError = true

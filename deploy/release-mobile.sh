@@ -114,7 +114,7 @@ expected=""
 if [[ -s "$EXPECTED_CERT" ]]; then
   expected="$(tr -d ' :\n' < "$EXPECTED_CERT" | tr 'A-F' 'a-f')"
 else
-  problems+=("missing $EXPECTED_CERT (the SHA-256 of the keystore certificate, printed by mobile/scripts/criar-keystore.sh)")
+  problems+=("missing $EXPECTED_CERT (the SHA-256 of the keystore certificate, printed by mobile/scripts/create-keystore.sh)")
 fi
 host "test -s '$KEYSTORE' && test -s '$PASSWORD'" || problems+=("missing the release keystore in $SECRETS on the host")
 
@@ -203,14 +203,14 @@ if [[ "$certificate" != "$expected" ]]; then
 fi
 echo "Signature checked: certificate $certificate." >&2
 host "cd '$DIST' && cp '$SRC/mobile/INSTALACAO.md' . \
-  && python3 '$SRC/mobile/scripts/manifesto_movel.py' --pasta . --versao '$VERSION' \
-       --certificado '$certificate' --notas $(printf '%q' "$NOTES") \
+  && python3 '$SRC/mobile/scripts/mobile_manifest.py' --dir . --version '$VERSION' \
+       --certificate '$certificate' --notes $(printf '%q' "$NOTES") \
   && sha256sum -c --quiet SHA256SUMS && ls -la"
 
 # --- smoke test of the minified APK on the emulator ------------------------------------------------
 if [[ "$SMOKE" -eq 1 ]]; then
   echo "Smoke test of the release APK on the emulator…" >&2
-  host "source ~/.config/eclume/android-env.sh && bash '$SRC/mobile/scripts/prova-emulador.sh' --fumaca '$SMOKE_APK'"
+  host "source ~/.config/eclume/android-env.sh && bash '$SRC/mobile/scripts/prove-emulator.sh' --smoke '$SMOKE_APK'"
 fi
 
 if [[ "$PUBLISH" -eq 0 ]]; then

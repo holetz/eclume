@@ -1,8 +1,8 @@
 import react from '@vitejs/plugin-react'
 import { configDefaults, defineConfig } from 'vitest/config'
 
-// O Tauri serve o `dist/` no WebView; em dev (`tauri android dev`), o emulador acessa o Vite pela
-// porta fixa 1420 no endereço que o CLI passa em TAURI_DEV_HOST.
+// Tauri serves `dist/` in the WebView; in dev (`tauri android dev`), the emulator reaches Vite on
+// the fixed port 1420 at the address the CLI passes in TAURI_DEV_HOST.
 const host = process.env.TAURI_DEV_HOST
 
 export default defineConfig({

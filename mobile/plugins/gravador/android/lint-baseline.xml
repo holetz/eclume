@@ -7,8 +7,8 @@
         errorLine1="        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse(&quot;package:${activity.packageName}&quot;))"
         errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/holetz/eclume/movel/gravador/GravadorPlugin.kt"
-            line="96"
+            file="src/main/java/io/github/holetz/eclume/movel/gravador/RecorderPlugin.kt"
+            line="132"
             column="38"/>
     </issue>
 
@@ -73,8 +73,8 @@
         errorLine1="                .apply { acquire() }"
         errorLine2="                         ~~~~~~~~~">
         <location
-            file="src/main/java/io/github/holetz/eclume/movel/gravador/ServicoDeGravacao.kt"
-            line="188"
+            file="src/main/java/io/github/holetz/eclume/movel/gravador/RecordingService.kt"
+            line="191"
             column="26"/>
     </issue>
 
@@ -84,7 +84,7 @@
         errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &amp;&amp;"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/holetz/eclume/movel/gravador/Atualizador.kt"
+            file="src/main/java/io/github/holetz/eclume/movel/gravador/Updater.kt"
             line="27"
             column="13"/>
     </issue>
@@ -95,8 +95,8 @@
         errorLine1="        if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.O) return"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/holetz/eclume/movel/gravador/Notificacao.kt"
-            line="111"
+            file="src/main/java/io/github/holetz/eclume/movel/gravador/RecordingNotification.kt"
+            line="113"
             column="13"/>
     </issue>
 
@@ -106,7 +106,7 @@
         errorLine1="                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse(&quot;package:${activity.packageName}&quot;)),"
         errorLine2="                                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/holetz/eclume/movel/gravador/Atualizador.kt"
+            file="src/main/java/io/github/holetz/eclume/movel/gravador/Updater.kt"
             line="31"
             column="68"/>
     </issue>
@@ -114,11 +114,11 @@
     <issue
         id="UseKtx"
         message="Use the KTX extension function `SharedPreferences.edit` instead?"
-        errorLine1="        context.getSharedPreferences(PREFERENCIAS, Context.MODE_PRIVATE).edit().putBoolean(ISENCAO_PEDIDA, true).apply()"
-        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="        context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).edit().putBoolean(EXEMPTION_ASKED, true).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/holetz/eclume/movel/gravador/Dispositivo.kt"
-            line="43"
+            file="src/main/java/io/github/holetz/eclume/movel/gravador/Device.kt"
+            line="44"
             column="9"/>
     </issue>
 
@@ -128,30 +128,30 @@
         errorLine1="        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse(&quot;package:${activity.packageName}&quot;))"
         errorLine2="                                                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/holetz/eclume/movel/gravador/GravadorPlugin.kt"
-            line="96"
+            file="src/main/java/io/github/holetz/eclume/movel/gravador/RecorderPlugin.kt"
+            line="132"
             column="83"/>
     </issue>
 
     <issue
         id="UseKtx"
         message="Use the KTX extension function `SharedPreferences.edit` instead?"
-        errorLine1="            preferencias(context).edit().putLong(GRAVANDO_DESDE, System.currentTimeMillis()).apply()"
-        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="            preferences(context).edit().putLong(RECORDING_SINCE, System.currentTimeMillis()).apply()"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/io/github/holetz/eclume/movel/gravador/VigiaDaGravacao.kt"
-            line="45"
+            line="49"
             column="13"/>
     </issue>
 
     <issue
         id="UseKtx"
         message="Use the KTX extension function `SharedPreferences.edit` instead?"
-        errorLine1="            preferencias(context).edit().remove(GRAVANDO_DESDE).apply()"
-        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="            preferences(context).edit().remove(RECORDING_SINCE).apply()"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/io/github/holetz/eclume/movel/gravador/VigiaDaGravacao.kt"
-            line="51"
+            line="55"
             column="13"/>
     </issue>
 

@@ -15,7 +15,7 @@
 # content_hash of a batch of restored audio files and `restic check --read-data-subset` of a
 # rotating 1/7 of the off-host repository. Refuses with the disk at 90% or more. Nothing touches
 # the `eclume` project. The state file (estado/ensaio.json) and the `conta` file keep their pt-BR
-# names: they are host data, read by the watchdog and by mobile/scripts/prova-emulador.sh.
+# names: they are host data, read by the watchdog and by mobile/scripts/prove-emulator.sh.
 #
 # Weight: the `eclume-server:<sha>` and `eclume-web:<sha>` (or `eclume-edge:<sha>`) images the
 # deploy kept for the `main` SHA are reused, without build; only what is missing is built. The FULL

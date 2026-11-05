@@ -1,32 +1,32 @@
 #!/usr/bin/env bash
-# Ambiente Android do app móvel no host, sem sudo e idempotente.
+# The mobile app's Android environment on the host, without sudo and idempotent.
 #
-# Instala em ~/ as command-line tools (SHA-256 conferido), um JDK 21 portátil (o OpenJDK do host
-# só traz o runtime, sem `javac`), os pacotes do SDK e do NDK, os alvos `rustup` Android, o AVD
-# `eclume-35` e o `~/.config/eclume/android-env.sh` que os comandos de build carregam. Uma segunda
-# execução só confere e imprime "nada a fazer".
+# Installs in ~/ the command-line tools (SHA-256 checked), a portable JDK 21 (the host's OpenJDK
+# only brings the runtime, without `javac`), the SDK and NDK packages, the Android `rustup`
+# targets, the AVD `eclume-35` and the `~/.config/eclume/android-env.sh` that the build commands
+# load. A second run only checks and prints "nothing to do".
 #
-# Uso: ssh holetz@192.168.15.199 'bash -s' < mobile/scripts/android-sdk.sh
+# Usage: ssh holetz@192.168.15.199 'bash -s' < mobile/scripts/android-sdk.sh
 set -euo pipefail
 
 SDK="${ANDROID_HOME:-$HOME/android-sdk}"
 JDK="$HOME/jdk-21"
 ENV_FILE="$HOME/.config/eclume/android-env.sh"
 AVD="eclume-35"
-# O limite de disco do deploy é 90 %; o SDK não pode levar o disco além de 88 %.
-LIMITE_DISCO=88
-# Espaço que uma instalação do zero ocupa, em GiB.
-TAMANHO_GIB=10
+# The deploy's disk limit is 90 %; the SDK may not take the disk beyond 88 %.
+DISK_LIMIT=88
+# The space a from-scratch install takes, in GiB.
+SIZE_GIB=10
 
-# Command-line tools 22.0: a 23 troca o `sdkmanager` pelo `android sdk` e muda a saída do
-# `--list_installed` (`ndk/28…` no lugar de `ndk;28…`); a 22 ainda é o `sdkmanager` de sempre.
+# Command-line tools 22.0: 23 swaps `sdkmanager` for `android sdk` and changes the
+# `--list_installed` output (`ndk/28…` instead of `ndk;28…`); 22 is still the usual `sdkmanager`.
 CLT_ZIP="commandlinetools-linux-15859902_latest.zip"
 CLT_SHA256="4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583"
-CLT_REVISAO="22.0"
+CLT_REVISION="22.0"
 JDK_URL="https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_linux_hotspot_21.0.12.1_1.tar.gz"
 JDK_SHA256="ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94"
 
-PACOTES=(
+PACKAGES=(
   "platform-tools"
   "platforms;android-36"
   "build-tools;36.0.0"
@@ -34,106 +34,106 @@ PACOTES=(
   "emulator"
   "system-images;android-35;google_apis;x86_64"
 )
-ALVOS=(aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android)
+TARGETS=(aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android)
 
-feito=0
+changed=0
 
-baixar_conferido() { # url destino sha256
+download_checked() { # url destination sha256
   curl -fsSL --retry 3 -o "$2" "$1"
   echo "$3  $2" | sha256sum -c --quiet -
 }
 
-checar_disco() {
-  local total livre usado_pct
-  read -r total livre < <(df -B1G --output=size,avail "$HOME" | tail -1)
-  usado_pct=$(( (total - livre + TAMANHO_GIB) * 100 / total ))
-  if (( usado_pct > LIMITE_DISCO )); then
-    echo "recusado: a instalação levaria o disco a ${usado_pct}% (limite ${LIMITE_DISCO}%)." >&2
-    echo "libere espaço (docker builder prune -af, ~/build/*/target do eclume) e rode de novo." >&2
+check_disk() {
+  local total free used_pct
+  read -r total free < <(df -B1G --output=size,avail "$HOME" | tail -1)
+  used_pct=$(( (total - free + SIZE_GIB) * 100 / total ))
+  if (( used_pct > DISK_LIMIT )); then
+    echo "refused: the install would take the disk to ${used_pct}% (limit ${DISK_LIMIT}%)." >&2
+    echo "free up space (docker builder prune -af, eclume's ~/build/*/target) and run again." >&2
     exit 1
   fi
 }
 
 if [[ ! -x "$JDK/bin/javac" ]]; then
-  checar_disco
+  check_disk
   tmp=$(mktemp -d)
-  baixar_conferido "$JDK_URL" "$tmp/jdk.tar.gz" "$JDK_SHA256"
+  download_checked "$JDK_URL" "$tmp/jdk.tar.gz" "$JDK_SHA256"
   mkdir -p "$JDK"
   tar -xzf "$tmp/jdk.tar.gz" -C "$JDK" --strip-components=1
   rm -rf "$tmp"
-  echo "JDK 21 em $JDK"
-  feito=1
+  echo "JDK 21 in $JDK"
+  changed=1
 fi
 export JAVA_HOME="$JDK"
 
-if ! grep -qxF "Pkg.Revision=$CLT_REVISAO" "$SDK/cmdline-tools/latest/source.properties" 2>/dev/null; then
-  checar_disco
+if ! grep -qxF "Pkg.Revision=$CLT_REVISION" "$SDK/cmdline-tools/latest/source.properties" 2>/dev/null; then
+  check_disk
   tmp=$(mktemp -d)
-  baixar_conferido "https://dl.google.com/android/repository/$CLT_ZIP" "$tmp/clt.zip" "$CLT_SHA256"
+  download_checked "https://dl.google.com/android/repository/$CLT_ZIP" "$tmp/clt.zip" "$CLT_SHA256"
   mkdir -p "$SDK/cmdline-tools"
   unzip -q "$tmp/clt.zip" -d "$tmp"
   rm -rf "$SDK/cmdline-tools/latest"
   mv "$tmp/cmdline-tools" "$SDK/cmdline-tools/latest"
   rm -rf "$tmp"
-  echo "command-line tools $CLT_REVISAO em $SDK/cmdline-tools/latest"
-  feito=1
+  echo "command-line tools $CLT_REVISION in $SDK/cmdline-tools/latest"
+  changed=1
 fi
 SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
 
-# Um pacote `a;b;c` do SDK vive em `$SDK/a/b/c`: a pasta diz se ele já está instalado.
-faltam=()
-for pacote in "${PACOTES[@]}"; do
-  [[ -d "$SDK/${pacote//;//}" ]] || faltam+=("$pacote")
+# An SDK package `a;b;c` lives in `$SDK/a/b/c`: the folder says whether it is installed.
+missing=()
+for package in "${PACKAGES[@]}"; do
+  [[ -d "$SDK/${package//;//}" ]] || missing+=("$package")
 done
-if (( ${#faltam[@]} )); then
-  checar_disco
-  "$SDKMANAGER" --sdk_root="$SDK" "${faltam[@]}" | grep -v '^\[' || true
-  for pacote in "${faltam[@]}"; do
-    [[ -d "$SDK/${pacote//;//}" ]] || { echo "falhou a instalação de $pacote" >&2; exit 1; }
+if (( ${#missing[@]} )); then
+  check_disk
+  "$SDKMANAGER" --sdk_root="$SDK" "${missing[@]}" | grep -v '^\[' || true
+  for package in "${missing[@]}"; do
+    [[ -d "$SDK/${package//;//}" ]] || { echo "installing $package failed" >&2; exit 1; }
   done
-  echo "pacotes instalados: ${faltam[*]}"
-  feito=1
+  echo "packages instalados: ${missing[*]}"
+  changed=1
 fi
 
 RUSTUP="$HOME/.cargo/bin/rustup"
-alvos_instalados=$("$RUSTUP" target list --installed)
-for alvo in "${ALVOS[@]}"; do
-  if ! grep -qxF "$alvo" <<<"$alvos_instalados"; then
-    "$RUSTUP" target add "$alvo"
-    feito=1
+installed_targets=$("$RUSTUP" target list --installed)
+for target in "${TARGETS[@]}"; do
+  if ! grep -qxF "$target" <<<"$installed_targets"; then
+    "$RUSTUP" target add "$target"
+    changed=1
   fi
 done
 
-# O crate `cmake` gera com Ninja ao compilar para o Android.
+# The `cmake` crate generates with Ninja when building for Android.
 if ! command -v ninja >/dev/null && [[ ! -x "$HOME/.local/bin/ninja" ]]; then
   "$HOME/.local/bin/uv" tool install ninja
-  feito=1
+  changed=1
 fi
 
-conteudo_env=$(cat <<EOF
-# Gerado por mobile/scripts/android-sdk.sh — ambiente do build Android do eclume.
+env_content=$(cat <<EOF
+# Generated by mobile/scripts/android-sdk.sh — the environment of eclume's Android build.
 export JAVA_HOME="$JDK"
 export ANDROID_HOME="$SDK"
 export ANDROID_SDK_ROOT="$SDK"
 export NDK_HOME="$SDK/ndk/28.2.13676358"
-# O cmake (libopus embutida) procura o NDK por estas duas.
+# cmake (the bundled libopus) looks up the NDK through these two.
 export ANDROID_NDK_HOME="$SDK/ndk/28.2.13676358"
 export ANDROID_NDK_ROOT="$SDK/ndk/28.2.13676358"
-# Sem cache incremental: no host de build, ele só ocupa disco (o limite do deploy é 90 %).
+# No incremental cache: on the build host, it only takes disk (the deploy's limit is 90 %).
 export CARGO_INCREMENTAL=0
-# O compilador e o linker do NDK para um cargo fora do Tauri (o check do núcleo para o Android),
-# de qualquer pasta; o tauri android build passa os seus.
+# The NDK compiler and linker for a cargo outside Tauri (the core's Android check), from any
+# folder; tauri android build passes its own.
 export CC_aarch64_linux_android=aarch64-linux-android26-clang
 export AR_aarch64_linux_android=llvm-ar
 export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=aarch64-linux-android26-clang
 export PATH="\$HOME/.local/bin:\$JAVA_HOME/bin:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools:\$ANDROID_HOME/emulator:\$ANDROID_HOME/build-tools/36.0.0:\$HOME/.cargo/bin:\$PATH:\$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
 EOF
 )
-if [[ ! -f "$ENV_FILE" ]] || [[ "$(cat "$ENV_FILE")" != "$conteudo_env" ]]; then
+if [[ ! -f "$ENV_FILE" ]] || [[ "$(cat "$ENV_FILE")" != "$env_content" ]]; then
   mkdir -p "$(dirname "$ENV_FILE")"
-  printf '%s\n' "$conteudo_env" >"$ENV_FILE"
-  echo "ambiente em $ENV_FILE"
-  feito=1
+  printf '%s\n' "$env_content" >"$ENV_FILE"
+  echo "environment in $ENV_FILE"
+  changed=1
 fi
 
 AVDMANAGER="$SDK/cmdline-tools/latest/bin/avdmanager"
@@ -143,14 +143,14 @@ if ! ANDROID_SDK_ROOT="$SDK" "$AVDMANAGER" list avd -c 2>/dev/null | grep -qxF "
   cfg="$HOME/.android/avd/$AVD.avd/config.ini"
   sed -i 's/^hw.ramSize=.*/hw.ramSize=2048/' "$cfg"
   grep -q '^hw.ramSize=' "$cfg" || echo 'hw.ramSize=2048' >>"$cfg"
-  echo "AVD $AVD criado"
-  feito=1
+  echo "AVD $AVD created"
+  changed=1
 fi
 
 if [[ ! -w /dev/kvm ]]; then
-  echo "aviso: /dev/kvm sem escrita para $(id -un); o emulador fica sem aceleração." >&2
+  echo "warning: /dev/kvm is not writable for $(id -un); the emulator runs without acceleration." >&2
 fi
 
-if (( feito == 0 )); then
-  echo "nada a fazer: ambiente Android completo em $SDK"
+if (( changed == 0 )); then
+  echo "nothing to do: the Android environment is complete in $SDK"
 fi
