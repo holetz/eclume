@@ -9,7 +9,9 @@ import { BridgeContext } from '../bridge/bridge'
 
 function openApp(route: string, prepare?: (bridge: FakeBridge) => void, locale: Locale = 'pt-BR') {
   window.location.hash = route
-  const bridge = fakeBridge(baseState({ pendentes: 2, locale }))
+  const bridge = fakeBridge(
+    baseState({ pendentes: 2, locale, espaco_livre: locale === 'en' ? 'about 9 h' : 'cerca de 9 h' }),
+  )
   prepare?.(bridge)
   render(
     <BridgeContext.Provider value={bridge}>

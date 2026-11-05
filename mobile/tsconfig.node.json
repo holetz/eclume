@@ -16,5 +16,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "ui/src/styles/copy.test.ts", "ui/src/app/vocabulario.test.ts"]
+  "include": ["vite.config.ts", "ui/src/styles/copy.test.ts", "ui/src/app/vocabulario.test.ts", "ui/src/test/literalStrings.test.ts"]
 }

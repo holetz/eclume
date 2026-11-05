@@ -18,8 +18,9 @@ export function duration(ms: number | null): string {
   return rest ? `${Math.floor(minutes / 60)} h ${rest} min` : `${Math.floor(minutes / 60)} h`
 }
 
-const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
-const DAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
+/** pt-BR's short month and weekday names, without Intl's trailing dot (`set`, not `set.`). */
+const MONTHS = () => t('formats.months').split(' ')
+const DAYS = () => t('formats.days').split(' ')
 
 function month(date: Date): string {
   return new Intl.DateTimeFormat(formatLocale(), { month: 'short' }).format(date)
@@ -42,7 +43,7 @@ export function when(ts: number, now: Date = new Date()): string {
   yesterday.setDate(now.getDate() - 1)
   if (sameDay(date, yesterday)) return t('formats.yesterday', { time })
   return activeLocale() === 'pt-BR'
-    ? `${date.getDate()} ${MONTHS[date.getMonth()]} ${time}`
+    ? `${date.getDate()} ${MONTHS()[date.getMonth()]} ${time}`
     : `${month(date)} ${date.getDate()} ${time}`
 }
 
@@ -50,14 +51,14 @@ export function when(ts: number, now: Date = new Date()): string {
 export function longDate(ts: number): string {
   const date = new Date(ts)
   if (activeLocale() === 'en') return `${weekday(date)} ${month(date)} ${date.getDate()} ${date.getFullYear()} · ${TWO(date.getHours())}:${TWO(date.getMinutes())}`
-  return `${DAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()} · ${TWO(date.getHours())}:${TWO(date.getMinutes())}`
+  return `${DAYS()[date.getDay()]} ${date.getDate()} ${MONTHS()[date.getMonth()]} ${date.getFullYear()} · ${TWO(date.getHours())}:${TWO(date.getMinutes())}`
 }
 
 /** The title suggested on the saved-recording sheet: weekday, day, month and time. */
 export function suggestedTitle(ts: number): string {
   const date = new Date(ts)
   if (activeLocale() === 'en') return `${weekday(date)} ${month(date)} ${date.getDate()}, ${TWO(date.getHours())}:${TWO(date.getMinutes())}`
-  return `${DAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}, ${TWO(date.getHours())}:${TWO(date.getMinutes())}`
+  return `${DAYS()[date.getDay()]} ${date.getDate()} ${MONTHS()[date.getMonth()]}, ${TWO(date.getHours())}:${TWO(date.getMinutes())}`
 }
 
 /** Bytes: `10 MB`, `1,1 GB`. */

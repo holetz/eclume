@@ -176,6 +176,10 @@ const en = {
     untitled: 'Untitled',
   },
   formats: {
+    // The prefix of the core's estimates (`estimates::about`).
+    aboutPrefix: 'about ',
+    months: 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec',
+    days: 'Sun Mon Tue Wed Thu Fri Sat',
     lessThanMinute: 'less than 1 min',
     today: 'Today {time}',
     yesterday: 'Yesterday {time}',

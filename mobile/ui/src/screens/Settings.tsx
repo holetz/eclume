@@ -1,4 +1,4 @@
-import { useT } from '../i18n'
+import { t, useT } from '../i18n'
 import { useEffect, useState, type ReactNode } from 'react'
 import { size } from '../app/formats'
 import { Back } from '../app/Back'
@@ -45,6 +45,12 @@ function Switch({
 }
 
 /** Settings: server, sync, audio, storage, sign out and the version. */
+/** The core's estimate without its "about" prefix: the row reads "9 h free". */
+function withoutAbout(estimate: string): string {
+  const prefix = t('formats.aboutPrefix')
+  return estimate.startsWith(prefix) ? estimate.slice(prefix.length) : estimate
+}
+
 export function Settings({ go, freeSpace }: { go: (route: string) => void; freeSpace: string | null }) {
   const t = useT()
   const bridge = useBridge()
@@ -205,7 +211,7 @@ export function Settings({ go, freeSpace }: { go: (route: string) => void; freeS
               <Row title={t('settings.onPhone')}>
                 <span className="text-muted text-14">
                   {size(data.uso_bytes)}
-                  {freeSpace ? t('settings.free', { remaining: freeSpace.replace(/^cerca de /, '') }) : ''}
+                  {freeSpace ? t('settings.free', { remaining: withoutAbout(freeSpace) }) : ''}
                 </span>
               </Row>
             </ul>

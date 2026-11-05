@@ -179,6 +179,10 @@ const ptBR: Catalog<typeof en> = {
     untitled: 'Sem título',
   },
   formats: {
+    // The prefix of the core's estimates (`estimates::about`).
+    aboutPrefix: 'cerca de ',
+    months: 'jan fev mar abr mai jun jul ago set out nov dez',
+    days: 'dom seg ter qua qui sex sáb',
     lessThanMinute: 'menos de 1 min',
     today: 'Hoje {time}',
     yesterday: 'Ontem {time}',
