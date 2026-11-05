@@ -17,6 +17,7 @@ interface DeviceReply {
 }
 
 export const tauriBridge: Bridge = {
+  reportDeviceLocale: (tag) => invoke('report_device_locale', { tag }),
   state: () => invoke('estado'),
   async onState(onChange) {
     return listen<AppState>('estado', (event) => onChange(event.payload))

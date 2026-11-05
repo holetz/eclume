@@ -7,6 +7,10 @@ import App from './app/App.tsx'
 import { BridgeContext } from './bridge/bridge.ts'
 import { tauriBridge } from './bridge/tauri.ts'
 
+import { deviceLocale, setLocale } from './i18n'
+
+setLocale(deviceLocale())
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BridgeContext.Provider value={tauriBridge}>

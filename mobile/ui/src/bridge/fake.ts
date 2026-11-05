@@ -7,6 +7,7 @@ import type { AppSettings, AppState, LocalDetail, LocalRecording, Marker } from 
 
 export function baseState(partial: Partial<AppState> = {}): AppState {
   return {
+    locale: 'pt-BR',
     conexao: {
       fase: 'conectado',
       servidor: { url: 'https://192.0.2.10:8443', nome: 'eclume', ca_sha256: 'ab'.repeat(32) },
@@ -69,6 +70,7 @@ export function fakeBridge(initial: AppState = baseState()): FakeBridge {
       current = state
       listeners.forEach((listener) => listener(state))
     },
+    reportDeviceLocale: vi.fn(async () => {}),
     state: vi.fn(async () => current),
     onState: vi.fn(async (onChange) => {
       listeners.add(onChange)

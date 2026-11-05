@@ -18,6 +18,7 @@ import type {
 } from './types'
 
 export interface Bridge {
+  reportDeviceLocale(tag: string | null): Promise<void>
   state(): Promise<AppState>
   /** Subscribes to the `estado` event; returns the function that cancels. */
   onState(onChange: (state: AppState) => void): Promise<() => void>

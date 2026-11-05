@@ -9,6 +9,7 @@ import { ScanCode } from '../screens/ScanCode'
 import { Server } from '../screens/Server'
 import { Settings } from '../screens/Settings'
 import { SignIn } from '../screens/SignIn'
+import { deviceTag, setLocale } from '../i18n'
 import { Brand } from './Brand'
 import { useRoute } from './routes'
 import { useAppState } from './state'
@@ -32,6 +33,17 @@ export default function App() {
     latest.current = { state, go }
   })
   const opened = state !== null
+
+  useEffect(() => {
+    const report = () => { void bridge.reportDeviceLocale(deviceTag()).catch(() => {}) }
+    report()
+    window.addEventListener('languagechange', report)
+    return () => window.removeEventListener('languagechange', report)
+  }, [bridge])
+
+  useEffect(() => {
+    if (state?.locale) setLocale(state.locale)
+  }, [state?.locale])
 
   useEffect(() => {
     if (!opened) return
