@@ -56,18 +56,18 @@ pub(crate) fn dirs_from(base: &std::path::Path) -> Dirs {
 /// calls it on a blocking thread) and the other calls run on a thread of their own.
 pub(crate) mod service {
     use tauri::{AppHandle, Runtime};
-    use tauri_plugin_eclume_gravador::GravadorExt;
+    use tauri_plugin_eclume_gravador::RecorderExt;
 
     fn in_background<R: Runtime>(
         app: &AppHandle<R>,
         what: &'static str,
         f: fn(
-            &tauri_plugin_eclume_gravador::Gravador<R>,
-        ) -> tauri_plugin_eclume_gravador::Resultado<()>,
+            &tauri_plugin_eclume_gravador::Recorder<R>,
+        ) -> tauri_plugin_eclume_gravador::PluginResult<()>,
     ) {
         let app = app.clone();
         std::thread::spawn(move || {
-            if let Err(err) = f(app.gravador()) {
+            if let Err(err) = f(app.recorder()) {
                 log::warn!("recording service ({what}): {err}");
             }
         });
@@ -75,17 +75,17 @@ pub(crate) mod service {
 
     /// Starts the service and waits for the foreground (blocks; never on the main thread).
     pub fn start<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-        app.gravador()
-            .iniciar_servico()
+        app.recorder()
+            .start_service()
             .map_err(|err| err.to_string())
     }
 
     pub fn update<R: Runtime>(app: &AppHandle<R>) {
-        in_background(app, "update", |g| g.atualizar_servico());
+        in_background(app, "update", |g| g.update_service());
     }
 
     pub fn stop<R: Runtime>(app: &AppHandle<R>) {
-        in_background(app, "stop", |g| g.parar_servico(None));
+        in_background(app, "stop", |g| g.stop_service(None));
     }
 
     /// Schedules the WorkManager sync to upload with the app closed (off the command's thread).
@@ -93,7 +93,7 @@ pub(crate) mod service {
         let app = app.clone();
         let delay_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX);
         std::thread::spawn(move || {
-            if let Err(err) = app.gravador().agendar_sync(delay_ms) {
+            if let Err(err) = app.recorder().schedule_sync(delay_ms) {
                 log::warn!("scheduling the sync: {err}");
             }
         });
@@ -108,7 +108,7 @@ pub(crate) mod service {
     ) {
         let app = app.clone();
         std::thread::spawn(move || {
-            if let Err(err) = app.gravador().parar_servico(Some((reason, duration_ms))) {
+            if let Err(err) = app.recorder().stop_service(Some((reason, duration_ms))) {
                 log::warn!("recording service (stop with warning): {err}");
             }
         });
@@ -136,14 +136,14 @@ async fn descobrir<R: Runtime>(
     tauri::async_runtime::spawn_blocking(move || {
         #[cfg(mobile)]
         let found = {
-            use tauri_plugin_eclume_gravador::GravadorExt;
-            app.gravador()
-                .descobrir(segundos)
+            use tauri_plugin_eclume_gravador::RecorderExt;
+            app.recorder()
+                .discover(segundos)
                 .map_err(|err| err.to_string())?
                 .into_iter()
                 .filter_map(|announcement| {
                     let txt: Vec<(String, String)> = announcement.txt.into_iter().collect();
-                    eclume_sync::discovery::parse(&announcement.nome, &txt)
+                    eclume_sync::discovery::parse(&announcement.name, &txt)
                 })
                 .collect::<Vec<_>>()
         };
@@ -169,25 +169,21 @@ async fn descobrir<R: Runtime>(
 /// Reads the device every few seconds (battery, space, unmetered Wi-Fi) and hands it to the core; a
 /// network change fires the cycle (the probe runs again).
 fn watch_device<R: Runtime>(app: tauri::AppHandle<R>) {
-    use tauri_plugin_eclume_gravador::GravadorExt;
+    use tauri_plugin_eclume_gravador::RecorderExt;
 
     std::thread::spawn(move || {
         let mut model_set = false;
         loop {
-            match app.gravador().estado_do_dispositivo() {
+            match app.recorder().device_state() {
                 Ok(device) => {
                     let changed = eclume_mobile_core::global()
                         .and_then(|core| eclume_mobile_core::lock(core).ok())
                         .map(|mut core| {
                             if !model_set {
-                                model_set = core.set_device(&device.modelo).is_ok();
+                                model_set = core.set_device(&device.model).is_ok();
                             }
-                            core.update_device(
-                                device.bateria,
-                                device.carregando,
-                                device.espaco_livre,
-                            );
-                            core.network_changed(device.wifi_nao_medido)
+                            core.update_device(device.battery, device.charging, device.free_space);
+                            core.network_changed(device.unmetered_wifi)
                         })
                         .unwrap_or(false);
                     if changed {

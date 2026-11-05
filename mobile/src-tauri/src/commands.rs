@@ -316,12 +316,12 @@ pub async fn verificar_atualizacao() -> CommandResult<Option<Update>> {
 #[tauri::command]
 pub async fn atualizar<R: Runtime>(app: AppHandle<R>) -> CommandResult<()> {
     tauri::async_runtime::spawn_blocking(move || {
-        use tauri_plugin_eclume_gravador::GravadorExt;
+        use tauri_plugin_eclume_gravador::RecorderExt;
 
         let apk = core::download_update(the_core()?).map_err(text)?;
         let opened = app
-            .gravador()
-            .abrir_instalador(&apk.to_string_lossy())
+            .recorder()
+            .open_installer(&apk.to_string_lossy())
             .map_err(|err| err.to_string())?;
         if opened {
             Ok(())
@@ -340,7 +340,7 @@ pub async fn atualizar<R: Runtime>(app: AppHandle<R>) -> CommandResult<()> {
 /// address.
 #[tauri::command]
 pub fn abrir_na_web<R: Runtime>(app: AppHandle<R>, id: String) -> CommandResult<()> {
-    use tauri_plugin_eclume_gravador::GravadorExt;
+    use tauri_plugin_eclume_gravador::RecorderExt;
 
     let url = lock(the_core()?)
         .map_err(text)?
@@ -348,7 +348,5 @@ pub fn abrir_na_web<R: Runtime>(app: AppHandle<R>, id: String) -> CommandResult<
         .map_err(text)?
         .web_address
         .ok_or_else(|| "A gravação ainda não foi enviada ao servidor".to_string())?;
-    app.gravador()
-        .abrir_url(&url)
-        .map_err(|err| err.to_string())
+    app.recorder().open_url(&url).map_err(|err| err.to_string())
 }

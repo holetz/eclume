@@ -1,3 +1,3 @@
 [default]
-description = "O que a janela do app móvel pode pedir ao plugin gravador: as permissões de microfone e notificação, o estado do aparelho (recortes de borda a borda, notificações e isenção de bateria), abrir as configurações do app, pedir a isenção da otimização de bateria e consumir o toque no atalho Gravar agora."
+description = "What the mobile app's window may ask of the recorder plugin: the microphone and notification permissions, the device state (edge-to-edge insets, notifications and battery exemption), opening the app settings, asking for the battery-optimization exemption and consuming the tap on the Gravar agora shortcut."
 permissions = ["allow-check-permissions", "allow-request-permissions", "allow-estado-do-dispositivo", "allow-abrir-configuracoes-do-app", "allow-pedir-isencao-de-bateria", "allow-consumir-atalho"]

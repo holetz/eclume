@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-eclume-gravador"
-description = "Plugin nativo do app móvel do eclume: serviço de gravação em primeiro plano, notificação, descoberta, rede, aparelho, sync em segundo plano e instalação da atualização."
+description = "Native plugin of eclume's mobile app: foreground recording service, notification, discovery, network, device, background sync and update install."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
