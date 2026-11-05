@@ -106,9 +106,7 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_sy
 /// `EclumeCore.probePending(base)`: before the worker's sync, whether the phone is on eclume's
 /// network and how many recordings (and bytes) wait, to decide on the foreground.
 #[no_mangle]
-pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_probePending<
-    'l,
->(
+pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_probePending<'l>(
     mut env: JNIEnv<'l>,
     _class: JClass<'l>,
     base: JString<'l>,
@@ -145,9 +143,7 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_ne
 /// `EclumeCore.interruptSync()`: the worker's `onStopped`; the upload stops at the next request
 /// and the recording goes back to the queue without spending an attempt.
 #[no_mangle]
-pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_interruptSync<
-    'l,
->(
+pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_interruptSync<'l>(
     mut env: JNIEnv<'l>,
     _class: JClass<'l>,
 ) -> jstring {
