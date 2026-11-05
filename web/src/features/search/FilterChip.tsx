@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import styles from './SearchPage.module.css'
 
 interface FilterChipProps {
@@ -15,6 +16,7 @@ interface FilterChipProps {
  * which opens a popover in the `.menu` style with the control and Aplicar. Esc and a click outside close it.
  */
 export function FilterChip({ label, value, active, children }: FilterChipProps) {
+  const { t } = useTranslation('search')
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -62,10 +64,10 @@ export function FilterChip({ label, value, active, children }: FilterChipProps) 
         aria-controls={open ? popoverId : undefined}
         onClick={() => setOpen(!open)}
       >
-        {label}: {value}
+        {t('chip.label', { label, value })}
       </button>
       {open && (
-        <div id={popoverId} className={`menu ${styles.popover}`} role="dialog" aria-label={`Filtro ${label}`}>
+        <div id={popoverId} className={`menu ${styles.popover}`} role="dialog" aria-label={t('chip.filter', { label })}>
           {children(close)}
         </div>
       )}

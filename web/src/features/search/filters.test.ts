@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { setLocale } from '../../i18n'
 import { fixtures } from '../../test/fixtures'
 import { apiQuery, filtersFromParams, isSearchable, paramsFromFilters, periodStart } from './filters'
 import { groupHits, totalLabel } from './group'
@@ -71,5 +72,16 @@ describe('search groups', () => {
     ])
     expect(totalLabel([a, b, other, a], false)).toBe('4 trechos em 2 gravações')
     expect(totalLabel([a], true)).toBe('1 trecho em 1 gravação ou mais')
+  })
+
+  it('counts in English from the search catalog', async () => {
+    const [a, b] = fixtures.searchPage().items
+    await setLocale('en')
+    try {
+      expect(totalLabel([a, b], false)).toBe('2 passages in 1 recording')
+      expect(totalLabel([a], true)).toBe('1 passage in 1 recording or more')
+    } finally {
+      await setLocale('pt-BR')
+    }
   })
 })

@@ -7,6 +7,7 @@ import connect from './connect'
 import desktop from './desktop'
 import environment from './environment'
 import errors from './errors'
+import search from './search'
 import importCatalog from './import'
 import transcript from './transcript'
 import library from './library'
@@ -14,6 +15,6 @@ import shared from './shared'
 import shell from './shell'
 import tokens from './tokens'
 
-const catalogs = { common, errors, shell, shared, auth, account, connect, tokens, environment, desktop, library, transcript, import: importCatalog }
+const catalogs = { common, errors, shell, shared, auth, account, connect, tokens, environment, desktop, library, transcript, import: importCatalog, search }
 
 export default catalogs
