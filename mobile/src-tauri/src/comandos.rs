@@ -1,9 +1,13 @@
-//! Os comandos que a UI chama (`invoke`). Cada um trava o núcleo só o tempo da operação local; o
-//! que fala com a rede demorado (sonda, sync, etapas) roda fora da trava pelas funções do núcleo.
+//! The commands the UI calls (`invoke`). Each one locks the core only for the local operation; the
+//! slow network work (probe, sync, steps) runs outside the lock through the core's functions.
+//!
+//! The command names and their argument names are the IPC contract with the UI (`invoke("gravar")`,
+//! `{ tipoDeAgendaId }`): they keep their original (pt-BR) names, and so do the serialized fields
+//! of the structs returned here.
 
-use eclume_mobile_core::config::TipoDeAgenda;
+use eclume_mobile_core::config::AgendaType;
 use eclume_mobile_core::{
-    self as core, trancar, Core, DetalheLocal, EstadoApp, GravacaoLocal, Preferencias,
+    self as core, lock, AppState, Core, LocalDetail, LocalRecording, Preferences,
 };
 use eclume_recorder::Marker;
 use serde::Serialize;
@@ -11,48 +15,49 @@ use tauri::{AppHandle, Runtime};
 
 use crate::eventos;
 
-/// O prazo da folha "Gravação salva" (`DETAILS_WAIT_MS`), que segura o sync da gravação parada.
-const PRAZO_DA_FOLHA: std::time::Duration =
+/// The saved-recording sheet's deadline (`DETAILS_WAIT_MS`), which holds the stopped recording's
+/// sync.
+const SHEET_DEADLINE: std::time::Duration =
     std::time::Duration::from_millis(eclume_recorder::queue::DETAILS_WAIT_MS.unsigned_abs());
 
-/// O erro de um comando, em texto para a UI mostrar.
-type Resultado<T> = Result<T, String>;
+/// A command's error, as text for the UI to show.
+type CommandResult<T> = Result<T, String>;
 
-fn texto(err: anyhow::Error) -> String {
+fn text(err: anyhow::Error) -> String {
     format!("{err:#}")
 }
 
-fn nucleo() -> Resultado<&'static std::sync::Mutex<Core>> {
+fn the_core() -> CommandResult<&'static std::sync::Mutex<Core>> {
     core::global().ok_or_else(|| "o app ainda está abrindo".to_string())
 }
 
-/// Roda `f` no núcleo travado e avisa a UI do estado novo.
-fn com_nucleo<R: Runtime, T>(
+/// Runs `f` on the locked core and tells the UI about the new state.
+fn with_core<R: Runtime, T>(
     app: &AppHandle<R>,
     f: impl FnOnce(&mut Core) -> anyhow::Result<T>,
-) -> Resultado<T> {
-    let resultado = {
-        let mut core = trancar(nucleo()?).map_err(texto)?;
-        f(&mut core).map_err(texto)
+) -> CommandResult<T> {
+    let result = {
+        let mut core = lock(the_core()?).map_err(text)?;
+        f(&mut core).map_err(text)
     };
-    eventos::avisar(app);
-    resultado
+    eventos::notify(app);
+    result
 }
 
-/// Como [`com_nucleo`], numa thread de bloqueio: os comandos que falam com o servidor (baixar a CA,
-/// `/server`, login, pareamento) não podem prender a thread principal (ANR) com um endereço mudo.
-async fn com_nucleo_na_rede<R: Runtime, T: Send + 'static>(
+/// Like [`with_core`], on a blocking thread: the commands that talk to the server (download the
+/// CA, `/server`, sign-in, pairing) must not hold the main thread (ANR) with a silent address.
+async fn with_core_on_network<R: Runtime, T: Send + 'static>(
     app: AppHandle<R>,
     f: impl FnOnce(&mut Core) -> anyhow::Result<T> + Send + 'static,
-) -> Resultado<T> {
-    tauri::async_runtime::spawn_blocking(move || com_nucleo(&app, f))
+) -> CommandResult<T> {
+    tauri::async_runtime::spawn_blocking(move || with_core(&app, f))
         .await
         .map_err(|err| err.to_string())?
 }
 
 #[tauri::command]
-pub fn estado() -> Resultado<EstadoApp> {
-    trancar(nucleo()?).map_err(texto)?.estado().map_err(texto)
+pub fn estado() -> CommandResult<AppState> {
+    lock(the_core()?).map_err(text)?.state().map_err(text)
 }
 
 #[tauri::command]
@@ -60,55 +65,62 @@ pub async fn conectar_descoberto<R: Runtime>(
     app: AppHandle<R>,
     url: String,
     ca: Option<String>,
-) -> Resultado<()> {
-    com_nucleo_na_rede(app, move |c| c.conectar_descoberto(&url, ca.as_deref())).await
+) -> CommandResult<()> {
+    with_core_on_network(app, move |c| c.connect_discovered(&url, ca.as_deref())).await
 }
 
 #[tauri::command]
-pub async fn conectar_endereco<R: Runtime>(app: AppHandle<R>, endereco: String) -> Resultado<()> {
-    com_nucleo_na_rede(app, move |c| c.conectar_endereco(&endereco)).await
+pub async fn conectar_endereco<R: Runtime>(
+    app: AppHandle<R>,
+    endereco: String,
+) -> CommandResult<()> {
+    with_core_on_network(app, move |c| c.connect_address(&endereco)).await
 }
 
 #[tauri::command]
-pub async fn confiar_ca<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
-    com_nucleo_na_rede(app, Core::confiar_ca).await
+pub async fn confiar_ca<R: Runtime>(app: AppHandle<R>) -> CommandResult<()> {
+    with_core_on_network(app, Core::trust_ca).await
 }
 
 #[tauri::command]
-pub fn cancelar_ca<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
-    com_nucleo(&app, |c| {
-        c.cancelar_ca();
+pub fn cancelar_ca<R: Runtime>(app: AppHandle<R>) -> CommandResult<()> {
+    with_core(&app, |c| {
+        c.cancel_ca();
         Ok(())
     })
 }
 
 #[tauri::command]
-pub async fn entrar<R: Runtime>(app: AppHandle<R>, email: String, senha: String) -> Resultado<()> {
-    com_nucleo_na_rede(app.clone(), move |c| c.entrar(&email, &senha)).await?;
-    eventos::ciclo_em_segundo_plano(&app, true);
+pub async fn entrar<R: Runtime>(
+    app: AppHandle<R>,
+    email: String,
+    senha: String,
+) -> CommandResult<()> {
+    with_core_on_network(app.clone(), move |c| c.sign_in(&email, &senha)).await?;
+    eventos::cycle_in_background(&app, true);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn parear<R: Runtime>(app: AppHandle<R>, texto: String) -> Resultado<()> {
-    com_nucleo_na_rede(app.clone(), move |c| c.parear(&texto)).await?;
-    eventos::ciclo_em_segundo_plano(&app, true);
+pub async fn parear<R: Runtime>(app: AppHandle<R>, texto: String) -> CommandResult<()> {
+    with_core_on_network(app.clone(), move |c| c.pair(&texto)).await?;
+    eventos::cycle_in_background(&app, true);
     Ok(())
 }
 
-/// Gravar só confirma depois de o serviço entrar em primeiro plano: abrir o microfone e esperar o
-/// Kotlin rodam numa thread de bloqueio (comando síncrono roda na thread principal). Se o Android
-/// recusar o serviço, a gravação aberta é desfeita e a tela recebe o motivo.
+/// Recording only confirms after the service enters the foreground: opening the microphone and
+/// waiting for Kotlin run on a blocking thread (a synchronous command runs on the main thread). If
+/// Android refuses the service, the opened recording is undone and the screen gets the reason.
 #[tauri::command]
-pub async fn gravar<R: Runtime>(app: AppHandle<R>) -> Resultado<String> {
+pub async fn gravar<R: Runtime>(app: AppHandle<R>) -> CommandResult<String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let fonte = crate::microfone().map_err(texto)?;
-        let id = com_nucleo(&app, |c| c.gravar(fonte))?;
-        if let Err(motivo) = crate::servico::iniciar(&app) {
-            log::warn!("serviço de gravação recusado: {motivo}");
-            com_nucleo(&app, Core::desfazer_gravacao)?;
+        let source = crate::microphone().map_err(text)?;
+        let id = with_core(&app, |c| c.record(source))?;
+        if let Err(reason) = crate::service::start(&app) {
+            log::warn!("recording service refused: {reason}");
+            with_core(&app, Core::undo_recording)?;
             return Err(format!(
-                "O Android não deixou gravar em segundo plano: {motivo}"
+                "O Android não deixou gravar em segundo plano: {reason}"
             ));
         }
         Ok(id)
@@ -118,24 +130,24 @@ pub async fn gravar<R: Runtime>(app: AppHandle<R>) -> Resultado<String> {
 }
 
 #[tauri::command]
-pub fn pausar<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
-    com_nucleo(&app, |c| c.pausar())?;
-    crate::servico::atualizar(&app);
+pub fn pausar<R: Runtime>(app: AppHandle<R>) -> CommandResult<()> {
+    with_core(&app, |c| c.pause())?;
+    crate::service::update(&app);
     Ok(())
 }
 
 #[tauri::command]
-pub fn continuar<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
-    com_nucleo(&app, |c| c.continuar())?;
-    crate::servico::atualizar(&app);
+pub fn continuar<R: Runtime>(app: AppHandle<R>) -> CommandResult<()> {
+    with_core(&app, |c| c.resume())?;
+    crate::service::update(&app);
     Ok(())
 }
 
 #[tauri::command]
-pub fn marcar<R: Runtime>(app: AppHandle<R>, nota: Option<String>) -> Resultado<Marker> {
-    let marcador = com_nucleo(&app, |c| c.marcar(nota.as_deref()))?;
-    crate::servico::atualizar(&app);
-    Ok(marcador)
+pub fn marcar<R: Runtime>(app: AppHandle<R>, nota: Option<String>) -> CommandResult<Marker> {
+    let marker = with_core(&app, |c| c.mark(nota.as_deref()))?;
+    crate::service::update(&app);
+    Ok(marker)
 }
 
 #[tauri::command]
@@ -143,18 +155,18 @@ pub fn anotar_marcador<R: Runtime>(
     app: AppHandle<R>,
     client_id: String,
     nota: Option<String>,
-) -> Resultado<Marker> {
-    com_nucleo(&app, |c| c.anotar_marcador(&client_id, nota.as_deref()))
+) -> CommandResult<Marker> {
+    with_core(&app, |c| c.annotate_marker(&client_id, nota.as_deref()))
 }
 
 #[tauri::command]
-pub fn parar<R: Runtime>(app: AppHandle<R>) -> Resultado<String> {
-    let gravacao = com_nucleo(&app, Core::parar)?;
-    crate::servico::parar(&app);
-    // A folha "Gravação salva" segura o sync até o prazo dela: o trabalho espera o mesmo prazo,
-    // para a gravação subir com o app fechado mesmo com a folha esquecida aberta.
-    crate::servico::agendar_sync(&app, PRAZO_DA_FOLHA);
-    Ok(gravacao.id)
+pub fn parar<R: Runtime>(app: AppHandle<R>) -> CommandResult<String> {
+    let recording = with_core(&app, Core::stop)?;
+    crate::service::stop(&app);
+    // The saved-recording sheet holds the sync until its deadline: the work waits the same
+    // deadline, so the recording uploads with the app closed even with the sheet left open.
+    crate::service::schedule_sync(&app, SHEET_DEADLINE);
+    Ok(recording.id)
 }
 
 #[tauri::command]
@@ -164,150 +176,154 @@ pub fn salvar<R: Runtime>(
     titulo: Option<String>,
     tipo_de_agenda_id: Option<String>,
     idioma: Option<String>,
-) -> Resultado<()> {
-    com_nucleo(&app, |c| {
-        c.salvar(
+) -> CommandResult<()> {
+    with_core(&app, |c| {
+        c.save_details(
             &id,
             titulo.as_deref(),
             tipo_de_agenda_id.as_deref(),
             idioma.as_deref(),
         )
     })?;
-    // Ao parar, a sonda roda de novo: a gravação pode subir já, ou com o app fechado pelo
-    // trabalho de sync, no próximo Wi-Fi do eclume.
-    eventos::ciclo_em_segundo_plano(&app, false);
-    crate::servico::agendar_sync(&app, std::time::Duration::ZERO);
+    // On stopping, the probe runs again: the recording may upload right away, or with the app
+    // closed through the sync work, on eclume's next Wi-Fi.
+    eventos::cycle_in_background(&app, false);
+    crate::service::schedule_sync(&app, std::time::Duration::ZERO);
     Ok(())
 }
 
 #[tauri::command]
-pub fn sincronizar_agora<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
-    eventos::ciclo_em_segundo_plano(&app, true);
+pub fn sincronizar_agora<R: Runtime>(app: AppHandle<R>) -> CommandResult<()> {
+    eventos::cycle_in_background(&app, true);
     Ok(())
 }
 
 #[tauri::command]
-pub fn gravacoes() -> Resultado<Vec<GravacaoLocal>> {
-    trancar(nucleo()?)
-        .map_err(texto)?
-        .gravacoes()
-        .map_err(texto)
+pub fn gravacoes() -> CommandResult<Vec<LocalRecording>> {
+    lock(the_core()?).map_err(text)?.recordings().map_err(text)
 }
 
 #[tauri::command]
-pub async fn gravacao(id: String) -> Resultado<DetalheLocal> {
-    // Fora da thread principal: a leitura das etapas no servidor é de rede.
-    tauri::async_runtime::spawn_blocking(move || core::detalhe(nucleo()?, &id).map_err(texto))
+pub async fn gravacao(id: String) -> CommandResult<LocalDetail> {
+    // Off the main thread: reading the server steps goes over the network.
+    tauri::async_runtime::spawn_blocking(move || core::detail(the_core()?, &id).map_err(text))
         .await
         .map_err(|err| err.to_string())?
 }
 
 #[tauri::command]
-pub fn excluir_local<R: Runtime>(app: AppHandle<R>, id: String) -> Resultado<()> {
-    com_nucleo(&app, |c| c.excluir_local(&id))
+pub fn excluir_local<R: Runtime>(app: AppHandle<R>, id: String) -> CommandResult<()> {
+    with_core(&app, |c| c.delete_local(&id))
 }
 
 #[tauri::command]
-pub fn excluir_sincronizadas<R: Runtime>(app: AppHandle<R>) -> Resultado<u64> {
-    com_nucleo(&app, |c| c.excluir_sincronizadas())
+pub fn excluir_sincronizadas<R: Runtime>(app: AppHandle<R>) -> CommandResult<u64> {
+    with_core(&app, |c| c.delete_synced())
 }
 
 #[tauri::command]
-pub fn tipos_de_agenda() -> Resultado<Vec<TipoDeAgenda>> {
-    Ok(trancar(nucleo()?)
-        .map_err(texto)?
+pub fn tipos_de_agenda() -> CommandResult<Vec<AgendaType>> {
+    Ok(lock(the_core()?)
+        .map_err(text)?
         .config()
-        .tipos_de_agenda
+        .agenda_types
         .clone())
 }
 
-/// As opções de idioma da folha "Gravação salva", com o padrão da conta nomeado.
+/// The saved-recording sheet's language options, with the account default named.
 #[tauri::command]
-pub fn idiomas() -> Resultado<Vec<eclume_mobile_core::OpcaoDeIdioma>> {
-    Ok(trancar(nucleo()?).map_err(texto)?.opcoes_de_idioma())
+pub fn idiomas() -> CommandResult<Vec<eclume_mobile_core::LanguageOption>> {
+    Ok(lock(the_core()?).map_err(text)?.language_options())
 }
 
-/// O que a tela Configurações mostra.
+/// What the Settings screen shows.
 #[derive(Clone, Debug, Serialize)]
-pub struct Configuracoes {
-    pub servidor: Option<String>,
-    pub preferencias: Preferencias,
-    pub reter_dias: u32,
-    pub uso_bytes: u64,
-    pub versao: String,
+pub struct Settings {
+    #[serde(rename = "servidor")]
+    pub server: Option<String>,
+    #[serde(rename = "preferencias")]
+    pub preferences: Preferences,
+    #[serde(rename = "reter_dias")]
+    pub retention_days: u32,
+    #[serde(rename = "uso_bytes")]
+    pub usage_bytes: u64,
+    #[serde(rename = "versao")]
+    pub version: String,
 }
 
 #[tauri::command]
-pub fn configuracoes() -> Resultado<Configuracoes> {
-    let core = trancar(nucleo()?).map_err(texto)?;
-    Ok(Configuracoes {
-        servidor: core.config().servidor.as_ref().map(|s| s.url.clone()),
-        preferencias: core.preferencias(),
-        reter_dias: core.config().reter_dias,
-        uso_bytes: core.uso_local().map_err(texto)?,
-        versao: env!("CARGO_PKG_VERSION").to_string(),
+pub fn configuracoes() -> CommandResult<Settings> {
+    let core = lock(the_core()?).map_err(text)?;
+    Ok(Settings {
+        server: core.config().server.as_ref().map(|s| s.url.clone()),
+        preferences: core.preferences(),
+        retention_days: core.config().retention_days,
+        usage_bytes: core.local_usage().map_err(text)?,
+        version: env!("CARGO_PKG_VERSION").to_string(),
     })
 }
 
 #[tauri::command]
 pub fn salvar_configuracoes<R: Runtime>(
     app: AppHandle<R>,
-    preferencias: Preferencias,
-) -> Resultado<()> {
-    com_nucleo(&app, |c| c.salvar_preferencias(&preferencias))
+    preferencias: Preferences,
+) -> CommandResult<()> {
+    with_core(&app, |c| c.save_preferences(&preferencias))
 }
 
 #[tauri::command]
-pub fn sair<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
-    com_nucleo(&app, Core::sair)
+pub fn sair<R: Runtime>(app: AppHandle<R>) -> CommandResult<()> {
+    with_core(&app, Core::sign_out)
 }
 
-/// A UI ficou visível ou foi para o segundo plano (a sonda periódica só roda visível).
+/// The UI became visible or went to the background (the periodic probe only runs when visible).
 #[tauri::command]
-pub fn visibilidade<R: Runtime>(app: AppHandle<R>, visivel: bool) -> Resultado<()> {
-    com_nucleo(&app, |c| {
-        c.definir_visivel(visivel);
+pub fn visibilidade<R: Runtime>(app: AppHandle<R>, visivel: bool) -> CommandResult<()> {
+    with_core(&app, |c| {
+        c.set_visible(visivel);
         Ok(())
     })?;
     if visivel {
-        eventos::ciclo_em_segundo_plano(&app, false);
+        eventos::cycle_in_background(&app, false);
     }
     Ok(())
 }
 
-/// Uma versão nova no `movel.json`.
+/// A new version in `movel.json`.
 #[derive(Clone, Debug, Serialize)]
-pub struct Atualizacao {
-    pub versao: String,
-    pub notas: Option<String>,
+pub struct Update {
+    #[serde(rename = "versao")]
+    pub version: String,
+    #[serde(rename = "notas")]
+    pub notes: Option<String>,
 }
 
-/// Lê o `movel.json` do servidor (pela CA fixada) e devolve a versão nova, se houver.
+/// Reads the server's `movel.json` (through the pinned CA) and returns the new version, if any.
 #[tauri::command]
-pub async fn verificar_atualizacao() -> Resultado<Option<Atualizacao>> {
+pub async fn verificar_atualizacao() -> CommandResult<Option<Update>> {
     tauri::async_runtime::spawn_blocking(|| {
-        let manifesto = core::verificar_atualizacao(nucleo()?, true).map_err(texto)?;
-        Ok(manifesto.map(|m| Atualizacao {
-            versao: m.versao,
-            notas: m.notas.filter(|n| !n.trim().is_empty()),
+        let manifest = core::check_update(the_core()?, true).map_err(text)?;
+        Ok(manifest.map(|m| Update {
+            version: m.version,
+            notes: m.notes.filter(|n| !n.trim().is_empty()),
         }))
     })
     .await
     .map_err(|err| err.to_string())?
 }
 
-/// Baixa o APK da versão nova, confere o SHA-256 e abre o instalador do sistema.
+/// Downloads the new version's APK, checks the SHA-256 and opens the system installer.
 #[tauri::command]
-pub async fn atualizar<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
+pub async fn atualizar<R: Runtime>(app: AppHandle<R>) -> CommandResult<()> {
     tauri::async_runtime::spawn_blocking(move || {
         use tauri_plugin_eclume_gravador::GravadorExt;
 
-        let apk = core::baixar_atualizacao(nucleo()?).map_err(texto)?;
-        let aberto = app
+        let apk = core::download_update(the_core()?).map_err(text)?;
+        let opened = app
             .gravador()
             .abrir_instalador(&apk.to_string_lossy())
             .map_err(|err| err.to_string())?;
-        if aberto {
+        if opened {
             Ok(())
         } else {
             Err(
@@ -320,17 +336,17 @@ pub async fn atualizar<R: Runtime>(app: AppHandle<R>) -> Resultado<()> {
     .map_err(|err| err.to_string())?
 }
 
-/// "Abrir na web": a página da gravação enviada no navegador do sistema, pelo endereço do
-/// servidor pareado.
+/// "Abrir na web": the uploaded recording's page in the system browser, by the paired server's
+/// address.
 #[tauri::command]
-pub fn abrir_na_web<R: Runtime>(app: AppHandle<R>, id: String) -> Resultado<()> {
+pub fn abrir_na_web<R: Runtime>(app: AppHandle<R>, id: String) -> CommandResult<()> {
     use tauri_plugin_eclume_gravador::GravadorExt;
 
-    let url = trancar(nucleo()?)
-        .map_err(texto)?
-        .gravacao(&id)
-        .map_err(texto)?
-        .endereco_na_web
+    let url = lock(the_core()?)
+        .map_err(text)?
+        .recording(&id)
+        .map_err(text)?
+        .web_address
         .ok_or_else(|| "A gravação ainda não foi enviada ao servidor".to_string())?;
     app.gravador()
         .abrir_url(&url)

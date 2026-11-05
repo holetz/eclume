@@ -1,18 +1,21 @@
-//! Núcleo do app móvel do eclume, independente do Tauri: o mesmo objeto atende a UI (pelos
-//! comandos Tauri) e o sistema (pela ponte JNI do plugin Android), porque a Activity pode morrer e
-//! voltar enquanto o serviço grava, e o WorkManager chama o sync sem Activity nenhuma. Arquitetura
-//! em docs/standards/code/mobile-app.md.
+//! Core of eclume's mobile app, independent of Tauri: the same object serves the UI (through the
+//! Tauri commands) and the system (through the Android plugin's JNI bridge), because the Activity
+//! can die and come back while the service records, and WorkManager calls the sync with no Activity
+//! at all. Architecture in docs/standards/code/mobile-app.md.
 //!
-//! O [`Core`] vive num `OnceLock<Mutex<Core>>` do processo ([`iniciar`], [`global`]). O que fala
-//! com a rede (a sonda, o sync, as leituras autenticadas) roda **fora** da trava: o núcleo prepara
-//! o plano, a chamada corre sem ele e o resultado volta por um método curto, para a UI seguir
-//! lendo o estado a cada 250 ms.
+//! The [`Core`] lives in a process-wide `OnceLock<Mutex<Core>>` ([`init`], [`global`]). What talks
+//! to the network (the probe, the sync, the authenticated reads) runs **outside** the lock: the core
+//! prepares the plan, the call runs without it and the result comes back through a short method, so
+//! the UI keeps reading the state every 250 ms.
+//!
+//! The serialized names of the structs the UI and the plugin read keep their original (pt-BR)
+//! names through `#[serde(rename)]`: they are the wire format of the bridge.
 
-pub mod conexao;
 pub mod config;
-pub mod estimativas;
-pub mod rede;
-pub mod sessao;
+pub mod connection;
+pub mod estimates;
+pub mod network;
+pub mod session;
 pub mod sync;
 
 use std::collections::HashMap;
@@ -25,241 +28,282 @@ use eclume_recorder::{now_ms, AudioSource, Marker, Queue, QueuedRecording, Sourc
 use eclume_sync::transport::REQUEST_TIMEOUT;
 use serde::Serialize;
 
-use crate::conexao::{Conexao, EstadoConexao, Transportes, TransportesReais};
-use crate::config::{Config, Dirs, Qualidade, Servidor};
-use crate::estimativas::{Avisos, Bateria, LeituraDeBateria};
-use crate::rede::{EstadoRede, Rede, Sonda, PRAZO_DA_SONDA};
-use crate::sessao::{EstadoSessao, Sessao};
-use crate::sync::{Espera, Etapa, Medidor, NoServidor};
+use crate::config::{Config, Dirs, Quality, Server};
+use crate::connection::{Connection, ConnectionState, RealTransports, Transports};
+use crate::estimates::{Battery, BatteryReading, Warnings};
+use crate::network::{Network, NetworkState, Probe, PROBE_TIMEOUT};
+use crate::session::{Session, SessionState};
+use crate::sync::{Meter, OnServer, Step, Wait};
 
-/// O prefixo do `client_version` e do user agent do app Android.
+/// The prefix of the Android app's `client_version` and user agent.
 pub const CLIENT_PREFIX: &str = "eclume-android";
 
-/// `eclume-android/<versão>`: o `capture.client_version` do upload e o user agent.
+/// `eclume-android/<version>`: the upload's `capture.client_version` and the user agent.
 pub fn client_version(version: &str) -> String {
     format!("{CLIENT_PREFIX}/{version}")
 }
 
-/// Os idiomas que a folha "Gravação salva" oferece, além do padrão da conta.
-const IDIOMAS: [(&str, &str); 4] = [
+/// The languages the saved-recording sheet offers, besides the account default (labels are UI
+/// copy).
+const LANGUAGES: [(&str, &str); 4] = [
     ("auto", "Detectar automaticamente"),
     ("pt", "Português"),
     ("es", "Español"),
     ("en", "English"),
 ];
 
-/// O nome de um idioma da lista curta (`pt-BR` vira `pt`); fora dela, o próprio código.
-fn nome_do_idioma(idioma: &str) -> &str {
-    let base = idioma.split('-').next().unwrap_or(idioma);
-    IDIOMAS
+/// The name of a language from the short list (`pt-BR` becomes `pt`); outside it, the code itself.
+fn language_name(language: &str) -> &str {
+    let base = language.split('-').next().unwrap_or(language);
+    LANGUAGES
         .iter()
-        .find(|(valor, _)| *valor == base)
-        .map_or(idioma, |(_, rotulo)| rotulo)
+        .find(|(value, _)| *value == base)
+        .map_or(language, |(_, label)| label)
 }
 
-/// Uma opção do seletor de idioma da folha.
+/// One option of the sheet's language picker.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct OpcaoDeIdioma {
-    pub valor: String,
-    pub rotulo: String,
+pub struct LanguageOption {
+    #[serde(rename = "valor")]
+    pub value: String,
+    #[serde(rename = "rotulo")]
+    pub label: String,
 }
 
-/// A folha "Gravação salva", aberta depois de parar.
+/// The saved-recording sheet, opened after stopping.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct Folha {
+pub struct Sheet {
     pub id: String,
-    /// Início da gravação, em ms Unix (o título sugerido).
-    pub iniciada_em: i64,
-    pub duracao_ms: i64,
-    pub marcadores: usize,
+    /// Recording start, in Unix ms (the suggested title).
+    #[serde(rename = "iniciada_em")]
+    pub started_at: i64,
+    #[serde(rename = "duracao_ms")]
+    pub duration_ms: i64,
+    #[serde(rename = "marcadores")]
+    pub markers: usize,
 }
 
-/// Por que a gravação parou sem pedido; o serviço mostra o motivo na notificação "A gravação
-/// parou".
+/// Why the recording stopped without being asked; the service shows the reason in the
+/// recording-stopped notification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum MotivoDaParada {
-    /// Menos de 5 min de gravação no espaço livre.
-    SemEspaco,
-    /// A fonte de áudio acabou (ou a gravação falhou) sozinha.
-    FonteEncerrada,
+pub enum StopReason {
+    /// Less than 5 min of recording fits in the free space.
+    #[serde(rename = "sem_espaco")]
+    NoSpace,
+    /// The audio source ended (or the recording failed) on its own.
+    #[serde(rename = "fonte_encerrada")]
+    SourceEnded,
 }
 
-impl MotivoDaParada {
-    /// O texto curto do aviso.
-    pub fn texto(self) -> &'static str {
+impl StopReason {
+    /// The warning's short text (notification copy).
+    pub fn text(self) -> &'static str {
         match self {
-            Self::SemEspaco => "pouco espaço livre",
-            Self::FonteEncerrada => "o microfone parou",
+            Self::NoSpace => "pouco espaço livre",
+            Self::SourceEnded => "o microfone parou",
         }
     }
 }
 
-/// Tudo o que a UI desenha: ela é função deste estado.
+/// Everything the UI draws: it is a function of this state.
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct EstadoApp {
-    pub conexao: EstadoConexao,
-    pub rede: EstadoRede,
-    pub sessao: Option<EstadoSessao>,
-    pub folha: Option<Folha>,
-    /// Gravações que ainda não chegaram ao servidor.
-    pub pendentes: u32,
-    pub avisos: Avisos,
-    /// "cerca de 9 h" de gravação no espaço livre.
-    pub espaco_livre: Option<String>,
-    pub versao: String,
+pub struct AppState {
+    #[serde(rename = "conexao")]
+    pub connection: ConnectionState,
+    #[serde(rename = "rede")]
+    pub network: NetworkState,
+    #[serde(rename = "sessao")]
+    pub session: Option<SessionState>,
+    #[serde(rename = "folha")]
+    pub sheet: Option<Sheet>,
+    /// Recordings that have not reached the server yet.
+    #[serde(rename = "pendentes")]
+    pub pending: u32,
+    #[serde(rename = "avisos")]
+    pub warnings: Warnings,
+    /// "cerca de 9 h" of recording in the free space.
+    #[serde(rename = "espaco_livre")]
+    pub free_space: Option<String>,
+    #[serde(rename = "versao")]
+    pub version: String,
 }
 
-/// Como uma gravação local aparece no "Neste celular".
+/// How a local recording shows in "Neste celular".
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Selo {
-    Gravando,
-    Aguardando,
-    Sincronizando,
-    Sincronizada,
-    Interrompida,
-    Falhou,
+pub enum Badge {
+    #[serde(rename = "gravando")]
+    Recording,
+    #[serde(rename = "aguardando")]
+    Waiting,
+    #[serde(rename = "sincronizando")]
+    Syncing,
+    #[serde(rename = "sincronizada")]
+    Synced,
+    #[serde(rename = "interrompida")]
+    Interrupted,
+    #[serde(rename = "falhou")]
+    Failed,
 }
 
-/// Uma gravação no celular.
+/// A recording on the phone.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct GravacaoLocal {
+pub struct LocalRecording {
     pub id: String,
-    pub titulo: Option<String>,
-    /// O título que o servidor deu à gravação (fila v5); a lista o mostra sem o título local.
-    pub titulo_do_servidor: Option<String>,
-    pub iniciada_em: i64,
-    pub duracao_ms: Option<i64>,
+    #[serde(rename = "titulo")]
+    pub title: Option<String>,
+    /// The title the server gave the recording (queue v5); the list shows it when there is no local
+    /// title.
+    #[serde(rename = "titulo_do_servidor")]
+    pub server_title: Option<String>,
+    #[serde(rename = "iniciada_em")]
+    pub started_at: i64,
+    #[serde(rename = "duracao_ms")]
+    pub duration_ms: Option<i64>,
     pub bytes: Option<i64>,
-    pub marcadores: usize,
-    pub selo: Selo,
+    #[serde(rename = "marcadores")]
+    pub markers: usize,
+    #[serde(rename = "selo")]
+    pub badge: Badge,
     pub remote_id: Option<String>,
-    /// O arquivo local já foi apagado (fica só no servidor).
-    pub apagada: bool,
-    pub tipo_de_agenda: Option<String>,
-    pub ultimo_erro: Option<String>,
+    /// The local file was already deleted (it stays only on the server).
+    #[serde(rename = "apagada")]
+    pub purged: bool,
+    #[serde(rename = "tipo_de_agenda")]
+    pub agenda_type: Option<String>,
+    #[serde(rename = "ultimo_erro")]
+    pub last_error: Option<String>,
 }
 
-/// O detalhe de uma gravação: a linha, os marcadores, as etapas no servidor e a espera na fila (em
-/// cache fora da rede).
+/// A recording's detail: the row, the markers, the server steps and the queue wait (cached off the
+/// network).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct DetalheLocal {
-    pub gravacao: GravacaoLocal,
-    pub caminho: Option<String>,
-    pub marcadores: Vec<Marker>,
-    pub etapas: Option<Vec<Etapa>>,
-    pub espera: Option<Espera>,
-    /// A página da gravação no eclume web (`/gravacoes/<id no servidor>`), depois de enviada.
-    pub endereco_na_web: Option<String>,
+pub struct LocalDetail {
+    #[serde(rename = "gravacao")]
+    pub recording: LocalRecording,
+    #[serde(rename = "caminho")]
+    pub path: Option<String>,
+    #[serde(rename = "marcadores")]
+    pub markers: Vec<Marker>,
+    #[serde(rename = "etapas")]
+    pub steps: Option<Vec<Step>>,
+    #[serde(rename = "espera")]
+    pub wait: Option<Wait>,
+    /// The recording's page on eclume web (`/gravacoes/<server id>`), once uploaded.
+    #[serde(rename = "endereco_na_web")]
+    pub web_address: Option<String>,
 }
 
-/// As configurações que a tela Configurações edita.
+/// The settings the Settings screen edits.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
-pub struct Preferencias {
+pub struct Preferences {
     pub sync_auto: bool,
-    pub qualidade: Qualidade,
-    pub excluir_sincronizadas: bool,
+    #[serde(rename = "qualidade")]
+    pub quality: Quality,
+    #[serde(rename = "excluir_sincronizadas")]
+    pub delete_synced: bool,
 }
 
-/// O que o sync precisa, montado sob a trava e usado fora dela.
-pub struct PlanoDeSync {
+/// What the sync needs, built under the lock and used outside it.
+pub struct SyncPlan {
     uploader: eclume_sync::HttpUploader,
-    fila: Arc<Mutex<Queue>>,
-    medidor: Arc<Medidor>,
-    ocupado: Arc<AtomicBool>,
+    queue: Arc<Mutex<Queue>>,
+    meter: Arc<Meter>,
+    busy: Arc<AtomicBool>,
 }
 
-/// Uma leitura autenticada a fazer fora da trava.
-pub struct PlanoDeLeitura {
-    transporte: Arc<dyn eclume_sync::transport::Transport>,
-    servidor: Servidor,
+/// An authenticated read to make outside the lock.
+pub struct ReadPlan {
+    transport: Arc<dyn eclume_sync::transport::Transport>,
+    server: Server,
     token: String,
-    /// A CA fixada, ao lado da qual a sonda guarda a próxima raiz anunciada.
+    /// The pinned CA, next to which the probe stores the next announced root.
     ca: std::path::PathBuf,
 }
 
-/// A próxima raiz guardada e o transporte fixado nela: a troca conferida fora da trava.
-pub struct PlanoDaProxima {
-    transporte: Arc<dyn eclume_sync::transport::Transport>,
-    servidor: Servidor,
-    raiz: eclume_sync::pin::RootCa,
+/// The stored next root and the transport pinned to it: the switch checked outside the lock.
+pub struct NextRootPlan {
+    transport: Arc<dyn eclume_sync::transport::Transport>,
+    server: Server,
+    root: eclume_sync::pin::RootCa,
 }
 
-/// O núcleo do app.
+/// The app's core.
 pub struct Core {
     dirs: Dirs,
-    versao: String,
+    version: String,
     config: Config,
-    conexao: Conexao,
-    rede: Rede,
-    sessao: Sessao,
-    fila: Arc<Mutex<Queue>>,
-    medidor: Arc<Medidor>,
-    sincronizando: Arc<AtomicBool>,
-    bateria: Bateria,
-    espaco_livre: Option<u64>,
-    visivel: bool,
-    folha: Option<Folha>,
-    etapas: HashMap<String, NoServidor>,
-    /// A versão nova do `movel.json`, se houver.
-    atualizacao: Option<sync::Manifesto>,
-    /// O próximo `?since=` da leitura dos títulos do servidor, e quando ela rodou.
-    titulos_desde: Option<String>,
-    titulos_lidos_em: i64,
+    connection: Connection,
+    network: Network,
+    session: Session,
+    queue: Arc<Mutex<Queue>>,
+    meter: Arc<Meter>,
+    syncing: Arc<AtomicBool>,
+    battery: Battery,
+    free_space: Option<u64>,
+    visible: bool,
+    sheet: Option<Sheet>,
+    steps: HashMap<String, OnServer>,
+    /// The new version from `movel.json`, if any.
+    update: Option<sync::Manifest>,
+    /// The next `?since=` of the server titles read, and when it ran.
+    titles_since: Option<String>,
+    titles_read_at: i64,
 }
 
-/// De quanto em quanto tempo, no máximo, os títulos do servidor são lidos no ciclo de rede.
-pub const INTERVALO_DOS_TITULOS_MS: i64 = 60 * 1_000;
+/// At most how often the server titles are read in the network cycle.
+pub const TITLES_INTERVAL_MS: i64 = 60 * 1_000;
 
-/// De quanto em quanto tempo o `movel.json` é lido, na rede do eclume.
-pub const INTERVALO_DA_ATUALIZACAO_MS: i64 = 24 * 60 * 60 * 1_000;
+/// How often `movel.json` is read, on eclume's network.
+pub const UPDATE_INTERVAL_MS: i64 = 24 * 60 * 60 * 1_000;
 
-/// Regrava um `ca.pem` com certificados a mais só com o primeiro: a primeira conexão pode ter sido
-/// interceptada, então a credencial é apagada e a tela Entrar diz por quê. Falha fica no log.
-fn aparar_ca(dirs: &Dirs, conexao: &mut Conexao) {
+/// Rewrites a `ca.pem` with extra certificates keeping only the first: the first connection may
+/// have been intercepted, so the credential is deleted and the sign-in screen says why. A failure
+/// stays in the log.
+fn trim_ca(dirs: &Dirs, connection: &mut Connection) {
     match eclume_sync::pin::trim_saved(&dirs.ca()) {
         Ok(0) => {}
         Ok(_) => {
             log::warn!("{}", eclume_sync::pin::CA_TRIMMED);
-            if let Err(err) = conexao.perdeu_credencial_por(eclume_sync::pin::CA_TRIMMED) {
-                log::warn!("falha ao apagar a credencial: {err:#}");
+            if let Err(err) = connection.credential_lost_because(eclume_sync::pin::CA_TRIMMED) {
+                log::warn!("failed to delete the credential: {err:#}");
             }
         }
-        Err(err) => log::warn!("falha ao conferir a CA fixada: {err:#}"),
+        Err(err) => log::warn!("failed to check the pinned CA: {err:#}"),
     }
 }
 
 impl Core {
-    /// Abre o núcleo: config, fila e a recuperação do que uma queda deixou para trás.
-    pub fn abrir(dirs: Dirs, versao: &str, transportes: Arc<dyn Transportes>) -> Result<Self> {
-        std::fs::create_dir_all(&dirs.dados)
-            .with_context(|| format!("falha ao criar {}", dirs.dados.display()))?;
-        let config = Config::carregar(&dirs.config())?;
-        let fila = Arc::new(Mutex::new(Queue::open(&dirs.fila())?));
-        Sessao::recuperar(&fila)?;
-        let mut conexao = Conexao::new(dirs.clone(), transportes);
-        if config.servidor.is_some() && dirs.ca().exists() {
-            aparar_ca(&dirs, &mut conexao);
+    /// Opens the core: config, queue and the recovery of what a crash left behind.
+    pub fn open(dirs: Dirs, version: &str, transports: Arc<dyn Transports>) -> Result<Self> {
+        std::fs::create_dir_all(&dirs.data)
+            .with_context(|| format!("falha ao criar {}", dirs.data.display()))?;
+        let config = Config::load(&dirs.config())?;
+        let queue = Arc::new(Mutex::new(Queue::open(&dirs.queue())?));
+        Session::recover(&queue)?;
+        let mut connection = Connection::new(dirs.clone(), transports);
+        if config.server.is_some() && dirs.ca().exists() {
+            trim_ca(&dirs, &mut connection);
         }
         Ok(Self {
-            conexao,
+            connection,
             dirs,
-            versao: versao.to_string(),
+            version: version.to_string(),
             config,
-            rede: Rede::default(),
-            sessao: Sessao::default(),
-            fila,
-            medidor: Arc::new(Medidor::default()),
-            sincronizando: Arc::new(AtomicBool::new(false)),
-            bateria: Bateria::default(),
-            espaco_livre: None,
-            visivel: true,
-            folha: None,
-            etapas: HashMap::new(),
-            atualizacao: None,
-            titulos_desde: None,
-            titulos_lidos_em: 0,
+            network: Network::default(),
+            session: Session::default(),
+            queue,
+            meter: Arc::new(Meter::default()),
+            syncing: Arc::new(AtomicBool::new(false)),
+            battery: Battery::default(),
+            free_space: None,
+            visible: true,
+            sheet: None,
+            steps: HashMap::new(),
+            update: None,
+            titles_since: None,
+            titles_read_at: 0,
         })
     }
 
@@ -271,666 +315,674 @@ impl Core {
         &self.config
     }
 
-    pub fn fila(&self) -> &Arc<Mutex<Queue>> {
-        &self.fila
+    pub fn queue(&self) -> &Arc<Mutex<Queue>> {
+        &self.queue
     }
 
-    fn trancar_fila(&self) -> Result<MutexGuard<'_, Queue>> {
-        self.fila
+    fn lock_queue(&self) -> Result<MutexGuard<'_, Queue>> {
+        self.queue
             .lock()
             .map_err(|_| anyhow!("a fila ficou envenenada por um pânico"))
     }
 
-    /// O nome do aparelho (`Build.MODEL`), vindo do plugin na abertura.
-    pub fn definir_aparelho(&mut self, nome: &str) -> Result<()> {
-        let nome = nome.trim();
-        if !nome.is_empty() && self.config.device_name != nome {
-            self.config.device_name = nome.to_string();
-            self.salvar_config()?;
+    /// The device name (`Build.MODEL`), from the plugin on open.
+    pub fn set_device(&mut self, name: &str) -> Result<()> {
+        let name = name.trim();
+        if !name.is_empty() && self.config.device_name != name {
+            self.config.device_name = name.to_string();
+            self.save_config()?;
         }
         Ok(())
     }
 
-    fn salvar_config(&self) -> Result<()> {
-        self.config.salvar(&self.dirs.config())
+    fn save_config(&self) -> Result<()> {
+        self.config.save(&self.dirs.config())
     }
 
     fn bitrate(&self) -> i32 {
-        self.config.qualidade.bitrate()
+        self.config.quality.bitrate()
     }
 
-    pub fn estado(&self) -> Result<EstadoApp> {
-        let mut rede = self.rede.clone();
-        if self.sincronizando.load(Ordering::Acquire) {
-            rede.sync_andando(self.medidor.andamento());
+    pub fn state(&self) -> Result<AppState> {
+        let mut network = self.network.clone();
+        if self.syncing.load(Ordering::Acquire) {
+            network.sync_progress(self.meter.progress());
         }
-        let pendentes = self.trancar_fila()?.counts()?.unsynced();
-        let sincronizadas = if self.espaco_livre.is_some() {
-            sync::bytes_sincronizados(&self.fila)?
+        let pending = self.lock_queue()?.counts()?.unsynced();
+        let synced = if self.free_space.is_some() {
+            sync::synced_bytes(&self.queue)?
         } else {
             0
         };
         let bitrate = self.bitrate();
-        Ok(EstadoApp {
-            conexao: self.conexao.estado(&self.config),
-            rede: rede.estado(),
-            sessao: self.sessao.estado(&self.fila)?,
-            folha: self.folha.clone(),
-            pendentes,
-            avisos: Avisos {
-                armazenamento: self
-                    .espaco_livre
-                    .and_then(|livre| estimativas::aviso_de_espaco(livre, bitrate, sincronizadas)),
-                bateria: if self.sessao.gravando() {
-                    estimativas::aviso_de_bateria(&self.bateria)
+        Ok(AppState {
+            connection: self.connection.state(&self.config),
+            network: network.state(),
+            session: self.session.state(&self.queue)?,
+            sheet: self.sheet.clone(),
+            pending,
+            warnings: Warnings {
+                storage: self
+                    .free_space
+                    .and_then(|free| estimates::storage_warning(free, bitrate, synced)),
+                battery: if self.session.is_recording() {
+                    estimates::battery_warning(&self.battery)
                 } else {
                     None
                 },
             },
-            espaco_livre: self.espaco_livre.map(|livre| {
-                estimativas::cerca_de(estimativas::segundos_que_cabem(livre, bitrate))
-            }),
-            versao: self.versao.clone(),
+            free_space: self
+                .free_space
+                .map(|free| estimates::about(estimates::seconds_that_fit(free, bitrate))),
+            version: self.version.clone(),
         })
     }
 
-    // --- conexão --------------------------------------------------------------------------------
+    // --- connection -----------------------------------------------------------------------------
 
-    pub fn conectar_descoberto(&mut self, url: &str, ca: Option<&str>) -> Result<()> {
-        self.conexao.conectar_descoberto(url, ca)
+    pub fn connect_discovered(&mut self, url: &str, ca: Option<&str>) -> Result<()> {
+        self.connection.connect_discovered(url, ca)
     }
 
-    pub fn conectar_endereco(&mut self, endereco: &str) -> Result<()> {
-        self.conexao.conectar_endereco(endereco)
+    pub fn connect_address(&mut self, address: &str) -> Result<()> {
+        self.connection.connect_address(address)
     }
 
-    pub fn confiar_ca(&mut self) -> Result<()> {
-        if self.conexao.confiar_ca(&mut self.config)? {
-            self.rede.recuperou_credencial();
+    pub fn trust_ca(&mut self) -> Result<()> {
+        if self.connection.trust_ca(&mut self.config)? {
+            self.network.credential_restored();
         }
         Ok(())
     }
 
-    pub fn cancelar_ca(&mut self) {
-        self.conexao.cancelar_ca();
+    pub fn cancel_ca(&mut self) {
+        self.connection.cancel_ca();
     }
 
-    pub fn entrar(&mut self, email: &str, senha: &str) -> Result<()> {
-        self.conexao.entrar(&self.config, email, senha)?;
-        self.rede.recuperou_credencial();
+    pub fn sign_in(&mut self, email: &str, password: &str) -> Result<()> {
+        self.connection.sign_in(&self.config, email, password)?;
+        self.network.credential_restored();
         Ok(())
     }
 
-    pub fn parear(&mut self, texto_do_qr: &str) -> Result<()> {
-        if self.conexao.parear(&mut self.config, texto_do_qr)? {
-            self.rede.recuperou_credencial();
+    pub fn pair(&mut self, qr_text: &str) -> Result<()> {
+        if self.connection.pair(&mut self.config, qr_text)? {
+            self.network.credential_restored();
         }
         Ok(())
     }
 
-    /// "Sair e esquecer o servidor". As gravações aguardando ficam e sobem no próximo servidor.
-    pub fn sair(&mut self) -> Result<()> {
-        self.conexao.sair(&mut self.config)?;
-        let wifi = self.rede.wifi_nao_medido();
-        self.rede = Rede::default();
-        self.rede.mudou_wifi(wifi);
-        self.etapas.clear();
+    /// "Sair e esquecer o servidor". The waiting recordings stay and upload to the next server.
+    pub fn sign_out(&mut self) -> Result<()> {
+        self.connection.sign_out(&mut self.config)?;
+        let wifi = self.network.unmetered_wifi();
+        self.network = Network::default();
+        self.network.wifi_changed(wifi);
+        self.steps.clear();
         Ok(())
     }
 
-    // --- rede e sync ----------------------------------------------------------------------------
+    // --- network and sync -----------------------------------------------------------------------
 
-    /// O plugin avisou o Wi-Fi não medido (o callback do sistema, na hora, ou a leitura do
-    /// aparelho). Sem ele, o sync em curso para na próxima requisição. Devolve se a sonda deve
-    /// rodar de novo.
-    pub fn mudou_rede(&mut self, wifi_nao_medido: bool) -> bool {
-        if !wifi_nao_medido {
-            self.medidor.interromper();
+    /// The plugin reported the unmetered Wi-Fi (the system callback, right away, or the device
+    /// reading). Without it, the running sync stops at the next request. Returns whether the probe
+    /// must run again.
+    pub fn network_changed(&mut self, unmetered_wifi: bool) -> bool {
+        if !unmetered_wifi {
+            self.meter.interrupt();
         }
-        let mudou = self.rede.mudou_wifi(wifi_nao_medido);
-        if mudou {
-            log::info!("Wi-Fi não medido: {wifi_nao_medido}");
+        let changed = self.network.wifi_changed(unmetered_wifi);
+        if changed {
+            log::info!("unmetered Wi-Fi: {unmetered_wifi}");
         }
-        mudou
+        changed
     }
 
-    /// Se a UI está visível (o laço do app desacelera com ela escondida).
-    pub fn visivel(&self) -> bool {
-        self.visivel
+    /// Whether the UI is visible (the app loop slows down with it hidden).
+    pub fn visible(&self) -> bool {
+        self.visible
     }
 
-    /// O microfone e o silêncio da gravação em curso, sem ler a fila (ver [`Sessao::sinais`]).
-    pub fn sinais_da_sessao(&self) -> Option<(crate::sessao::EstadoMicrofone, bool)> {
-        self.sessao.sinais()
+    /// The current recording's microphone and silence, without reading the queue (see
+    /// [`Session::signals`]).
+    pub fn session_signals(&self) -> Option<(crate::session::MicState, bool)> {
+        self.session.signals()
     }
 
-    pub fn definir_visivel(&mut self, visivel: bool) {
-        self.visivel = visivel;
+    pub fn set_visible(&mut self, visible: bool) {
+        self.visible = visible;
     }
 
-    /// O servidor pareado, o token e o transporte fixado com o prazo dado; `None` sem conexão.
-    fn leitura(&self, prazo: std::time::Duration) -> Result<Option<PlanoDeLeitura>> {
-        let (Some(servidor), Some(token)) = (self.config.servidor.clone(), self.conexao.token()?)
+    /// The paired server, the token and the transport pinned with the given timeout; `None` with
+    /// no connection.
+    fn read_plan(&self, timeout: std::time::Duration) -> Result<Option<ReadPlan>> {
+        let (Some(server), Some(token)) = (self.config.server.clone(), self.connection.token()?)
         else {
             return Ok(None);
         };
-        Ok(Some(PlanoDeLeitura {
-            transporte: self.conexao.transporte(prazo)?,
-            servidor,
+        Ok(Some(ReadPlan {
+            transport: self.connection.transport(timeout)?,
+            server,
             token,
             ca: self.dirs.ca(),
         }))
     }
 
-    /// A sonda a rodar (`forcar`: abrir o app, mudar de rede, parar, "Sincronizar agora").
-    pub fn preparar_sonda(&self, agora_ms: i64, forcar: bool) -> Result<Option<PlanoDeLeitura>> {
-        let deve = if forcar {
-            self.rede.pode_sondar()
+    /// The probe to run (`force`: opening the app, a network change, stopping, "Sincronizar
+    /// agora").
+    pub fn prepare_probe(&self, now_ms: i64, force: bool) -> Result<Option<ReadPlan>> {
+        let should = if force {
+            self.network.can_probe()
         } else {
-            self.rede.precisa_sondar(agora_ms, self.visivel)
+            self.network.needs_probe(now_ms, self.visible)
         };
-        if !deve {
+        if !should {
             return Ok(None);
         }
-        self.leitura(PRAZO_DA_SONDA)
+        self.read_plan(PROBE_TIMEOUT)
     }
 
-    /// Depois de uma sonda `CaMudou`: a próxima raiz guardada, para conferir se o servidor virou
-    /// para ela; `None` sem servidor ou sem próxima.
-    pub fn preparar_proxima(&self) -> Result<Option<PlanoDaProxima>> {
-        let Some(servidor) = self.config.servidor.clone() else {
+    /// After a `CaChanged` probe: the stored next root, to check whether the server switched to it;
+    /// `None` with no server or no next root.
+    pub fn prepare_next_root(&self) -> Result<Option<NextRootPlan>> {
+        let Some(server) = self.config.server.clone() else {
             return Ok(None);
         };
         Ok(self
-            .conexao
-            .proxima(PRAZO_DA_SONDA)?
-            .map(|(raiz, transporte)| PlanoDaProxima {
-                transporte,
-                servidor,
-                raiz,
+            .connection
+            .next_root(PROBE_TIMEOUT)?
+            .map(|(root, transport)| NextRootPlan {
+                transport,
+                server,
+                root,
             }))
     }
 
-    /// A próxima raiz conferida vira a fixada (ver [`conexao::Conexao::promover_proxima`]).
-    pub fn promover_proxima(&mut self, plano: &PlanoDaProxima) -> Result<()> {
-        self.conexao.promover_proxima(&plano.raiz, &mut self.config)
+    /// The checked next root becomes the pinned one (see [`connection::Connection::promote_next`]).
+    pub fn promote_next(&mut self, plan: &NextRootPlan) -> Result<()> {
+        self.connection.promote_next(&plan.root, &mut self.config)
     }
 
-    pub fn registrar_sonda(&mut self, agora_ms: i64, sonda: Sonda) {
-        let antes = self.rede.estado();
-        self.rede.registrar_sonda(agora_ms, sonda);
-        if self.rede.estado() != antes {
-            log::info!("sonda {sonda:?}: rede {:?}", self.rede.estado());
+    pub fn record_probe(&mut self, now_ms: i64, probe: Probe) {
+        let before = self.network.state();
+        self.network.record_probe(now_ms, probe);
+        if self.network.state() != before {
+            log::info!("probe {probe:?}: network {:?}", self.network.state());
         }
     }
 
-    /// O sistema parou o trabalho de sync (o `onStopped` do worker): o upload para na próxima
-    /// requisição e a gravação volta à fila sem gastar tentativa.
-    pub fn interromper_sync(&self) {
-        self.medidor.interromper();
+    /// The system stopped the sync work (the worker's `onStopped`): the upload stops at the next
+    /// request and the recording goes back to the queue without spending an attempt.
+    pub fn interrupt_sync(&self) {
+        self.meter.interrupt();
     }
 
-    /// As gravações aguardando o sync e quantos bytes elas somam.
-    pub fn pendentes(&self) -> Result<(u32, u64)> {
-        let fila = self.trancar_fila()?;
-        fila.retry_due(now_ms(), sync::MAX_TENTATIVAS)?;
-        let pendentes = fila.by_status(Status::Pending)?;
-        let bytes = pendentes
+    /// The recordings waiting for the sync and how many bytes they add up to.
+    pub fn pending(&self) -> Result<(u32, u64)> {
+        let queue = self.lock_queue()?;
+        queue.retry_due(now_ms(), sync::MAX_ATTEMPTS)?;
+        let pending = queue.by_status(Status::Pending)?;
+        let bytes = pending
             .iter()
             .filter_map(|rec| rec.bytes)
             .map(|b| u64::try_from(b).unwrap_or(0))
             .sum();
-        Ok((u32::try_from(pendentes.len()).unwrap_or(u32::MAX), bytes))
+        Ok((u32::try_from(pending.len()).unwrap_or(u32::MAX), bytes))
     }
 
-    /// O sync a rodar: na rede do eclume, sem outro em curso, com algo pendente e (sem `agora`)
-    /// com o sync automático ligado. Na rede, a interrupção anterior deixa de valer.
-    pub fn preparar_sync(&self, agora: bool) -> Result<Option<PlanoDeSync>> {
-        if !self.rede.na_rede()
-            || (!agora && !self.config.sync_auto)
-            || self.sincronizando.load(Ordering::Acquire)
+    /// The sync to run: on eclume's network, with no other running, with something pending and
+    /// (without `now`) with the automatic sync on. On the network, the previous interruption stops
+    /// counting.
+    pub fn prepare_sync(&self, now: bool) -> Result<Option<SyncPlan>> {
+        if !self.network.on_network()
+            || (!now && !self.config.sync_auto)
+            || self.syncing.load(Ordering::Acquire)
         {
             return Ok(None);
         }
         {
-            let fila = self.trancar_fila()?;
-            if agora {
-                // "Sincronizar agora" não espera o backoff das falhas.
-                fila.retry_failed(sync::MAX_TENTATIVAS)?;
+            let queue = self.lock_queue()?;
+            if now {
+                // "Sincronizar agora" does not wait for the failures' backoff.
+                queue.retry_failed(sync::MAX_ATTEMPTS)?;
             }
-            fila.retry_due(now_ms(), sync::MAX_TENTATIVAS)?;
-            if fila.counts()?.pending == 0 {
+            queue.retry_due(now_ms(), sync::MAX_ATTEMPTS)?;
+            if queue.counts()?.pending == 0 {
                 return Ok(None);
             }
         }
-        let Some(leitura) = self.leitura(REQUEST_TIMEOUT)? else {
+        let Some(read) = self.read_plan(REQUEST_TIMEOUT)? else {
             return Ok(None);
         };
         let uploader = sync::uploader(
-            leitura.transporte,
-            Arc::clone(&self.medidor),
-            &leitura.servidor,
-            &leitura.token,
-            Arc::clone(&self.fila),
-            &client_version(&self.versao),
+            read.transport,
+            Arc::clone(&self.meter),
+            &read.server,
+            &read.token,
+            Arc::clone(&self.queue),
+            &client_version(&self.version),
             &self.config.device_name,
         )?;
-        self.sincronizando.store(true, Ordering::Release);
-        // Sob a trava do núcleo: um "saiu da rede" depois daqui interrompe esta passada.
-        self.medidor.retomar();
-        Ok(Some(PlanoDeSync {
+        self.syncing.store(true, Ordering::Release);
+        // Under the core's lock: a "left the network" after this point interrupts this pass.
+        self.meter.resume();
+        Ok(Some(SyncPlan {
             uploader,
-            fila: Arc::clone(&self.fila),
-            medidor: Arc::clone(&self.medidor),
-            ocupado: Arc::clone(&self.sincronizando),
+            queue: Arc::clone(&self.queue),
+            meter: Arc::clone(&self.meter),
+            busy: Arc::clone(&self.syncing),
         }))
     }
 
-    /// Depois do sync: o 401 leva a Entrar, e a retenção apaga o que venceu.
-    pub fn concluir_sync(&mut self, credencial_recusada: bool) -> Result<()> {
-        if credencial_recusada {
-            self.perdeu_credencial()?;
+    /// After the sync: a 401 leads to sign-in, and the retention deletes what expired.
+    pub fn finish_sync(&mut self, credential_refused: bool) -> Result<()> {
+        if credential_refused {
+            self.credential_lost()?;
         }
-        if self.config.excluir_sincronizadas {
-            sync::reter(&self.fila, now_ms(), self.config.reter_dias)?;
+        if self.config.delete_synced {
+            sync::retain(&self.queue, now_ms(), self.config.retention_days)?;
         }
         Ok(())
     }
 
-    /// O servidor recusou a credencial (401 em qualquer chamada autenticada): volta a Entrar.
-    pub fn perdeu_credencial(&mut self) -> Result<()> {
-        self.conexao.perdeu_credencial()?;
-        self.rede.perdeu_credencial();
+    /// The server refused the credential (401 on any authenticated call): back to sign-in.
+    pub fn credential_lost(&mut self) -> Result<()> {
+        self.connection.credential_lost()?;
+        self.network.credential_lost();
         Ok(())
     }
 
-    pub fn preparar_tipos(&self) -> Result<Option<PlanoDeLeitura>> {
-        if !self.rede.na_rede() {
+    pub fn prepare_types(&self) -> Result<Option<ReadPlan>> {
+        if !self.network.on_network() {
             return Ok(None);
         }
-        self.leitura(REQUEST_TIMEOUT)
+        self.read_plan(REQUEST_TIMEOUT)
     }
 
-    pub fn guardar_idioma_da_conta(&mut self, idioma: String) -> Result<()> {
-        if self.config.idioma_da_conta.as_deref() != Some(idioma.as_str()) {
-            self.config.idioma_da_conta = Some(idioma);
-            self.salvar_config()?;
+    pub fn store_account_language(&mut self, language: String) -> Result<()> {
+        if self.config.account_language.as_deref() != Some(language.as_str()) {
+            self.config.account_language = Some(language);
+            self.save_config()?;
         }
         Ok(())
     }
 
-    /// As opções de idioma da folha "Gravação salva": o padrão da conta nomeado, Detectar e a
-    /// lista curta. O valor vazio é o padrão (a gravação sobe sem idioma e vale o da conta).
-    pub fn opcoes_de_idioma(&self) -> Vec<OpcaoDeIdioma> {
-        let padrao = match self.config.idioma_da_conta.as_deref() {
-            Some(idioma) => format!("Padrão da conta: {}", nome_do_idioma(idioma)),
+    /// The saved-recording sheet's language options: the named account default, Detect and the
+    /// short list. The empty value is the default (the recording uploads without a language and the
+    /// account's applies).
+    pub fn language_options(&self) -> Vec<LanguageOption> {
+        let default = match self.config.account_language.as_deref() {
+            Some(language) => format!("Padrão da conta: {}", language_name(language)),
             None => "Padrão da conta".to_string(),
         };
-        std::iter::once(OpcaoDeIdioma {
-            valor: String::new(),
-            rotulo: padrao,
+        std::iter::once(LanguageOption {
+            value: String::new(),
+            label: default,
         })
-        .chain(IDIOMAS.iter().map(|(valor, rotulo)| OpcaoDeIdioma {
-            valor: (*valor).to_string(),
-            rotulo: (*rotulo).to_string(),
+        .chain(LANGUAGES.iter().map(|(value, label)| LanguageOption {
+            value: (*value).to_string(),
+            label: (*label).to_string(),
         }))
         .collect()
     }
 
-    pub fn guardar_tipos(&mut self, tipos: Vec<config::TipoDeAgenda>) -> Result<()> {
-        if self.config.tipos_de_agenda != tipos {
-            self.config.tipos_de_agenda = tipos;
-            self.salvar_config()?;
+    pub fn store_types(&mut self, types: Vec<config::AgendaType>) -> Result<()> {
+        if self.config.agenda_types != types {
+            self.config.agenda_types = types;
+            self.save_config()?;
         }
         Ok(())
     }
 
-    // --- sessão ---------------------------------------------------------------------------------
+    // --- session --------------------------------------------------------------------------------
 
-    /// Começa a gravar a fonte dada (o microfone).
-    pub fn gravar(&mut self, fonte: Box<dyn AudioSource>) -> Result<String> {
+    /// Starts recording the given source (the microphone).
+    pub fn record(&mut self, source: Box<dyn AudioSource>) -> Result<String> {
         let config = RecorderConfig {
             bitrate: self.bitrate(),
             source: Source::Mobile,
             ask_details: true,
-            ..RecorderConfig::new(self.dirs.gravacoes())
+            ..RecorderConfig::new(self.dirs.recordings())
         };
-        self.bateria.recomecar();
-        if let Some(leitura) = self.bateria.ultima() {
-            self.bateria.registrar(LeituraDeBateria {
-                em_ms: now_ms(),
-                ..leitura
+        self.battery.restart();
+        if let Some(reading) = self.battery.last() {
+            self.battery.record(BatteryReading {
+                at_ms: now_ms(),
+                ..reading
             });
         }
-        let id = self.sessao.gravar(&config, &self.fila, fonte)?;
-        self.folha = None;
+        let id = self.session.start(&config, &self.queue, source)?;
+        self.sheet = None;
         Ok(id)
     }
 
-    pub fn pausar(&self) -> Result<()> {
-        self.sessao.pausar()
+    pub fn pause(&self) -> Result<()> {
+        self.session.pause()
     }
 
-    pub fn continuar(&self) -> Result<()> {
-        self.sessao.continuar()
+    pub fn resume(&self) -> Result<()> {
+        self.session.resume()
     }
 
-    pub fn marcar(&self, nota: Option<&str>) -> Result<Marker> {
-        self.sessao.marcar(&self.fila, nota)
+    pub fn mark(&self, note: Option<&str>) -> Result<Marker> {
+        self.session.mark(&self.queue, note)
     }
 
-    /// Vigia o microfone da gravação em curso (marcadores de queda e volta); o laço do app chama.
-    pub fn vigiar(&mut self) -> Result<()> {
-        self.sessao.vigiar(&self.fila)
+    /// Watches the current recording's microphone (drop and return markers); the app loop calls
+    /// it.
+    pub fn watch(&mut self) -> Result<()> {
+        self.session.watch(&self.queue)
     }
 
-    /// O sistema silenciou (`true`) ou devolveu a captura, pelo `AudioRecordingCallback`.
-    pub fn silenciar(&mut self, silenciada: bool) -> Result<()> {
-        self.sessao.silenciar(&self.fila, silenciada)
+    /// The system muted (`true`) or gave back the capture, through `AudioRecordingCallback`.
+    pub fn set_muted(&mut self, muted: bool) -> Result<()> {
+        self.session.set_muted(&self.queue, muted)
     }
 
-    pub fn anotar_marcador(&self, client_id: &str, nota: Option<&str>) -> Result<Marker> {
-        Sessao::anotar(&self.fila, client_id, nota)
+    pub fn annotate_marker(&self, client_id: &str, note: Option<&str>) -> Result<Marker> {
+        Session::annotate(&self.queue, client_id, note)
     }
 
-    /// Para e abre a folha "Gravação salva".
-    pub fn parar(&mut self) -> Result<QueuedRecording> {
-        let gravacao = self.sessao.parar(&self.fila)?;
-        let marcadores = self.trancar_fila()?.markers(&gravacao.id)?.len();
-        self.folha = Some(Folha {
-            id: gravacao.id.clone(),
-            iniciada_em: gravacao.started_at,
-            duracao_ms: gravacao.duration_ms.unwrap_or(0),
-            marcadores,
+    /// Stops and opens the saved-recording sheet.
+    pub fn stop(&mut self) -> Result<QueuedRecording> {
+        let recording = self.session.stop(&self.queue)?;
+        let markers = self.lock_queue()?.markers(&recording.id)?.len();
+        self.sheet = Some(Sheet {
+            id: recording.id.clone(),
+            started_at: recording.started_at,
+            duration_ms: recording.duration_ms.unwrap_or(0),
+            markers,
         });
-        Ok(gravacao)
+        Ok(recording)
     }
 
-    /// O Android recusou o serviço em primeiro plano: para a gravação recém-aberta e a tira do
-    /// celular (fila e disco), sem folha "Gravação salva", para não sobrar gravação desprotegida.
-    pub fn desfazer_gravacao(&mut self) -> Result<()> {
-        let gravacao = self.sessao.parar(&self.fila)?;
-        self.folha = None;
-        self.trancar_fila()?.discard(&gravacao.id)?;
-        match std::fs::remove_file(&gravacao.path) {
+    /// Android refused the foreground service: stops the just-opened recording and removes it from
+    /// the phone (queue and disk), with no saved-recording sheet, so no unprotected recording is
+    /// left behind.
+    pub fn undo_recording(&mut self) -> Result<()> {
+        let recording = self.session.stop(&self.queue)?;
+        self.sheet = None;
+        self.lock_queue()?.discard(&recording.id)?;
+        match std::fs::remove_file(&recording.path) {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => log::warn!("falha ao apagar {}: {err}", gravacao.path.display()),
+            Err(err) => log::warn!("failed to delete {}: {err}", recording.path.display()),
         }
         Ok(())
     }
 
-    /// "Salvar" ou "Pular" na folha.
-    pub fn salvar(
+    /// "Salvar" or "Pular" on the sheet.
+    pub fn save_details(
         &mut self,
         id: &str,
-        titulo: Option<&str>,
-        tipo: Option<&str>,
-        idioma: Option<&str>,
+        title: Option<&str>,
+        agenda_type: Option<&str>,
+        language: Option<&str>,
     ) -> Result<()> {
-        Sessao::salvar(&self.fila, id, titulo, tipo, idioma)?;
-        if self.folha.as_ref().is_some_and(|f| f.id == id) {
-            self.folha = None;
+        Session::save_details(&self.queue, id, title, agenda_type, language)?;
+        if self.sheet.as_ref().is_some_and(|s| s.id == id) {
+            self.sheet = None;
         }
         Ok(())
     }
 
-    /// A leitura periódica do aparelho (bateria e espaço livre).
-    pub fn atualizar_aparelho(&mut self, pct: u8, carregando: bool, espaco_livre: u64) {
-        self.bateria.registrar(LeituraDeBateria {
-            em_ms: now_ms(),
+    /// The periodic device reading (battery and free space).
+    pub fn update_device(&mut self, pct: u8, charging: bool, free_space: u64) {
+        self.battery.record(BatteryReading {
+            at_ms: now_ms(),
             pct,
-            carregando,
+            charging,
         });
-        self.espaco_livre = Some(espaco_livre);
+        self.free_space = Some(free_space);
     }
 
-    /// Os limites da gravação: fecha a que terminou sozinha e para a que ficou sem espaço.
-    /// Devolve a gravação fechada e o motivo, para o chamador avisar.
-    pub fn verificar_limites(&mut self) -> Result<Option<(QueuedRecording, MotivoDaParada)>> {
-        if !self.sessao.gravando() {
+    /// The recording's limits: closes the one that ended on its own and stops the one out of
+    /// space. Returns the closed recording and the reason, for the caller to warn.
+    pub fn check_limits(&mut self) -> Result<Option<(QueuedRecording, StopReason)>> {
+        if !self.session.is_recording() {
             return Ok(None);
         }
-        let motivo = if self
-            .espaco_livre
-            .is_some_and(|livre| estimativas::deve_parar_por_espaco(livre, self.bitrate()))
+        let reason = if self
+            .free_space
+            .is_some_and(|free| estimates::should_stop_for_storage(free, self.bitrate()))
         {
-            MotivoDaParada::SemEspaco
-        } else if self.sessao.terminou_sozinha() {
-            MotivoDaParada::FonteEncerrada
+            StopReason::NoSpace
+        } else if self.session.ended_on_its_own() {
+            StopReason::SourceEnded
         } else {
             return Ok(None);
         };
-        self.parar().map(|gravacao| Some((gravacao, motivo)))
+        self.stop().map(|recording| Some((recording, reason)))
     }
 
-    // --- gravações locais -----------------------------------------------------------------------
+    // --- local recordings -----------------------------------------------------------------------
 
-    fn local(&self, fila: &Queue, rec: &QueuedRecording) -> Result<GravacaoLocal> {
-        let selo = match rec.status {
-            Status::Recording => Selo::Gravando,
-            Status::Syncing => Selo::Sincronizando,
-            Status::Synced => Selo::Sincronizada,
-            Status::Failed => Selo::Falhou,
-            Status::Pending if rec.interrupted => Selo::Interrompida,
-            Status::Pending => Selo::Aguardando,
+    fn local(&self, queue: &Queue, rec: &QueuedRecording) -> Result<LocalRecording> {
+        let badge = match rec.status {
+            Status::Recording => Badge::Recording,
+            Status::Syncing => Badge::Syncing,
+            Status::Synced => Badge::Synced,
+            Status::Failed => Badge::Failed,
+            Status::Pending if rec.interrupted => Badge::Interrupted,
+            Status::Pending => Badge::Waiting,
         };
-        let tipo = rec.agenda_type_id.as_ref().and_then(|id| {
+        let agenda_type = rec.agenda_type_id.as_ref().and_then(|id| {
             self.config
-                .tipos_de_agenda
+                .agenda_types
                 .iter()
                 .find(|t| &t.id == id)
-                .map(|t| t.nome.clone())
+                .map(|t| t.name.clone())
         });
-        Ok(GravacaoLocal {
+        Ok(LocalRecording {
             id: rec.id.clone(),
-            titulo: rec.title.clone(),
-            titulo_do_servidor: rec.server_title.clone(),
-            iniciada_em: rec.started_at,
-            duracao_ms: rec.duration_ms,
+            title: rec.title.clone(),
+            server_title: rec.server_title.clone(),
+            started_at: rec.started_at,
+            duration_ms: rec.duration_ms,
             bytes: rec.bytes,
-            marcadores: fila.markers(&rec.id)?.len(),
-            selo,
+            markers: queue.markers(&rec.id)?.len(),
+            badge,
             remote_id: rec.remote_id.clone(),
-            apagada: rec.purged_at.is_some(),
-            tipo_de_agenda: tipo,
-            ultimo_erro: rec.last_error.clone(),
+            purged: rec.purged_at.is_some(),
+            agenda_type,
+            last_error: rec.last_error.clone(),
         })
     }
 
-    /// "Neste celular": as gravações mais recentes primeiro.
-    pub fn gravacoes(&self) -> Result<Vec<GravacaoLocal>> {
-        let fila = self.trancar_fila()?;
-        fila.list(200)?
+    /// "Neste celular": the most recent recordings first.
+    pub fn recordings(&self) -> Result<Vec<LocalRecording>> {
+        let queue = self.lock_queue()?;
+        queue
+            .list(200)?
             .iter()
-            .map(|rec| self.local(&fila, rec))
+            .map(|rec| self.local(&queue, rec))
             .collect()
     }
 
-    pub fn gravacao(&self, id: &str) -> Result<DetalheLocal> {
-        let fila = self.trancar_fila()?;
-        let rec = fila
+    pub fn recording(&self, id: &str) -> Result<LocalDetail> {
+        let queue = self.lock_queue()?;
+        let rec = queue
             .get(id)?
             .with_context(|| format!("gravação {id} não está no celular"))?;
-        Ok(DetalheLocal {
-            gravacao: self.local(&fila, &rec)?,
-            caminho: (rec.purged_at.is_none() && rec.status != Status::Recording)
+        Ok(LocalDetail {
+            recording: self.local(&queue, &rec)?,
+            path: (rec.purged_at.is_none() && rec.status != Status::Recording)
                 .then(|| rec.path.to_string_lossy().into_owned()),
-            marcadores: fila.markers(id)?,
-            etapas: self.etapas.get(id).map(|no| no.etapas.clone()),
-            espera: self.etapas.get(id).and_then(|no| no.espera.clone()),
-            endereco_na_web: self.endereco_na_web(rec.remote_id.as_deref()),
+            markers: queue.markers(id)?,
+            steps: self.steps.get(id).map(|on| on.steps.clone()),
+            wait: self.steps.get(id).and_then(|on| on.wait.clone()),
+            web_address: self.web_address(rec.remote_id.as_deref()),
         })
     }
 
-    /// A página da gravação no eclume web, pelo endereço do servidor pareado.
-    fn endereco_na_web(&self, remote_id: Option<&str>) -> Option<String> {
-        let servidor = self.config.servidor.as_ref()?;
+    /// The recording's page on eclume web, by the paired server's address.
+    fn web_address(&self, remote_id: Option<&str>) -> Option<String> {
+        let server = self.config.server.as_ref()?;
         Some(format!(
             "{}/gravacoes/{}",
-            servidor.url.trim_end_matches('/'),
+            server.url.trim_end_matches('/'),
             remote_id?
         ))
     }
 
-    /// A leitura das etapas de uma gravação sincronizada, na rede do eclume.
-    pub fn preparar_etapas(&self, id: &str) -> Result<Option<(PlanoDeLeitura, String)>> {
-        if !self.rede.na_rede() {
+    /// The read of a synced recording's steps, on eclume's network.
+    pub fn prepare_steps(&self, id: &str) -> Result<Option<(ReadPlan, String)>> {
+        if !self.network.on_network() {
             return Ok(None);
         }
-        let remoto = self.trancar_fila()?.get(id)?.and_then(|rec| rec.remote_id);
-        let (Some(remoto), Some(plano)) = (remoto, self.leitura(REQUEST_TIMEOUT)?) else {
+        let remote = self.lock_queue()?.get(id)?.and_then(|rec| rec.remote_id);
+        let (Some(remote), Some(plan)) = (remote, self.read_plan(REQUEST_TIMEOUT)?) else {
             return Ok(None);
         };
-        Ok(Some((plano, remoto)))
+        Ok(Some((plan, remote)))
     }
 
-    pub fn guardar_etapas(&mut self, id: &str, etapas: NoServidor) -> Result<()> {
-        if let Some(titulo) = &etapas.titulo {
-            let fila = self.trancar_fila()?;
-            if let Some(remoto) = fila.get(id)?.and_then(|rec| rec.remote_id) {
-                fila.set_server_title(&remoto, titulo)?;
+    pub fn store_steps(&mut self, id: &str, steps: OnServer) -> Result<()> {
+        if let Some(title) = &steps.title {
+            let queue = self.lock_queue()?;
+            if let Some(remote) = queue.get(id)?.and_then(|rec| rec.remote_id) {
+                queue.set_server_title(&remote, title)?;
             }
         }
-        self.etapas.insert(id.to_string(), etapas);
+        self.steps.insert(id.to_string(), steps);
         Ok(())
     }
 
-    /// A leitura dos títulos do servidor, na rede do eclume e no máximo a cada
-    /// [`INTERVALO_DOS_TITULOS_MS`]. A primeira parte da enviada mais antiga ainda sem título (sem
-    /// nenhuma, de agora); as seguintes, do `since` da anterior.
-    pub fn preparar_titulos(&mut self, agora_ms: i64) -> Result<Option<(PlanoDeLeitura, String)>> {
-        if !self.rede.na_rede() || agora_ms - self.titulos_lidos_em < INTERVALO_DOS_TITULOS_MS {
+    /// The read of the server titles, on eclume's network and at most every
+    /// [`TITLES_INTERVAL_MS`]. The first starts from the oldest uploaded one still without a title
+    /// (with none, from now); the next ones, from the previous one's `since`.
+    pub fn prepare_titles(&mut self, now_ms: i64) -> Result<Option<(ReadPlan, String)>> {
+        if !self.network.on_network() || now_ms - self.titles_read_at < TITLES_INTERVAL_MS {
             return Ok(None);
         }
-        let desde = match &self.titulos_desde {
-            Some(desde) => desde.clone(),
+        let since = match &self.titles_since {
+            Some(since) => since.clone(),
             None => {
-                let sem_titulo = self
-                    .trancar_fila()?
+                let untitled = self
+                    .lock_queue()?
                     .by_status(Status::Synced)?
                     .into_iter()
                     .filter(|rec| rec.server_title.is_none())
                     .filter_map(|rec| rec.synced_at)
                     .min();
-                let inicio = sem_titulo.unwrap_or(agora_ms) - INTERVALO_DOS_TITULOS_MS;
-                eclume_sync::api::rfc3339_from_ms(inicio).context("instante inválido")?
+                let start = untitled.unwrap_or(now_ms) - TITLES_INTERVAL_MS;
+                eclume_sync::api::rfc3339_from_ms(start).context("instante inválido")?
             }
         };
-        let Some(plano) = self.leitura(REQUEST_TIMEOUT)? else {
+        let Some(plan) = self.read_plan(REQUEST_TIMEOUT)? else {
             return Ok(None);
         };
-        self.titulos_lidos_em = agora_ms;
-        Ok(Some((plano, desde)))
+        self.titles_read_at = now_ms;
+        Ok(Some((plan, since)))
     }
 
-    /// Guarda os títulos lidos nas linhas enviadas daqui e o próximo `since`.
-    pub fn guardar_titulos(&mut self, titulos: sync::Titulos, desde: String) -> Result<()> {
-        let fila = self.trancar_fila()?;
-        for (remoto, titulo) in &titulos.pares {
-            fila.set_server_title(remoto, titulo)?;
+    /// Stores the read titles on the rows uploaded from here, and the next `since`.
+    pub fn store_titles(&mut self, titles: sync::Titles, since: String) -> Result<()> {
+        let queue = self.lock_queue()?;
+        for (remote, title) in &titles.pairs {
+            queue.set_server_title(remote, title)?;
         }
-        drop(fila);
-        self.titulos_desde = Some(titulos.proximo.unwrap_or(desde));
+        drop(queue);
+        self.titles_since = Some(titles.next.unwrap_or(since));
         Ok(())
     }
 
-    /// "Excluir deste celular": só uma gravação que o servidor já confirmou.
-    pub fn excluir_local(&self, id: &str) -> Result<()> {
-        let fila = self.trancar_fila()?;
-        let rec = fila
+    /// "Excluir deste celular": only a recording the server already confirmed.
+    pub fn delete_local(&self, id: &str) -> Result<()> {
+        let queue = self.lock_queue()?;
+        let rec = queue
             .get(id)?
             .with_context(|| format!("gravação {id} não está no celular"))?;
         if rec.status != Status::Synced {
             anyhow::bail!("Só dá para excluir do celular depois de sincronizar");
         }
         if rec.purged_at.is_none() {
-            sync::apagar_arquivo(&rec.path)?;
-            fila.mark_purged(id, now_ms())?;
+            sync::delete_file(&rec.path)?;
+            queue.mark_purged(id, now_ms())?;
         }
         Ok(())
     }
 
-    /// "Excluir sincronizadas": devolve os bytes liberados.
-    pub fn excluir_sincronizadas(&self) -> Result<u64> {
-        sync::excluir_sincronizadas(&self.fila).map(|(_, bytes)| bytes)
+    /// "Excluir sincronizadas": returns the bytes freed.
+    pub fn delete_synced(&self) -> Result<u64> {
+        sync::delete_synced(&self.queue).map(|(_, bytes)| bytes)
     }
 
-    // --- atualização ---------------------------------------------------------------------------
+    // --- update ---------------------------------------------------------------------------------
 
-    /// A leitura do `movel.json`: na rede do eclume, uma vez por dia (ou já, com `forcar`).
-    pub fn preparar_atualizacao(&self, forcar: bool) -> Result<Option<PlanoDeLeitura>> {
-        let vencida = self
+    /// The `movel.json` read: on eclume's network, once a day (or right away, with `force`).
+    pub fn prepare_update(&self, force: bool) -> Result<Option<ReadPlan>> {
+        let due = self
             .config
-            .atualizacao_verificada_em
-            .is_none_or(|em| now_ms() - em >= INTERVALO_DA_ATUALIZACAO_MS);
-        if !self.rede.na_rede() || !(forcar || vencida) {
+            .update_checked_at
+            .is_none_or(|at| now_ms() - at >= UPDATE_INTERVAL_MS);
+        if !self.network.on_network() || !(force || due) {
             return Ok(None);
         }
-        self.leitura(REQUEST_TIMEOUT)
+        self.read_plan(REQUEST_TIMEOUT)
     }
 
-    /// Guarda o manifesto lido: só uma versão maior que a instalada vira atualização.
-    pub fn guardar_manifesto(&mut self, manifesto: Option<sync::Manifesto>) -> Result<()> {
-        self.atualizacao = manifesto.filter(|m| sync::mais_nova(&m.versao, &self.versao));
-        self.config.atualizacao_verificada_em = Some(now_ms());
-        self.salvar_config()
+    /// Stores the read manifest: only a version above the installed one becomes an update.
+    pub fn store_manifest(&mut self, manifest: Option<sync::Manifest>) -> Result<()> {
+        self.update = manifest.filter(|m| sync::is_newer(&m.version, &self.version));
+        self.config.update_checked_at = Some(now_ms());
+        self.save_config()
     }
 
-    pub fn atualizacao(&self) -> Option<&sync::Manifesto> {
-        self.atualizacao.as_ref()
+    pub fn update(&self) -> Option<&sync::Manifest> {
+        self.update.as_ref()
     }
 
-    /// Onde o APK baixado fica: o cache do app (`<dados do app>/cache`), que o `FileProvider`
-    /// do Android expõe ao instalador.
-    fn pasta_do_apk(&self) -> std::path::PathBuf {
+    /// Where the downloaded APK goes: the app's cache (`<app data>/cache`), which Android's
+    /// `FileProvider` exposes to the installer.
+    fn apk_dir(&self) -> std::path::PathBuf {
         self.dirs
-            .dados
+            .data
             .parent()
-            .unwrap_or(&self.dirs.dados)
+            .unwrap_or(&self.dirs.data)
             .join("cache")
     }
 
-    /// O download da atualização a fazer fora da trava.
-    pub fn preparar_download(&self) -> Result<PlanoDeDownload> {
-        let manifesto = self
-            .atualizacao
+    /// The update download to make outside the lock.
+    pub fn prepare_download(&self) -> Result<DownloadPlan> {
+        let manifest = self
+            .update
             .clone()
             .context("Nenhuma versão nova para baixar")?;
-        let servidor = self
+        let server = self
             .config
-            .servidor
+            .server
             .clone()
             .context("nenhum servidor pareado")?;
-        Ok(PlanoDeDownload {
-            transporte: self.conexao.baixador()?,
-            servidor,
-            manifesto,
-            destino: self.pasta_do_apk(),
+        Ok(DownloadPlan {
+            transport: self.connection.downloader()?,
+            server,
+            manifest,
+            dest: self.apk_dir(),
         })
     }
 
-    // --- configurações --------------------------------------------------------------------------
+    // --- settings -------------------------------------------------------------------------------
 
-    pub fn preferencias(&self) -> Preferencias {
-        Preferencias {
+    pub fn preferences(&self) -> Preferences {
+        Preferences {
             sync_auto: self.config.sync_auto,
-            qualidade: self.config.qualidade,
-            excluir_sincronizadas: self.config.excluir_sincronizadas,
+            quality: self.config.quality,
+            delete_synced: self.config.delete_synced,
         }
     }
 
-    pub fn salvar_preferencias(&mut self, preferencias: &Preferencias) -> Result<()> {
-        self.config.sync_auto = preferencias.sync_auto;
-        self.config.qualidade = preferencias.qualidade;
-        self.config.excluir_sincronizadas = preferencias.excluir_sincronizadas;
-        self.salvar_config()
+    pub fn save_preferences(&mut self, preferences: &Preferences) -> Result<()> {
+        self.config.sync_auto = preferences.sync_auto;
+        self.config.quality = preferences.quality;
+        self.config.delete_synced = preferences.delete_synced;
+        self.save_config()
     }
 
-    /// Bytes das gravações ainda no celular.
-    pub fn uso_local(&self) -> Result<u64> {
+    /// Bytes of the recordings still on the phone.
+    pub fn local_usage(&self) -> Result<u64> {
         Ok(self
-            .trancar_fila()?
+            .lock_queue()?
             .list(10_000)?
             .iter()
             .filter(|rec| rec.purged_at.is_none())
@@ -939,280 +991,280 @@ impl Core {
     }
 }
 
-impl PlanoDeLeitura {
-    pub fn sondar(self) -> Sonda {
-        rede::sondar_e_aprender(self.transporte, &self.servidor, &self.ca)
+impl ReadPlan {
+    pub fn probe(self) -> Probe {
+        network::probe_and_learn(self.transport, &self.server, &self.ca)
     }
 
-    pub fn tipos(&self) -> Result<Vec<config::TipoDeAgenda>> {
-        sync::buscar_tipos_de_agenda(self.transporte.as_ref(), &self.servidor, &self.token)
+    pub fn types(&self) -> Result<Vec<config::AgendaType>> {
+        sync::fetch_agenda_types(self.transport.as_ref(), &self.server, &self.token)
     }
 
-    pub fn idioma_da_conta(&self) -> Result<String> {
-        sync::buscar_idioma_da_conta(self.transporte.as_ref(), &self.servidor, &self.token)
+    pub fn account_language(&self) -> Result<String> {
+        sync::fetch_account_language(self.transport.as_ref(), &self.server, &self.token)
     }
 
-    pub fn titulos(&self, desde: &str) -> Result<sync::Titulos> {
-        sync::buscar_titulos(self.transporte.as_ref(), &self.servidor, &self.token, desde)
+    pub fn titles(&self, since: &str) -> Result<sync::Titles> {
+        sync::fetch_titles(self.transport.as_ref(), &self.server, &self.token, since)
     }
 
-    pub fn etapas(&self, remote_id: &str) -> Result<NoServidor> {
-        sync::buscar_etapas(
-            self.transporte.as_ref(),
-            &self.servidor,
+    pub fn steps(&self, remote_id: &str) -> Result<OnServer> {
+        sync::fetch_steps(
+            self.transport.as_ref(),
+            &self.server,
             &self.token,
             remote_id,
         )
     }
 }
 
-/// O download do APK, montado sob a trava e feito fora dela.
-pub struct PlanoDeDownload {
-    transporte: Arc<dyn eclume_sync::transport::Transport>,
-    servidor: Servidor,
-    manifesto: sync::Manifesto,
-    destino: std::path::PathBuf,
+/// The APK download, built under the lock and made outside it.
+pub struct DownloadPlan {
+    transport: Arc<dyn eclume_sync::transport::Transport>,
+    server: Server,
+    manifest: sync::Manifest,
+    dest: std::path::PathBuf,
 }
 
-impl PlanoDaProxima {
-    /// O descritor, lido fixando a próxima raiz, a confirma: o servidor virou para ela.
-    pub fn confere(&self) -> bool {
-        rede::confere_proxima(
-            Arc::clone(&self.transporte),
-            &self.servidor,
-            &self.raiz.sha256,
+impl NextRootPlan {
+    /// The descriptor, read pinning the next root, confirms it: the server switched to it.
+    pub fn confirms(&self) -> bool {
+        network::confirms_next(Arc::clone(&self.transport), &self.server, &self.root.sha256)
+    }
+}
+
+impl DownloadPlan {
+    /// Downloads and checks the APK; returns its path.
+    pub fn run(&self) -> Result<std::path::PathBuf> {
+        sync::download_apk(
+            self.transport.as_ref(),
+            &self.server,
+            &self.manifest,
+            &self.dest,
         )
     }
 }
 
-impl PlanoDeDownload {
-    /// Baixa e confere o APK; devolve o caminho dele.
-    pub fn executar(&self) -> Result<std::path::PathBuf> {
-        sync::baixar_apk(
-            self.transporte.as_ref(),
-            &self.servidor,
-            &self.manifesto,
-            &self.destino,
-        )
+impl SyncPlan {
+    /// Runs the sync (blocks) and returns whether the server refused the credential.
+    pub fn run(self) -> Result<(eclume_recorder::SyncReport, bool)> {
+        let result = sync::synchronize(&self.queue, &self.uploader, &self.meter);
+        self.busy.store(false, Ordering::Release);
+        Ok((result?, self.meter.credential_refused()))
     }
 }
 
-impl PlanoDeSync {
-    /// Roda o sync (bloqueia) e devolve se o servidor recusou a credencial.
-    pub fn executar(self) -> Result<(eclume_recorder::SyncReport, bool)> {
-        let resultado = sync::sincronizar(&self.fila, &self.uploader, &self.medidor);
-        self.ocupado.store(false, Ordering::Release);
-        Ok((resultado?, self.medidor.credencial_recusada()))
+// --- the process's core ----------------------------------------------------------------------
+
+static CORE: OnceLock<Mutex<Core>> = OnceLock::new();
+/// Serializes the opening: the screen and WorkManager opening together would run the recovery
+/// twice.
+static OPENING: Mutex<()> = Mutex::new(());
+
+/// Opens the process's core on the first call; the next ones return the same (the Activity that
+/// comes back, WorkManager).
+pub fn init(dirs: Dirs, version: &str) -> Result<&'static Mutex<Core>> {
+    if let Some(core) = CORE.get() {
+        return Ok(core);
     }
-}
-
-// --- o núcleo do processo --------------------------------------------------------------------
-
-static NUCLEO: OnceLock<Mutex<Core>> = OnceLock::new();
-/// Serializa a abertura: a tela e o WorkManager abrindo juntos rodariam a recuperação duas vezes.
-static ABRINDO: Mutex<()> = Mutex::new(());
-
-/// Abre o núcleo do processo na primeira chamada; as seguintes devolvem o mesmo (a Activity que
-/// volta, o WorkManager).
-pub fn iniciar(dirs: Dirs, versao: &str) -> Result<&'static Mutex<Core>> {
-    if let Some(nucleo) = NUCLEO.get() {
-        return Ok(nucleo);
-    }
-    let _vez = ABRINDO
+    let _turn = OPENING
         .lock()
-        .unwrap_or_else(|envenenada| envenenada.into_inner());
-    if let Some(nucleo) = NUCLEO.get() {
-        return Ok(nucleo);
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(core) = CORE.get() {
+        return Ok(core);
     }
-    let transportes = Arc::new(TransportesReais {
-        user_agent: client_version(versao),
+    let transports = Arc::new(RealTransports {
+        user_agent: client_version(version),
     });
-    let core = Core::abrir(dirs, versao, transportes)?;
-    Ok(NUCLEO.get_or_init(|| Mutex::new(core)))
+    let core = Core::open(dirs, version, transports)?;
+    Ok(CORE.get_or_init(|| Mutex::new(core)))
 }
 
-/// O núcleo, se já foi aberto.
+/// The core, if already opened.
 pub fn global() -> Option<&'static Mutex<Core>> {
-    NUCLEO.get()
+    CORE.get()
 }
 
-/// Trava o núcleo.
-pub fn trancar(nucleo: &Mutex<Core>) -> Result<MutexGuard<'_, Core>> {
-    nucleo
-        .lock()
+/// Locks the core.
+pub fn lock(core: &Mutex<Core>) -> Result<MutexGuard<'_, Core>> {
+    core.lock()
         .map_err(|_| anyhow!("o núcleo ficou envenenado por um pânico"))
 }
 
-/// O resultado de [`sondar`].
+/// The result of [`probe`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Sondagem {
-    /// A sonda rodou agora (e não só o resultado anterior valeu).
-    pub rodou: bool,
-    pub na_rede: bool,
+pub struct ProbeOutcome {
+    /// The probe ran now (and not only the previous result counted).
+    pub ran: bool,
+    pub on_network: bool,
 }
 
-/// Roda a sonda (se cabe) fora da trava e registra o resultado.
-pub fn sondar(nucleo: &Mutex<Core>, forcar: bool) -> Result<Sondagem> {
-    let agora = now_ms();
-    let plano = trancar(nucleo)?.preparar_sonda(agora, forcar)?;
-    let rodou = plano.is_some();
-    if let Some(plano) = plano {
-        let mut sonda = plano.sondar();
-        if sonda == Sonda::CaMudou && trocar_pela_proxima(nucleo)? {
-            sonda = Sonda::Ok;
+/// Runs the probe (when it applies) outside the lock and records the result.
+pub fn probe(core: &Mutex<Core>, force: bool) -> Result<ProbeOutcome> {
+    let now = now_ms();
+    let plan = lock(core)?.prepare_probe(now, force)?;
+    let ran = plan.is_some();
+    if let Some(plan) = plan {
+        let mut probe = plan.probe();
+        if probe == Probe::CaChanged && switch_to_next(core)? {
+            probe = Probe::Ok;
         }
-        trancar(nucleo)?.registrar_sonda(agora, sonda);
+        lock(core)?.record_probe(now, probe);
     }
-    Ok(Sondagem {
-        rodou,
-        na_rede: trancar(nucleo)?.rede.na_rede(),
+    Ok(ProbeOutcome {
+        ran,
+        on_network: lock(core)?.network.on_network(),
     })
 }
 
-/// Na sonda que acusou outra CA: se o servidor virou para a próxima raiz guardada (o descritor,
-/// lido fixando-a, a confirma), ela vira a fixada e a sonda vale como ok; senão, `CaMudou` segue.
-fn trocar_pela_proxima(nucleo: &Mutex<Core>) -> Result<bool> {
-    let Some(plano) = trancar(nucleo)?.preparar_proxima()? else {
+/// On a probe that reported another CA: if the server switched to the stored next root (the
+/// descriptor, read pinning it, confirms it), it becomes the pinned one and the probe counts as ok;
+/// otherwise `CaChanged` stands.
+fn switch_to_next(core: &Mutex<Core>) -> Result<bool> {
+    let Some(plan) = lock(core)?.prepare_next_root()? else {
         return Ok(false);
     };
-    if !plano.confere() {
+    if !plan.confirms() {
         return Ok(false);
     }
-    trancar(nucleo)?.promover_proxima(&plano)?;
+    lock(core)?.promote_next(&plan)?;
     Ok(true)
 }
 
-/// O que o `SyncWorker` precisa saber antes de subir: se está na rede do eclume e o que aguarda.
+/// What the `SyncWorker` needs to know before uploading: whether it is on eclume's network and what
+/// waits. Serialized to the plugin over JNI; the keys keep their names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub struct SondagemDoWorker {
-    pub na_rede: bool,
-    pub pendentes: u32,
+pub struct WorkerProbe {
+    #[serde(rename = "na_rede")]
+    pub on_network: bool,
+    #[serde(rename = "pendentes")]
+    pub pending: u32,
     pub bytes: u64,
 }
 
-/// O resultado do ciclo do worker: o relatório do sync e se ele foi interrompido no meio.
+/// The worker cycle's result: the sync report and whether it was interrupted halfway.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RelatorioDoWorker {
-    pub relatorio: eclume_recorder::SyncReport,
-    pub interrompido: bool,
+pub struct WorkerReport {
+    pub report: eclume_recorder::SyncReport,
+    pub interrupted: bool,
 }
 
-/// A sonda do `SyncWorker`, antes de decidir o primeiro plano: parte da rede não medida que o
-/// WorkManager garante (o processo aberto só para ele não tem a tela que avisaria o Wi-Fi).
-pub fn sondar_do_worker(nucleo: &Mutex<Core>) -> Result<SondagemDoWorker> {
-    trancar(nucleo)?.mudou_rede(true);
-    let na_rede = sondar(nucleo, false)?.na_rede;
-    let (pendentes, bytes) = trancar(nucleo)?.pendentes()?;
-    Ok(SondagemDoWorker {
-        na_rede,
-        pendentes,
+/// The `SyncWorker`'s probe, before deciding on the foreground: it assumes the unmetered network
+/// WorkManager guarantees (the process opened only for it has no screen that would report the
+/// Wi-Fi).
+pub fn worker_probe(core: &Mutex<Core>) -> Result<WorkerProbe> {
+    lock(core)?.network_changed(true);
+    let on_network = probe(core, false)?.on_network;
+    let (pending, bytes) = lock(core)?.pending()?;
+    Ok(WorkerProbe {
+        on_network,
+        pending,
         bytes,
     })
 }
 
-/// O ciclo do `SyncWorker`. O WorkManager só o roda em rede não medida (`UNMETERED`), e o processo
-/// aberto só para ele não tem a tela que avisaria o Wi-Fi: sem isso, a sonda nunca rodaria.
-pub fn ciclo_do_worker(nucleo: &Mutex<Core>) -> Result<Option<RelatorioDoWorker>> {
-    trancar(nucleo)?.mudou_rede(true);
-    let relatorio = ciclo(nucleo, false)?;
-    let interrompido = trancar(nucleo)?.medidor.interrompido();
-    Ok(relatorio.map(|relatorio| RelatorioDoWorker {
-        relatorio,
-        interrompido,
+/// The `SyncWorker`'s cycle. WorkManager only runs it on an unmetered network (`UNMETERED`), and the
+/// process opened only for it has no screen that would report the Wi-Fi: without this, the probe
+/// would never run.
+pub fn worker_cycle(core: &Mutex<Core>) -> Result<Option<WorkerReport>> {
+    lock(core)?.network_changed(true);
+    let report = cycle(core, false)?;
+    let interrupted = lock(core)?.meter.interrupted();
+    Ok(report.map(|report| WorkerReport {
+        report,
+        interrupted,
     }))
 }
 
-/// Um ciclo: sonda, atualiza os tipos de agenda e sincroniza (`agora`: "Sincronizar agora", que
-/// sobe mesmo com o sync automático desligado). Bloqueia até o sync terminar.
-pub fn ciclo(nucleo: &Mutex<Core>, agora: bool) -> Result<Option<eclume_recorder::SyncReport>> {
-    let sondagem = sondar(nucleo, agora)?;
-    if !sondagem.na_rede {
+/// One cycle: probes, refreshes the agenda types and syncs (`now`: "Sincronizar agora", which
+/// uploads even with the automatic sync off). Blocks until the sync ends.
+pub fn cycle(core: &Mutex<Core>, now: bool) -> Result<Option<eclume_recorder::SyncReport>> {
+    let outcome = probe(core, now)?;
+    if !outcome.on_network {
         return Ok(None);
     }
-    // Os tipos de agenda mudam pouco: só são lidos quando a sonda roda.
-    if sondagem.rodou {
-        // O plano sai da trava antes da rede: no `if let` (edição 2021), o guard temporário
-        // viveria o bloco inteiro, e a trava de novo lá dentro travaria para sempre.
-        let plano = trancar(nucleo)?.preparar_tipos()?;
-        if let Some(plano) = plano {
-            match plano.tipos() {
-                Ok(tipos) => trancar(nucleo)?.guardar_tipos(tipos)?,
-                Err(err) => leitura_falhou(nucleo, &err)?,
+    // The agenda types change rarely: they are read only when the probe runs.
+    if outcome.ran {
+        // The plan leaves the lock before the network: in `if let` (edition 2021), the temporary
+        // guard would live the whole block, and locking again inside would deadlock.
+        let plan = lock(core)?.prepare_types()?;
+        if let Some(plan) = plan {
+            match plan.types() {
+                Ok(types) => lock(core)?.store_types(types)?,
+                Err(err) => read_failed(core, &err)?,
             }
-            // Servidor anterior à 2.20.0 não tem a rota: a folha fica com "Padrão da conta".
-            match plano.idioma_da_conta() {
-                Ok(idioma) => trancar(nucleo)?.guardar_idioma_da_conta(idioma)?,
+            // A server older than 2.20.0 lacks the route: the sheet keeps the plain account default.
+            match plan.account_language() {
+                Ok(language) => lock(core)?.store_account_language(language)?,
                 Err(err) => log::warn!("{err:#}"),
             }
         }
     }
-    if let Err(err) = verificar_atualizacao(nucleo, false) {
+    if let Err(err) = check_update(core, false) {
         log::warn!("{err:#}");
     }
-    let plano = trancar(nucleo)?.preparar_sync(agora)?;
-    let relatorio = match plano {
-        Some(plano) => {
-            let (relatorio, recusada) = plano.executar()?;
-            trancar(nucleo)?.concluir_sync(recusada)?;
-            Some(relatorio)
+    let plan = lock(core)?.prepare_sync(now)?;
+    let report = match plan {
+        Some(plan) => {
+            let (report, refused) = plan.run()?;
+            lock(core)?.finish_sync(refused)?;
+            Some(report)
         }
         None => None,
     };
-    atualizar_titulos(nucleo)?;
-    Ok(relatorio)
+    refresh_titles(core)?;
+    Ok(report)
 }
 
-/// Lê os títulos do servidor (fora da trava) e os guarda na fila: a lista e o detalhe mostram o
-/// título do servidor da gravação já processada.
-pub fn atualizar_titulos(nucleo: &Mutex<Core>) -> Result<()> {
-    let plano = trancar(nucleo)?.preparar_titulos(now_ms())?;
-    if let Some((plano, desde)) = plano {
-        match plano.titulos(&desde) {
-            Ok(titulos) => trancar(nucleo)?.guardar_titulos(titulos, desde)?,
-            Err(err) => leitura_falhou(nucleo, &err)?,
+/// Reads the server titles (outside the lock) and stores them in the queue: the list and the detail
+/// show the server title of the already processed recording.
+pub fn refresh_titles(core: &Mutex<Core>) -> Result<()> {
+    let plan = lock(core)?.prepare_titles(now_ms())?;
+    if let Some((plan, since)) = plan {
+        match plan.titles(&since) {
+            Ok(titles) => lock(core)?.store_titles(titles, since)?,
+            Err(err) => read_failed(core, &err)?,
         }
     }
     Ok(())
 }
 
-/// Uma leitura autenticada que falhou: com 401, a credencial caiu; o resto só vai ao log.
-fn leitura_falhou(nucleo: &Mutex<Core>, err: &anyhow::Error) -> Result<()> {
+/// An authenticated read that failed: on 401, the credential dropped; the rest only goes to the
+/// log.
+fn read_failed(core: &Mutex<Core>, err: &anyhow::Error) -> Result<()> {
     log::warn!("{err:#}");
-    if sync::recusou_credencial(err) {
-        trancar(nucleo)?.perdeu_credencial()?;
+    if sync::refused_credential(err) {
+        lock(core)?.credential_lost()?;
     }
     Ok(())
 }
 
-/// Lê o `movel.json` (uma vez por dia, ou já com `forcar`) e devolve a versão nova, se houver.
-pub fn verificar_atualizacao(
-    nucleo: &Mutex<Core>,
-    forcar: bool,
-) -> Result<Option<sync::Manifesto>> {
-    let plano = trancar(nucleo)?.preparar_atualizacao(forcar)?;
-    if let Some(plano) = plano {
-        let manifesto = sync::buscar_manifesto(plano.transporte.as_ref(), &plano.servidor)?;
-        trancar(nucleo)?.guardar_manifesto(manifesto)?;
+/// Reads `movel.json` (once a day, or right away with `force`) and returns the new version, if any.
+pub fn check_update(core: &Mutex<Core>, force: bool) -> Result<Option<sync::Manifest>> {
+    let plan = lock(core)?.prepare_update(force)?;
+    if let Some(plan) = plan {
+        let manifest = sync::fetch_manifest(plan.transport.as_ref(), &plan.server)?;
+        lock(core)?.store_manifest(manifest)?;
     }
-    Ok(trancar(nucleo)?.atualizacao().cloned())
+    Ok(lock(core)?.update().cloned())
 }
 
-/// Baixa a atualização (fora da trava) e devolve o caminho do APK conferido.
-pub fn baixar_atualizacao(nucleo: &Mutex<Core>) -> Result<std::path::PathBuf> {
-    let plano = trancar(nucleo)?.preparar_download()?;
-    plano.executar()
+/// Downloads the update (outside the lock) and returns the checked APK's path.
+pub fn download_update(core: &Mutex<Core>) -> Result<std::path::PathBuf> {
+    let plan = lock(core)?.prepare_download()?;
+    plan.run()
 }
 
-/// Atualiza as etapas no servidor de uma gravação (fora da trava) e devolve o detalhe.
-pub fn detalhe(nucleo: &Mutex<Core>, id: &str) -> Result<DetalheLocal> {
-    let plano = trancar(nucleo)?.preparar_etapas(id)?;
-    if let Some((plano, remoto)) = plano {
-        match plano.etapas(&remoto) {
-            Ok(etapas) => trancar(nucleo)?.guardar_etapas(id, etapas)?,
-            Err(err) => leitura_falhou(nucleo, &err)?,
+/// Refreshes a recording's server steps (outside the lock) and returns the detail.
+pub fn detail(core: &Mutex<Core>, id: &str) -> Result<LocalDetail> {
+    let plan = lock(core)?.prepare_steps(id)?;
+    if let Some((plan, remote)) = plan {
+        match plan.steps(&remote) {
+            Ok(steps) => lock(core)?.store_steps(id, steps)?,
+            Err(err) => read_failed(core, &err)?,
         }
     }
-    trancar(nucleo)?.gravacao(id)
+    lock(core)?.recording(id)
 }
 
 #[cfg(test)]
@@ -1220,7 +1272,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn versao_do_cliente_segue_o_contrato() {
+    fn client_version_follows_the_contract() {
         assert_eq!(client_version("0.1.0"), "eclume-android/0.1.0");
+    }
+
+    #[test]
+    fn bridge_keys_stay_the_installed_format() {
+        let probe = serde_json::to_value(WorkerProbe {
+            on_network: true,
+            pending: 2,
+            bytes: 3,
+        })
+        .unwrap();
+        assert_eq!(probe["na_rede"], true);
+        assert_eq!(probe["pendentes"], 2);
+        assert_eq!(serde_json::to_value(Badge::Waiting).unwrap(), "aguardando");
+        assert_eq!(
+            serde_json::to_value(StopReason::NoSpace).unwrap(),
+            "sem_espaco"
+        );
     }
 }

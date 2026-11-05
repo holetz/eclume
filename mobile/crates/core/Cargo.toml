@@ -1,6 +1,6 @@
 [package]
 name = "eclume-mobile-core"
-description = "Núcleo do app móvel do eclume, sem Tauri: conexão, rede, sessão de gravação e sync."
+description = "Core of eclume's mobile app, without Tauri: connection, network, recording session and sync."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

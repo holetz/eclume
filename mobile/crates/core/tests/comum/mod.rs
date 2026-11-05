@@ -1,4 +1,4 @@
-//! Apoio dos testes do núcleo: diretórios temporários e um transporte roteirizado por rota.
+//! Support for the core tests: temporary directories and a transport scripted per route.
 
 #![allow(dead_code)]
 
@@ -7,18 +7,18 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
-use eclume_mobile_core::conexao::Transportes;
 use eclume_mobile_core::config::Dirs;
+use eclume_mobile_core::connection::Transports;
 use eclume_sync::transport::{HttpRequest, HttpResponse, Transport};
 
-/// A CA autoassinada de teste do crate de sync e a impressão digital dela.
+/// The sync crate's self-signed test CA and its fingerprint.
 pub const CA_PEM: &str =
     include_str!("../../../../../desktop/crates/sync/tests/fixtures/test-ca.pem");
 pub const CA_SHA256: &str = "b36a35276dcebd4b810c47c567f5b240f638450ab9701d196c64e4e7c6eaa233";
 
-pub type Resposta = Result<HttpResponse>;
+pub type Reply = Result<HttpResponse>;
 
-pub fn json(status: u16, body: serde_json::Value) -> Resposta {
+pub fn json(status: u16, body: serde_json::Value) -> Reply {
     Ok(HttpResponse {
         status,
         headers: vec![("content-type".into(), "application/json".into())],
@@ -26,7 +26,7 @@ pub fn json(status: u16, body: serde_json::Value) -> Resposta {
     })
 }
 
-pub fn texto(status: u16, body: &str) -> Resposta {
+pub fn text(status: u16, body: &str) -> Reply {
     Ok(HttpResponse {
         status,
         headers: Vec::new(),
@@ -34,108 +34,108 @@ pub fn texto(status: u16, body: &str) -> Resposta {
     })
 }
 
-pub fn falha(motivo: &str) -> Resposta {
-    Err(anyhow!("{motivo}"))
+pub fn failure(reason: &str) -> Reply {
+    Err(anyhow!("{reason}"))
 }
 
-type Rota = (String, String, Box<dyn Fn() -> Resposta + Send + Sync>);
+type Route = (String, String, Box<dyn Fn() -> Reply + Send + Sync>);
 
-/// Responde por método e fim do caminho (sem a query); a última rota cadastrada vence. Guarda os
-/// pedidos vistos.
+/// Answers by method and path suffix (without the query); the last registered route wins. Keeps
+/// the requests seen.
 #[derive(Clone, Default)]
-pub struct Roteiro {
-    rotas: Arc<Mutex<Vec<Rota>>>,
-    vistos: Arc<Mutex<Vec<HttpRequest>>>,
+pub struct Script {
+    routes: Arc<Mutex<Vec<Route>>>,
+    seen: Arc<Mutex<Vec<HttpRequest>>>,
 }
 
-impl Roteiro {
-    pub fn responde(&self, metodo: &str, caminho: &str, resposta: Resposta) {
-        let guardada = resposta.map_err(|e| format!("{e:#}"));
-        self.responde_com(metodo, caminho, move || match &guardada {
+impl Script {
+    pub fn reply(&self, method: &str, path: &str, reply: Reply) {
+        let stored = reply.map_err(|e| format!("{e:#}"));
+        self.reply_with(method, path, move || match &stored {
             Ok(r) => Ok(r.clone()),
             Err(e) => Err(anyhow!("{e}")),
         });
     }
 
-    pub fn responde_com(
+    pub fn reply_with(
         &self,
-        metodo: &str,
-        caminho: &str,
-        f: impl Fn() -> Resposta + Send + Sync + 'static,
+        method: &str,
+        path: &str,
+        f: impl Fn() -> Reply + Send + Sync + 'static,
     ) {
-        self.rotas
+        self.routes
             .lock()
             .unwrap()
-            .push((metodo.into(), caminho.into(), Box::new(f)));
+            .push((method.into(), path.into(), Box::new(f)));
     }
 
-    pub fn pedido(&self, metodo: &str, caminho: &str) -> Option<HttpRequest> {
-        self.vistos
+    pub fn request(&self, method: &str, path: &str) -> Option<HttpRequest> {
+        self.seen
             .lock()
             .unwrap()
             .iter()
             .rev()
-            .find(|p| p.method == metodo && caminho_de(&p.url).ends_with(caminho))
+            .find(|p| p.method == method && path_of(&p.url).ends_with(path))
             .cloned()
     }
 
-    pub fn quantos(&self, metodo: &str, caminho: &str) -> usize {
-        self.vistos
+    pub fn count(&self, method: &str, path: &str) -> usize {
+        self.seen
             .lock()
             .unwrap()
             .iter()
-            .filter(|p| p.method == metodo && caminho_de(&p.url).ends_with(caminho))
+            .filter(|p| p.method == method && path_of(&p.url).ends_with(path))
             .count()
     }
 }
 
-fn caminho_de(url: &str) -> &str {
+fn path_of(url: &str) -> &str {
     url.split('?').next().unwrap_or(url)
 }
 
-impl Transport for Roteiro {
+impl Transport for Script {
     fn send(&self, request: HttpRequest) -> Result<HttpResponse> {
-        let caminho = caminho_de(&request.url).to_string();
-        let metodo = request.method;
-        self.vistos.lock().unwrap().push(request);
-        let rotas = self.rotas.lock().unwrap();
-        let rota = rotas
+        let path = path_of(&request.url).to_string();
+        let method = request.method;
+        self.seen.lock().unwrap().push(request);
+        let routes = self.routes.lock().unwrap();
+        let route = routes
             .iter()
             .rev()
-            .find(|(m, c, _)| m == metodo && caminho.ends_with(c.as_str()))
-            .ok_or_else(|| anyhow!("rota não roteirizada: {metodo} {caminho}"))?;
-        (rota.2)()
+            .find(|(m, c, _)| m == method && path.ends_with(c.as_str()))
+            .ok_or_else(|| anyhow!("unscripted route: {method} {path}"))?;
+        (route.2)()
     }
 }
 
-/// Os dois transportes do núcleo são o mesmo roteiro.
-pub struct TransportesFalsos(pub Roteiro);
+/// Both of the core's transports are the same script.
+pub struct FakeTransports(pub Script);
 
-impl Transportes for TransportesFalsos {
-    fn inseguro(&self) -> Arc<dyn Transport> {
+impl Transports for FakeTransports {
+    fn insecure(&self) -> Arc<dyn Transport> {
         Arc::new(self.0.clone())
     }
 
-    fn fixado(&self, ca: &Path, _prazo: Duration) -> Result<Arc<dyn Transport>> {
+    fn pinned(&self, ca: &Path, _timeout: Duration) -> Result<Arc<dyn Transport>> {
         if !ca.exists() {
-            return Err(anyhow!("CA fixada ausente em {}", ca.display()));
+            return Err(anyhow!("pinned CA missing at {}", ca.display()));
         }
         Ok(Arc::new(self.0.clone()))
     }
 }
 
-/// Apaga o diretório ao sair do teste.
-pub struct Limpa(PathBuf);
+/// Deletes the directory when the test ends.
+pub struct Cleanup(PathBuf);
 
-impl Drop for Limpa {
+impl Drop for Cleanup {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
 
-pub fn dirs_temp(nome: &str) -> (Dirs, Limpa) {
-    let raiz = std::env::temp_dir().join(format!(
-        "eclume-movel-{nome}-{}-{}",
+pub fn temp_dirs(name: &str) -> (Dirs, Cleanup) {
+    let root = std::env::temp_dir().join(format!(
+        "eclume-movel-{name}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -143,8 +143,8 @@ pub fn dirs_temp(nome: &str) -> (Dirs, Limpa) {
             .as_nanos()
     ));
     let dirs = Dirs {
-        dados: raiz.join("dados"),
-        sem_backup: raiz.join("sem-backup"),
+        data: root.join("dados"),
+        no_backup: root.join("sem-backup"),
     };
-    (dirs, Limpa(raiz))
+    (dirs, Cleanup(root))
 }

@@ -1,17 +1,17 @@
-//! A ligação com o servidor pelos três caminhos, com transportes roteirizados.
+//! The link with the server through the three paths, with scripted transports.
 
 mod comum;
 
 use std::sync::Arc;
 
-use comum::{dirs_temp, json, Roteiro, TransportesFalsos, CA_PEM, CA_SHA256};
-use eclume_mobile_core::conexao::{Conexao, EstadoConexao};
+use comum::{json, temp_dirs, FakeTransports, Script, CA_PEM, CA_SHA256};
 use eclume_mobile_core::config::Config;
+use eclume_mobile_core::connection::{Connection, ConnectionState};
 
 const URL: &str = "https://eclume.test:8443";
 
-fn servidor_ok(roteiro: &Roteiro) {
-    roteiro.responde(
+fn server_ok(script: &Script) {
+    script.reply(
         "GET",
         "/api/v1/server",
         json(
@@ -22,7 +22,7 @@ fn servidor_ok(roteiro: &Roteiro) {
     );
 }
 
-fn credencial() -> comum::Resposta {
+fn credential() -> comum::Reply {
     json(
         201,
         serde_json::json!({
@@ -34,207 +34,207 @@ fn credencial() -> comum::Resposta {
 }
 
 #[test]
-fn endereco_digitado_confere_confia_e_entra() {
-    let (dirs, _guard) = dirs_temp("endereco");
-    let roteiro = Roteiro::default();
-    roteiro.responde(
+fn typed_address_checks_trusts_and_signs_in() {
+    let (dirs, _guard) = temp_dirs("endereco");
+    let script = Script::default();
+    script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::texto(200, CA_PEM),
+        comum::text(200, CA_PEM),
     );
-    servidor_ok(&roteiro);
-    roteiro.responde("POST", "/api/v1/devices/login", credencial());
+    server_ok(&script);
+    script.reply("POST", "/api/v1/devices/login", credential());
     let mut config = Config {
         device_name: "Pixel 8".into(),
         ..Config::default()
     };
-    let mut conexao = Conexao::new(dirs.clone(), Arc::new(TransportesFalsos(roteiro.clone())));
-    assert_eq!(conexao.estado(&config), EstadoConexao::SemServidor);
+    let mut connection = Connection::new(dirs.clone(), Arc::new(FakeTransports(script.clone())));
+    assert_eq!(connection.state(&config), ConnectionState::NoServer);
 
-    conexao.conectar_endereco("eclume.test:8443").unwrap();
-    let EstadoConexao::ConfirmarCa { url, impressao } = conexao.estado(&config) else {
-        panic!("esperava a conferência da CA");
+    connection.connect_address("eclume.test:8443").unwrap();
+    let ConnectionState::ConfirmCa { url, fingerprint } = connection.state(&config) else {
+        panic!("expected the CA check");
     };
     assert_eq!(url, URL);
-    assert!(impressao.starts_with("B36A 3527"), "{impressao}");
-    // Nada é gravado antes de "Confiar".
+    assert!(fingerprint.starts_with("B36A 3527"), "{fingerprint}");
+    // Nothing is written before "Confiar".
     assert!(!dirs.ca().exists());
 
-    conexao.confiar_ca(&mut config).unwrap();
+    connection.trust_ca(&mut config).unwrap();
     assert!(dirs.ca().exists());
     assert!(matches!(
-        conexao.estado(&config),
-        EstadoConexao::SemCredencial { .. }
+        connection.state(&config),
+        ConnectionState::NoCredential { .. }
     ));
-    assert_eq!(
-        Config::carregar(&dirs.config()).unwrap().servidor,
-        config.servidor
-    );
+    assert_eq!(Config::load(&dirs.config()).unwrap().server, config.server);
 
-    conexao.entrar(&config, "ana@eclume.test", "senha").unwrap();
+    connection
+        .sign_in(&config, "ana@eclume.test", "senha")
+        .unwrap();
     assert!(matches!(
-        conexao.estado(&config),
-        EstadoConexao::Conectado { .. }
+        connection.state(&config),
+        ConnectionState::Connected { .. }
     ));
-    assert_eq!(conexao.token().unwrap().as_deref(), Some("eclp_segredo"));
-    let login = roteiro.pedido("POST", "/api/v1/devices/login").unwrap();
-    let corpo: serde_json::Value = serde_json::from_slice(&login.body).unwrap();
-    assert_eq!(corpo["device_name"], "Pixel 8");
+    assert_eq!(connection.token().unwrap().as_deref(), Some("eclp_segredo"));
+    let login = script.request("POST", "/api/v1/devices/login").unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&login.body).unwrap();
+    assert_eq!(body["device_name"], "Pixel 8");
 
-    // 401 numa chamada autenticada: volta a Entrar, sem apagar o servidor.
-    conexao.perdeu_credencial().unwrap();
+    // A 401 on an authenticated call: back to sign-in, without deleting the server.
+    connection.credential_lost().unwrap();
     assert!(matches!(
-        conexao.estado(&config),
-        EstadoConexao::SemCredencial { .. }
+        connection.state(&config),
+        ConnectionState::NoCredential { .. }
     ));
-    assert_eq!(conexao.token().unwrap(), None);
+    assert_eq!(connection.token().unwrap(), None);
 
-    conexao.sair(&mut config).unwrap();
-    assert_eq!(conexao.estado(&config), EstadoConexao::SemServidor);
+    connection.sign_out(&mut config).unwrap();
+    assert_eq!(connection.state(&config), ConnectionState::NoServer);
     assert!(!dirs.ca().exists());
 }
 
 #[test]
-fn descoberto_com_ca_diferente_da_anunciada_e_recusado() {
-    let (dirs, _guard) = dirs_temp("descoberto");
-    let roteiro = Roteiro::default();
-    roteiro.responde(
+fn discovered_with_a_ca_other_than_announced_is_refused() {
+    let (dirs, _guard) = temp_dirs("descoberto");
+    let script = Script::default();
+    script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::texto(200, CA_PEM),
+        comum::text(200, CA_PEM),
     );
     let config = Config::default();
-    let mut conexao = Conexao::new(dirs, Arc::new(TransportesFalsos(roteiro)));
-    let erro = conexao
-        .conectar_descoberto(URL, Some(&"00".repeat(32)))
+    let mut connection = Connection::new(dirs, Arc::new(FakeTransports(script)));
+    let err = connection
+        .connect_discovered(URL, Some(&"00".repeat(32)))
         .unwrap_err();
-    assert!(format!("{erro:#}").contains("não confere"), "{erro:#}");
-    assert_eq!(conexao.estado(&config), EstadoConexao::SemServidor);
+    assert!(format!("{err:#}").contains("não confere"), "{err:#}");
+    assert_eq!(connection.state(&config), ConnectionState::NoServer);
 
-    // Com a CA anunciada certa, a pessoa ainda confere antes de mandar a senha.
-    conexao.conectar_descoberto(URL, Some(CA_SHA256)).unwrap();
+    // With the right announced CA, the person still checks before sending the password.
+    connection.connect_discovered(URL, Some(CA_SHA256)).unwrap();
     assert!(matches!(
-        conexao.estado(&config),
-        EstadoConexao::ConfirmarCa { .. }
+        connection.state(&config),
+        ConnectionState::ConfirmCa { .. }
     ));
-    conexao.cancelar_ca();
-    assert_eq!(conexao.estado(&config), EstadoConexao::SemServidor);
+    connection.cancel_ca();
+    assert_eq!(connection.state(&config), ConnectionState::NoServer);
 }
 
 #[test]
-fn qr_pareia_sem_senha_e_sem_conferencia() {
-    let (dirs, _guard) = dirs_temp("qr");
-    let roteiro = Roteiro::default();
-    roteiro.responde(
+fn qr_pairs_without_password_or_check() {
+    let (dirs, _guard) = temp_dirs("qr");
+    let script = Script::default();
+    script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::texto(200, CA_PEM),
+        comum::text(200, CA_PEM),
     );
-    servidor_ok(&roteiro);
-    roteiro.responde("POST", "/api/v1/devices/pair", credencial());
+    server_ok(&script);
+    script.reply("POST", "/api/v1/devices/pair", credential());
     let mut config = Config {
         device_name: "Pixel 8".into(),
         ..Config::default()
     };
-    let mut conexao = Conexao::new(dirs, Arc::new(TransportesFalsos(roteiro.clone())));
-    conexao
-        .parear(
+    let mut connection = Connection::new(dirs, Arc::new(FakeTransports(script.clone())));
+    connection
+        .pair(
             &mut config,
             &format!("{URL}/parear?codigo=K7Q4MX&ca={CA_SHA256}"),
         )
         .unwrap();
     assert!(matches!(
-        conexao.estado(&config),
-        EstadoConexao::Conectado { .. }
+        connection.state(&config),
+        ConnectionState::Connected { .. }
     ));
-    let par = roteiro.pedido("POST", "/api/v1/devices/pair").unwrap();
-    let corpo: serde_json::Value = serde_json::from_slice(&par.body).unwrap();
-    assert_eq!(corpo["code"], "K7Q4MX");
+    let pair = script.request("POST", "/api/v1/devices/pair").unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&pair.body).unwrap();
+    assert_eq!(body["code"], "K7Q4MX");
 
-    assert!(conexao
-        .parear(&mut config, "https://outro.site/qualquer")
+    assert!(connection
+        .pair(&mut config, "https://outro.site/qualquer")
         .is_err());
 }
 
 #[test]
-fn token_fica_em_memoria_ate_sair_ou_ser_recusado() {
-    let (dirs, _guard) = dirs_temp("token-memoria");
-    let roteiro = Roteiro::default();
-    roteiro.responde(
+fn token_stays_in_memory_until_sign_out_or_refusal() {
+    let (dirs, _guard) = temp_dirs("token-memoria");
+    let script = Script::default();
+    script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::texto(200, CA_PEM),
+        comum::text(200, CA_PEM),
     );
-    servidor_ok(&roteiro);
-    roteiro.responde("POST", "/api/v1/devices/pair", credencial());
+    server_ok(&script);
+    script.reply("POST", "/api/v1/devices/pair", credential());
     let mut config = Config {
         device_name: "Pixel 8".into(),
         ..Config::default()
     };
-    let transportes = Arc::new(TransportesFalsos(roteiro));
-    let mut conexao = Conexao::new(dirs.clone(), transportes.clone());
-    conexao
-        .parear(
+    let transports = Arc::new(FakeTransports(script));
+    let mut connection = Connection::new(dirs.clone(), transports.clone());
+    connection
+        .pair(
             &mut config,
             &format!("{URL}/parear?codigo=K7Q4MX&ca={CA_SHA256}"),
         )
         .unwrap();
     assert!(dirs.token().exists());
 
-    // Aberta de novo, a conexão lê o arquivo uma vez; depois, o estado não volta ao disco.
-    let mut reaberta = Conexao::new(dirs.clone(), transportes);
+    // Opened again, the connection reads the file once; afterwards, the state does not go back to
+    // disk.
+    let mut reopened = Connection::new(dirs.clone(), transports);
     std::fs::remove_file(dirs.token()).unwrap();
     assert!(matches!(
-        reaberta.estado(&config),
-        EstadoConexao::Conectado { .. }
+        reopened.state(&config),
+        ConnectionState::Connected { .. }
     ));
-    assert_eq!(reaberta.token().unwrap().as_deref(), Some("eclp_segredo"));
+    assert_eq!(reopened.token().unwrap().as_deref(), Some("eclp_segredo"));
 
-    // Um 401 esquece o token da memória.
-    reaberta.perdeu_credencial().unwrap();
+    // A 401 forgets the token from memory.
+    reopened.credential_lost().unwrap();
     assert!(matches!(
-        reaberta.estado(&config),
-        EstadoConexao::SemCredencial { .. }
+        reopened.state(&config),
+        ConnectionState::NoCredential { .. }
     ));
-    assert_eq!(reaberta.token().unwrap(), None);
+    assert_eq!(reopened.token().unwrap(), None);
 
-    // Sair também.
-    assert_eq!(conexao.token().unwrap().as_deref(), Some("eclp_segredo"));
-    conexao.sair(&mut config).unwrap();
-    assert_eq!(conexao.token().unwrap(), None);
-    assert_eq!(conexao.estado(&config), EstadoConexao::SemServidor);
+    // So does signing out.
+    assert_eq!(connection.token().unwrap().as_deref(), Some("eclp_segredo"));
+    connection.sign_out(&mut config).unwrap();
+    assert_eq!(connection.token().unwrap(), None);
+    assert_eq!(connection.state(&config), ConnectionState::NoServer);
 }
 
 #[test]
-fn raiz_servida_com_dois_certificados_grava_so_o_primeiro() {
-    let outra = include_str!("../../../../server/tests/fixtures/ca-test.pem");
-    let (dirs, _guard) = dirs_temp("ca-a-mais");
-    let roteiro = Roteiro::default();
-    roteiro.responde(
+fn root_served_with_two_certificates_writes_only_the_first() {
+    let other = include_str!("../../../../server/tests/fixtures/ca-test.pem");
+    let (dirs, _guard) = temp_dirs("ca-a-mais");
+    let script = Script::default();
+    script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::texto(200, &format!("{CA_PEM}{outra}")),
+        comum::text(200, &format!("{CA_PEM}{other}")),
     );
-    servidor_ok(&roteiro);
+    server_ok(&script);
     let mut config = Config::default();
-    let mut conexao = Conexao::new(dirs.clone(), Arc::new(TransportesFalsos(roteiro)));
-    conexao.conectar_endereco(URL).unwrap();
-    conexao.confiar_ca(&mut config).unwrap();
+    let mut connection = Connection::new(dirs.clone(), Arc::new(FakeTransports(script)));
+    connection.connect_address(URL).unwrap();
+    connection.trust_ca(&mut config).unwrap();
     let ca = std::fs::read_to_string(dirs.ca()).unwrap();
     assert_eq!(ca.matches("BEGIN CERTIFICATE").count(), 1, "{ca}");
     assert_eq!(ca, CA_PEM);
 }
 
 #[test]
-fn ca_trocada_no_servidor_e_recusada_ao_confiar() {
-    let (dirs, _guard) = dirs_temp("ca-trocada");
-    let roteiro = Roteiro::default();
-    roteiro.responde(
+fn ca_swapped_on_the_server_is_refused_on_trust() {
+    let (dirs, _guard) = temp_dirs("ca-trocada");
+    let script = Script::default();
+    script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::texto(200, CA_PEM),
+        comum::text(200, CA_PEM),
     );
-    roteiro.responde(
+    script.reply(
         "GET",
         "/api/v1/server",
         json(
@@ -243,64 +243,64 @@ fn ca_trocada_no_servidor_e_recusada_ao_confiar() {
         ),
     );
     let mut config = Config::default();
-    let mut conexao = Conexao::new(dirs.clone(), Arc::new(TransportesFalsos(roteiro)));
-    conexao.conectar_endereco(URL).unwrap();
-    let erro = conexao.confiar_ca(&mut config).unwrap_err();
-    assert!(format!("{erro:#}").contains("mudou"), "{erro:#}");
-    assert_eq!(config.servidor, None);
-    // A raiz recusada não fica no lugar da CA fixada (nem a provisória).
+    let mut connection = Connection::new(dirs.clone(), Arc::new(FakeTransports(script)));
+    connection.connect_address(URL).unwrap();
+    let err = connection.trust_ca(&mut config).unwrap_err();
+    assert!(format!("{err:#}").contains("mudou"), "{err:#}");
+    assert_eq!(config.server, None);
+    // The refused root does not take the pinned CA's place (nor does the provisional one).
     assert!(!dirs.ca().exists());
     assert!(!dirs.ca().with_extension("pem.novo").exists());
 }
 
 #[test]
-fn qr_sem_ca_espera_a_conferencia_antes_do_codigo() {
-    let (dirs, _guard) = dirs_temp("qr-sem-ca");
-    let roteiro = Roteiro::default();
-    roteiro.responde(
+fn qr_without_ca_waits_for_the_check_before_the_code() {
+    let (dirs, _guard) = temp_dirs("qr-sem-ca");
+    let script = Script::default();
+    script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::texto(200, CA_PEM),
+        comum::text(200, CA_PEM),
     );
-    servidor_ok(&roteiro);
-    roteiro.responde("POST", "/api/v1/devices/pair", credencial());
+    server_ok(&script);
+    script.reply("POST", "/api/v1/devices/pair", credential());
     let mut config = Config {
         device_name: "Pixel 8".into(),
         ..Config::default()
     };
-    let mut conexao = Conexao::new(dirs.clone(), Arc::new(TransportesFalsos(roteiro.clone())));
-    let pareou = conexao
-        .parear(&mut config, &format!("{URL}/parear?codigo=K7Q4MX"))
+    let mut connection = Connection::new(dirs.clone(), Arc::new(FakeTransports(script.clone())));
+    let paired = connection
+        .pair(&mut config, &format!("{URL}/parear?codigo=K7Q4MX"))
         .unwrap();
-    assert!(!pareou);
+    assert!(!paired);
     assert!(matches!(
-        conexao.estado(&config),
-        EstadoConexao::ConfirmarCa { .. }
+        connection.state(&config),
+        ConnectionState::ConfirmCa { .. }
     ));
-    assert!(roteiro.pedido("POST", "/api/v1/devices/pair").is_none());
+    assert!(script.request("POST", "/api/v1/devices/pair").is_none());
     assert!(!dirs.ca().exists());
 
-    assert!(conexao.confiar_ca(&mut config).unwrap());
+    assert!(connection.trust_ca(&mut config).unwrap());
     assert!(matches!(
-        conexao.estado(&config),
-        EstadoConexao::Conectado { .. }
+        connection.state(&config),
+        ConnectionState::Connected { .. }
     ));
-    let par = roteiro.pedido("POST", "/api/v1/devices/pair").unwrap();
-    let corpo: serde_json::Value = serde_json::from_slice(&par.body).unwrap();
-    assert_eq!(corpo["code"], "K7Q4MX");
+    let pair = script.request("POST", "/api/v1/devices/pair").unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&pair.body).unwrap();
+    assert_eq!(body["code"], "K7Q4MX");
 }
 
 #[test]
-fn login_recusado_mostra_o_motivo() {
-    let (dirs, _guard) = dirs_temp("recusado");
-    let roteiro = Roteiro::default();
-    roteiro.responde(
+fn refused_login_shows_the_reason() {
+    let (dirs, _guard) = temp_dirs("recusado");
+    let script = Script::default();
+    script.reply(
         "GET",
         "/downloads/eclume-root.crt",
-        comum::texto(200, CA_PEM),
+        comum::text(200, CA_PEM),
     );
-    servidor_ok(&roteiro);
-    roteiro.responde(
+    server_ok(&script);
+    script.reply(
         "POST",
         "/api/v1/devices/login",
         json(
@@ -309,15 +309,15 @@ fn login_recusado_mostra_o_motivo() {
         ),
     );
     let mut config = Config::default();
-    let mut conexao = Conexao::new(dirs, Arc::new(TransportesFalsos(roteiro)));
-    conexao.conectar_endereco(URL).unwrap();
-    conexao.confiar_ca(&mut config).unwrap();
-    let erro = conexao
-        .entrar(&config, "ana@eclume.test", "errada")
+    let mut connection = Connection::new(dirs, Arc::new(FakeTransports(script)));
+    connection.connect_address(URL).unwrap();
+    connection.trust_ca(&mut config).unwrap();
+    let err = connection
+        .sign_in(&config, "ana@eclume.test", "errada")
         .unwrap_err();
-    assert!(format!("{erro:#}").contains("E-mail ou senha"), "{erro:#}");
+    assert!(format!("{err:#}").contains("E-mail ou senha"), "{err:#}");
     assert!(matches!(
-        conexao.estado(&config),
-        EstadoConexao::SemCredencial { .. }
+        connection.state(&config),
+        ConnectionState::NoCredential { .. }
     ));
 }

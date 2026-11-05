@@ -1,32 +1,34 @@
-//! O evento `estado` e o laço do app: a UI é função do `EstadoApp`, que sai a cada 250 ms com o
-//! app visível (o medidor precisa) e a cada mudança no resto. Invisível, o laço passa a 1 s e só
-//! confere os limites e o microfone, sem ler o estado nem emitir para o WebView; ao voltar a ficar
-//! visível, emite já no primeiro tick. O mesmo laço fecha a gravação que bateu num limite (o
-//! serviço avisa "A gravação parou") e dispara o ciclo de rede quando ele cabe.
+//! The `estado` event and the app loop: the UI is a function of the `AppState`, which goes out every
+//! 250 ms with the app visible (the meter needs it) and on every change otherwise. Invisible, the
+//! loop slows to 1 s and only checks the limits and the microphone, without reading the state or
+//! emitting to the WebView; when it becomes visible again, it emits on the first tick. The same
+//! loop closes the recording that hit a limit (the service shows the recording-stopped notice)
+//! and fires the network cycle when it applies.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use eclume_mobile_core::{self as core, trancar, EstadoApp};
+use eclume_mobile_core::{self as core, lock, AppState};
 use tauri::{AppHandle, Emitter, Runtime};
 
-/// O nome do evento que leva o `EstadoApp` à UI.
-pub const EVENTO_ESTADO: &str = "estado";
-/// O intervalo do laço com o app visível e invisível.
-const TICK_VISIVEL: Duration = Duration::from_millis(250);
-const TICK_INVISIVEL: Duration = Duration::from_secs(1);
-/// De quanto em quanto tempo o laço tenta o ciclo de rede (ele mesmo decide se sonda ou sobe).
-const CICLO: Duration = Duration::from_secs(5);
+/// The name of the event that carries the `AppState` to the UI (wire name, kept).
+pub const STATE_EVENT: &str = "estado";
+/// The loop interval with the app visible and invisible.
+const TICK_VISIBLE: Duration = Duration::from_millis(250);
+const TICK_INVISIBLE: Duration = Duration::from_secs(1);
+/// How often the loop tries the network cycle (the cycle itself decides whether to probe or
+/// upload).
+const CYCLE: Duration = Duration::from_secs(5);
 
-static ULTIMO: Mutex<Option<String>> = Mutex::new(None);
-static EM_CICLO: AtomicBool = AtomicBool::new(false);
+static LAST: Mutex<Option<String>> = Mutex::new(None);
+static IN_CYCLE: AtomicBool = AtomicBool::new(false);
 
-fn estado_atual() -> Option<EstadoApp> {
-    let nucleo = core::global()?;
-    let estado = trancar(nucleo).ok()?.estado();
-    match estado {
-        Ok(estado) => Some(estado),
+fn current_state() -> Option<AppState> {
+    let core = core::global()?;
+    let state = lock(core).ok()?.state();
+    match state {
+        Ok(state) => Some(state),
         Err(err) => {
             log::warn!("{err:#}");
             None
@@ -34,104 +36,105 @@ fn estado_atual() -> Option<EstadoApp> {
     }
 }
 
-/// Emite o estado se mudou desde o último (ou sempre, com `forcar`); devolve o estado lido.
-fn emitir<R: Runtime>(app: &AppHandle<R>, forcar: bool) -> Option<EstadoApp> {
-    let estado = estado_atual()?;
-    let Ok(json) = serde_json::to_string(&estado) else {
-        return Some(estado);
+/// Emits the state if it changed since the last one (or always, with `force`); returns the state
+/// read.
+fn emit<R: Runtime>(app: &AppHandle<R>, force: bool) -> Option<AppState> {
+    let state = current_state()?;
+    let Ok(json) = serde_json::to_string(&state) else {
+        return Some(state);
     };
-    let mut ultimo = ULTIMO
+    let mut last = LAST
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if forcar || ultimo.as_deref() != Some(json.as_str()) {
-        *ultimo = Some(json);
-        drop(ultimo);
-        if let Err(err) = app.emit(EVENTO_ESTADO, &estado) {
-            log::warn!("falha ao emitir o estado: {err}");
+    if force || last.as_deref() != Some(json.as_str()) {
+        *last = Some(json);
+        drop(last);
+        if let Err(err) = app.emit(STATE_EVENT, &state) {
+            log::warn!("failed to emit the state: {err}");
         }
     }
-    Some(estado)
+    Some(state)
 }
 
-/// Avisa a UI do estado novo depois de um comando.
-pub fn avisar<R: Runtime>(app: &AppHandle<R>) {
-    let _ = emitir(app, false);
+/// Tells the UI about the new state after a command.
+pub fn notify<R: Runtime>(app: &AppHandle<R>) {
+    let _ = emit(app, false);
 }
 
-/// Roda um ciclo de rede numa thread, se não há outro em curso (`agora`: "Sincronizar agora").
-pub fn ciclo_em_segundo_plano<R: Runtime>(app: &AppHandle<R>, agora: bool) {
-    if EM_CICLO.swap(true, Ordering::AcqRel) {
+/// Runs a network cycle on a thread, if no other is running (`now`: "Sincronizar agora").
+pub fn cycle_in_background<R: Runtime>(app: &AppHandle<R>, now: bool) {
+    if IN_CYCLE.swap(true, Ordering::AcqRel) {
         return;
     }
     let app = app.clone();
     std::thread::spawn(move || {
-        if let Some(nucleo) = core::global() {
-            if let Err(err) = core::ciclo(nucleo, agora) {
-                log::warn!("ciclo de rede: {err:#}");
+        if let Some(core) = core::global() {
+            if let Err(err) = core::cycle(core, now) {
+                log::warn!("network cycle: {err:#}");
             }
         }
-        EM_CICLO.store(false, Ordering::Release);
-        let _ = emitir(&app, false);
+        IN_CYCLE.store(false, Ordering::Release);
+        let _ = emit(&app, false);
     });
 }
 
-/// O intervalo do laço: 250 ms visível (o medidor e o relógio), 1 s invisível.
-fn intervalo(visivel: bool) -> Duration {
-    if visivel {
-        TICK_VISIVEL
+/// The loop interval: 250 ms visible (the meter and the clock), 1 s invisible.
+fn interval(visible: bool) -> Duration {
+    if visible {
+        TICK_VISIBLE
     } else {
-        TICK_INVISIVEL
+        TICK_INVISIBLE
     }
 }
 
-/// O laço do app, numa thread própria.
-pub fn iniciar_laco<R: Runtime>(app: AppHandle<R>) {
+/// The app loop, on its own thread.
+pub fn start_loop<R: Runtime>(app: AppHandle<R>) {
     std::thread::spawn(move || {
-        let mut ultimo_ciclo = Instant::now();
-        let mut estava_visivel = true;
-        // O microfone e o silêncio da gravação em curso, para redesenhar a notificação na troca.
-        let mut sinais = None;
-        ciclo_em_segundo_plano(&app, false);
+        let mut last_cycle = Instant::now();
+        let mut was_visible = true;
+        // The current recording's microphone and silence, to redraw the notification on a change.
+        let mut signals = None;
+        cycle_in_background(&app, false);
         loop {
-            let visivel = core::global()
-                .and_then(|nucleo| trancar(nucleo).ok())
-                .is_none_or(|c| c.visivel());
-            std::thread::sleep(intervalo(visivel));
-            let Some(nucleo) = core::global() else {
+            let visible = core::global()
+                .and_then(|core| lock(core).ok())
+                .is_none_or(|c| c.visible());
+            std::thread::sleep(interval(visible));
+            let Some(core) = core::global() else {
                 continue;
             };
-            let passada = trancar(nucleo).and_then(|mut c| {
-                if let Err(err) = c.vigiar() {
-                    log::warn!("vigiar o microfone: {err:#}");
+            let pass = lock(core).and_then(|mut c| {
+                if let Err(err) = c.watch() {
+                    log::warn!("watching the microphone: {err:#}");
                 }
-                let fechada = c.verificar_limites()?;
-                Ok((fechada, c.sinais_da_sessao()))
+                let closed = c.check_limits()?;
+                Ok((closed, c.session_signals()))
             });
-            match passada {
-                Ok((fechada, agora)) => {
-                    if let Some((gravacao, motivo)) = fechada {
-                        log::warn!("gravação {} parou sozinha: {motivo:?}", gravacao.id);
-                        crate::servico::parar_com_aviso(
+            match pass {
+                Ok((closed, now)) => {
+                    if let Some((recording, reason)) = closed {
+                        log::warn!("recording {} stopped on its own: {reason:?}", recording.id);
+                        crate::service::stop_with_warning(
                             &app,
-                            motivo.texto(),
-                            gravacao.duration_ms.unwrap_or(0),
+                            reason.text(),
+                            recording.duration_ms.unwrap_or(0),
                         );
-                        ciclo_em_segundo_plano(&app, false);
-                    } else if agora.is_some() && agora != sinais {
-                        crate::servico::atualizar(&app);
+                        cycle_in_background(&app, false);
+                    } else if now.is_some() && now != signals {
+                        crate::service::update(&app);
                     }
-                    sinais = agora;
+                    signals = now;
                 }
                 Err(err) => log::warn!("{err:#}"),
             }
-            if ultimo_ciclo.elapsed() >= CICLO {
-                ultimo_ciclo = Instant::now();
-                ciclo_em_segundo_plano(&app, false);
+            if last_cycle.elapsed() >= CYCLE {
+                last_cycle = Instant::now();
+                cycle_in_background(&app, false);
             }
-            if visivel {
-                let _ = emitir(&app, !estava_visivel);
+            if visible {
+                let _ = emit(&app, !was_visible);
             }
-            estava_visivel = visivel;
+            was_visible = visible;
         }
     });
 }
@@ -141,8 +144,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn laco_desacelera_com_o_app_invisivel() {
-        assert_eq!(intervalo(true), Duration::from_millis(250));
-        assert_eq!(intervalo(false), Duration::from_secs(1));
+    fn loop_slows_down_with_the_app_invisible() {
+        assert_eq!(interval(true), Duration::from_millis(250));
+        assert_eq!(interval(false), Duration::from_secs(1));
     }
 }
