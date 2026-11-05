@@ -1,3 +1,4 @@
+import { useT } from '../i18n'
 import { useState, type FormEvent } from 'react'
 import { clock } from '../app/formats'
 import { errorMessage, useBridge } from '../bridge/bridge'
@@ -5,6 +6,7 @@ import type { Marker } from '../bridge/types'
 
 /** The optional note of the marker just made: the marker already exists, the note comes after. */
 export function MarkerNote({ marker, onDone }: { marker: Marker; onDone: () => void }) {
+  const t = useT()
   const bridge = useBridge()
   const [note, setNote] = useState(marker.note ?? '')
   const [error, setError] = useState<string | null>(null)
@@ -25,19 +27,19 @@ export function MarkerNote({ marker, onDone }: { marker: Marker; onDone: () => v
       onSubmit={add}
     >
       <label htmlFor="marker-note" className="text-muted text-12">
-        Marcador em {clock(marker.at_ms)}
+        {t('marker.at', { time: clock(marker.at_ms) })}
       </label>
       <div className="field-and-button">
         <input
           id="marker-note"
           className="input"
-          placeholder="Nota (opcional)"
+          placeholder={t('marker.note')}
           maxLength={500}
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
         <button type="submit" className="btn btn-primary">
-          Adicionar
+          {t('marker.add')}
         </button>
       </div>
       {error && (

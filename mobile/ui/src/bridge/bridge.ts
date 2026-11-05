@@ -2,6 +2,7 @@
 // `gravador` plugin. In the tests, the fake bridge (fake.ts) scripts the same contract.
 
 import { createContext, useContext } from 'react'
+import { t } from '../i18n'
 import type {
   AgendaType,
   AppSettings,
@@ -84,5 +85,5 @@ export function useBridge(): Bridge {
 export function errorMessage(error: unknown): string {
   if (typeof error === 'string') return error
   if (error instanceof Error) return error.message
-  return 'Algo deu errado. Tente de novo.'
+  return t('common.error')
 }
