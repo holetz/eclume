@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The pt-BR translation of values/strings.xml: same keys, same placeholders. -->
+<resources>
+    <string name="notification_recording">Gravando</string>
+    <string name="notification_paused">Pausado · %1$s</string>
+    <string name="notification_silenced">Silenciado pelo sistema</string>
+    <string name="notification_reconnecting">Microfone desconectado · reconectando</string>
+    <string name="notification_markers_one">%1$d marcador</string>
+    <string name="notification_markers_other">%1$d marcadores</string>
+    <string name="notification_free_space">%1$s · espaço para %2$s</string>
+    <string name="action_resume">Continuar</string>
+    <string name="action_pause">Pausar</string>
+    <string name="action_marker">Marcador</string>
+    <string name="action_stop">Parar</string>
+    <string name="warning_stopped">A gravação parou</string>
+    <string name="warning_stopped_with_error">A gravação parou com erro</string>
+    <string name="warning_interrupted">A gravação foi interrompida</string>
+    <string name="warning_saved">%1$s · %2$s salvos</string>
+    <string name="warning_system_ended">o sistema encerrou o serviço</string>
+    <string name="warning_tap_to_open">Toque para abrir</string>
+    <string name="channel_recording">Gravação</string>
+    <string name="channel_recording_description">Mostra a gravação em curso, com Pausar, Marcador e Parar.</string>
+    <string name="channel_warnings">Avisos da gravação</string>
+    <string name="channel_warnings_description">Avisa quando a gravação para sem pedido ou é interrompida.</string>
+    <string name="channel_sync">Envio das gravações</string>
+    <string name="channel_sync_description">Mostra o envio das gravações ao servidor em segundo plano.</string>
+    <string name="sync_uploading_one">Enviando 1 gravação</string>
+    <string name="sync_uploading_other">Enviando %1$d gravações</string>
+    <string name="sync_on_network">No Wi‑Fi do servidor eclume</string>
+</resources>

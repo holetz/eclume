@@ -108,15 +108,15 @@ pub fn start_loop<R: Runtime>(app: AppHandle<R>) {
                     log::warn!("watching the microphone: {err:#}");
                 }
                 let closed = c.check_limits()?;
-                Ok((closed, c.session_signals()))
+                Ok((closed, c.session_signals(), c.locale()))
             });
             match pass {
-                Ok((closed, now)) => {
+                Ok((closed, now, locale)) => {
                     if let Some((recording, reason)) = closed {
                         log::warn!("recording {} stopped on its own: {reason:?}", recording.id);
                         crate::service::stop_with_warning(
                             &app,
-                            reason.text(),
+                            reason.text(locale),
                             recording.duration_ms.unwrap_or(0),
                         );
                         cycle_in_background(&app, false);

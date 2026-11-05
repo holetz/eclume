@@ -33,7 +33,16 @@ class SyncWorkerTest {
         assertEquals(3, SyncWorker.toUpload("""{"na_rede": true, "pendentes": 3, "bytes": 30}"""))
         assertEquals(0, SyncWorker.toUpload("""{"na_rede": false, "pendentes": 3, "bytes": 30}"""))
         assertEquals(0, SyncWorker.toUpload("""{"erro": "no core"}"""))
-        assertEquals("Enviando 1 gravação", SyncWorker.uploadText(1))
-        assertEquals("Enviando 3 gravações", SyncWorker.uploadText(3))
+    }
+
+    @Test
+    fun uploadTextInBothLocales() {
+        val pt = XmlStrings.strings(XmlStrings.PT_BR)
+        val en = XmlStrings.strings(XmlStrings.EN)
+        assertEquals("Enviando 1 gravação", SyncWorker.uploadText(pt, 1))
+        assertEquals("Enviando 3 gravações", SyncWorker.uploadText(pt, 3))
+        assertEquals("Uploading 1 recording", SyncWorker.uploadText(en, 1))
+        assertEquals("Uploading 3 recordings", SyncWorker.uploadText(en, 3))
+        assertEquals("On the Wi‑Fi of the eclume server", en.get("sync_on_network"))
     }
 }

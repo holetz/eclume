@@ -117,7 +117,10 @@ pub extern "system" fn Java_io_github_holetz_eclume_movel_gravador_EclumeCore_pr
             crate::dirs_from(std::path::Path::new(&base)),
             crate::VERSION,
         )?;
-        Ok(serde_json::to_value(core::worker_probe(core)?)?)
+        let mut probe = serde_json::to_value(core::worker_probe(core)?)?;
+        // The worker's notification follows the core's resolved locale.
+        probe["locale"] = json!(lock(core)?.locale().tag());
+        Ok(probe)
     });
     give_back(&mut env, &reply)
 }

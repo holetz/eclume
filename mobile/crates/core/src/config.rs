@@ -118,6 +118,12 @@ pub struct Config {
     /// the saved-recording sheet can name the default off the network.
     #[serde(default, rename = "idioma_da_conta")]
     pub account_language: Option<String>,
+    /// The account's stored UI locale (`GET /me/locale`), absent until explicitly chosen.
+    #[serde(default)]
+    pub account_locale: Option<String>,
+    /// The device language reported by the UI.
+    #[serde(default)]
+    pub device_locale: Option<String>,
     /// When `movel.json` was last read (Unix ms).
     #[serde(default, rename = "atualizacao_verificada_em")]
     pub update_checked_at: Option<i64>,
@@ -134,6 +140,8 @@ impl Default for Config {
             retention_days: 7,
             agenda_types: Vec::new(),
             account_language: None,
+            account_locale: None,
+            device_locale: None,
             update_checked_at: None,
         }
     }
@@ -193,6 +201,8 @@ mod tests {
         let old = Config::load(&path).unwrap();
         assert_eq!(old.device_name, "Pixel 8");
         assert!(old.sync_auto);
+        assert_eq!(old.account_locale, None);
+        assert_eq!(old.device_locale, None);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -215,6 +225,8 @@ mod tests {
             "reter_dias",
             "tipos_de_agenda",
             "idioma_da_conta",
+            "account_locale",
+            "device_locale",
             "atualizacao_verificada_em",
         ] {
             assert!(json.get(key).is_some(), "{key} missing from config.json");

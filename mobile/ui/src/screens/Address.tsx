@@ -1,3 +1,4 @@
+import { useT } from '../i18n'
 import { useState, type FormEvent } from 'react'
 import { Back } from '../app/Back'
 import { errorMessage, useBridge } from '../bridge/bridge'
@@ -10,10 +11,11 @@ export function Address({
   confirm,
   go,
 }: {
-  /** The downloaded CA waiting for "Confiar"; without it, the address field. */
+  /** The downloaded CA waiting for trust confirmation; without it, the address field. */
   confirm: { url: string; impressao: string } | null
   go: (route: string) => void
 }) {
+  const t = useT()
   const bridge = useBridge()
   const [address, setAddress] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -39,20 +41,17 @@ export function Address({
   if (confirm) {
     return (
       <div className="m-body">
-        <Back label="Servidores" onBack={() => run(() => bridge.cancelCa())} />
+        <Back label={t('address.servers')} onBack={() => run(() => bridge.cancelCa())} />
         <div className="m-section gap-2">
-          <h1 className="m-title">Confira o servidor</h1>
-          <p className="no-margin text-15">
-            Compare os blocos abaixo com os da web, em Minhas configurações → App móvel. Se forem os
-            mesmos, o celular passa a confiar só neste servidor.
-          </p>
+          <h1 className="m-title">{t('address.verify')}</h1>
+          <p className="no-margin text-15">{t('address.verifyHelp')}</p>
           <div className="code-block">
             <span>{new URL(confirm.url).host}</span>
           </div>
         </div>
         <div className="m-section m-fill">
-          <span className="kicker">Impressão digital</span>
-          <p className="fingerprint mono" aria-label="Impressão digital do certificado">
+          <span className="kicker">{t('address.fingerprint')}</span>
+          <p className="fingerprint mono" aria-label={t('address.certificateFingerprint')}>
             {confirm.impressao}
           </p>
           {error && (
@@ -68,7 +67,7 @@ export function Address({
             disabled={busy}
             onClick={() => run(() => bridge.trustCa())}
           >
-            Confiar
+            {t('address.trust')}
           </button>
           <button
             type="button"
@@ -76,7 +75,7 @@ export function Address({
             disabled={busy}
             onClick={() => run(() => bridge.cancelCa())}
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
         </div>
       </div>
@@ -85,18 +84,18 @@ export function Address({
 
   return (
     <div className="m-body">
-      <Back label="Servidores" onBack={() => go('/server')} />
+      <Back label={t('address.servers')} onBack={() => go('/server')} />
       <form className="m-section m-fill gap-4 align-top" onSubmit={submit}>
-        <h1 className="m-title">Digite o endereço</h1>
+        <h1 className="m-title">{t('address.title')}</h1>
         <div className="field">
-          <label htmlFor="address">Endereço do servidor</label>
+          <label htmlFor="address">{t('address.label')}</label>
           <input
             id="address"
             className="input"
             inputMode="url"
             autoCapitalize="none"
             autoCorrect="off"
-            placeholder="servidor.local:8443"
+            placeholder={t('address.placeholder')}
             value={address}
             onChange={(e) => setAddress(e.target.value)}
           />
@@ -111,7 +110,7 @@ export function Address({
           className="btn btn-primary button-start"
           disabled={busy || !address.trim()}
         >
-          {busy ? 'Conectando…' : 'Continuar'}
+          {busy ? t('server.connecting') : t('address.continue')}
         </button>
       </form>
     </div>

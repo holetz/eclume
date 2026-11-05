@@ -1,4 +1,7 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { setLocale } from '../i18n'
+import { duration, when, longDate, suggestedTitle, size, rate, markers } from '../app/formats'
+import { errorMessage } from '../bridge/bridge'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from '../app/App'
@@ -116,5 +119,72 @@ describe('home', () => {
     })
     await userEvent.click(await screen.findByText('Reunião semanal'))
     expect(window.location.hash).toBe('#/recording/g1')
+  })
+})
+
+
+describe('English recording home', () => {
+  beforeEach(() => {
+    window.location.hash = '/'
+  })
+
+  it('shows the main controls and updates the list and badges on a locale switch', async () => {
+    setLocale('en')
+    openApp(baseState({ locale: 'en' }), (bridge) => {
+      bridge.list = [localRecording({ titulo: null, marcadores: 1 })]
+    })
+    expect(await screen.findByRole('button', { name: /Record/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sync now' })).toBeInTheDocument()
+    expect(await screen.findByText('Untitled')).toBeInTheDocument()
+    expect(screen.getByText('Uploaded')).toBeInTheDocument()
+    expect(screen.getByText(/54 min · 1 marker$/)).toBeInTheDocument()
+    act(() => setLocale('pt-BR'))
+    expect(screen.getByRole('button', { name: /Gravar/ })).toBeInTheDocument()
+    expect(screen.getByText('Enviada')).toBeInTheDocument()
+  })
+
+  it('explains missing microphone access in English', async () => {
+    setLocale('en')
+    openApp(baseState({ locale: 'en' }), (bridge) => {
+      bridge.permissions = async () => ({ microphone: false, notifications: true })
+    })
+    await userEvent.click(await screen.findByRole('button', { name: /Record/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Without microphone access, eclume cannot record.')
+    expect(screen.getByRole('button', { name: 'Open app settings' })).toBeInTheDocument()
+  })
+})
+
+describe('localized recording formats', () => {
+  const timestamp = new Date(2026, 8, 26, 9).getTime()
+
+  it('uses consistent English dates, counts and numbers', () => {
+    setLocale('en')
+    expect(duration(0)).toBe('less than 1 min')
+    expect(duration(null)).toBe('—')
+    expect(duration(72 * 60_000)).toBe('1 h 12 min')
+    expect(when(timestamp, new Date(2026, 8, 26, 12))).toBe('Today 09:00')
+    expect(when(timestamp, new Date(2026, 8, 27, 12))).toBe('Yesterday 09:00')
+    expect(when(timestamp, new Date(2026, 9, 1))).toBe('Sep 26 09:00')
+    expect(longDate(timestamp)).toBe('Sat Sep 26 2026 · 09:00')
+    expect(suggestedTitle(timestamp)).toBe('Sat Sep 26, 09:00')
+    expect(size(1_100_000_000)).toBe('1.1 GB')
+    expect(size(1_200_000)).toBe('1 MB')
+    expect(rate(18_000_000)).toBe('18 MB/s')
+    expect(rate(640_000)).toBe('640 kB/s')
+    expect([0, 1, 2].map(markers)).toEqual(['0 markers', '1 marker', '2 markers'])
+    expect(errorMessage(null)).toBe('Something went wrong. Try again.')
+  })
+
+  it('preserves the exact Portuguese formats, including zero markers', () => {
+    expect(duration(0)).toBe('menos de 1 min')
+    expect(when(timestamp, new Date(2026, 8, 26, 12))).toBe('Hoje 09:00')
+    expect(when(timestamp, new Date(2026, 8, 27, 12))).toBe('Ontem 09:00')
+    expect(when(timestamp, new Date(2026, 9, 1))).toBe('26 set 09:00')
+    expect(longDate(timestamp)).toBe('sáb 26 set 2026 · 09:00')
+    expect(suggestedTitle(timestamp)).toBe('sáb 26 set, 09:00')
+    expect(size(1_100_000_000)).toBe('1,1 GB')
+    expect([0, 1, 2].map(markers)).toEqual(['0 marcadores', '1 marcador', '2 marcadores'])
+    expect(errorMessage(null)).toBe('Algo deu errado. Tente de novo.')
   })
 })

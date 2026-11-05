@@ -19,6 +19,8 @@ Ainda não publicada.
 - Posição na fila de transcrição e estado do processador.
 - Aviso quando o resumo fica pronto ou falha.
 - Idioma da transcrição escolhido por arquivo, além do padrão da conta.
+- App em inglês e português: as telas, as notificações da gravação e do envio e o atalho "Gravar
+  agora" seguem o idioma da conta, senão o do aparelho, senão o inglês.
 
 ### Mudado
 
@@ -30,6 +32,8 @@ Ainda não publicada.
   com restrição de nome.
 - O identificador do app passa a ser `io.github.holetz.eclume.movel`, sem o domínio pessoal do
   autor. Como a versão ainda não foi publicada, nenhuma instalação existente é afetada.
+- O APK passa a ser assinado por uma chave nova, com o titular `CN=eclume, O=Israel Holetz, C=BR`
+  (SHA-256 do certificado em `mobile/certificado-release.sha256`).
 
 ## [0.1.0] - 2026-09-27
 

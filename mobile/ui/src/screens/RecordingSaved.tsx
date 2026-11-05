@@ -1,14 +1,16 @@
+import { useT } from '../i18n'
 import { useEffect, useState, type FormEvent } from 'react'
 import { duration, markers, suggestedTitle } from '../app/formats'
 import { errorMessage, useBridge } from '../bridge/bridge'
 import type { AgendaType, LanguageOption, Sheet } from '../bridge/types'
 
 /**
- * The saved-recording sheet, after Parar: title, agenda type and language, all optional (the
+ * The saved-recording sheet, after Stop: title, agenda type and language, all optional (the
  * language starts from the named account default). While it is open, the sync waits (up to 10 min);
- * Salvar or Pular releases it.
+ * Save or Skip releases it.
  */
 export function RecordingSaved({ sheet }: { sheet: Sheet }) {
+  const t = useT()
   const bridge = useBridge()
   const [title, setTitle] = useState('')
   const [type, setType] = useState<string | null>(null)
@@ -57,14 +59,14 @@ export function RecordingSaved({ sheet }: { sheet: Sheet }) {
         <span className="sheet-grip" />
         <div className="stack-tight gap-1">
           <h2 id="sheet-title" className="m-title text-24">
-            Gravação salva
+            {t('saved.title')}
           </h2>
           <span className="text-muted text-14">
-            {duration(sheet.duracao_ms)} · {markers(sheet.marcadores)} · neste celular
+            {duration(sheet.duracao_ms)} · {markers(sheet.marcadores)} · {t('saved.onPhone')}
           </span>
         </div>
         <div className="field">
-          <label htmlFor="title">Título (opcional)</label>
+          <label htmlFor="title">{t('saved.optionalTitle')}</label>
           <input
             id="title"
             className="input"
@@ -75,7 +77,7 @@ export function RecordingSaved({ sheet }: { sheet: Sheet }) {
         </div>
         {types.length > 0 && (
           <div className="field">
-            <span className="field-label">Tipo de agenda (opcional)</span>
+            <span className="field-label">{t('saved.optionalType')}</span>
             <div className="m-chips">
               {types.map((t) => (
                 <button
@@ -93,7 +95,7 @@ export function RecordingSaved({ sheet }: { sheet: Sheet }) {
         )}
         {languages.length > 0 && (
           <div className="field">
-            <label htmlFor="language">Idioma da transcrição</label>
+            <label htmlFor="language">{t('saved.language')}</label>
             <select
               id="language"
               className="input"
@@ -109,7 +111,7 @@ export function RecordingSaved({ sheet }: { sheet: Sheet }) {
           </div>
         )}
         <span className="text-muted text-13">
-          O servidor preenche os outros campos ao transcrever.
+          {t('saved.fieldsHelp')}
         </span>
         {error && (
           <p className="error-text" role="alert">
@@ -118,14 +120,14 @@ export function RecordingSaved({ sheet }: { sheet: Sheet }) {
         )}
         <div className="two-columns">
           <button type="submit" className="btn btn-primary button-start">
-            Salvar
+            {t('common.save')}
           </button>
           <button
             type="button"
             className="btn btn-secondary button-start"
             onClick={() => finish(false)}
           >
-            Pular
+            {t('saved.skip')}
           </button>
         </div>
       </form>

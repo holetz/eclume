@@ -1,6 +1,7 @@
+import { useT, t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { size } from '../app/formats'
-import { record as recordFlow, recordAfterBattery, type RecordStep, NO_MICROPHONE } from '../app/record'
+import { record as recordFlow, recordAfterBattery, type RecordStep } from '../app/record'
 import { SettingsIcon } from '../app/Icons'
 import { Brand } from '../app/Brand'
 import { errorMessage, useBridge } from '../bridge/bridge'
@@ -10,13 +11,13 @@ import { PhoneList } from './PhoneList'
 
 /** The summary to the right of the phone list's heading. */
 function summary(state: AppState): string {
-  if (state.pendentes === 0) return 'Tudo sincronizado'
-  if (state.rede.estado === 'away') return 'Sincroniza no Wi‑Fi do servidor'
-  return state.pendentes === 1 ? '1 aguardando' : `${state.pendentes} aguardando`
+  if (state.pendentes === 0) return t('home.allSynced')
+  if (state.rede.estado === 'away') return t('home.syncOnWifi')
+  return t('home.waiting', { count: state.pendentes })
 }
 
 /**
- * Home: the network banner, the Gravar button and this phone's recordings. Each new `recordRequest`
+ * Home: the network banner, the Record button and this phone's recordings. Each new `recordRequest`
  * (the launcher icon's record-now shortcut) runs the button's flow, once the device has been read.
  */
 export function Home({
@@ -28,6 +29,7 @@ export function Home({
   go: (route: string) => void
   recordRequest?: number
 }) {
+  const t = useT()
   const bridge = useBridge()
   const [recordings, setRecordings] = useState<LocalRecording[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -66,7 +68,7 @@ export function Home({
   function show(step: RecordStep) {
     if (step.step === 'no_microphone') {
       setNoMicrophone(true)
-      setError(NO_MICROPHONE)
+      setError(step.message)
     } else if (step.step === 'explain_battery') {
       setExplainingBattery(true)
     } else if (step.step === 'error') {
@@ -128,7 +130,7 @@ export function Home({
         <button
           type="button"
           className="btn btn-ghost btn-icon"
-          aria-label="Configurações"
+          aria-label={t('home.settings')}
           onClick={() => go('/settings')}
         >
           <SettingsIcon />
@@ -137,28 +139,28 @@ export function Home({
       <NetworkBanner network={state.rede} pending={state.pendentes} />
       {device && !device.notifications && (
         <div className="alert alert-warning alert-on-top" role="status">
-          <span className="alert-title">Notificações bloqueadas</span>
-          <span>Sem elas, a gravação não aparece na tela bloqueada e você não fica sabendo se ela parar.</span>
+          <span className="alert-title">{t('home.notificationsBlocked')}</span>
+          <span>{t('home.notificationsHelp')}</span>
           <button
             type="button"
             className="btn btn-secondary btn-sm align-start margin-top-2"
             onClick={openAppSettings}
           >
-            Abrir configurações do app
+            {t('home.openSettings')}
           </button>
         </div>
       )}
       {storage && (
         <div className="alert alert-warning alert-on-top" role="status">
-          <span className="alert-title">Armazenamento quase cheio</span>
-          <span>{storage.restante.replace(/^cerca/, 'Cerca')} de gravação.</span>
+          <span className="alert-title">{t('home.storageLow')}</span>
+          <span>{t('home.recordingRemaining', { remaining: storage.restante.replace(/^cerca/, 'Cerca') })}</span>
           {storage.sincronizadas_bytes > 0 && (
             <button
               type="button"
               className="btn btn-secondary btn-sm align-start margin-top-2"
               onClick={deleteSynced}
             >
-              Excluir sincronizadas · {size(storage.sincronizadas_bytes)}
+              {t('home.deleteSynced', { size: size(storage.sincronizadas_bytes) })}
             </button>
           )}
         </div>
@@ -166,35 +168,34 @@ export function Home({
       <div className="m-section">
         <button type="button" className="m-rec" aria-pressed="false" disabled={busy} onClick={record}>
           <span>
-            <span className="m-rec-label">Gravar</span>
-            <span className="m-rec-sub">Continua gravando com a tela bloqueada</span>
+            <span className="m-rec-label">{t('home.record')}</span>
+            <span className="m-rec-sub">{t('home.lockScreenHint')}</span>
           </span>
         </button>
         {explainingBattery && (
-          <div className="alert alert-info" role="alertdialog" aria-label="Gravar com a tela bloqueada">
-            <span className="alert-title">Gravar com a tela bloqueada</span>
+          <div className="alert alert-info" role="alertdialog" aria-label={t('home.batteryTitle')}>
+            <span className="alert-title">{t('home.batteryTitle')}</span>
             <span>
-              A otimização de bateria do Android pode parar a gravação com a tela apagada. Permita que o eclume
-              funcione em segundo plano.
+              {t('home.batteryHelp')}
             </span>
             <div className="two-columns margin-top-2">
               <button type="button" className="btn btn-primary" onClick={() => continueFromBattery(true)}>
-                Permitir
+                {t('home.allow')}
               </button>
               <button type="button" className="btn btn-secondary" onClick={() => continueFromBattery(false)}>
-                Agora não
+                {t('home.notNow')}
               </button>
             </div>
           </div>
         )}
         {error && (
           <p className="error-text" role="alert">
-            {error}
+            {noMicrophone ? t('home.noMicrophone') : error}
           </p>
         )}
         {noMicrophone && (
           <button type="button" className="btn btn-secondary" onClick={openAppSettings}>
-            Abrir configurações do app
+            {t('home.openSettings')}
           </button>
         )}
       </div>

@@ -14,6 +14,7 @@
 pub mod config;
 pub mod connection;
 pub mod estimates;
+pub mod locale;
 pub mod network;
 pub mod session;
 pub mod sync;
@@ -31,6 +32,7 @@ use serde::Serialize;
 use crate::config::{Config, Dirs, Quality, Server};
 use crate::connection::{Connection, ConnectionState, RealTransports, Transports};
 use crate::estimates::{Battery, BatteryReading, Warnings};
+use crate::locale::Locale;
 use crate::network::{Network, NetworkState, Probe, PROBE_TIMEOUT};
 use crate::session::{Session, SessionState};
 use crate::sync::{Meter, OnServer, Step, Wait};
@@ -43,14 +45,8 @@ pub fn client_version(version: &str) -> String {
     format!("{CLIENT_PREFIX}/{version}")
 }
 
-/// The languages the saved-recording sheet offers, besides the account default (labels are UI
-/// copy).
-const LANGUAGES: [(&str, &str); 4] = [
-    ("auto", "Detectar automaticamente"),
-    ("pt", "Português"),
-    ("es", "Español"),
-    ("en", "English"),
-];
+/// The languages the saved-recording sheet offers, with their autonyms.
+const LANGUAGES: [(&str, &str); 3] = [("pt", "Português"), ("es", "Español"), ("en", "English")];
 
 /// The name of a language from the short list (`pt-BR` becomes `pt`); outside it, the code itself.
 fn language_name(language: &str) -> &str {
@@ -98,10 +94,12 @@ pub enum StopReason {
 
 impl StopReason {
     /// The warning's short text (notification copy).
-    pub fn text(self) -> &'static str {
-        match self {
-            Self::NoSpace => "pouco espaço livre",
-            Self::SourceEnded => "o microfone parou",
+    pub fn text(self, locale: Locale) -> &'static str {
+        match (self, locale) {
+            (Self::NoSpace, Locale::En) => "low free space",
+            (Self::SourceEnded, Locale::En) => "the microphone stopped",
+            (Self::NoSpace, Locale::PtBr) => "pouco espaço livre",
+            (Self::SourceEnded, Locale::PtBr) => "o microfone parou",
         }
     }
 }
@@ -109,6 +107,7 @@ impl StopReason {
 /// Everything the UI draws: it is a function of this state.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AppState {
+    pub locale: &'static str,
     #[serde(rename = "conexao")]
     pub connection: ConnectionState,
     #[serde(rename = "rede")]
@@ -343,6 +342,13 @@ impl Core {
         self.config.quality.bitrate()
     }
 
+    pub fn locale(&self) -> Locale {
+        locale::resolve(
+            self.config.account_locale.as_deref(),
+            self.config.device_locale.as_deref(),
+        )
+    }
+
     pub fn state(&self) -> Result<AppState> {
         let mut network = self.network.clone();
         if self.syncing.load(Ordering::Acquire) {
@@ -356,24 +362,25 @@ impl Core {
         };
         let bitrate = self.bitrate();
         Ok(AppState {
+            locale: self.locale().tag(),
             connection: self.connection.state(&self.config),
             network: network.state(),
             session: self.session.state(&self.queue)?,
             sheet: self.sheet.clone(),
             pending,
             warnings: Warnings {
-                storage: self
-                    .free_space
-                    .and_then(|free| estimates::storage_warning(free, bitrate, synced)),
+                storage: self.free_space.and_then(|free| {
+                    estimates::storage_warning(free, bitrate, synced, self.locale())
+                }),
                 battery: if self.session.is_recording() {
-                    estimates::battery_warning(&self.battery)
+                    estimates::battery_warning(&self.battery, self.locale())
                 } else {
                     None
                 },
             },
-            free_space: self
-                .free_space
-                .map(|free| estimates::about(estimates::seconds_that_fit(free, bitrate))),
+            free_space: self.free_space.map(|free| {
+                estimates::about(estimates::seconds_that_fit(free, bitrate), self.locale())
+            }),
             version: self.version.clone(),
         })
     }
@@ -414,6 +421,7 @@ impl Core {
 
     /// "Sair e esquecer o servidor". The waiting recordings stay and upload to the next server.
     pub fn sign_out(&mut self) -> Result<()> {
+        self.config.account_locale = None;
         self.connection.sign_out(&mut self.config)?;
         let wifi = self.network.unmetered_wifi();
         self.network = Network::default();
@@ -607,18 +615,42 @@ impl Core {
         Ok(())
     }
 
+    pub fn store_account_locale(&mut self, tag: Option<String>) -> Result<()> {
+        if self.config.account_locale != tag {
+            self.config.account_locale = tag;
+            self.save_config()?;
+        }
+        Ok(())
+    }
+
+    pub fn store_device_locale(&mut self, tag: Option<String>) -> Result<()> {
+        if self.config.device_locale != tag {
+            self.config.device_locale = tag;
+            self.save_config()?;
+        }
+        Ok(())
+    }
+
     /// The saved-recording sheet's language options: the named account default, Detect and the
     /// short list. The empty value is the default (the recording uploads without a language and the
     /// account's applies).
     pub fn language_options(&self) -> Vec<LanguageOption> {
+        let (default_label, auto_label) = match self.locale() {
+            Locale::En => ("Account default", "Detect automatically"),
+            Locale::PtBr => ("Padrão da conta", "Detectar automaticamente"),
+        };
         let default = match self.config.account_language.as_deref() {
-            Some(language) => format!("Padrão da conta: {}", language_name(language)),
-            None => "Padrão da conta".to_string(),
+            Some(language) => format!("{default_label}: {}", language_name(language)),
+            None => default_label.to_string(),
         };
         std::iter::once(LanguageOption {
             value: String::new(),
             label: default,
         })
+        .chain(std::iter::once(LanguageOption {
+            value: "auto".to_string(),
+            label: auto_label.to_string(),
+        }))
         .chain(LANGUAGES.iter().map(|(value, label)| LanguageOption {
             value: (*value).to_string(),
             label: (*label).to_string(),
@@ -1004,6 +1036,10 @@ impl ReadPlan {
         sync::fetch_account_language(self.transport.as_ref(), &self.server, &self.token)
     }
 
+    pub fn account_locale(&self) -> Result<Option<String>> {
+        sync::fetch_account_locale(self.transport.as_ref(), &self.server, &self.token)
+    }
+
     pub fn titles(&self, since: &str) -> Result<sync::Titles> {
         sync::fetch_titles(self.transport.as_ref(), &self.server, &self.token, since)
     }
@@ -1198,6 +1234,11 @@ pub fn cycle(core: &Mutex<Core>, now: bool) -> Result<Option<eclume_recorder::Sy
                 Ok(language) => lock(core)?.store_account_language(language)?,
                 Err(err) => log::warn!("{err:#}"),
             }
+            // A server older than 2.30.0 lacks the route: keep the cached locale.
+            match plan.account_locale() {
+                Ok(locale) => lock(core)?.store_account_locale(locale)?,
+                Err(err) => log::warn!("{err:#}"),
+            }
         }
     }
     if let Err(err) = check_update(core, false) {
@@ -1274,6 +1315,20 @@ mod tests {
     #[test]
     fn client_version_follows_the_contract() {
         assert_eq!(client_version("0.1.0"), "eclume-android/0.1.0");
+    }
+
+    #[test]
+    fn stop_reason_text_follows_the_locale() {
+        assert_eq!(StopReason::NoSpace.text(Locale::PtBr), "pouco espaço livre");
+        assert_eq!(
+            StopReason::SourceEnded.text(Locale::PtBr),
+            "o microfone parou"
+        );
+        assert_eq!(StopReason::NoSpace.text(Locale::En), "low free space");
+        assert_eq!(
+            StopReason::SourceEnded.text(Locale::En),
+            "the microphone stopped"
+        );
     }
 
     #[test]

@@ -534,6 +534,14 @@ fn connected_core(
             serde_json::json!({"language": null, "platform_default": "pt"}),
         ),
     );
+    script.reply(
+        "GET",
+        "/api/v1/me/locale",
+        json(
+            200,
+            serde_json::json!({"locale": "pt-BR", "effective": "pt-BR", "default": "en", "supported": ["en", "pt-BR"]}),
+        ),
+    );
     script.reply("GET", "/downloads/movel.json", common::text(404, ""));
     let core = Arc::new(Mutex::new(
         Core::open(
@@ -576,11 +584,76 @@ fn full_cycle_does_not_deadlock_the_core() {
     let core = lock(&core).unwrap();
     assert_eq!(core.state().unwrap().network, NetworkState::OnNetwork);
     assert_eq!(core.config().agenda_types[0].name, "Reunião");
+    assert_eq!(core.config().account_locale.as_deref(), Some("pt-BR"));
+    assert_eq!(core.state().unwrap().locale, "pt-BR");
     // The account default comes named on the sheet, off the network afterwards too.
     let options = core.language_options();
     assert_eq!(options[0].value, "");
     assert_eq!(options[0].label, "Padrão da conta: Português");
     assert_eq!(options[1].value, "auto");
+}
+
+#[test]
+fn null_account_locale_uses_the_device_and_sign_out_clears_the_cache() {
+    use eclume_mobile_core::config::Config;
+    use eclume_mobile_core::{cycle, lock};
+
+    let (core, script, _guard) = connected_core("account-locale");
+    {
+        let mut core = lock(&core).unwrap();
+        core.store_device_locale(Some("en-US".into())).unwrap();
+        core.network_changed(true);
+    }
+    cycle(&core, true).unwrap();
+    assert_eq!(lock(&core).unwrap().state().unwrap().locale, "pt-BR");
+    script.reply(
+        "GET",
+        "/api/v1/me/locale",
+        json(
+            200,
+            serde_json::json!({"locale": null, "effective": "pt-BR", "default": "en", "supported": ["en", "pt-BR"]}),
+        ),
+    );
+    cycle(&core, true).unwrap();
+    let mut core = lock(&core).unwrap();
+    assert_eq!(core.config().account_locale, None);
+    assert_eq!(core.state().unwrap().locale, "en");
+    let saved = Config::load(&core.dirs().config()).unwrap();
+    assert_eq!(saved.account_locale, None);
+    assert_eq!(saved.device_locale.as_deref(), Some("en-US"));
+
+    core.store_account_locale(Some("pt-BR".into())).unwrap();
+    core.sign_out().unwrap();
+    assert_eq!(core.state().unwrap().locale, "en");
+    let saved = Config::load(&core.dirs().config()).unwrap();
+    assert_eq!(saved.account_locale, None);
+    assert_eq!(saved.device_locale.as_deref(), Some("en-US"));
+}
+
+#[test]
+fn missing_account_locale_route_preserves_the_resolved_locale() {
+    use eclume_mobile_core::{cycle, lock};
+
+    let (core, script, _guard) = connected_core("locale-route-missing");
+    script.reply("GET", "/api/v1/me/locale", common::text(404, ""));
+    lock(&core).unwrap().network_changed(true);
+    cycle(&core, true).unwrap();
+    assert_eq!(lock(&core).unwrap().state().unwrap().locale, "en");
+    lock(&core)
+        .unwrap()
+        .store_device_locale(Some("pt-PT".into()))
+        .unwrap();
+    cycle(&core, true).unwrap();
+    assert_eq!(lock(&core).unwrap().state().unwrap().locale, "pt-BR");
+    lock(&core)
+        .unwrap()
+        .store_account_locale(Some("en-GB".into()))
+        .unwrap();
+    cycle(&core, true).unwrap();
+    let core = lock(&core).unwrap();
+    assert_eq!(core.config().account_locale.as_deref(), Some("en-GB"));
+    assert_eq!(core.state().unwrap().locale, "en");
+    assert_eq!(script.count("GET", "/api/v1/me/locale"), 3);
 }
 
 /// The process opened only for the `SyncWorker` has no screen to report the Wi-Fi: the worker

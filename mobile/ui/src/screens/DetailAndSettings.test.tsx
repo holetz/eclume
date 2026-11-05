@@ -2,13 +2,16 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../app/App'
+import { setLocale, type Locale } from '../i18n'
 import { followSystemTheme } from '../app/theme'
 import { baseState, localRecording, marker, fakeBridge, type FakeBridge } from '../bridge/fake'
 import { BridgeContext } from '../bridge/bridge'
 
-function openApp(route: string, prepare?: (bridge: FakeBridge) => void) {
+function openApp(route: string, prepare?: (bridge: FakeBridge) => void, locale: Locale = 'pt-BR') {
   window.location.hash = route
-  const bridge = fakeBridge(baseState({ pendentes: 2 }))
+  const bridge = fakeBridge(
+    baseState({ pendentes: 2, locale, espaco_livre: locale === 'en' ? 'about 9 h' : 'cerca de 9 h' }),
+  )
   prepare?.(bridge)
   render(
     <BridgeContext.Provider value={bridge}>
@@ -211,5 +214,58 @@ describe('theme', () => {
     listeners[0]({ matches: false })
     expect(document.documentElement.dataset.theme).toBe('light')
     stop()
+  })
+})
+
+
+describe('English detail and settings', () => {
+  it('localizes detail controls, pipeline vocabulary, skip reasons and queue text', async () => {
+    setLocale('en')
+    openApp('/recording/g1', (bridge) => {
+      bridge.detail = {
+        gravacao: localRecording({ titulo: null, titulo_do_servidor: null }),
+        caminho: '/data/eclume/gravacoes/g1.ogg',
+        marcadores: [marker(1_000)],
+        etapas: [
+          { step: 'received', state: 'done' },
+          { step: 'fields', state: 'active' },
+          { step: 'agenda_type', state: 'skipped', reason: 'set_by_user' },
+          { step: 'summary', state: 'pending' },
+        ],
+        espera: { reason: 'account_turn', account_ahead: 1 },
+        endereco_na_web: 'https://192.0.2.10:8443/gravacoes/r1',
+      }
+    }, 'en')
+    expect(await screen.findByRole('heading', { name: 'Untitled' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+    expect(screen.getByText('Marker')).toBeInTheDocument()
+    const steps = within(screen.getByRole('list', { name: 'Server steps' }))
+    expect(steps.getByText('Audio received')).toBeInTheDocument()
+    expect(steps.getByText('Filling in fields')).toBeInTheDocument()
+    expect(steps.getByText('Summary · waiting')).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Step reasons' })).toHaveTextContent('Agenda type · skipped: you chose the type')
+    expect(screen.getByRole('status')).toHaveTextContent('Behind 1 recording of yours that arrived earlier.')
+    expect(screen.getByRole('button', { name: 'Open in the web app' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete from this phone' })).toBeInTheDocument()
+  })
+
+  it('localizes quality, retention, sizes and the log-out confirmation', async () => {
+    setLocale('en')
+    openApp('/settings', (bridge) => {
+      bridge.checkUpdate = async () => ({ versao: '0.2.0', notas: null })
+    }, 'en')
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    expect(await screen.findByText('About 11 MB per hour')).toBeInTheDocument()
+    expect(screen.getByLabelText('Sync automatically')).toBeChecked()
+    expect(screen.getByLabelText('Standard')).toBeChecked()
+    expect(screen.getByLabelText('High')).toBeInTheDocument()
+    expect(screen.getByLabelText('Delete after syncing')).toBeInTheDocument()
+    expect(screen.getByText(/Keeps the last/)).toBeInTheDocument()
+    expect(screen.getByText('1.2 GB · 9 h free')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'New version available · v0.2.0' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Log out and forget the server' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('2 recordings are waiting to sync')
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('My settings → Mobile app')
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
   })
 })

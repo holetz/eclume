@@ -1,6 +1,7 @@
 // The types the Rust core serializes (eclume-mobile-core); the UI is a function of the `AppState`.
 // The field names are the core's wire format and keep their (pt-BR) names.
 
+import type { Locale } from '../i18n'
 import type { FilaDaEspera } from '../app/vocabulario.js'
 
 export interface Server {
@@ -73,6 +74,7 @@ export interface Warnings {
 }
 
 export interface AppState {
+  locale: Locale
   conexao: ConnectionState
   rede: NetworkState
   sessao: SessionState | null

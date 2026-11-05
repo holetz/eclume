@@ -1,3 +1,4 @@
+import { setLocale } from '../i18n'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
@@ -120,5 +121,39 @@ describe('recording', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Pular' }))
     expect(bridge.save).toHaveBeenLastCalledWith('g1', null, null, null)
+  })
+})
+
+
+describe('English recording flow', () => {
+  it('shows the main controls, adds a marker and resumes after pausing', async () => {
+    setLocale('en')
+    const bridge = openApp(baseState({ locale: 'en', sessao: session() }))
+    expect(await screen.findByText('Recording')).toBeInTheDocument()
+    expect(screen.getByLabelText('Audio time')).toHaveTextContent('00:42:10')
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Marker' }))
+    expect(await screen.findByPlaceholderText('Note (optional)')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }))
+    expect(bridge.pause).toHaveBeenCalled()
+    act(() => bridge.emit(baseState({ locale: 'en', sessao: session({ pausada: true }) })))
+    expect(await screen.findByText('Paused')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    expect(bridge.resume).toHaveBeenCalled()
+  })
+
+  it('shows the saved sheet with zero markers and English field labels', async () => {
+    setLocale('en')
+    openApp(baseState({ locale: 'en', folha: {
+      id: 'g1', iniciada_em: new Date(2026, 8, 26, 9).getTime(), duracao_ms: 0, marcadores: 0,
+    } }))
+    expect(await screen.findByRole('heading', { name: 'Recording saved' })).toBeInTheDocument()
+    expect(screen.getByText('less than 1 min · 0 markers · on this phone')).toBeInTheDocument()
+    expect(screen.getByLabelText('Title (optional)')).toHaveAttribute('placeholder', 'Sat Sep 26, 09:00')
+    expect(await screen.findByText('Agenda type (optional)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Transcription language')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Skip' })).toBeInTheDocument()
   })
 })

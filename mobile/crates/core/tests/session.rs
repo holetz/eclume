@@ -117,6 +117,7 @@ fn crash_midway_stays_interrupted_and_without_sheet() {
 fn limits_stop_without_space_and_warn() {
     let (dirs, _guard) = temp_dirs("limites");
     let mut core = open(dirs);
+    core.store_device_locale(Some("pt-BR".into())).unwrap();
     // 40 min of space at 24 kbps: a warning on the home screen.
     core.update_device(80, false, 7_200_000);
     let warning = core.state().unwrap().warnings.storage.unwrap();
@@ -141,6 +142,52 @@ fn limits_stop_without_space_and_warn() {
     );
     assert!(core.state().unwrap().session.is_none());
     assert!(core.state().unwrap().warnings.battery.is_none());
+}
+
+#[test]
+fn estimates_follow_the_english_locale() {
+    let (dirs, _guard) = temp_dirs("english-estimates");
+    let mut core = open(dirs);
+    core.store_device_locale(Some("en".into())).unwrap();
+    core.update_device(80, false, 7_200_000);
+    let state = core.state().unwrap();
+    assert_eq!(state.warnings.storage.unwrap().remaining, "about 40 min");
+    assert_eq!(state.free_space.as_deref(), Some("about 40 min"));
+}
+
+#[test]
+fn language_options_follow_the_locale_and_keep_autonyms() {
+    let (dirs, _guard) = temp_dirs("language-options");
+    let mut core = open(dirs);
+    for (locale, default, auto) in [
+        ("en", "Account default", "Detect automatically"),
+        ("pt-BR", "Padrão da conta", "Detectar automaticamente"),
+    ] {
+        core.store_device_locale(Some(locale.into())).unwrap();
+        let options = core.language_options();
+        let actual: Vec<(&str, &str)> = options
+            .iter()
+            .map(|option| (option.value.as_str(), option.label.as_str()))
+            .collect();
+        assert_eq!(
+            actual,
+            vec![
+                ("", default),
+                ("auto", auto),
+                ("pt", "Português"),
+                ("es", "Español"),
+                ("en", "English"),
+            ]
+        );
+    }
+    core.store_account_language("pt-BR".into()).unwrap();
+    for (locale, expected) in [
+        ("en", "Account default: Português"),
+        ("pt-BR", "Padrão da conta: Português"),
+    ] {
+        core.store_device_locale(Some(locale.into())).unwrap();
+        assert_eq!(core.language_options()[0].label, expected);
+    }
 }
 
 /// A microphone that drops at `away.0` and returns at `away.1` (since opening), as the reconnecting

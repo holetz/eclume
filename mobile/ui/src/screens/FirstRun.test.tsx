@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from '../app/App'
+import { setLocale } from '../i18n'
 import { baseState, fakeBridge } from '../bridge/fake'
 import { BridgeContext } from '../bridge/bridge'
 import type { AppState } from '../bridge/types'
@@ -117,5 +118,52 @@ describe('first run', () => {
     expect(await screen.findByRole('heading', { name: 'Leia o código' })).toBeInTheDocument()
     expect(screen.getByText(/O código vale 10 minutos/)).toBeInTheDocument()
     await waitFor(() => expect(bridge.pair).toHaveBeenCalledWith(qr))
+  })
+})
+
+
+describe('English first run', () => {
+  it('offers discovery, a web code and a typed address in English', async () => {
+    setLocale('en')
+    openApp(baseState({ locale: 'en', conexao: { fase: 'sem_servidor' } }))
+    expect(await screen.findByRole('heading', { name: 'Find your server' })).toBeInTheDocument()
+    expect(await screen.findByText(/No server responded/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Read a code from the web app' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Enter the address' }))
+    expect(await screen.findByRole('heading', { name: 'Enter the address' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Server address')).toHaveAttribute('placeholder', 'server.local:8443')
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  })
+
+  it('explains certificate trust and code pairing in English', async () => {
+    setLocale('en')
+    const bridge = openApp(baseState({ locale: 'en', conexao: {
+      fase: 'confirmar_ca', url: SERVER.url, impressao: '3F9A 12C4 0B7D',
+    } }))
+    expect(await screen.findByRole('heading', { name: 'Check the server' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Certificate fingerprint')).toHaveTextContent('3F9A 12C4 0B7D')
+    expect(screen.getByRole('button', { name: 'Trust' })).toBeInTheDocument()
+    act(() => bridge.emit(baseState({ locale: 'en', conexao: { fase: 'sem_servidor' } })))
+    await userEvent.click(await screen.findByRole('button', { name: 'Read a code from the web app' }))
+    expect(await screen.findByRole('heading', { name: 'Read the code' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Camera')).toBeInTheDocument()
+    expect(screen.getByText('Go to My settings → Mobile app.')).toBeInTheDocument()
+    expect(screen.getByText(/The code is valid for 10 minutes/)).toBeInTheDocument()
+  })
+
+  it('logs in in English while preserving the core notice and command error', async () => {
+    setLocale('en')
+    const reason = 'Entre novamente no servidor'
+    const bridge = openApp(baseState({ locale: 'en', conexao: {
+      fase: 'sem_credencial', servidor: SERVER, motivo: reason,
+    } }))
+    expect(await screen.findByRole('heading', { name: 'Log in' })).toBeInTheDocument()
+    expect(screen.getByText('Use your web account.')).toBeInTheDocument()
+    expect(screen.getByText(reason)).toBeInTheDocument()
+    bridge.signIn = async () => { throw 'Erro do servidor' }
+    await userEvent.type(screen.getByLabelText('Email'), 'ana@eclume.test')
+    await userEvent.type(screen.getByLabelText('Password'), 'secret')
+    await userEvent.click(screen.getByRole('button', { name: 'Log in' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Erro do servidor')
   })
 })
