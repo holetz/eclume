@@ -28,6 +28,8 @@ Ainda não publicada.
 - Estilos e contraste dos controles no Design System.
 - A CA do servidor fica fixada de forma estrita, e o app acompanha a rotação para a raiz própria
   com restrição de nome.
+- O identificador do app passa a ser `io.github.holetz.eclume.movel`, sem o domínio pessoal do
+  autor. Como a versão ainda não foi publicada, nenhuma instalação existente é afetada.
 
 ## [0.1.0] - 2026-09-27
 

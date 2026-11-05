@@ -356,10 +356,7 @@ mod tests {
         );
         let installed = r"C:\Users\u\AppData\Local\eclume\eclume-desktop.exe";
         assert!(is_self(&AudioClient::new(installed, "eclume-desktop"), 7));
-        assert!(is_self(
-            &AudioClient::new("io.github.holetz.eclume", ""),
-            7
-        ));
+        assert!(is_self(&AudioClient::new("io.github.holetz.eclume", ""), 7));
     }
 
     #[test]

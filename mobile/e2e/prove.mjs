@@ -154,7 +154,7 @@ function syncWorkerJobs() {
   const output = adb('shell', 'dumpsys', 'jobscheduler')
   const ids = new Set()
   for (const line of output.split('\n')) {
-    const found = line.match(/JOB #u[0-9a-z]*\/(\d+): .*br\.com\.holetz\.eclume\.movel\/.*SystemJobService/)
+    const found = line.match(/JOB #u[0-9a-z]*\/(\d+): .*io\.github\.holetz\.eclume\.movel\/.*SystemJobService/)
     if (found) ids.add(found[1])
   }
   return [...ids]
