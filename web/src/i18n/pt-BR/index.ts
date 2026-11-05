@@ -7,6 +7,7 @@ import connect from './connect'
 import desktop from './desktop'
 import environment from './environment'
 import errors from './errors'
+import library from './library'
 import shared from './shared'
 import shell from './shell'
 import tokens from './tokens'
@@ -23,6 +24,7 @@ const catalogs: { [K in keyof typeof en]: unknown } = {
   tokens,
   environment,
   desktop,
+  library,
 }
 
 export default catalogs

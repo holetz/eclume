@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router'
 import { ZoomIn, ZoomOut } from 'lucide-react'
 import type { Schemas } from '../../api/client'
@@ -62,6 +63,7 @@ interface CalendarWeekProps {
  * minimum is the whole day on screen.
  */
 export function CalendarWeek({ days, recordings, busy = false }: CalendarWeekProps) {
+  const { t } = useTranslation('library')
   const now = useNow(60_000)
   const location = useLocation()
   const from = `${location.pathname}${location.search}`
@@ -149,14 +151,14 @@ export function CalendarWeek({ days, recordings, busy = false }: CalendarWeekPro
       ref={scrollRef}
       className={styles.weekScroll}
       style={measured ? ({ '--altura-visivel': `${height}px` } as CSSProperties) : undefined}
-      title="Ctrl + roda do mouse muda o zoom"
+      title={t('calendar.zoomHint')}
     >
       <div className={`cal-week ${styles.week}`} style={grid} aria-busy={busy || undefined}>
         <span className={`cal-head ${styles.zoom}`}>
           <button
             type="button"
             className="btn btn-secondary btn-icon"
-            aria-label="Diminuir o zoom"
+            aria-label={t('calendar.zoomOut')}
             disabled={!canZoomOut}
             onClick={() => zoomTo(hourPx / ZOOM_STEP)}
           >
@@ -165,7 +167,7 @@ export function CalendarWeek({ days, recordings, busy = false }: CalendarWeekPro
           <button
             type="button"
             className="btn btn-secondary btn-icon"
-            aria-label="Aumentar o zoom"
+            aria-label={t('calendar.zoomIn')}
             disabled={!canZoomIn}
             onClick={() => zoomTo(hourPx * ZOOM_STEP)}
           >

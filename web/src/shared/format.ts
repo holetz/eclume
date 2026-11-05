@@ -191,22 +191,6 @@ export function dayMonth(day: Date, withYear = false): string {
     : dateFormat('dayMonth', { day: 'numeric', month: 'long' }).format(day)
 }
 
-/** The library's pt-BR month names, until its period phrases move to `monthName` and `dayMonth` (task 2.1). */
-export const MONTHS = [
-  'janeiro',
-  'fevereiro',
-  'março',
-  'abril',
-  'maio',
-  'junho',
-  'julho',
-  'agosto',
-  'setembro',
-  'outubro',
-  'novembro',
-  'dezembro',
-]
-
 /** Index of the weekday, with Monday at 0. */
 export function weekdayIndex(day: Date): number {
   return (day.getDay() + 6) % 7

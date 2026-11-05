@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router'
 import type { Schemas } from '../../api/client'
 import { dayLabel, type MonthCell, recordingTitle, sameDay } from './calendar'
@@ -17,6 +18,7 @@ interface CalendarMonthProps {
 
 /** The month as a grid: up to three recordings per day, and the day number opens its week. */
 export function CalendarMonth({ cells, recordings, onOpenWeek, busy = false }: CalendarMonthProps) {
+  const { t } = useTranslation('library')
   const location = useLocation()
   const from = `${location.pathname}${location.search}`
   const today = new Date()
@@ -42,7 +44,7 @@ export function CalendarMonth({ cells, recordings, onOpenWeek, busy = false }: C
               <button
                 type="button"
                 className={styles.dayButton}
-                aria-label={`Abrir a semana de ${dayLabel(cell.date)}`}
+                aria-label={t('calendar.openWeek', { day: dayLabel(cell.date) })}
                 onClick={() => onOpenWeek(cell.date)}
               >
                 {cell.date.getDate()}

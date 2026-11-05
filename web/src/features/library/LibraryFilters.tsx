@@ -1,5 +1,6 @@
 import { PanelRight, X } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import type { Schemas } from '../../api/client'
 import { useCollections } from '../collections/queries'
@@ -19,9 +20,6 @@ import styles from './LibraryPage.module.css'
 import { useUserFields } from './queries'
 
 type Field = Schemas['Field']
-
-const KIND_LABELS: Record<KindParam, string> = { reuniao: 'Reuniões', nota: 'Notas' }
-const STATUS_LABELS: Record<StatusParam, string> = { pronta: 'Pronta', processando: 'Processando', falhou: 'Falhou' }
 
 interface FilterProps {
   filters: LibraryFilters
@@ -65,6 +63,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function FieldFilter({ field, filters, onChange }: FilterProps & { field: Field }) {
+  const { t } = useTranslation('library')
   const prefix = `${field.id}:`
   const values = filters.field.filter((value) => value.startsWith(prefix)).map((value) => value.slice(prefix.length))
   const others = filters.field.filter((value) => !value.startsWith(prefix))
@@ -90,7 +89,7 @@ function FieldFilter({ field, filters, onChange }: FilterProps & { field: Field 
     <Group title={field.name}>
       <input
         className="input"
-        placeholder="Qualquer valor"
+        placeholder={t('filters.anyValue')}
         aria-label={field.name}
         value={text}
         onChange={(event) => setDraft(event.target.value)}
@@ -110,17 +109,18 @@ type ParticipantKey = 'personCompany' | 'personDepartment' | 'personTag'
  * in the directory. Combined, they apply to one same person.
  */
 function ParticipantFilter({ filters, onChange }: FilterProps) {
+  const { t } = useTranslation('library')
   const facets = usePersonFacets()
   const sections: { key: ParticipantKey; title: string; values: string[] }[] = [
-    { key: 'personCompany', title: 'Empresa', values: facets.data?.companies.map((f) => f.value) ?? [] },
-    { key: 'personDepartment', title: 'Área', values: facets.data?.departments.map((f) => f.value) ?? [] },
-    { key: 'personTag', title: 'Tag da pessoa', values: facets.data?.tags.map((f) => f.value) ?? [] },
+    { key: 'personCompany', title: t('filters.company'), values: facets.data?.companies.map((f) => f.value) ?? [] },
+    { key: 'personDepartment', title: t('filters.department'), values: facets.data?.departments.map((f) => f.value) ?? [] },
+    { key: 'personTag', title: t('filters.personTag'), values: facets.data?.tags.map((f) => f.value) ?? [] },
   ]
   const visible = sections.filter((section) => section.values.length > 0 || filters[section.key].length > 0)
   if (visible.length === 0) return null
   return (
-    <Group title="Participantes">
-      <p className={`field-hint ${styles.participantHint}`}>Alguém que falou na gravação e tem tudo o que você marcar.</p>
+    <Group title={t('filters.participants')}>
+      <p className={`field-hint ${styles.participantHint}`}>{t('filters.participantsHint')}</p>
       {visible.map(({ key, title, values }) => {
         // A checked value that left the directory stays in the list, so it can be unchecked.
         const all = [...values, ...filters[key].filter((value) => !values.includes(value))]
@@ -144,26 +144,27 @@ function ParticipantFilter({ filters, onChange }: FilterProps) {
 
 /** The library filter groups: in the right-hand panel or, on a narrow screen, in a dialog. */
 export function FilterGroups({ filters, onChange }: FilterProps) {
+  const { t } = useTranslation('library')
   const tags = useTags()
   const collections = useCollections()
   const fields = useUserFields()
   const people = usePeopleOptions()
   const kinds = Object.keys(KINDS) as KindParam[]
   const statuses = Object.keys(STATUS_GROUPS) as StatusParam[]
-  const personName = (id: string) => people.data?.items.find((person) => person.id === id)?.name ?? 'Pessoa'
+  const personName = (id: string) => people.data?.items.find((person) => person.id === id)?.name ?? t('filters.person')
   const own = (fields.data?.items ?? []).filter((field) => field.builtin === null)
   // After choosing, the combobox comes back empty (it is remounted) for the next person.
   const [personPick, setPersonPick] = useState(0)
 
   return (
     <>
-      <Group title="Tipo">
+      <Group title={t('filters.kind')}>
         {kinds.map((kind) => {
           const checked = filters.kind.length === 0 || filters.kind.includes(kind)
           return (
             <Check
               key={kind}
-              label={KIND_LABELS[kind]}
+              label={t(`filters.kinds.${kind}`)}
               checked={checked}
               disabled={checked && filters.kind.length === 1}
               onChange={() => onChange({ ...filters, kind: toggleAll(filters.kind, kinds, kind) })}
@@ -171,20 +172,20 @@ export function FilterGroups({ filters, onChange }: FilterProps) {
           )
         })}
       </Group>
-      <Group title="Precisam de você">
+      <Group title={t('filters.needs')}>
         <Check
-          label="Aguardando locutores"
+          label={t('filters.awaitingSpeakers')}
           checked={filters.needs.includes('locutores')}
           onChange={() => onChange({ ...filters, needs: toggle(filters.needs, 'locutores') as NeedsParam[] })}
         />
       </Group>
-      <Group title="Situação">
+      <Group title={t('filters.status')}>
         {statuses.map((status) => {
           const checked = filters.status.length === 0 || filters.status.includes(status)
           return (
             <Check
               key={status}
-              label={STATUS_LABELS[status]}
+              label={t(`filters.statuses.${status}`)}
               checked={checked}
               disabled={checked && filters.status.length === 1}
               onChange={() => onChange({ ...filters, status: toggleAll(filters.status, statuses, status) })}
@@ -193,7 +194,7 @@ export function FilterGroups({ filters, onChange }: FilterProps) {
         })}
       </Group>
       {(tags.data?.items.length ?? 0) > 0 && (
-        <Group title="Tags">
+        <Group title={t('filters.tags')}>
           <div className={styles.tags}>
             {tags.data?.items.map(({ name }) => {
               const pressed = filters.tag.includes(name)
@@ -212,7 +213,7 @@ export function FilterGroups({ filters, onChange }: FilterProps) {
           </div>
         </Group>
       )}
-      <Group title="Pessoas">
+      <Group title={t('filters.people')}>
         {filters.person.length > 0 && (
           <div className={styles.tags}>
             {filters.person.map((id) => (
@@ -221,7 +222,7 @@ export function FilterGroups({ filters, onChange }: FilterProps) {
                 <button
                   type="button"
                   className={styles.chipRemove}
-                  aria-label={`Tirar ${personName(id)} do filtro`}
+                  aria-label={t('filters.removePerson', { name: personName(id) })}
                   onClick={() => onChange({ ...filters, person: filters.person.filter((item) => item !== id) })}
                 >
                   <X size={12} aria-hidden />
@@ -232,8 +233,8 @@ export function FilterGroups({ filters, onChange }: FilterProps) {
         )}
         <PersonCombobox
           key={personPick}
-          label="Filtrar por pessoa"
-          placeholder="Qualquer pessoa"
+          label={t('filters.pickPerson')}
+          placeholder={t('filters.anyPerson')}
           onSelect={(person) => {
             setPersonPick(personPick + 1)
             if (!filters.person.includes(person.id)) onChange({ ...filters, person: [...filters.person, person.id] })
@@ -242,7 +243,7 @@ export function FilterGroups({ filters, onChange }: FilterProps) {
       </Group>
       <ParticipantFilter filters={filters} onChange={onChange} />
       {(collections.data?.items.length ?? 0) > 0 && (
-        <Group title="Coleções">
+        <Group title={t('filters.collections')}>
           {collections.data?.items.map((collection) => (
             <Check
               key={collection.id}
@@ -252,7 +253,7 @@ export function FilterGroups({ filters, onChange }: FilterProps) {
             />
           ))}
           <Link to="/colecoes" className={styles.manage}>
-            Gerenciar coleções
+            {t('filters.manageCollections')}
           </Link>
         </Group>
       )}
@@ -272,17 +273,19 @@ interface LibraryFiltersProps extends FilterProps {
 
 /** The `.filters` panel on the right, collapsible down to the DS 48px strip. */
 export function LibraryFilters({ id, collapsed, onToggle, onClear, filters, onChange }: LibraryFiltersProps) {
+  const { t } = useTranslation('library')
   const count = activeFilterCount(filters)
   return (
-    <aside className="filters" id={id} aria-label="Filtros">
+    <aside className="filters" id={id} aria-label={t('filters.label')}>
       <div className="filters-head">
         <h5 className={styles.filtersTitle}>
-          Filtros{count > 0 && <span className={`badge badge-neutral ${styles.count}`}>{count}</span>}
+          {t('filters.title')}
+          {count > 0 && <span className={`badge badge-neutral ${styles.count}`}>{count}</span>}
         </h5>
         <button
           type="button"
           className={`btn btn-ghost btn-icon ${styles.collapse}`}
-          aria-label={collapsed ? 'Expandir filtros' : 'Recolher filtros'}
+          aria-label={collapsed ? t('filters.expand') : t('filters.collapse')}
           aria-expanded={!collapsed}
           aria-controls={`${id}-grupos`}
           onClick={onToggle}
@@ -294,7 +297,7 @@ export function LibraryFilters({ id, collapsed, onToggle, onClear, filters, onCh
       <div id={`${id}-grupos`} className={styles.groups}>
         {count > 0 && (
           <button type="button" className={`btn btn-ghost btn-sm ${styles.clear}`} onClick={onClear}>
-            Limpar filtros
+            {t('filters.clear')}
           </button>
         )}
         <FilterGroups filters={filters} onChange={onChange} />
