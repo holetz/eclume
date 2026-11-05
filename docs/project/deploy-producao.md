@@ -4,7 +4,7 @@ title: Production deploy on the GPU host
 description: How eclume runs in production on the host 192.168.15.199 — the eclume compose project with Caddy on 8443, build on the host daemon through the Docker context, secrets in deploy/.env.prod, a separate admin account and open signup, an internal CA on the clients, a daily cron backup with a tested restore, operation and coexistence with lumea.
 resource: deploy/docker-compose.prod.yml, deploy/deploy.sh, deploy/deploy_lib.py, deploy/.env.prod.example, deploy/server.Dockerfile, deploy/web.Dockerfile, deploy/web.Caddyfile, deploy/bootstrap-admin.sh, deploy/backup.sh, deploy/restore-backup.sh, deploy/staging.sh, deploy/docker-compose.staging.yml, deploy/smoke_prod.py, deploy/smoke_mcp.py, deploy/prove-web-prod.sh, deploy/release-desktop.sh, deploy/test_compose_prod.py, deploy/prove-restricted-ca.sh
 tags: [deploy, producao, host, caddy, backup, runbook]
-timestamp: 2026-10-08
+timestamp: 2026-11-05
 audience: both
 authority: current
 source: holetz/eclume#14, holetz/eclume#26, holetz/eclume#28, holetz/eclume#29, holetz/eclume#32, holetz/eclume#33, holetz/eclume#35, holetz/eclume#39, holetz/eclume#60, holetz/eclume#110, holetz/eclume#92, holetz/eclume#101, holetz/eclume#151
@@ -304,9 +304,18 @@ credential. The matrix of what each type requires is in [server-agentes.md](../s
 The smoke does not register a provider: it proves the summary with whatever is registered for `summaries`, of
 any type, or with the one in `--provider <id>`.
 
-**Pending decision (holetz/eclume#129, task 5.3):** whether Anthropic's terms allow a
-subscription's token to serve eclume's accounts. Until the owner records the decision here,
-`claude-cli` remains this production's provider; the switch is re-registering the provider in the panel.
+**Terms decision (holetz/eclume#129, 2026-11-05).** Anthropic's Claude Code legal page
+([code.claude.com/docs/en/legal-and-compliance](https://code.claude.com/docs/en/legal-and-compliance),
+§Authentication and credential use) says that Free, Pro, Max and Ultra credentials must not route requests
+on behalf of other users. The rule for any eclume deployment:
+
+- A subscription `setup-token` (the `claude-cli` provider below) serves **only the owner's own
+  account**. This production uses it because the owner is the account that summarizes.
+- A deployment with **other accounts** uses an Anthropic API key (the `anthropic` provider) under the
+  Commercial Terms, or a local or OpenAI-compatible provider.
+
+Switching is re-registering the provider in the panel; [auto-hospedar.md](../how-to/auto-hospedar.md#5-summary-provider)
+points here for the self-hosting path.
 
 **Claude token.** On a computer with Claude Code logged in to the subscription, `claude setup-token`
 opens the authorization in the browser and prints the token (`sk-ant-oat01-…`). Register it in the panel:

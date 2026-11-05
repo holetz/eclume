@@ -4,7 +4,7 @@ title: Self-host eclume
 description: How to bring up eclume on your own server, with or without an NVIDIA GPU — requirements, the no-GPU path, the generated deploy/.env.prod, deploy through any Docker context, the first admin, the summary provider, the local-network premise (mDNS and own CA), what changes when exposing to the internet, how to close signup, and the backup.
 resource: deploy/deploy.sh, deploy/docker-compose.prod.yml, deploy/docker-compose.cpu.yml, deploy/.env.prod.example, deploy/bootstrap-admin.sh, deploy/backup.sh
 tags: [deploy, auto-hospedagem, gpu, cpu, instalacao]
-timestamp: 2026-10-07
+timestamp: 2026-11-05
 audience: both
 source: holetz/eclume#126, holetz/eclume#151
 maintainer: holetz
@@ -120,6 +120,13 @@ types and what each requires — an API key, an OpenAI-API-compatible server on 
 or the Claude CLI, which only goes into the image with `ECLUME_CLAUDE_CLI=1` — are in the matrix of
 [server-agentes.md](../standards/code/server-agentes.md#what-each-provider-requires). With
 `ECLUME_CLAUDE_CLI=0`, the server image has free software only.
+
+**Which credential serves which accounts.** A Claude subscription `setup-token` (the Claude CLI
+provider) may serve only the account of the person who owns the subscription: Anthropic's terms do not
+let Free, Pro, Max or Ultra credentials route requests for other users. A deployment with other accounts
+registers an Anthropic API key (Commercial Terms) or a local or OpenAI-compatible provider instead. The
+decision and its source are in
+[deploy-producao.md](../project/deploy-producao.md#admin-accounts-and-provider).
 
 ## 6. Clients on the local network
 
