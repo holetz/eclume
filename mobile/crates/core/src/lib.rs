@@ -14,6 +14,7 @@
 pub mod config;
 pub mod connection;
 pub mod estimates;
+pub mod locale;
 pub mod network;
 pub mod session;
 pub mod sync;
@@ -31,6 +32,7 @@ use serde::Serialize;
 use crate::config::{Config, Dirs, Quality, Server};
 use crate::connection::{Connection, ConnectionState, RealTransports, Transports};
 use crate::estimates::{Battery, BatteryReading, Warnings};
+use crate::locale::Locale;
 use crate::network::{Network, NetworkState, Probe, PROBE_TIMEOUT};
 use crate::session::{Session, SessionState};
 use crate::sync::{Meter, OnServer, Step, Wait};
@@ -109,6 +111,7 @@ impl StopReason {
 /// Everything the UI draws: it is a function of this state.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AppState {
+    pub locale: &'static str,
     #[serde(rename = "conexao")]
     pub connection: ConnectionState,
     #[serde(rename = "rede")]
@@ -343,6 +346,13 @@ impl Core {
         self.config.quality.bitrate()
     }
 
+    pub fn locale(&self) -> Locale {
+        locale::resolve(
+            self.config.account_locale.as_deref(),
+            self.config.device_locale.as_deref(),
+        )
+    }
+
     pub fn state(&self) -> Result<AppState> {
         let mut network = self.network.clone();
         if self.syncing.load(Ordering::Acquire) {
@@ -356,6 +366,7 @@ impl Core {
         };
         let bitrate = self.bitrate();
         Ok(AppState {
+            locale: self.locale().tag(),
             connection: self.connection.state(&self.config),
             network: network.state(),
             session: self.session.state(&self.queue)?,
@@ -414,6 +425,7 @@ impl Core {
 
     /// "Sair e esquecer o servidor". The waiting recordings stay and upload to the next server.
     pub fn sign_out(&mut self) -> Result<()> {
+        self.config.account_locale = None;
         self.connection.sign_out(&mut self.config)?;
         let wifi = self.network.unmetered_wifi();
         self.network = Network::default();
@@ -602,6 +614,22 @@ impl Core {
     pub fn store_account_language(&mut self, language: String) -> Result<()> {
         if self.config.account_language.as_deref() != Some(language.as_str()) {
             self.config.account_language = Some(language);
+            self.save_config()?;
+        }
+        Ok(())
+    }
+
+    pub fn store_account_locale(&mut self, tag: Option<String>) -> Result<()> {
+        if self.config.account_locale != tag {
+            self.config.account_locale = tag;
+            self.save_config()?;
+        }
+        Ok(())
+    }
+
+    pub fn store_device_locale(&mut self, tag: Option<String>) -> Result<()> {
+        if self.config.device_locale != tag {
+            self.config.device_locale = tag;
             self.save_config()?;
         }
         Ok(())
@@ -1004,6 +1032,10 @@ impl ReadPlan {
         sync::fetch_account_language(self.transport.as_ref(), &self.server, &self.token)
     }
 
+    pub fn account_locale(&self) -> Result<Option<String>> {
+        sync::fetch_account_locale(self.transport.as_ref(), &self.server, &self.token)
+    }
+
     pub fn titles(&self, since: &str) -> Result<sync::Titles> {
         sync::fetch_titles(self.transport.as_ref(), &self.server, &self.token, since)
     }
@@ -1196,6 +1228,11 @@ pub fn cycle(core: &Mutex<Core>, now: bool) -> Result<Option<eclume_recorder::Sy
             // A server older than 2.20.0 lacks the route: the sheet keeps the plain account default.
             match plan.account_language() {
                 Ok(language) => lock(core)?.store_account_language(language)?,
+                Err(err) => log::warn!("{err:#}"),
+            }
+            // A server older than 2.30.0 lacks the route: keep the cached locale.
+            match plan.account_locale() {
+                Ok(locale) => lock(core)?.store_account_locale(locale)?,
                 Err(err) => log::warn!("{err:#}"),
             }
         }
