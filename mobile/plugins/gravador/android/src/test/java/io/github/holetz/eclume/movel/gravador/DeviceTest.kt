@@ -5,48 +5,48 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class AparelhoTest {
+class DeviceTest {
     @Test
-    fun soWifiNaoMedidoContaComoRedeDoEclume() {
-        assertTrue(Conectividade.ehWifiNaoMedido(wifi = true, naoMedida = true))
-        assertFalse(Conectividade.ehWifiNaoMedido(wifi = true, naoMedida = false))
-        assertFalse(Conectividade.ehWifiNaoMedido(wifi = false, naoMedida = true))
+    fun onlyUnmeteredWifiCountsAsEclumesNetwork() {
+        assertTrue(Connectivity.isUnmeteredWifi(wifi = true, unmetered = true))
+        assertFalse(Connectivity.isUnmeteredWifi(wifi = true, unmetered = false))
+        assertFalse(Connectivity.isUnmeteredWifi(wifi = false, unmetered = true))
     }
 
     @Test
-    fun porcentagemDaBateria() {
-        assertEquals(12, Dispositivo.porcentagem(12, 100))
-        assertEquals(50, Dispositivo.porcentagem(128, 256))
-        assertEquals(100, Dispositivo.porcentagem(-1, 100))
-        assertEquals(100, Dispositivo.porcentagem(40, 0))
+    fun batteryPercentage() {
+        assertEquals(12, Device.percentage(12, 100))
+        assertEquals(50, Device.percentage(128, 256))
+        assertEquals(100, Device.percentage(-1, 100))
+        assertEquals(100, Device.percentage(40, 0))
     }
 
     @Test
-    fun isencaoDaOtimizacaoDeBateria() {
-        assertEquals("concedida", Dispositivo.isencao(concedida = true, jaPediu = true))
-        assertEquals("pedir", Dispositivo.isencao(concedida = false, jaPediu = false))
-        assertEquals("recusada", Dispositivo.isencao(concedida = false, jaPediu = true))
+    fun batteryOptimizationExemption() {
+        assertEquals("concedida", Device.exemption(granted = true, alreadyAsked = true))
+        assertEquals("pedir", Device.exemption(granted = false, alreadyAsked = false))
+        assertEquals("recusada", Device.exemption(granted = false, alreadyAsked = true))
     }
 
     @Test
-    fun txtDoAnuncioViraTexto() {
-        val txt = Descoberta.txtEmTexto(
+    fun announcementTxtBecomesText() {
+        val txt = Discovery.txtAsText(
             mapOf(
                 "url" to "https://192.168.15.199:8443".toByteArray(),
                 "ca" to "3f9a".toByteArray(),
-                "vazia" to null,
+                "empty" to null,
             ),
         )
         assertEquals("https://192.168.15.199:8443", txt["url"])
         assertEquals("3f9a", txt["ca"])
-        assertEquals("", txt["vazia"])
+        assertEquals("", txt["empty"])
     }
 
     @Test
-    fun autoridadeDoFileProviderDoApp() {
+    fun appFileProviderAuthority() {
         assertEquals(
             "io.github.holetz.eclume.movel.fileprovider",
-            Atualizador.autoridade("io.github.holetz.eclume.movel"),
+            Updater.authority("io.github.holetz.eclume.movel"),
         )
     }
 }

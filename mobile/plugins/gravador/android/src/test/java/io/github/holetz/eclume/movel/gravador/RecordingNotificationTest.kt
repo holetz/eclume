@@ -5,74 +5,74 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class NotificacaoTest {
-    private val gravando = SessaoNaNotificacao(
+class RecordingNotificationTest {
+    private val recording = NotificationSession(
         audioMs = 42 * 60_000L + 10_000L,
-        pausada = false,
-        marcadores = 2,
-        espacoLivre = "cerca de 9 h",
+        paused = false,
+        markers = 2,
+        freeSpace = "cerca de 9 h",
     )
 
     @Test
-    fun relogioDoTempoDeAudio() {
-        assertEquals("00:42:10", TextosDaNotificacao.relogio(gravando.audioMs))
-        assertEquals("01:00:00", TextosDaNotificacao.relogio(3_600_000L))
-        assertEquals("00:00:00", TextosDaNotificacao.relogio(-5L))
+    fun audioTimeClock() {
+        assertEquals("00:42:10", NotificationTexts.clock(recording.audioMs))
+        assertEquals("01:00:00", NotificationTexts.clock(3_600_000L))
+        assertEquals("00:00:00", NotificationTexts.clock(-5L))
     }
 
     @Test
-    fun gravandoUsaOCronometroEPausadoMostraOTempoParado() {
-        assertEquals("Gravando", TextosDaNotificacao.titulo(gravando))
-        assertEquals("Pausado · 00:42:10", TextosDaNotificacao.titulo(gravando.copy(pausada = true)))
-        // O cronômetro do sistema conta a partir de agora menos o tempo de áudio.
-        assertEquals(1_000_000L - gravando.audioMs, TextosDaNotificacao.inicioDoCronometro(1_000_000L, gravando))
+    fun recordingUsesTheChronometerAndPausedShowsTheStoppedTime() {
+        assertEquals("Gravando", NotificationTexts.title(recording))
+        assertEquals("Pausado · 00:42:10", NotificationTexts.title(recording.copy(paused = true)))
+        // The system chronometer counts from now minus the audio time.
+        assertEquals(1_000_000L - recording.audioMs, NotificationTexts.chronometerStart(1_000_000L, recording))
     }
 
     @Test
-    fun marcadoresEEspacoLivre() {
-        assertEquals("2 marcadores · espaço para cerca de 9 h", TextosDaNotificacao.texto(gravando))
-        assertEquals("1 marcador", TextosDaNotificacao.texto(gravando.copy(marcadores = 1, espacoLivre = null)))
+    fun markersAndFreeSpace() {
+        assertEquals("2 marcadores · espaço para cerca de 9 h", NotificationTexts.text(recording))
+        assertEquals("1 marcador", NotificationTexts.text(recording.copy(markers = 1, freeSpace = null)))
         assertEquals(
             "Microfone desconectado · reconectando",
-            TextosDaNotificacao.texto(gravando.copy(reconectando = true)),
+            NotificationTexts.text(recording.copy(reconnecting = true)),
         )
-        assertEquals("Silenciado pelo sistema", TextosDaNotificacao.texto(gravando.copy(silenciada = true)))
+        assertEquals("Silenciado pelo sistema", NotificationTexts.text(recording.copy(silenced = true)))
     }
 
     @Test
-    fun respostaDoNucleoTemTresCasos() {
-        val comSessao = RespostaDoNucleo.ler(
+    fun coreReplyHasThreeCases() {
+        val withSession = CoreReply.read(
             """{"sessao": {"audio_ms": 1000, "pausada": false, "marcadores": [{}], "microfone": "ok"},
                 "espaco_livre": "cerca de 9 h"}""",
         )
         assertEquals(
-            RespostaDoNucleo.ComSessao(SessaoNaNotificacao(1000, false, 1, "cerca de 9 h")),
-            comSessao,
+            CoreReply.WithSession(NotificationSession(1000, false, 1, "cerca de 9 h")),
+            withSession,
         )
-        assertEquals(RespostaDoNucleo.SemSessao, RespostaDoNucleo.ler("""{"sessao": null}"""))
+        assertEquals(CoreReply.NoSession, CoreReply.read("""{"sessao": null}"""))
         assertEquals(
-            RespostaDoNucleo.Erro("pânico: núcleo quebrado"),
-            RespostaDoNucleo.ler("""{"erro": "pânico: núcleo quebrado"}"""),
+            CoreReply.Failure("pânico: núcleo quebrado"),
+            CoreReply.read("""{"erro": "pânico: núcleo quebrado"}"""),
         )
-        assertTrue(RespostaDoNucleo.ler("não é json") is RespostaDoNucleo.Erro)
-        assertTrue(RespostaDoNucleo.ler(null) is RespostaDoNucleo.Erro)
-        assertNull(SessaoNaNotificacao.doEstado("""{"erro": "x"}"""))
+        assertTrue(CoreReply.read("not json") is CoreReply.Failure)
+        assertTrue(CoreReply.read(null) is CoreReply.Failure)
+        assertNull(NotificationSession.fromState("""{"erro": "x"}"""))
     }
 
     @Test
-    fun avisoDeQuandoAGravacaoPara() {
-        assertEquals("A gravação parou", TextosDaNotificacao.PAROU)
-        assertEquals("pouco espaço livre · 00:12:30 salvos", TextosDaNotificacao.parou("pouco espaço livre", 750_000L))
-        assertEquals("o microfone parou", TextosDaNotificacao.parou("o microfone parou", null))
+    fun warningWhenTheRecordingStops() {
+        assertEquals("A gravação parou", NotificationTexts.STOPPED)
+        assertEquals("pouco espaço livre · 00:12:30 salvos", NotificationTexts.stopped("pouco espaço livre", 750_000L))
+        assertEquals("o microfone parou", NotificationTexts.stopped("o microfone parou", null))
     }
 
     @Test
-    fun acoesDaNotificacaoViramAcoesDoNucleo() {
-        assertEquals("pausar", ServicoDeGravacao.acaoDoNucleo(ServicoDeGravacao.PAUSAR))
-        assertEquals("continuar", ServicoDeGravacao.acaoDoNucleo(ServicoDeGravacao.CONTINUAR))
-        assertEquals("marcar", ServicoDeGravacao.acaoDoNucleo(ServicoDeGravacao.MARCAR))
-        assertEquals("parar", ServicoDeGravacao.acaoDoNucleo(ServicoDeGravacao.PARAR))
-        assertNull(ServicoDeGravacao.acaoDoNucleo(ServicoDeGravacao.ATUALIZAR))
-        assertNull(ServicoDeGravacao.acaoDoNucleo(null))
+    fun notificationActionsBecomeCoreActions() {
+        assertEquals("pausar", RecordingService.coreAction(RecordingService.PAUSE))
+        assertEquals("continuar", RecordingService.coreAction(RecordingService.RESUME))
+        assertEquals("marcar", RecordingService.coreAction(RecordingService.MARK))
+        assertEquals("parar", RecordingService.coreAction(RecordingService.STOP))
+        assertNull(RecordingService.coreAction(RecordingService.UPDATE))
+        assertNull(RecordingService.coreAction(null))
     }
 }

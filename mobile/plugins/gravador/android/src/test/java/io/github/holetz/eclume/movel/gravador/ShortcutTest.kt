@@ -4,13 +4,13 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class AtalhoTest {
+class ShortcutTest {
     @Test
-    fun soOToqueNovoNoAtalhoGrava() {
-        assertTrue(Atalho.ehGravarAgora(Atalho.GRAVAR_AGORA, 0))
-        // Pelos recentes, o mesmo intent volta com FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY.
-        assertFalse(Atalho.ehGravarAgora(Atalho.GRAVAR_AGORA, 0x00100000))
-        assertFalse(Atalho.ehGravarAgora("android.intent.action.MAIN", 0))
-        assertFalse(Atalho.ehGravarAgora(null, 0))
+    fun onlyANewTapOnTheShortcutRecords() {
+        assertTrue(Shortcut.isRecordNow(Shortcut.RECORD_NOW, 0))
+        // From the recents, the same intent comes back with FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY.
+        assertFalse(Shortcut.isRecordNow(Shortcut.RECORD_NOW, 0x00100000))
+        assertFalse(Shortcut.isRecordNow("android.intent.action.MAIN", 0))
+        assertFalse(Shortcut.isRecordNow(null, 0))
     }
 }
