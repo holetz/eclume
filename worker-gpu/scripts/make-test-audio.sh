@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Generate the GPU worker's test audio, in the upload format (Opus mono 16 kHz, Ogg, 32 kbps;
-# docs/standards/code/formato-audio-upload.md). Runs on the GPU host (needs Docker and ffmpeg):
+# docs/standards/code/formato-audio-upload.md). Needs curl, ffmpeg and network access:
 #
-#   bash worker-gpu/scripts/make-test-audio.sh fixture <output.ogg>   # ~30 s, two voices (Piper TTS)
+#   bash worker-gpu/scripts/make-test-audio.sh fixture <output.ogg>   # ~30 s, two real speakers (Common Voice, CC0)
 #   bash worker-gpu/scripts/make-test-audio.sh bench <output.ogg>     # 1 h of real speech (LibriVox)
 #
-# `fixture`: pt-BR dialogue synthesized with two distinct Piper voices (faber and cadu), alternating.
+# `fixture`: pt-BR sentences read by two different real speakers, alternating, from six pinned clips
+# of Common Voice pt 17.0 (CC0-1.0). Provenance: docs/project/fixtures-provenance.md.
 # `bench`: short stories by Artur Azevedo read in Portuguese (LibriVox, public domain), cut to 1 h.
 set -euo pipefail
 
 mode="${1:?usage: make-test-audio.sh fixture|bench <output.ogg>}"
+CV_REVISION=8262c16bf297c87a9cd88c51997c4758ed7a8ba2  # fsicoli/common_voice_17_0, a mirror of Common Voice 17.0 (CC0-1.0)
 out="$(realpath -m "${2:?give the output file}")"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -23,27 +25,29 @@ encode() {  # encode <input> <output> [extra ffmpeg args]
 }
 
 fixture() {
-  cat > "$work/lines.tsv" <<'LINES'
-faber	Bom dia, pessoal. Obrigado por virem. Hoje vamos fechar o cronograma do programa de lideranças.
-cadu	Bom dia. Eu trouxe a proposta revisada, com os três módulos e as datas de cada turma.
-faber	Ótimo. O primeiro módulo começa em março, certo? Precisamos confirmar a sala com o financeiro.
-cadu	Isso, começa na segunda semana de março. Eu falo com o financeiro ainda hoje à tarde.
-faber	Perfeito. Então a próxima reunião fica para sexta-feira, às dez horas.
-LINES
-  docker run --rm -v "$work:/work" -w /work python:3.12-slim bash -euo pipefail -c '
-    pip install --quiet --root-user-action=ignore piper-tts >/dev/null
-    python -m piper.download_voices --data-dir /work/voices pt_BR-faber-medium pt_BR-cadu-medium >/dev/null
-    n=0
-    while IFS=$(printf "\t") read -r voice text; do
-      n=$((n + 1))
-      printf "%s" "$text" | python -m piper --data-dir /work/voices -m "pt_BR-$voice-medium" -f "/work/line-$(printf %02d $n).wav"
-    done < lines.tsv
-    chown -R '"$(id -u):$(id -g)"' /work
-  '
+  # Six clips of Common Voice pt 17.0 (CC0-1.0), two real speakers alternating: a woman (A) and a
+  # man (B). The dataset keeps the clips inside one 291 MB tar, so each clip is read with one Range
+  # request at its data offset in the tar and checked against its sha256. Fields: id, speaker,
+  # offset, size, sha256.
+  local base="https://huggingface.co/datasets/fsicoli/common_voice_17_0/resolve/$CV_REVISION"
+  local clips=(
+    "19839027 A 39085568 46317 31a0767d529251ead6c32031c8f675039bada3875b897f316e4d96b411cc8e01"
+    "19372052 B 12950016 36333 6ee2198f128b775a70c6d5bce70a0b3c7fb2fc2a4d2fcc33f1ec59239d31ef07"
+    "19839054 A 39385600 31725 85064434426548dc0398f79c2fe14bda63b75e7876c619c118c766288affbd69"
+    "19372064 B 13201920 39213 20de6d94225e09aa95c3258246160b4bfd67d2cefe764e1fcb1aa5606029a51e"
+    "19839053 A 39347200 37677 0051b8c04a6f602435ddd78b06f10e21a93a54b28a36c22adf92737ed914ee27"
+    "19372093 B 13451776 44013 c0a9de540038caacfc9e2af36b5e30a21cf54017f512a97da108c2af5326cc72"
+  )
+  ffmpeg -hide_banner -loglevel error -f lavfi -i anullsrc=r=16000:cl=mono -t 0.4 "$work/pause.wav"
   : > "$work/list.txt"
-  ffmpeg -hide_banner -loglevel error -f lavfi -i anullsrc=r=22050:cl=mono -t 0.6 "$work/pause.wav"
-  for wav in "$work"/line-*.wav; do
-    printf "file '%s'\nfile '%s'\n" "$wav" "$work/pause.wav" >> "$work/list.txt"
+  local clip id offset size sha
+  for clip in "${clips[@]}"; do
+    read -r id _ offset size sha <<< "$clip"
+    curl -fsSL -r "$offset-$((offset + size - 1))" -o "$work/$id.mp3" "$base/audio/pt/dev/pt_dev_0.tar"
+    echo "$sha  $work/$id.mp3" | sha256sum --check --status \
+      || { echo "clip $id does not match its pinned sha256" >&2; exit 1; }
+    ffmpeg -hide_banner -loglevel error -y -i "$work/$id.mp3" -ac 1 -ar 16000 "$work/$id.wav"
+    printf "file '%s'\nfile '%s'\n" "$work/$id.wav" "$work/pause.wav" >> "$work/list.txt"
   done
   ffmpeg -hide_banner -loglevel error -f concat -safe 0 -i "$work/list.txt" -c copy "$work/dialogue.wav"
   encode "$work/dialogue.wav" "$out"
