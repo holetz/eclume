@@ -1,11 +1,11 @@
 ---
-titulo: Sincronize seus resumos numa pasta
-topico: conectar
-paginas: [app-desktop, colecoes]
-relacionados: [tags-e-colecoes, instalar-app-desktop, conectar-assistente-mcp]
-termos: [pasta, sincronizar, sincronização, Obsidian, vault, Markdown, JSONL, agente, AGENTS.md, Claude Code, coleção, coleções, subpasta, espelho]
-ordem: 6
-atualizado: 2026-10-08
+title: Sincronize seus resumos numa pasta
+topic: conectar
+pages: [app-desktop, colecoes]
+related: [tags-and-collections, install-desktop-app, connect-mcp-assistant]
+terms: [pasta, sincronizar, sincronização, Obsidian, vault, Markdown, JSONL, agente, AGENTS.md, Claude Code, coleção, coleções, subpasta, espelho]
+order: 6
+updated: 2026-10-08
 ---
 O app desktop pode manter uma pasta do seu computador com o **resumo** e a **transcrição** de cada
 gravação da sua biblioteca. Assim você lê, busca e reaproveita o conteúdo fora do eclume, num editor
@@ -80,13 +80,13 @@ ali e como ler e pesquisar: a estrutura, as propriedades, o formato do JSONL e e
 com `rg` e `jq`. Basta abrir o agente na pasta.
 
 Para que o agente consulte o eclume diretamente, em vez de arquivos, veja
-[Conecte um assistente pelo MCP](/ajuda/conectar-assistente-mcp).
+[Conecte um assistente pelo MCP](/ajuda/connect-mcp-assistant).
 
 ## O que o app faz e não faz com os arquivos
 
 - A pasta é um **espelho**: o eclume é a fonte. Editar um arquivo gerado não muda o resumo no
   servidor, e a edição se perde no próximo ciclo. Para editar de verdade, use
-  [Editar o resumo](/ajuda/editar-resumo) no eclume, ou trabalhe numa cópia.
+  [Editar o resumo](/ajuda/edit-summary) no eclume, ou trabalhe numa cópia.
 - Os seus próprios arquivos na pasta nunca são tocados: o app só mexe no que ele mesmo criou.
 - Apagar uma gravação no eclume apaga os arquivos dela na pasta, na próxima conferência.
 - Quem tem acesso à pasta lê os resumos e as transcrições: guarde-a onde só você tem acesso.

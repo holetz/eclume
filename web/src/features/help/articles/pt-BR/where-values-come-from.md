@@ -1,11 +1,11 @@
 ---
-titulo: De onde veio um valor preenchido
-topico: resumos
-paginas: [gravacao, campos]
-relacionados: [campos-em-toda-gravacao, escrever-uma-regra, tentar-de-novo]
-termos: [automático, editado, aceito, aceitar, aceitar tudo, origem, selo, campo]
-ordem: 4
-atualizado: 2026-09-27
+title: De onde veio um valor preenchido
+topic: resumos
+pages: [gravacao, campos]
+related: [fields-on-every-recording, write-a-rule, try-again]
+terms: [automático, editado, aceito, aceitar, aceitar tudo, origem, selo, campo]
+order: 4
+updated: 2026-09-27
 ---
 No painel de campos da gravação, cada valor tem um selo que diz de onde ele veio.
 
@@ -28,4 +28,4 @@ O preenchimento automático nunca sobrescreve um valor **editado** ou **aceito**
 gravação ou mudar a regra do campo recalcula só os valores automáticos. O que você conferiu fica.
 
 Para mudar o que o agente preenche, ajuste a regra do campo em
-[Campos personalizados](/config/campos): veja [Escreva uma regra que preenche um campo](/ajuda/escrever-uma-regra).
+[Campos personalizados](/config/campos): veja [Escreva uma regra que preenche um campo](/ajuda/write-a-rule).

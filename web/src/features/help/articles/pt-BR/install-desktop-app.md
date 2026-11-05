@@ -1,11 +1,11 @@
 ---
-titulo: Instale o app desktop
-topico: comecar
-paginas: [app-desktop]
-relacionados: [primeira-gravacao, notas-de-voz, marcadores]
-termos: [instalar, instalador, Windows, Linux, baixar, download, primeira execução, entrar]
-ordem: 3
-atualizado: 2026-10-01
+title: Instale o app desktop
+topic: comecar
+pages: [app-desktop]
+related: [first-recording, voice-notes, markers]
+terms: [instalar, instalador, Windows, Linux, baixar, download, primeira execução, entrar]
+order: 3
+updated: 2026-10-01
 ---
 O app desktop grava reuniões e notas de voz no computador e envia tudo para este servidor.
 

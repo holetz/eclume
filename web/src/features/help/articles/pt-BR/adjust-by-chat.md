@@ -1,11 +1,11 @@
 ---
-titulo: Ajuste o resumo pelo chat
-topico: resumos
-paginas: [gravacao]
-relacionados: [editar-resumo, versoes-do-resumo, conectar-assistente-mcp]
-termos: [chat, agente, ajustar, pedir, perguntar, reescrever, IA]
-ordem: 2
-atualizado: 2026-10-01
+title: Ajuste o resumo pelo chat
+topic: resumos
+pages: [gravacao]
+related: [edit-summary, summary-versions, connect-mcp-assistant]
+terms: [chat, agente, ajustar, pedir, perguntar, reescrever, IA]
+order: 2
+updated: 2026-10-01
 ---
 O chat **Ajustar o resumo**, ao lado do resumo na página da gravação, pede mudanças ao agente do
 servidor em linguagem comum.

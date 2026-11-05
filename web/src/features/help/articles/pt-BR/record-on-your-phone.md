@@ -1,11 +1,11 @@
 ---
-titulo: Grave pelo celular
-topico: comecar
-paginas: [app-movel]
-relacionados: [marcadores, notas-de-voz, primeira-gravacao]
-termos: [celular, app móvel, Android, QR, parear, sincronizar, Wi-Fi, sem rede]
-ordem: 4
-atualizado: 2026-09-27
+title: Grave pelo celular
+topic: comecar
+pages: [app-movel]
+related: [markers, voice-notes, first-recording]
+terms: [celular, app móvel, Android, QR, parear, sincronizar, Wi-Fi, sem rede]
+order: 4
+updated: 2026-09-27
 ---
 O app do celular é um gravador portátil. Ele serve para as conversas longe do computador: uma
 visita, um corredor, uma reunião presencial.

@@ -1,11 +1,11 @@
 ---
-titulo: Habilidades e ações do Agente
-topico: resumos
-paginas: [agente]
-relacionados: [conversar-com-o-agente, ajustar-pelo-chat, conectar-assistente-mcp]
-termos: [habilidade, habilidades, instrução, instruções, ação, ações, lote, confirmar, regenerar, tag, coleção, tipo de agenda]
-ordem: 6
-atualizado: 2026-10-05
+title: Habilidades e ações do Agente
+topic: resumos
+pages: [agente]
+related: [chat-with-the-agent, adjust-by-chat, connect-mcp-assistant]
+terms: [habilidade, habilidades, instrução, instruções, ação, ações, lote, confirmar, regenerar, tag, coleção, tipo de agenda]
+order: 6
+updated: 2026-10-05
 ---
 O Agente pode seguir um jeito de trabalhar que você repete, guardado como **habilidade**, e pode
 propor mudanças em várias gravações de uma vez, que só acontecem depois que você confirma.

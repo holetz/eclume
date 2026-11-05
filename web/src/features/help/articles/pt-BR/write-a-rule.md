@@ -1,11 +1,11 @@
 ---
-titulo: Escreva uma regra que preenche um campo
-topico: organizar
-paginas: [campos]
-relacionados: [testar-uma-regra, campos-em-toda-gravacao, origem-dos-valores]
-termos: [regra, como identificar, instrução, preencher, agente, prompt]
-ordem: 2
-atualizado: 2026-09-30
+title: Escreva uma regra que preenche um campo
+topic: organizar
+pages: [campos]
+related: [test-a-rule, fields-on-every-recording, where-values-come-from]
+terms: [regra, como identificar, instrução, preencher, agente, prompt]
+order: 2
+updated: 2026-09-30
 ---
 A regra de um campo, em **Como identificar**, é o que o agente lê para preencher aquele campo a
 partir da transcrição. Escreva como explicaria a alguém que vai ouvir a reunião por você.
@@ -28,6 +28,6 @@ partir da transcrição. Escreva como explicaria a alguém que vai ouvir a reuni
 - Nos campos do tipo escolha, o agente só usa as opções que você definiu. Não precisa repeti-las
   na regra.
 - O título não tem regra aqui: cada tipo de agenda diz como escrever o assunto e monta o título
-  com ele. Veja [Monte o título pelo tipo de agenda](/ajuda/padrao-de-titulo).
+  com ele. Veja [Monte o título pelo tipo de agenda](/ajuda/title-pattern).
 
-Antes de salvar, teste a regra: [Teste uma regra antes de salvar](/ajuda/testar-uma-regra).
+Antes de salvar, teste a regra: [Teste uma regra antes de salvar](/ajuda/test-a-rule).

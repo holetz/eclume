@@ -1,11 +1,11 @@
 ---
-titulo: Exporte a transcrição e o resumo
-topico: transcricao
-paginas: [gravacao]
-relacionados: [corrigir-transcricao, buscar-nas-gravacoes]
-termos: [exportar, baixar, TXT, SRT, Markdown, MD, DOCX, Word, legenda]
-ordem: 7
-atualizado: 2026-09-27
+title: Exporte a transcrição e o resumo
+topic: transcricao
+pages: [gravacao]
+related: [correct-the-transcript, search-recordings]
+terms: [exportar, baixar, TXT, SRT, Markdown, MD, DOCX, Word, legenda]
+order: 7
+updated: 2026-09-27
 ---
 Na página da gravação, o menu **Exportar** baixa a transcrição ou o resumo num arquivo.
 

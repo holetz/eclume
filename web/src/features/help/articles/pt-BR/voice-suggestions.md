@@ -1,11 +1,11 @@
 ---
-titulo: Como funcionam as sugestões por voz
-topico: transcricao
-paginas: [pessoas, pessoa, gravacao]
-relacionados: [ligar-locutor-a-pessoa, esquecer-a-voz, corrigir-transcricao]
-termos: [impressão de voz, biometria, LGPD, limiar, identificação por voz]
-ordem: 2
-atualizado: 2026-09-30
+title: Como funcionam as sugestões por voz
+topic: transcricao
+pages: [pessoas, pessoa, gravacao]
+related: [link-speaker-to-person, forget-a-voice, correct-the-transcript]
+terms: [impressão de voz, biometria, LGPD, limiar, identificação por voz]
+order: 2
+updated: 2026-09-30
 ---
 Quando um locutor da transcrição ainda não está ligado a ninguém, o eclume pode sugerir quem é,
 comparando a voz com a impressão de voz das pessoas que **você** cadastrou.

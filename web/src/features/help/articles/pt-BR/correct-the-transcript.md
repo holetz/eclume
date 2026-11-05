@@ -1,11 +1,11 @@
 ---
-titulo: Corrija uma transcrição
-topico: transcricao
-paginas: [gravacao]
-relacionados: [ligar-locutor-a-pessoa, tentar-de-novo, exportar]
-termos: [corrigir, editar fala, erro de transcrição, renomear locutor, juntar locutores, retranscrever]
-ordem: 4
-atualizado: 2026-10-08
+title: Corrija uma transcrição
+topic: transcricao
+pages: [gravacao]
+related: [link-speaker-to-person, try-again, export]
+terms: [corrigir, editar fala, erro de transcrição, renomear locutor, juntar locutores, retranscrever]
+order: 4
+updated: 2026-10-08
 ---
 A transcrição automática erra nomes próprios, siglas e trechos com ruído. Você corrige tudo na
 página da gravação.
@@ -29,11 +29,11 @@ o **Mínimo** e o **Máximo de locutores**: a transcrição nova separa as vozes
 Deixados vazios, valem os limites da plataforma.
 
 Para dar nome a quem fala de verdade, prefira
-[ligar o locutor a uma pessoa](/ajuda/ligar-locutor-a-pessoa).
+[ligar o locutor a uma pessoa](/ajuda/link-speaker-to-person).
 
 ## Retranscrever
 
 Retranscrever faz uma transcrição nova do áudio e refaz as etapas seguintes. Em **Transcrever de
 novo em…** você escolhe o idioma e o mínimo e o máximo de locutores. As correções de texto
 da transcrição anterior não passam para a nova, então corrija depois de retranscrever. Os vínculos
-de locutor com pessoa que você confirmou continuam valendo. Veja [Tente de novo uma etapa que falhou](/ajuda/tentar-de-novo).
+de locutor com pessoa que você confirmou continuam valendo. Veja [Tente de novo uma etapa que falhou](/ajuda/try-again).

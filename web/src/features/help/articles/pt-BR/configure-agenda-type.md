@@ -1,11 +1,11 @@
 ---
-titulo: Configure um tipo de agenda
-topico: organizar
-paginas: [agendas]
-relacionados: [padrao-de-titulo, trocar-tipo-da-gravacao, editar-resumo]
-termos: [tipo de agenda, agenda, reunião de equipe, 1:1, conversa com cliente, nota de voz, instruções do resumo, pré-visualizar]
-ordem: 4
-atualizado: 2026-10-01
+title: Configure um tipo de agenda
+topic: organizar
+pages: [agendas]
+related: [title-pattern, change-recording-type, edit-summary]
+terms: [tipo de agenda, agenda, reunião de equipe, 1:1, conversa com cliente, nota de voz, instruções do resumo, pré-visualizar]
+order: 4
+updated: 2026-10-01
 ---
 O tipo de agenda diz que tipo de conversa é a gravação e como resumi-la. Depois da transcrição, um
 agente escolhe o tipo, e o tipo define o título, as tags e o resumo.
@@ -34,7 +34,7 @@ passa as gravações dele para o tipo padrão.
 
 - **Nome.**
 - **Título da gravação:** um padrão com marcadores, como `Reunião de equipe · {assunto}`. Veja
-  [Monte o título pelo tipo de agenda](/ajuda/padrao-de-titulo).
+  [Monte o título pelo tipo de agenda](/ajuda/title-pattern).
 - **Como escrever o assunto:** a regra que o agente segue para o `{assunto}` do título. Vazia, vale
   a do tipo padrão.
 - **Como identificar:** o que o agente lê para escolher o tipo. Diga o que distingue esse tipo dos
@@ -46,7 +46,7 @@ passa as gravações dele para o tipo padrão.
 
 Na página da gravação, o selo do tipo acima do resumo abre este tipo aqui. Depois de um ajuste pelo
 chat do resumo, **Levar este pedido para as instruções do tipo** abre o tipo com o pedido no fim das
-instruções do resumo, para você revisar e salvar. Veja [Ajuste o resumo pelo chat](/ajuda/ajustar-pelo-chat).
+instruções do resumo, para você revisar e salvar. Veja [Ajuste o resumo pelo chat](/ajuda/adjust-by-chat).
 
 ## Pré-visualizar antes de salvar
 

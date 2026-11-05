@@ -1,11 +1,11 @@
 ---
-titulo: Libere o microfone
-topico: comecar
-paginas: [app-desktop, app-movel]
-relacionados: [instalar-app-desktop, gravar-pelo-celular, primeira-gravacao]
-termos: [microfone, permissão, privacidade, sem áudio, gravação muda, Windows, Linux, Android]
-ordem: 8
-atualizado: 2026-10-01
+title: Libere o microfone
+topic: comecar
+pages: [app-desktop, app-movel]
+related: [install-desktop-app, record-on-your-phone, first-recording]
+terms: [microfone, permissão, privacidade, sem áudio, gravação muda, Windows, Linux, Android]
+order: 8
+updated: 2026-10-01
 ---
 Para gravar, o app precisa do microfone. Se a gravação sai muda ou o app avisa que não achou o
 microfone, confira a permissão no sistema.

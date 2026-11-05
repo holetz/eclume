@@ -1,11 +1,11 @@
 ---
-titulo: Por que o aparelho pergunta sobre o certificado
-topico: conectar
-paginas: [app-desktop, app-movel, mcp]
-relacionados: [vincular-aparelho, conectar-assistente-mcp, instalar-app-desktop]
-termos: [certificado, HTTPS, segurança, impressão digital, CA, confiar, aviso do navegador, troca do certificado, próxima raiz]
-ordem: 5
-atualizado: 2026-10-01
+title: Por que o aparelho pergunta sobre o certificado
+topic: conectar
+pages: [app-desktop, app-movel, mcp]
+related: [link-a-device, connect-mcp-assistant, install-desktop-app]
+terms: [certificado, HTTPS, segurança, impressão digital, CA, confiar, aviso do navegador, troca do certificado, próxima raiz]
+order: 5
+updated: 2026-10-01
 ---
 Este servidor usa um certificado próprio, e não um certificado de uma autoridade pública. A
 conexão é cifrada do mesmo jeito, mas cada aparelho precisa saber que está falando com o servidor

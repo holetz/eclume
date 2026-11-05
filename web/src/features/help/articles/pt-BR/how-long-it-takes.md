@@ -1,11 +1,11 @@
 ---
-titulo: Quanto tempo leva
-topico: processamento
-paginas: [gravacao, biblioteca]
-relacionados: [etapas-do-processamento, por-que-falhou, importar-arquivos]
-termos: [demora, fila, espera, GPU, tempo, processando, aviso, notificação, resumo pronto]
-ordem: 5
-atualizado: 2026-10-01
+title: Quanto tempo leva
+topic: processamento
+pages: [gravacao, biblioteca]
+related: [processing-stages, why-it-failed, import-files]
+terms: [demora, fila, espera, GPU, tempo, processando, aviso, notificação, resumo pronto]
+order: 5
+updated: 2026-10-01
 ---
 O tempo até uma gravação ficar pronta depende mais da fila do que do tamanho do áudio.
 

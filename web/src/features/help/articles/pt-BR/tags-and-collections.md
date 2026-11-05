@@ -1,11 +1,11 @@
 ---
-titulo: Tags e coleções
-topico: organizar
-paginas: [colecoes, tags, biblioteca]
-relacionados: [tags-cadastradas, campos-em-toda-gravacao, buscar-nas-gravacoes, configurar-tipo-de-agenda]
-termos: [tag, tags, coleção, coleções, agrupar, organizar, pasta]
-ordem: 7
-atualizado: 2026-09-30
+title: Tags e coleções
+topic: organizar
+pages: [colecoes, tags, biblioteca]
+related: [registered-tags, fields-on-every-recording, search-recordings, configure-agenda-type]
+terms: [tag, tags, coleção, coleções, agrupar, organizar, pasta]
+order: 7
+updated: 2026-09-30
 ---
 Tags e coleções organizam as gravações de jeitos diferentes, e uma gravação pode ter várias de
 cada.
@@ -20,7 +20,7 @@ A tag marca um **assunto**: "orçamento", "contratação", "planejamento".
 - Você acrescenta e tira tags no painel de campos da gravação, e a tag nova entra no cadastro
   sozinha.
 
-Veja [Cadastre as tags e deixe o agente usá-las](/ajuda/tags-cadastradas).
+Veja [Cadastre as tags e deixe o agente usá-las](/ajuda/registered-tags).
 
 ## Coleções
 
@@ -31,7 +31,7 @@ várias reuniões. Ela tem nome e descrição, e nada entra nela sozinho.
 - Ponha uma gravação numa coleção pelo painel de campos da gravação.
 - Excluir uma coleção não apaga as gravações: elas só saem da coleção.
 - No app desktop, as coleções também viram **subpastas** da pasta sincronizada. Veja
-  [Sincronize seus resumos numa pasta](/ajuda/pasta-sincronizada).
+  [Sincronize seus resumos numa pasta](/ajuda/synced-folder).
 
 ## Na biblioteca e na busca
 

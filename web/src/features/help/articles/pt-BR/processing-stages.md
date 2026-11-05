@@ -1,11 +1,11 @@
 ---
-titulo: O que cada etapa do processamento faz
-topico: processamento
-paginas: [gravacao, biblioteca]
-relacionados: [pre-processamento, por-que-falhou, quanto-tempo-leva]
-termos: [etapas, pipeline, processando, status, pulada, esperando, transcrevendo, resumindo, aguardando locutores, aguardando você]
-ordem: 1
-atualizado: 2026-10-08
+title: O que cada etapa do processamento faz
+topic: processamento
+pages: [gravacao, biblioteca]
+related: [preprocessing, why-it-failed, how-long-it-takes]
+terms: [etapas, pipeline, processando, status, pulada, esperando, transcrevendo, resumindo, aguardando locutores, aguardando você]
+order: 1
+updated: 2026-10-08
 ---
 Toda gravação passa pelas mesmas sete etapas, uma depois da outra. A barra de etapas no alto da
 página da gravação mostra em qual ela está.
@@ -14,9 +14,9 @@ página da gravação mostra em qual ela está.
 
 1. **Áudio recebido:** o arquivo chegou inteiro ao servidor.
 2. **Pré-processamento:** o áudio é preparado para a transcrição, conforme o que quem administra o
-   servidor ligou. Veja [O que o pré-processamento faz com o áudio](/ajuda/pre-processamento).
+   servidor ligou. Veja [O que o pré-processamento faz com o áudio](/ajuda/preprocessing).
 3. **Transcrição:** a fala vira texto, separada por locutor e com o tempo de cada fala. Na
-   [nota de voz](/ajuda/notas-de-voz) há um locutor só, sem separação de vozes.
+   [nota de voz](/ajuda/voice-notes) há um locutor só, sem separação de vozes.
 4. **Locutores:** depois da identificação pela voz, confere se todo locutor com fala tem uma
    pessoa. Só para a gravação quando a sua conta exige a marcação dos locutores (em
    **Processamento automático**); aí ela fica **Aguardando locutores** até você ligar cada locutor
@@ -37,7 +37,7 @@ Cada etapa diz o estado em palavra, ao lado do nome, sem depender da cor da barr
 - **Em andamento:** a etapa está rodando agora, com o nome do que faz (por exemplo, "Transcrevendo").
 - **Concluída:** a etapa terminou; aparece só o nome dela.
 - **Falhou:** algo deu errado. O motivo aparece em texto embaixo da barra e, quando dá, o botão para
-  tentar de novo. Veja [Por que uma gravação falhou](/ajuda/por-que-falhou).
+  tentar de novo. Veja [Por que uma gravação falhou](/ajuda/why-it-failed).
 - **Aguardando você:** só a etapa **Locutores**: a gravação espera você nomear os locutores sem
   pessoa, e o motivo aparece embaixo da barra. Quando o último ganha nome, o resto segue sozinho.
 - **Pulada:** a etapa não precisou ou não pôde rodar, e o motivo aparece em texto embaixo da barra.

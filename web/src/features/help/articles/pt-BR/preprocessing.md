@@ -1,11 +1,11 @@
 ---
-titulo: O que o pré-processamento faz com o áudio
-topico: processamento
-paginas: [gravacao]
-relacionados: [etapas-do-processamento, por-que-falhou, corrigir-transcricao]
-termos: [pré-processamento, ruído, volume, silêncio, canais, 16 kHz, mono, qualidade do áudio]
-ordem: 2
-atualizado: 2026-09-27
+title: O que o pré-processamento faz com o áudio
+topic: processamento
+pages: [gravacao]
+related: [processing-stages, why-it-failed, correct-the-transcript]
+terms: [pré-processamento, ruído, volume, silêncio, canais, 16 kHz, mono, qualidade do áudio]
+order: 2
+updated: 2026-09-27
 ---
 Antes da transcrição, o servidor prepara uma cópia do áudio para o modelo entender melhor a fala.
 Quem administra o servidor escolhe o que essa etapa faz, e vale para todas as gravações.

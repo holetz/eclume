@@ -1,11 +1,11 @@
 ---
-titulo: Deixe o agente pôr as gravações nas coleções
-topico: organizar
-paginas: [colecoes]
-relacionados: [tags-e-colecoes, cadastro-de-pessoas, configurar-tipo-de-agenda]
-termos: [coleção, coleções, automática, regra, quando incluir, participantes, empresa, área, mesclar]
-ordem: 9
-atualizado: 2026-09-30
+title: Deixe o agente pôr as gravações nas coleções
+topic: organizar
+pages: [colecoes]
+related: [tags-and-collections, people-directory, configure-agenda-type]
+terms: [coleção, coleções, automática, regra, quando incluir, participantes, empresa, área, mesclar]
+order: 9
+updated: 2026-09-30
 ---
 Uma coleção pode receber as gravações sozinha. Depois da transcrição, o agente lê a conversa e
 inclui a gravação em cada coleção cuja regra ela cumpre.
@@ -25,7 +25,7 @@ O agente recebe, além da transcrição:
 
 - **O tipo de agenda** da gravação, como "Conversa com cliente".
 - **Os participantes identificados:** as pessoas ligadas aos locutores, com empresa, área, cargo e
-  tags de pessoa. Veja [Cadastre de onde cada pessoa é](/ajuda/cadastro-de-pessoas).
+  tags de pessoa. Veja [Cadastre de onde cada pessoa é](/ajuda/people-directory).
 
 Exemplos:
 

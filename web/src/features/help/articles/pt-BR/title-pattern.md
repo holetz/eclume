@@ -1,11 +1,11 @@
 ---
-titulo: Monte o título pelo tipo de agenda
-topico: organizar
-paginas: [agendas, campos]
-relacionados: [configurar-tipo-de-agenda, escrever-uma-regra, campos-em-toda-gravacao]
-termos: [título, padrão de título, marcador, assunto, data, chave]
-ordem: 5
-atualizado: 2026-09-30
+title: Monte o título pelo tipo de agenda
+topic: organizar
+pages: [agendas, campos]
+related: [configure-agenda-type, write-a-rule, fields-on-every-recording]
+terms: [título, padrão de título, marcador, assunto, data, chave]
+order: 5
+updated: 2026-09-30
 ---
 O título de uma gravação vem sempre do tipo de agenda dela: o campo **Título da gravação** monta o
 título, e **Como escrever o assunto** diz ao agente como escrever o `{assunto}`. Como toda gravação

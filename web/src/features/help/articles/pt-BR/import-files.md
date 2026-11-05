@@ -1,11 +1,11 @@
 ---
-titulo: Importe arquivos de áudio e vídeo
-topico: comecar
-paginas: [biblioteca]
-relacionados: [primeira-gravacao, etapas-do-processamento, quanto-tempo-leva]
-termos: [importar, arquivo, enviar, vídeo, mp3, mp4, m4a, data da gravação, metadados]
-ordem: 2
-atualizado: 2026-09-27
+title: Importe arquivos de áudio e vídeo
+topic: comecar
+pages: [biblioteca]
+related: [first-recording, processing-stages, how-long-it-takes]
+terms: [importar, arquivo, enviar, vídeo, mp3, mp4, m4a, data da gravação, metadados]
+order: 2
+updated: 2026-09-27
 ---
 Uma gravação feita em outro lugar (um gravador, o celular, uma reunião baixada da plataforma de
 vídeo) entra na sua biblioteca pela importação.

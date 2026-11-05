@@ -1,11 +1,11 @@
 ---
-titulo: Por que uma gravação falhou
-topico: processamento
-paginas: [gravacao]
-relacionados: [tentar-de-novo, etapas-do-processamento, quanto-tempo-leva]
-termos: [falha, erro, falhou, agente, fila, arquivo corrompido, sem agente]
-ordem: 3
-atualizado: 2026-09-27
+title: Por que uma gravação falhou
+topic: processamento
+pages: [gravacao]
+related: [try-again, processing-stages, how-long-it-takes]
+terms: [falha, erro, falhou, agente, fila, arquivo corrompido, sem agente]
+order: 3
+updated: 2026-09-27
 ---
 Quando uma etapa falha, a barra de etapas da gravação marca qual foi e mostra o motivo. As causas
 mais comuns, por etapa:
@@ -27,7 +27,7 @@ mais comuns, por etapa:
 Uma falha no preenchimento não impede as etapas seguintes: o tipo de agenda e o resumo rodam do
 mesmo jeito, e os campos ficam vazios para você preencher. Já sem o tipo de agenda o resumo não
 tem instruções e fica pulado. Escolha o tipo à mão na gravação, e o resumo sai por ele. Veja
-[Tente de novo uma etapa que falhou](/ajuda/tentar-de-novo).
+[Tente de novo uma etapa que falhou](/ajuda/try-again).
 
 ## Resumo
 

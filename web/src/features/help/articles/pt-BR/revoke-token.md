@@ -1,11 +1,11 @@
 ---
-titulo: Revogue um token
-topico: conectar
-paginas: [tokens]
-relacionados: [criar-token, vincular-aparelho, conectar-assistente-mcp]
-termos: [revogar, cancelar, token, expirado, desligar, desvincular]
-ordem: 3
-atualizado: 2026-09-27
+title: Revogue um token
+topic: conectar
+pages: [tokens]
+related: [create-token, link-a-device, connect-mcp-assistant]
+terms: [revogar, cancelar, token, expirado, desligar, desvincular]
+order: 3
+updated: 2026-09-27
 ---
 Revogar um token corta o acesso de quem o usa, na hora.
 

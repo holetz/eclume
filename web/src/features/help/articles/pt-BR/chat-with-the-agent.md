@@ -1,11 +1,11 @@
 ---
-titulo: Converse com o Agente
-topico: resumos
-paginas: [agente, busca]
-relacionados: [buscar-nas-gravacoes, habilidades-e-acoes-do-agente, ajustar-pelo-chat, conectar-assistente-mcp]
-termos: [agente, perguntar, perguntas, conversa, anexo, anexar, arquivo, baixar, pdf, docx, csv, histórico, IA]
-ordem: 5
-atualizado: 2026-10-05
+title: Converse com o Agente
+topic: resumos
+pages: [agente, busca]
+related: [search-recordings, agent-skills-and-actions, adjust-by-chat, connect-mcp-assistant]
+terms: [agente, perguntar, perguntas, conversa, anexo, anexar, arquivo, baixar, pdf, docx, csv, histórico, IA]
+order: 5
+updated: 2026-10-05
 ---
 O **Agente**, o primeiro item do menu, abre a tela [Agente](/agente): nela você conversa em linguagem
 natural sobre o conjunto das suas gravações e sobre os arquivos que anexar. Antes, esta tela se

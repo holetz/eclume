@@ -1,11 +1,11 @@
 ---
-titulo: Escolha o idioma da transcrição
-topico: transcricao
-paginas: [conta, gravacao, biblioteca, app-desktop, app-movel]
-relacionados: [importar-arquivos, tentar-de-novo, corrigir-transcricao]
-termos: [idioma, língua, inglês, espanhol, português, detectar idioma, transcrever de novo, auto]
-ordem: 6
-atualizado: 2026-10-01
+title: Escolha o idioma da transcrição
+topic: transcricao
+pages: [conta, gravacao, biblioteca, app-desktop, app-movel]
+related: [import-files, try-again, correct-the-transcript]
+terms: [idioma, língua, inglês, espanhol, português, detectar idioma, transcrever de novo, auto]
+order: 6
+updated: 2026-10-01
 ---
 O eclume transcreve cada gravação em um idioma. Quem decide é, nesta ordem: o idioma escolhido para
 o arquivo, o padrão da sua conta e o padrão do servidor.

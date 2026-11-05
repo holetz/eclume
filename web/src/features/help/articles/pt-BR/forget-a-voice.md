@@ -1,11 +1,11 @@
 ---
-titulo: Apague a impressão de voz de uma pessoa
-topico: transcricao
-paginas: [pessoa]
-relacionados: [sugestoes-por-voz, ligar-locutor-a-pessoa]
-termos: [esquecer a voz, apagar, impressão de voz, amostras, LGPD, biometria, remover]
-ordem: 3
-atualizado: 2026-09-27
+title: Apague a impressão de voz de uma pessoa
+topic: transcricao
+pages: [pessoa]
+related: [voice-suggestions, link-speaker-to-person]
+terms: [esquecer a voz, apagar, impressão de voz, amostras, LGPD, biometria, remover]
+order: 3
+updated: 2026-09-27
 ---
 A impressão de voz de uma pessoa é o conjunto das amostras que o eclume usa para sugerir quem
 fala numa gravação. Você pode apagá-la a qualquer momento.

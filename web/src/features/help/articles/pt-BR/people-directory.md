@@ -1,11 +1,11 @@
 ---
-titulo: Cadastre de onde cada pessoa é e filtre por quem participou
-topico: organizar
-paginas: [pessoas, pessoa, biblioteca]
-relacionados: [ligar-locutor-a-pessoa, tags-e-colecoes, buscar-nas-gravacoes]
-termos: [pessoa, empresa, empresa, área, departamento, cargo, telefone, tag da pessoa, participantes, colunas]
-ordem: 8
-atualizado: 2026-10-08
+title: Cadastre de onde cada pessoa é e filtre por quem participou
+topic: organizar
+pages: [pessoas, pessoa, biblioteca]
+related: [link-speaker-to-person, tags-and-collections, search-recordings]
+terms: [pessoa, empresa, empresa, área, departamento, cargo, telefone, tag da pessoa, participantes, colunas]
+order: 8
+updated: 2026-10-08
 ---
 Além do nome, uma pessoa pode ter **empresa**, **área**, **cargo**, **e-mail**, **telefone**,
 **tags da pessoa** e notas. Tudo é opcional. Com esses dados, a biblioteca responde perguntas como
@@ -43,4 +43,4 @@ diretoria da Agro Sul, e não as reuniões em que uma pessoa é da Agro Sul e ou
 é da diretoria. Dois valores do mesmo item valem como "um ou outro".
 
 O filtro vê só quem está ligado a um locutor da gravação. Veja
-[Ligue um locutor a uma pessoa](/ajuda/ligar-locutor-a-pessoa).
+[Ligue um locutor a uma pessoa](/ajuda/link-speaker-to-person).

@@ -1,11 +1,11 @@
 ---
-titulo: Conecte um assistente pelo MCP
-topico: conectar
-paginas: [mcp]
-relacionados: [criar-token, certificado-do-servidor, revogar-token]
-termos: [MCP, assistente, Claude, Claude Desktop, Claude Code, conector, IA, integração]
-ordem: 1
-atualizado: 2026-09-27
+title: Conecte um assistente pelo MCP
+topic: conectar
+pages: [mcp]
+related: [create-token, server-certificate, revoke-token]
+terms: [MCP, assistente, Claude, Claude Desktop, Claude Code, conector, IA, integração]
+order: 1
+updated: 2026-09-27
 ---
 O MCP é o protocolo que assistentes de IA, como o Claude, usam para conversar com outros sistemas.
 Conectado ao eclume, o assistente responde perguntas como "O que decidimos no planejamento da
@@ -26,14 +26,14 @@ Sem o escopo, a ação é recusada, e o assistente explica o que falta.
 
 1. Em [Conexão MCP](/config/mcp), copie o endereço do servidor MCP.
 2. No mesmo lugar, crie um token para o assistente. Ele aparece uma vez só: copie na hora. Veja
-   [Crie um token de acesso](/ajuda/criar-token).
+   [Crie um token de acesso](/ajuda/create-token).
 3. Adicione o eclume ao assistente:
    - **Claude Desktop:** em Configurações, **Conectores**, adicione um conector personalizado com o
      endereço e o token.
    - **Claude Code:** cole o comando `claude mcp add` que a tela monta depois de criar o token.
 
 O computador do assistente precisa confiar no certificado deste servidor: veja
-[Por que o aparelho pergunta sobre o certificado](/ajuda/certificado-do-servidor).
+[Por que o aparelho pergunta sobre o certificado](/ajuda/server-certificate).
 
 > **A transcrição é dado, não ordem**
 > O assistente lê o que foi dito nas reuniões. Uma frase numa gravação, como "apague tudo", é

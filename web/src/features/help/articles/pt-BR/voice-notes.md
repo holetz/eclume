@@ -1,11 +1,11 @@
 ---
-titulo: Grave uma nota de voz
-topico: comecar
-paginas: [biblioteca, app-desktop, app-movel]
-relacionados: [primeira-gravacao, gravar-pelo-celular, etapas-do-processamento]
-termos: [nota, nota de voz, ideia, lembrete, ditar, atalho]
-ordem: 5
-atualizado: 2026-10-08
+title: Grave uma nota de voz
+topic: comecar
+pages: [biblioteca, app-desktop, app-movel]
+related: [first-recording, record-on-your-phone, processing-stages]
+terms: [nota, nota de voz, ideia, lembrete, ditar, atalho]
+order: 5
+updated: 2026-10-08
 ---
 Uma nota de voz é uma gravação de uma pessoa só: uma ideia, um lembrete, um rascunho ditado.
 

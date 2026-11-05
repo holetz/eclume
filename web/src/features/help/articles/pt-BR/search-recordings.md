@@ -1,11 +1,11 @@
 ---
-titulo: Busque nas suas gravações
-topico: transcricao
-paginas: [busca, biblioteca, agente]
-relacionados: [ligar-locutor-a-pessoa, marcadores, exportar]
-termos: [buscar, busca, pesquisar, filtro, período, tag, pessoa, campo, trecho]
-ordem: 6
-atualizado: 2026-10-05
+title: Busque nas suas gravações
+topic: transcricao
+pages: [busca, biblioteca, agente]
+related: [link-speaker-to-person, markers, export]
+terms: [buscar, busca, pesquisar, filtro, período, tag, pessoa, campo, trecho]
+order: 6
+updated: 2026-10-05
 ---
 A [busca](/busca) procura no texto de todas as suas transcrições e mostra os trechos em que as
 palavras aparecem.
@@ -32,7 +32,7 @@ Na [biblioteca](/), o painel de filtros à direita tem os mesmos filtros e mais 
 O item **Agente**, o primeiro do menu, abre a tela [Agente](/agente): nela você faz uma pergunta em
 linguagem natural sobre o conjunto das gravações. O agente começa pelos resumos e só lê as
 transcrições quando o resumo não basta; cada resposta mostra as gravações em que se apoia, com o
-link para abri-las. Veja [Converse com o Agente](/ajuda/conversar-com-o-agente).
+link para abri-las. Veja [Converse com o Agente](/ajuda/chat-with-the-agent).
 
 ## Do trecho ao áudio
 

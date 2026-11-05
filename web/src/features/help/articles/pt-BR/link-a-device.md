@@ -1,11 +1,11 @@
 ---
-titulo: Vincule o app com um código
-topico: conectar
-paginas: [app-desktop, app-movel]
-relacionados: [instalar-app-desktop, gravar-pelo-celular, certificado-do-servidor]
-termos: [vincular, código, parear, pareamento, QR, desvincular, aparelho]
-ordem: 4
-atualizado: 2026-09-27
+title: Vincule o app com um código
+topic: conectar
+pages: [app-desktop, app-movel]
+related: [install-desktop-app, record-on-your-phone, server-certificate]
+terms: [vincular, código, parear, pareamento, QR, desvincular, aparelho]
+order: 4
+updated: 2026-09-27
 ---
 O código de vínculo liga o app desktop ou o celular à sua conta sem digitar o endereço do servidor.
 

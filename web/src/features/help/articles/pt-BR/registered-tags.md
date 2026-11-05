@@ -1,11 +1,11 @@
 ---
-titulo: Cadastre as tags e deixe o agente usá-las
-topico: organizar
-paginas: [tags]
-relacionados: [tags-e-colecoes, campos-em-toda-gravacao, escrever-uma-regra]
-termos: [tag, tags, cadastro, quando usar, descrição, regra geral, mesclar, renomear, excluir, autogerenciada, limite, variações, agente]
-ordem: 10
-atualizado: 2026-09-30
+title: Cadastre as tags e deixe o agente usá-las
+topic: organizar
+pages: [tags]
+related: [tags-and-collections, fields-on-every-recording, write-a-rule]
+terms: [tag, tags, cadastro, quando usar, descrição, regra geral, mesclar, renomear, excluir, autogerenciada, limite, variações, agente]
+order: 10
+updated: 2026-09-30
 ---
 As tags marcam o **assunto** das gravações. Elas ficam num cadastro seu, em [Tags](/tags), e o
 agente escolhe entre elas depois da transcrição.

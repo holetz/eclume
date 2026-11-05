@@ -1,11 +1,11 @@
 ---
-titulo: Ajustar o ambiente deste navegador
-topico: comecar
-paginas: [ambiente, biblioteca]
-relacionados: [primeira-gravacao, sua-conta]
-termos: [tema, escuro, claro, densidade, compacta, movimento, animação, expediente, horário, zoom, atalhos, teclado, preferências, engrenagem]
-ordem: 7
-atualizado: 2026-09-28
+title: Ajustar o ambiente deste navegador
+topic: comecar
+pages: [ambiente, biblioteca]
+related: [first-recording, your-account]
+terms: [tema, escuro, claro, densidade, compacta, movimento, animação, expediente, horário, zoom, atalhos, teclado, preferências, engrenagem]
+order: 7
+updated: 2026-09-28
 ---
 A tela **Ambiente** guarda como o eclume aparece e se comporta neste navegador. Abra pela engrenagem
 ao lado do seu nome, no cabeçalho, e escolha **Ambiente** no menu.

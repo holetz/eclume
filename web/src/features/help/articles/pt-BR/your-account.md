@@ -1,11 +1,11 @@
 ---
-titulo: Sua conta e quem vê suas gravações
-topico: comecar
-paginas: [biblioteca, ajuda, conta]
-relacionados: [primeira-gravacao, sugestoes-por-voz]
-termos: [conta, privacidade, quem vê, para onde vão os dados, dados, agente externo, amostras de voz, administrador, consentimento, aviso, cadastro, senha, trocar senha, esqueci a senha, redefinir senha, excluir conta, limite, cota, armazenamento]
-ordem: 6
-atualizado: 2026-10-01
+title: Sua conta e quem vê suas gravações
+topic: comecar
+pages: [biblioteca, ajuda, conta]
+related: [first-recording, voice-suggestions]
+terms: [conta, privacidade, quem vê, para onde vão os dados, dados, agente externo, amostras de voz, administrador, consentimento, aviso, cadastro, senha, trocar senha, esqueci a senha, redefinir senha, excluir conta, limite, cota, armazenamento]
+order: 6
+updated: 2026-10-01
 ---
 Cada conta do eclume é um espaço próprio.
 
@@ -80,4 +80,4 @@ Na mesma tela, **Excluir minha conta** apaga para sempre tudo o que é seu neste
 e áudios, transcrições, resumos, pessoas e impressões de voz, coleções, tags, campos, tipos de
 agenda, tokens e aparelhos vinculados. Para confirmar, digite a sua senha e marque que entende que
 tudo será apagado. Não há como desfazer: se quiser guardar algo, exporte as gravações antes. Veja
-[Exporte a transcrição e o resumo](/ajuda/exportar).
+[Exporte a transcrição e o resumo](/ajuda/export).

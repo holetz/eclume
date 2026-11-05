@@ -1,11 +1,11 @@
 ---
-titulo: Crie um token de acesso
-topico: conectar
-paginas: [tokens, mcp]
-relacionados: [revogar-token, conectar-assistente-mcp, vincular-aparelho]
-termos: [token, escopo, escopos, validade, chave, API, acesso, lumea]
-ordem: 2
-atualizado: 2026-10-01
+title: Crie um token de acesso
+topic: conectar
+pages: [tokens, mcp]
+related: [revoke-token, connect-mcp-assistant, link-a-device]
+terms: [token, escopo, escopos, validade, chave, API, acesso, lumea]
+order: 2
+updated: 2026-10-01
 ---
 Um token de acesso deixa outro programa usar o eclume em seu nome, com as permissões que você
 escolher. Crie em [Tokens de acesso](/tokens) ou, para um assistente de IA, em
@@ -30,7 +30,7 @@ Escolha 30 dias, 90 dias ou Nunca. Um token vencido aparece como **Expirado** e 
 ## O token aparece uma vez
 
 Depois de criar, o eclume mostra o token uma única vez. Copie e guarde num lugar seguro, como um
-gerenciador de senhas. Perdeu? Revogue e crie outro: veja [Revogue um token](/ajuda/revogar-token).
+gerenciador de senhas. Perdeu? Revogue e crie outro: veja [Revogue um token](/ajuda/revoke-token).
 
 ## Para quem programa
 

@@ -1,11 +1,11 @@
 ---
-titulo: Edite um resumo
-topico: resumos
-paginas: [gravacao]
-relacionados: [ajustar-pelo-chat, versoes-do-resumo, configurar-tipo-de-agenda]
-termos: [resumo, editar, corrigir, Markdown, versão, ata]
-ordem: 1
-atualizado: 2026-10-08
+title: Edite um resumo
+topic: resumos
+pages: [gravacao]
+related: [adjust-by-chat, summary-versions, configure-agenda-type]
+terms: [resumo, editar, corrigir, Markdown, versão, ata]
+order: 1
+updated: 2026-10-08
 ---
 O resumo é seu: dá para corrigir um nome, apagar um item ou reescrever um trecho inteiro.
 
@@ -16,7 +16,7 @@ O resumo é seu: dá para corrigir um nome, apagar um item ou reescrever um trec
 3. Use **Salvar**.
 
 A edição vira uma **versão nova** do resumo, marcada como manual. A versão gerada pelo agente
-continua guardada: veja [Versões do resumo e Voltar à gerada](/ajuda/versoes-do-resumo).
+continua guardada: veja [Versões do resumo e Voltar à gerada](/ajuda/summary-versions).
 
 ## Se outra versão entrou enquanto você editava
 
@@ -36,4 +36,4 @@ já está certo, pode seguir sem regenerar.
 ## Prefere pedir em vez de escrever?
 
 Para mudanças maiores, como "junte as decisões numa tabela", peça ao agente:
-[Ajuste o resumo pelo chat](/ajuda/ajustar-pelo-chat).
+[Ajuste o resumo pelo chat](/ajuda/adjust-by-chat).

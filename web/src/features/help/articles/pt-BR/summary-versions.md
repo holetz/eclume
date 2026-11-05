@@ -1,11 +1,11 @@
 ---
-titulo: Versões do resumo e Voltar à gerada
-topico: resumos
-paginas: [gravacao]
-relacionados: [editar-resumo, ajustar-pelo-chat, trocar-tipo-da-gravacao]
-termos: [versão, histórico, gerada, manual, chat, comparar, voltar, desfazer]
-ordem: 3
-atualizado: 2026-10-08
+title: Versões do resumo e Voltar à gerada
+topic: resumos
+pages: [gravacao]
+related: [edit-summary, adjust-by-chat, change-recording-type]
+terms: [versão, histórico, gerada, manual, chat, comparar, voltar, desfazer]
+order: 3
+updated: 2026-10-08
 ---
 Toda mudança no resumo cria uma versão nova. Nenhuma mudança apaga a anterior.
 

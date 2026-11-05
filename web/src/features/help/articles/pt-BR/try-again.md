@@ -1,11 +1,11 @@
 ---
-titulo: Tente de novo uma etapa que falhou
-topico: processamento
-paginas: [gravacao]
-relacionados: [por-que-falhou, etapas-do-processamento, corrigir-transcricao]
-termos: [tentar de novo, retranscrever, refazer, reprocessar, falha]
-ordem: 4
-atualizado: 2026-10-08
+title: Tente de novo uma etapa que falhou
+topic: processamento
+pages: [gravacao]
+related: [why-it-failed, processing-stages, correct-the-transcript]
+terms: [tentar de novo, retranscrever, refazer, reprocessar, falha]
+order: 4
+updated: 2026-10-08
 ---
 Uma etapa que falhou quase sempre pode rodar de novo pela própria página da gravação.
 

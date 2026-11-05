@@ -1,11 +1,11 @@
 ---
-titulo: Marcadores feitos durante a gravação
-topico: transcricao
-paginas: [gravacao, app-desktop, app-movel]
-relacionados: [primeira-gravacao, gravar-pelo-celular, corrigir-transcricao, pasta-sincronizada]
-termos: [marcador, marcar, momento, instante, nota, atalho]
-ordem: 5
-atualizado: 2026-10-08
+title: Marcadores feitos durante a gravação
+topic: transcricao
+pages: [gravacao, app-desktop, app-movel]
+related: [first-recording, record-on-your-phone, correct-the-transcript, synced-folder]
+terms: [marcador, marcar, momento, instante, nota, atalho]
+order: 5
+updated: 2026-10-08
 ---
 Um marcador guarda um instante da gravação para você achar depois: uma decisão, uma pergunta, um
 número que precisa conferir.
@@ -38,4 +38,4 @@ A nota não fica só no marcador:
   agente: a nota não é copiada palavra por palavra. Se mudar uma nota depois, peça um resumo novo.
 - **Na pasta sincronizada:** o `.md` de cada gravação ganha a seção **Notas dos marcadores**, com uma
   linha por nota e o horário dela. Marcador sem nota não entra. Como o arquivo vai para o seu
-  computador, as notas saem do servidor; veja [Sincronize seus resumos numa pasta](/ajuda/pasta-sincronizada).
+  computador, as notas saem do servidor; veja [Sincronize seus resumos numa pasta](/ajuda/synced-folder).

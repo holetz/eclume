@@ -1,11 +1,11 @@
 ---
-titulo: Teste uma regra antes de salvar
-topico: organizar
-paginas: [campos]
-relacionados: [escrever-uma-regra, campos-em-toda-gravacao, configurar-tipo-de-agenda]
-termos: [testar, teste, pré-visualizar, simular, rascunho]
-ordem: 3
-atualizado: 2026-09-27
+title: Teste uma regra antes de salvar
+topic: organizar
+pages: [campos]
+related: [write-a-rule, fields-on-every-recording, configure-agenda-type]
+terms: [testar, teste, pré-visualizar, simular, rascunho]
+order: 3
+updated: 2026-09-27
 ---
 **Testar numa gravação** mostra o que a regra de um campo preencheria, sem gravar nada.
 
