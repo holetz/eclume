@@ -44,8 +44,8 @@ info:
       names the scope. Without a valid credential, 401 `unauthorized`. Detail in
       `docs/standards/code/server-mcp-e-dispositivos.md`.
   license:
-    name: MIT
-    identifier: MIT
+    name: GNU General Public License v3.0 or later
+    identifier: GPL-3.0-or-later
 servers:
   - url: https://192.168.15.199:8443
     description: Production on the GPU host (Caddy with `tls internal`).

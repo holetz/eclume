@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "eclume GPU worker: ASR, alignment, diarization and speaker embeddings with WhisperX."
 readme = "README.md"
 requires-python = ">=3.12"
-license = "MIT"
+license = "GPL-3.0-or-later"
 dependencies = [
   "eclume-engines",
   "arq>=0.26",

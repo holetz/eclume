@@ -8,5 +8,5 @@ members = ["src-tauri", "crates/core", "plugins/gravador"]
 [workspace.package]
 version = "0.1.1"
 edition = "2021"
-license = "MIT"
+license = "GPL-3.0-or-later"
 rust-version = "1.88"

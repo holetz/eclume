@@ -37,7 +37,7 @@
     "category": "Productivity",
     "shortDescription": "Grava reuniões e envia para transcrição no eclume.",
     "longDescription": "App desktop do eclume: grava reuniões (microfone e áudio do sistema), guarda a fila local de gravações e sincroniza com o servidor eclume, na bandeja do sistema.",
-    "license": "MIT",
+    "license": "GPL-3.0-or-later",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

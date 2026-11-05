@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "ASR engine interface of eclume, shared by the server and the worker."
 readme = "README.md"
 requires-python = ">=3.12"
-license = "MIT"
+license = "GPL-3.0-or-later"
 dependencies = [
   # client of the `openai-compatible` engine (speaches); light, so it stays in the core
   "httpx>=0.27",

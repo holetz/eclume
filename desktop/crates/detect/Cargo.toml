@@ -5,7 +5,7 @@ name = "eclume-detect"
 description = "Meeting detection for the eclume desktop app: mic and process signals, debounce and automatic recording."
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license = "MIT"  # adapted from Anarlog (MIT, see VENDOR.md), not the GPL workspace licence
 rust-version.workspace = true
 publish = false
 
