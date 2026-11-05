@@ -173,9 +173,22 @@ export function speakerPreset({ min_speakers: min, max_speakers: max }: SpeakerR
 }
 
 const formats = new Map<string, Intl.DateTimeFormat>()
+const numberFormats = new Map<string, Intl.NumberFormat>()
+
+/** One number formatter per locale and options, so a locale switch formats with the new one. */
+export function numberFormat(kind: string, options: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const locale = activeLocale()
+  const key = `${locale}|${kind}`
+  let format = numberFormats.get(key)
+  if (!format) {
+    format = new Intl.NumberFormat(locale, options)
+    numberFormats.set(key, format)
+  }
+  return format
+}
 
 /** One date formatter per locale and options, so a locale switch formats with the new one. */
-function dateFormat(kind: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+export function dateFormat(kind: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
   const locale = activeLocale()
   const key = `${locale}|${kind}`
   let format = formats.get(key)
