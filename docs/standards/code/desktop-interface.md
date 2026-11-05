@@ -176,12 +176,12 @@ In the order of `index.html`:
 
 ## Help and updates
 
-- The help icon opens a `.menu`: "Primeiros passos" (the `primeira-gravacao` article) and
-  "Permissões de microfone" (`permissoes-de-microfone`), opened at `<web_url>/ajuda/<artigo>`, "Atalhos de teclado", "Abrir a central de ajuda", "Relatar um
+- The help icon opens a `.menu`: "Primeiros passos" (the `first-recording` article) and
+  "Permissões de microfone" (`microphone-permissions`), opened at `<web_url>/ajuda/<artigo>`, "Atalhos de teclado", "Abrir a central de ajuda", "Relatar um
   problema…" (opens the logs folder, with the hint "Anexe o eclume.log": the server is local and
   there is no form) and the version line. Every article the UI asks `open_help` for must exist in
-  `web/src/features/help/articles/`: the `ui_assets` test extracts the slugs from `desktop/ui/js`
-  and fails without the `.md`, and the CI `desktop` filter includes the articles.
+  `web/src/features/help/articles/en/`: the `ui_assets` test extracts the slugs from `desktop/ui/js`
+  and fails without the `.md`, and the CI `desktop` filter includes the English articles.
 - After an automatic update, the main view shows the `.alert-success` "Atualizado para
   X" with the release notes until the person closes it ([desktop-distribuicao.md](desktop-distribuicao.md)).
 
