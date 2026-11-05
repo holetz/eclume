@@ -44,6 +44,21 @@ function mockCollections(initial: Schemas['Collection'][] = fixtures.collectionP
   })
 }
 
+describe('collections in English', () => {
+  it('reads in English when the account chose English', async () => {
+    const me = fixtures.me()
+    mockFetch({
+      'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }),
+      'GET /api/v1/collections': () => fixtures.collectionPage(),
+    })
+    renderApp('/colecoes')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Collections' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New collection' })).toBeInTheDocument()
+    const list = await screen.findByRole('list', { name: 'Collections' })
+    expect(within(list).getAllByRole('link', { name: 'See recordings' }).length).toBeGreaterThan(0)
+  })
+})
+
 describe('collections', () => {
   it('is opened from "Gerenciar coleções" in the library filter, with the DS header', async () => {
     mockCollections()
