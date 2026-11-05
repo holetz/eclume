@@ -55,7 +55,7 @@ export function CollectionsPage() {
         />
       </p>
       <p className="text-muted">
-        <Trans t={t} i18nKey="desktop" components={{ folder: <Link to="/ajuda/pasta-sincronizada" /> }} />
+        <Trans t={t} i18nKey="desktop" components={{ folder: <Link to="/ajuda/synced-folder" /> }} />
       </p>
 
       {collections.isPending && <p role="status">{t('loading')}</p>}
@@ -357,7 +357,7 @@ function CollectionForm({ initial, submitLabel, pending, error, onSubmit, onCanc
       <div className="field">
         <div className={styles.labelRow}>
           <label htmlFor={`${id}-regra`}>{t('form.rule')}</label>
-          <HelpHint subject={t('form.hintSubject')} title={t('form.hintTitle')} article="colecoes-automaticas">
+          <HelpHint subject={t('form.hintSubject')} title={t('form.hintTitle')} article="automatic-collections">
             {t('form.hint')}
           </HelpHint>
         </div>

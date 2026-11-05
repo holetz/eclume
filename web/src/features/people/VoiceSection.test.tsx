@@ -37,7 +37,7 @@ describe('Amostras de voz tab', () => {
     expect(within(samples).getByText('Gravação excluída')).toBeInTheDocument()
     expect(within(panel).getByRole('link', { name: 'Como funcionam as sugestões por voz' })).toHaveAttribute(
       'href',
-      '/ajuda/sugestoes-por-voz',
+      '/ajuda/voice-suggestions',
     )
     // Accepting the notice at registration replaces each person's consent term.
     expect(within(panel).queryByRole('checkbox')).not.toBeInTheDocument()

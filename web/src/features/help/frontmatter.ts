@@ -17,17 +17,17 @@ const LINE = /^([a-z][a-z0-9_-]*):\s*(.*)$/
 /** Splits header and body; throws with the file name when the header is invalid. */
 export function parseFrontmatter(raw: string, file: string): Frontmatter {
   const text = raw.replace(/\r\n?/g, '\n')
-  if (!text.startsWith('---\n')) throw new Error(`${file}: o artigo precisa começar com o cabeçalho entre "---".`)
+  if (!text.startsWith('---\n')) throw new Error(`${file}: the article must start with a header between "---".`)
   const end = text.indexOf('\n---\n', 3)
-  if (end < 0) throw new Error(`${file}: o cabeçalho não fecha com "---".`)
+  if (end < 0) throw new Error(`${file}: the header does not close with "---".`)
 
   const data: Record<string, FrontmatterValue> = {}
   for (const line of text.slice(4, end).split('\n')) {
     if (!line.trim()) continue
     const match = LINE.exec(line)
-    if (!match) throw new Error(`${file}: linha inválida no cabeçalho: "${line}".`)
+    if (!match) throw new Error(`${file}: invalid header line: "${line}".`)
     const [, key, value] = match
-    if (key in data) throw new Error(`${file}: a chave "${key}" aparece duas vezes.`)
+    if (key in data) throw new Error(`${file}: the key "${key}" appears twice.`)
     data[key] = parseValue(value.trim(), file, key)
   }
   return { data, body: text.slice(end + 5).trim() }
@@ -35,7 +35,7 @@ export function parseFrontmatter(raw: string, file: string): Frontmatter {
 
 function parseValue(value: string, file: string, key: string): FrontmatterValue {
   if (!value.startsWith('[')) return value
-  if (!value.endsWith(']')) throw new Error(`${file}: a lista de "${key}" não fecha com "]".`)
+  if (!value.endsWith(']')) throw new Error(`${file}: the list for "${key}" does not close with "]".`)
   const inner = value.slice(1, -1).trim()
   return inner ? inner.split(',').map((item) => item.trim()) : []
 }

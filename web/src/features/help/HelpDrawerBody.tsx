@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { isSearchShortcut } from '../../app/help'
-import { ARTICLES, articlesForPage } from './catalog'
+import { articlesForPage, useHelpCatalog } from './catalog'
 import { HelpSearch } from './HelpSearch'
-import { HELP_PAGES, type HelpPageKey } from './pages'
+import type { HelpPageKey } from './pages'
 import { searchArticles } from './search'
 
 const MAX_RESULTS = 6
 
-/** The help drawer body: search, the page's articles ("Nesta página") and the shortcuts. */
+/** The help drawer body: search, the page's articles ("On this page") and the shortcuts. */
 export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | null }) {
+  const { t } = useTranslation('shell')
+  const catalog = useHelpCatalog()
   const [query, setQuery] = useState('')
   const input = useRef<HTMLInputElement>(null)
-  const results = useMemo(() => searchArticles(query, ARTICLES, MAX_RESULTS), [query])
-  const pageArticles = pageKey ? articlesForPage(pageKey) : []
+  const results = useMemo(() => searchArticles(query, catalog.articles, MAX_RESULTS), [query, catalog])
+  const pageArticles = pageKey ? articlesForPage(catalog, pageKey) : []
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -27,13 +30,13 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
 
   return (
     <>
-      <HelpSearch value={query} onChange={setQuery} inputRef={input} placeholder="Buscar na ajuda" />
+      <HelpSearch value={query} onChange={setQuery} inputRef={input} placeholder={t('helpCenter.search')} />
       <div className="help-drawer-body">
         {query.trim() ? (
           <div className="help-section">
-            <span className="kicker">Resultados</span>
+            <span className="kicker">{t('helpCenter.resultsKicker')}</span>
             {results.length > 0 ? (
-              <ul className="help-links" aria-label="Resultados da busca na ajuda">
+              <ul className="help-links" aria-label={t('helpCenter.resultsInHelp')}>
                 {results.map(({ article }) => (
                   <li key={article.slug}>
                     <Link to={`/ajuda/${article.slug}`}>{article.title}</Link>
@@ -42,7 +45,7 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
               </ul>
             ) : (
               <p className="text-muted" role="status">
-                Nada encontrado. Tente outras palavras.
+                {t('helpCenter.nothingFoundShort')}
               </p>
             )}
           </div>
@@ -50,8 +53,8 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
           pageKey &&
           pageArticles.length > 0 && (
             <div className="help-section">
-              <span className="kicker">Nesta página · {HELP_PAGES[pageKey]}</span>
-              <ul className="help-links" aria-label={`Artigos sobre ${HELP_PAGES[pageKey]}`}>
+              <span className="kicker">{t('helpCenter.onThisPageIn', { page: t(`helpCenter.pages.${pageKey}`) })}</span>
+              <ul className="help-links" aria-label={t('helpCenter.articlesAbout', { page: t(`helpCenter.pages.${pageKey}`) })}>
                 {pageArticles.map((article) => (
                   <li key={article.slug}>
                     <Link to={`/ajuda/${article.slug}`}>{article.title}</Link>
@@ -62,22 +65,22 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
           )
         )}
         <div className="help-section">
-          <span className="kicker">Atalhos</span>
+          <span className="kicker">{t('helpCenter.shortcuts')}</span>
           <dl className="shortcuts">
             <div>
-              <dt>Abrir a ajuda</dt>
+              <dt>{t('helpCenter.openHelp')}</dt>
               <dd>
                 <kbd className="kbd">?</kbd>
               </dd>
             </div>
             <div>
-              <dt>Buscar na ajuda</dt>
+              <dt>{t('helpCenter.searchHelp')}</dt>
               <dd>
                 <kbd className="kbd">/</kbd>
               </dd>
             </div>
             <div>
-              <dt>Fechar a ajuda</dt>
+              <dt>{t('helpCenter.closeHelp')}</dt>
               <dd>
                 <kbd className="kbd">Esc</kbd>
               </dd>

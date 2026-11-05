@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it } from 'vitest'
-import { articlesForPage } from '../features/help/catalog'
+import { articlesForPage, helpCatalog } from '../features/help/catalog'
 import { Dialog } from './Dialog'
 import { useHelpTopic } from './help'
 import { HelpProvider } from './HelpProvider'
@@ -74,7 +74,7 @@ describe('help drawer', () => {
     const help = drawer()!
     expect(await within(help).findByText('Nesta página · Pessoas')).toBeInTheDocument()
     const links = within(help).getByRole('list', { name: 'Artigos sobre Pessoas' })
-    const expected = articlesForPage('pessoas').map((article) => article.title)
+    const expected = articlesForPage(helpCatalog('pt-BR'), 'pessoas').map((article) => article.title)
     expect(within(links).getAllByRole('link').map((link) => link.textContent)).toEqual(expected)
     expect(expected).toContain('Como funcionam as sugestões por voz')
 

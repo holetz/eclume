@@ -234,7 +234,7 @@ function renderHint() {
     <MemoryRouter>
       <p>
         Pessoas
-        <HelpHint subject="as sugestões por voz" title="Sugestões por voz" article="sugestoes-por-voz">
+        <HelpHint subject="as sugestões por voz" title="Sugestões por voz" article="voice-suggestions">
           Uma sugestão nunca liga sozinha.
         </HelpHint>
       </p>
@@ -253,7 +253,7 @@ describe('HelpHint', () => {
     expect(hint).toHaveAttribute('aria-expanded', 'true')
     const popover = screen.getByRole('dialog', { name: 'Sugestões por voz' })
     expect(popover).toHaveTextContent('Uma sugestão nunca liga sozinha.')
-    expect(screen.getByRole('link', { name: 'Ler o artigo →' })).toHaveAttribute('href', '/ajuda/sugestoes-por-voz')
+    expect(screen.getByRole('link', { name: 'Ler o artigo →' })).toHaveAttribute('href', '/ajuda/voice-suggestions')
   })
 
   it('closes with Esc and returns focus to the ?', async () => {

@@ -125,8 +125,8 @@ function VoiceDetail({ person, voiceprint }: { person: Person; voiceprint: Voice
         </p>
       )}
       <p className={styles.detail}>
-        {t('voice.detail')} <Link to="/ajuda/sugestoes-por-voz">{t('voice.howItWorks')}</Link>{' '}
-        <HelpHint subject={t('voice.hintSubject')} title={t('voice.hintTitle')} article="esquecer-a-voz">
+        {t('voice.detail')} <Link to="/ajuda/voice-suggestions">{t('voice.howItWorks')}</Link>{' '}
+        <HelpHint subject={t('voice.hintSubject')} title={t('voice.hintTitle')} article="forget-a-voice">
           {t('voice.hint')}
         </HelpHint>
       </p>

@@ -55,7 +55,7 @@ export function TagsPage() {
         <Trans
           t={t}
           i18nKey="intro"
-          components={{ how: <Link to="/ajuda/tags-cadastradas" />, automation: <Link to="/config/automacao" /> }}
+          components={{ how: <Link to="/ajuda/registered-tags" />, automation: <Link to="/config/automacao" /> }}
         />
       </p>
 
@@ -326,7 +326,7 @@ function TagForm({ initial, submitLabel, pending, error, onSubmit, onCancel }: T
       <div className="field">
         <div className={styles.labelRow}>
           <label htmlFor={`${id}-quando`}>{t('form.when')}</label>
-          <HelpHint subject={t('form.hintSubject')} title={t('form.when')} article="tags-cadastradas">
+          <HelpHint subject={t('form.hintSubject')} title={t('form.when')} article="registered-tags">
             {t('form.hint')}
           </HelpHint>
         </div>

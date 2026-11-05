@@ -83,7 +83,7 @@ describe('collections', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Coleções' })).toBeInTheDocument()
     expect(screen.getByText(/as coleções também organizam a pasta sincronizada/)).toBeInTheDocument()
     expect(screen.getByText(/cada uma vira uma subpasta/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Saiba como funciona' })).toHaveAttribute('href', '/ajuda/pasta-sincronizada')
+    expect(screen.getByRole('link', { name: 'Saiba como funciona' })).toHaveAttribute('href', '/ajuda/synced-folder')
   })
 
   it('with no collections, teaches how to include by recording or by rule', async () => {

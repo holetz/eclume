@@ -1,29 +1,30 @@
-// Help page keys: each screen declares its own with `useHelpTopic`, and each article's `paginas`
-// header says on which screens it appears in the drawer ("Nesta página"). `biblioteca`, `gravacao`
-// and `busca` belong to the screens of holetz/eclume#37.
-export const HELP_PAGES = {
-  biblioteca: 'Biblioteca',
-  gravacao: 'Gravação',
-  busca: 'Busca',
-  agente: 'Agente',
-  pessoas: 'Pessoas',
-  pessoa: 'Pessoa',
-  colecoes: 'Coleções',
-  tags: 'Tags',
-  automacao: 'Processamento automático',
-  campos: 'Campos personalizados',
-  agendas: 'Tipos de agenda',
-  mcp: 'Conexão MCP',
-  tokens: 'Tokens de acesso',
-  'app-desktop': 'App desktop',
-  'app-movel': 'App móvel',
-  conta: 'Conta',
-  ambiente: 'Ambiente',
-  ajuda: 'Central de ajuda',
-} as const
+// Help page keys: each screen declares its own with `useHelpTopic`, and each article's `pages`
+// header says on which screens it appears in the drawer ("On this page"). The label of each key is
+// `shell:helpCenter.pages.<key>`. `biblioteca`, `gravacao` and `busca` belong to the screens of
+// holetz/eclume#37. The keys are wire names (route and header vocabulary), not display text.
+export const HELP_PAGES = [
+  'biblioteca',
+  'gravacao',
+  'busca',
+  'agente',
+  'pessoas',
+  'pessoa',
+  'colecoes',
+  'tags',
+  'automacao',
+  'campos',
+  'agendas',
+  'mcp',
+  'tokens',
+  'app-desktop',
+  'app-movel',
+  'conta',
+  'ambiente',
+  'ajuda',
+] as const
 
-export type HelpPageKey = keyof typeof HELP_PAGES
+export type HelpPageKey = (typeof HELP_PAGES)[number]
 
 export function isHelpPageKey(key: string): key is HelpPageKey {
-  return Object.hasOwn(HELP_PAGES, key)
+  return (HELP_PAGES as readonly string[]).includes(key)
 }

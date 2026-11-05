@@ -1,57 +1,59 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import { usePageTitle } from '../../app/usePageTitle'
 import { ArticleBody } from './ArticleBody'
-import { getArticle, getTopic, type Article } from './catalog'
+import { getArticle, useHelpCatalog, type Article, type HelpCatalog } from './catalog'
 import styles from './Help.module.css'
 
-const updatedFormat = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
 
 export function ArticlePage() {
   useHelpTopic('ajuda')
   const { slug = '' } = useParams()
-  const article = getArticle(slug)
+  const catalog = useHelpCatalog()
+  const article = getArticle(catalog, slug)
   if (!article) return <ArticleNotFound />
-  return <ArticleView key={article.slug} article={article} />
+  return <ArticleView key={article.slug} article={article} catalog={catalog} />
 }
 
 function ArticleNotFound() {
+  const { t } = useTranslation('shell')
   return (
     <section className={styles.page}>
-      <PageHead kicker="Ajuda" title="Artigo não encontrado" />
+      <PageHead kicker={t('helpCenter.kicker')} title={t('helpCenter.notFoundTitle')} />
       <p>
-        Este artigo não existe ou mudou de endereço. Veja os tópicos na{' '}
-        <Link to="/ajuda">central de ajuda</Link>.
+        <Trans t={t} i18nKey="helpCenter.notFoundText" components={{ center: <Link to="/ajuda" /> }} />
       </p>
     </section>
   )
 }
 
-function ArticleView({ article }: { article: Article }) {
+function ArticleView({ article, catalog }: { article: Article; catalog: HelpCatalog }) {
+  const { t, i18n } = useTranslation('shell')
   usePageTitle(article.title)
-  const topic = getTopic(article.topic)
+  const updatedFormat = new Intl.DateTimeFormat(i18n.language, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
   const body = useRef<HTMLDivElement>(null)
   const current = useCurrentHeading(body, article.headings[0]?.id)
-  const related = article.related.map(getArticle).filter((item): item is Article => item !== undefined)
+  const related = article.related.map((slug) => getArticle(catalog, slug)).filter((item): item is Article => item !== undefined)
 
   return (
     <section className={styles.article}>
       <ol className="crumbs">
         <li>
-          <Link to="/ajuda">Ajuda</Link>
+          <Link to="/ajuda">{t('helpCenter.kicker')}</Link>
         </li>
         <li>
-          <Link to={`/ajuda?topico=${topic.key}`}>{topic.title}</Link>
+          <Link to={`/ajuda?topico=${article.topic}`}>{t(`helpCenter.topics.${article.topic}.title`)}</Link>
         </li>
         <li aria-current="page">{article.title}</li>
       </ol>
       <div className={`page-head ${styles.articleHead}`}>
         <h1>{article.title}</h1>
         <div className="article-meta">
-          <span>{article.minutes} min de leitura</span>
-          <span>Atualizado em {updatedFormat.format(new Date(`${article.updated}T00:00:00Z`))}</span>
+          <span>{t('helpCenter.minutes', { count: article.minutes })}</span>
+          <span>{t('helpCenter.updatedOn', { date: updatedFormat.format(new Date(`${article.updated}T00:00:00Z`)) })}</span>
         </div>
       </div>
       <div className="help-article">
@@ -60,7 +62,7 @@ function ArticleView({ article }: { article: Article }) {
           {related.length > 0 && (
             <nav className={styles.related} aria-labelledby="artigos-relacionados">
               <span className="kicker" id="artigos-relacionados">
-                Relacionados
+                {t('helpCenter.related')}
               </span>
               <ul className="help-links">
                 {related.map((item) => (
@@ -73,8 +75,8 @@ function ArticleView({ article }: { article: Article }) {
           )}
         </div>
         {article.headings.length > 0 && (
-          <nav className="toc" aria-label="Nesta página">
-            <span className="toc-title">Nesta página</span>
+          <nav className="toc" aria-label={t('helpCenter.onThisPage')}>
+            <span className="toc-title">{t('helpCenter.onThisPage')}</span>
             {article.headings.map((heading) => (
               <a key={heading.id} href={`#${heading.id}`} aria-current={heading.id === current ? 'true' : undefined}>
                 {heading.text}

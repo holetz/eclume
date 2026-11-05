@@ -57,7 +57,7 @@ export function McpPage() {
               <Trans
                 t={t}
                 i18nKey="mcp.addEclumeText"
-                components={{ help: <Link to="/ajuda/conectar-assistente-mcp" /> }}
+                components={{ help: <Link to="/ajuda/connect-mcp-assistant" /> }}
               />
             </span>
           </li>
@@ -74,7 +74,7 @@ export function McpPage() {
               defaults={ASSISTANT_DEFAULTS}
               groupHints={{
                 excluir: (
-                  <HelpHint subject={t('mcp.deleteSubject')} title={t('mcp.deleteTitle')} article="conectar-assistente-mcp">
+                  <HelpHint subject={t('mcp.deleteSubject')} title={t('mcp.deleteTitle')} article="connect-mcp-assistant">
                     {t('mcp.deleteHint')}
                   </HelpHint>
                 ),
@@ -123,7 +123,7 @@ function CreatedToken({
         </>
       )}
       <p className="field-hint">
-        {t('mcp.certificate')} <Link to="/ajuda/certificado-do-servidor">{t('mcp.certificateLink')}</Link>
+        {t('mcp.certificate')} <Link to="/ajuda/server-certificate">{t('mcp.certificateLink')}</Link>
       </p>
       <div>
         <button type="button" className="btn btn-secondary btn-sm" onClick={onAnother}>

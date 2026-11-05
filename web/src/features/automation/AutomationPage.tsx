@@ -156,7 +156,7 @@ export function AutomationPage() {
       <PageHead kicker="Regras" title="Processamento automático" />
       <p className="text-muted">
         Depois de cada gravação, o eclume segue estas etapas sozinho, nesta ordem. Cada uma mostra como está agora e
-        leva à tela que a configura. <Link to="/ajuda/o-que-acontece-depois-da-gravacao">Saiba como funciona</Link>.
+        leva à tela que a configura. <Link to="/ajuda/after-the-recording">Saiba como funciona</Link>.
       </p>
       <ol className={`list ${styles.list}`} aria-label="Etapas do processamento automático">
         {steps.map((step, index) => (

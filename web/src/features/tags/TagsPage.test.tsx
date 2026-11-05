@@ -102,7 +102,7 @@ describe('tags: the screen', () => {
     expect(screen.getByText('Organizar', { selector: '.kicker' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Nova tag' })).toBeInTheDocument()
     expect(screen.getByText(/o agente só usa as tags cadastradas aqui/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Saiba como funciona' })).toHaveAttribute('href', '/ajuda/tags-cadastradas')
+    expect(screen.getByRole('link', { name: 'Saiba como funciona' })).toHaveAttribute('href', '/ajuda/registered-tags')
     const nav = screen.getByRole('navigation', { name: 'Principal' })
     expect(within(nav).getByRole('link', { name: 'Tags' })).toHaveAttribute('aria-current', 'page')
   })

@@ -97,7 +97,7 @@ export function TokenForm({ defaults, showIndividual = false, groupHints, onCrea
             <summary>{t('form.individual')}</summary>
             <div className={styles.presets}>
               {/* Outside the summary: a button inside it would be a nested interactive control. */}
-              <HelpHint subject={t('form.individualSubject')} title={t('form.individual')} article="criar-token">
+              <HelpHint subject={t('form.individualSubject')} title={t('form.individual')} article="create-token">
                 {t('form.individualHint')}
               </HelpHint>
               <span className="field-hint">{t('form.presets')}</span>
