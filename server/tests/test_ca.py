@@ -28,7 +28,7 @@ def _load(path: Path) -> x509.Certificate:
 
 
 def test_root_profile(tmp_path: Path):
-    root = generate(tmp_path, "192.168.15.199", ["workstation.local"])
+    root = generate(tmp_path, "192.0.2.10", ["workstation.local"])
 
     assert isinstance(root.public_key(), ec.EllipticCurvePublicKey)
     assert root.public_key().curve.name == "secp256r1"
@@ -36,7 +36,7 @@ def test_root_profile(tmp_path: Path):
     constraints = root.extensions.get_extension_for_class(x509.NameConstraints)
     assert constraints.critical
     assert constraints.value.permitted_subtrees == [
-        x509.IPAddress(ipaddress.ip_network("192.168.15.199/32")),
+        x509.IPAddress(ipaddress.ip_network("192.0.2.10/32")),
         x509.DNSName("workstation.local"),
         x509.RFC822Name("eclume.invalid"),
     ]
@@ -68,10 +68,10 @@ def test_names_by_comma_or_space():
 
 
 def test_refuses_to_overwrite(tmp_path: Path):
-    generate(tmp_path, "192.168.15.199", [])
+    generate(tmp_path, "192.0.2.10", [])
     before = (tmp_path / "raiz.crt").read_bytes()
     with pytest.raises(CaError, match="não é sobrescrita"):
-        generate(tmp_path, "192.168.15.199", [])
+        generate(tmp_path, "192.0.2.10", [])
     assert (tmp_path / "raiz.crt").read_bytes() == before
 
 
@@ -95,7 +95,7 @@ def test_proof_can_be_redone(tmp_path: Path):
 
 def test_cli_generate_and_refuse(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     folder = tmp_path / "secrets" / "ca"
-    args = ["ca", "gerar", "--pasta", str(folder), "--host", "192.168.15.199", "--nomes", "workstation.local"]
+    args = ["ca", "gerar", "--pasta", str(folder), "--host", "192.0.2.10", "--nomes", "workstation.local"]
     assert cli.main(args) == 0
     assert capsys.readouterr().out.startswith("sha256 ")
     assert cli.main(args) == 2

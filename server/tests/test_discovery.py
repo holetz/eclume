@@ -20,7 +20,7 @@ CA_SHA256 = "b127358a576a7cd0e4d76b63271e80a7d168a412e635e10855fcde3f83a4dd20"
 
 
 def _settings(**values: Any) -> Settings:  # noqa: ANN401
-    return Settings(**{"public_url": "https://192.168.15.199:8443/", "server_name": "eclume"} | values)
+    return Settings(**{"public_url": "https://192.0.2.10:8443/", "server_name": "eclume"} | values)
 
 
 def test_registration_uses_the_public_address_and_the_ca_txt():
@@ -28,13 +28,13 @@ def test_registration_uses_the_public_address_and_the_ca_txt():
     assert info.type == SERVICE_TYPE == "_eclume._tcp.local."
     assert info.name == "eclume._eclume._tcp.local."
     assert info.server == "eclume.local."
-    assert (info.parsed_addresses(), info.port) == (["192.168.15.199"], 8443)
+    assert (info.parsed_addresses(), info.port) == (["192.0.2.10"], 8443)
     assert describe(info) == {
         "name": "eclume",
-        "url": "https://192.168.15.199:8443",
+        "url": "https://192.0.2.10:8443",
         "ca_sha256": CA_SHA256,
         "contract_version": CONTRACT_VERSION,
-        "addresses": ["192.168.15.199"],
+        "addresses": ["192.0.2.10"],
         "port": 8443,
     }
     assert describe(service_info(_settings(server_name="sala-2"), None))["ca_sha256"] is None

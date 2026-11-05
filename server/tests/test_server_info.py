@@ -44,12 +44,12 @@ def test_descriptor_without_credential_and_without_ca(client: TestClient):
 
 
 def test_descriptor_with_public_address_name_and_ca(services: Services):
-    settings = {"public_url": "https://192.168.15.199:8443/", "server_name": "eclume-sala", "ca_file": str(CA)}
+    settings = {"public_url": "https://192.0.2.10:8443/", "server_name": "eclume-sala", "ca_file": str(CA)}
     with _client(services, **settings) as client:
         info = client.get("/api/v1/server").json()
     assert info["name"] == "eclume-sala"
-    assert info["url"] == "https://192.168.15.199:8443"
-    assert info["mcp_url"] == "https://192.168.15.199:8443/mcp"
+    assert info["url"] == "https://192.0.2.10:8443"
+    assert info["mcp_url"] == "https://192.0.2.10:8443/mcp"
     assert info["ca_sha256"] == CA_SHA256
 
 

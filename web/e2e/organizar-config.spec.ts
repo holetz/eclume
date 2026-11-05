@@ -89,7 +89,7 @@ test('tags: the catalog with the agent badge and the settings', async ({ page })
 
 test('MCP connection: descriptor address and assistant token', async ({ page }) => {
   await navTo(page, 'Conexão MCP')
-  await expect(page.getByText('https://192.168.15.199:8443/mcp', { exact: true })).toBeVisible()
+  await expect(page.getByText('https://192.0.2.10:8443/mcp', { exact: true })).toBeVisible()
   const panel = page.getByRole('region', { name: 'Novo token para um assistente' })
   await expect(panel.getByRole('checkbox', { name: 'Excluir gravações' })).not.toBeChecked()
   await expect(panel.getByRole('radio', { name: '90 dias' })).toBeChecked()
