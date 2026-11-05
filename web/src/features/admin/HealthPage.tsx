@@ -1,39 +1,40 @@
+import { useTranslation } from 'react-i18next'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 
 import { AdminPageHead } from './AdminPageHead'
 import styles from './Admin.module.css'
-import { formatDuration, labelOf, SERVICE_STATUS, SERVICES, STEP_ORDER, STEPS } from './labels'
+import { dateFormat, formatDuration, labelOf, numberFormat, SERVICE_STATUS, SERVICES, STEP_ORDER, STEPS } from './labels'
 import { HEALTH_MAX_REFRESH_MS, HEALTH_REFRESH_MS, useAdminHealth, useRetryJob } from './queries'
 import { formatDateTime } from '../../shared/format'
 
 type Health = Schemas['AdminHealth']
 type Failure = Health['recent_failures'][number]
 
-const clock = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-const gigabytes = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 })
-const gb = (mb: number) => gigabytes.format(mb / 1024)
+const clock = (iso: string) => dateFormat('clock', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(iso))
+const gb = (mb: number) => numberFormat('gigabytes', { maximumFractionDigits: 1 }).format(mb / 1024)
 
 /**
  * Platform health, reread every 15 s only with the tab visible. No user content: neither
  * a recording's title nor its file shows here.
  */
 export function HealthPage() {
+  const { t } = useTranslation('admin')
   const health = useAdminHealth()
   const data = health.data
   return (
     <>
       <AdminPageHead
-        title="Saúde"
+        title={t('health.title')}
         actions={
           data && (
             <span className={`text-muted tabular ${styles.note}`} aria-live="polite">
-              Atualizado às {clock.format(new Date(data.checked_at))} · a cada {HEALTH_REFRESH_MS / 1000} a {HEALTH_MAX_REFRESH_MS / 1000} s
+              {t('health.updated', { time: clock(data.checked_at), min: HEALTH_REFRESH_MS / 1000, max: HEALTH_MAX_REFRESH_MS / 1000 })}
             </span>
           )
         }
       />
-      {health.isPending && <p role="status">Consultando a saúde do serviço…</p>}
+      {health.isPending && <p role="status">{t('health.loading')}</p>}
       {/* A read error keeps the last data on screen. */}
       {health.isError && (
         <p className="alert alert-error" role="alert">
@@ -46,6 +47,7 @@ export function HealthPage() {
 }
 
 function HealthView({ health }: { health: Health }) {
+  const { t } = useTranslation('admin')
   const { worker, gpu, queue } = health
   const asr = health.models_loaded.find((model) => model.kind === 'asr')
   const steps = STEP_ORDER.map(
@@ -58,44 +60,44 @@ function HealthView({ health }: { health: Health }) {
     <>
       <div className={`stats ${styles.healthStats}`}>
         <Stat
-          kicker="Worker GPU"
-          value={worker ? (worker.busy ? 'Transcrevendo' : 'Ocioso') : 'Sem sinal'}
+          kicker={t('health.gpuWorker')}
+          value={worker ? (worker.busy ? t('health.transcribing') : t('health.idle')) : t('health.noSignal')}
           danger={!worker}
-          sub={gpu ? `${gpu.name} · ${gb(gpu.vram_total_mb)} GB` : 'Sem leitura da GPU'}
+          sub={gpu ? t('health.gpu', { name: gpu.name, total: gb(gpu.vram_total_mb) }) : t('health.noGpu')}
         />
         <Stat
-          kicker="Modelo residente"
-          value={asr?.name ?? 'Nenhum'}
+          kicker={t('health.model')}
+          value={asr?.name ?? t('health.noModel')}
           sub={
             asr && gpu
-              ? `${gb(gpu.vram_used_mb)} / ${gb(gpu.vram_total_mb)} GB de VRAM`
-              : 'Sai da GPU depois de alguns minutos sem job'
+              ? t('health.vram', { used: gb(gpu.vram_used_mb), total: gb(gpu.vram_total_mb) })
+              : t('health.modelHint')
           }
         />
         <Stat
-          kicker="Fila"
+          kicker={t('health.queue')}
           value={String(queue.queued + queue.running)}
-          sub={`${queue.running} rodando · ${queue.queued} esperando`}
+          sub={t('health.queueSub', { running: queue.running, queued: queue.queued })}
         />
         <Stat
-          kicker="Falhas · 24 h"
+          kicker={t('health.failures24')}
           value={String(failures)}
-          sub={latest ? `${labelOf(STEPS, latest.step)} · ${latest.code}` : 'Nenhuma falha'}
+          sub={latest ? `${labelOf(STEPS, latest.step)} · ${latest.code}` : t('health.noFailures')}
         />
       </div>
 
       <section aria-labelledby="saude-etapas">
         <h4 id="saude-etapas" className={styles.healthTitle}>
-          Etapas do processamento · últimas 24 h
+          {t('health.steps')}
         </h4>
         <div className={styles.scroll}>
           <table className="table">
             <thead>
               <tr>
-                <th scope="col">Etapa</th>
-                <th scope="col">Execuções</th>
-                <th scope="col">Mediana</th>
-                <th scope="col">Falhas</th>
+                <th scope="col">{t('health.step')}</th>
+                <th scope="col">{t('health.runs')}</th>
+                <th scope="col">{t('health.median')}</th>
+                <th scope="col">{t('health.failures')}</th>
               </tr>
             </thead>
             <tbody>
@@ -111,7 +113,7 @@ function HealthView({ health }: { health: Health }) {
                       <span className="text-muted">0</span>
                     ) : (
                       <span className="badge badge-danger">
-                        {step.failures} {step.failures === 1 ? 'falha' : 'falhas'}
+                        {t('health.failureCount', { count: step.failures })}
                       </span>
                     )}
                   </td>
@@ -124,7 +126,7 @@ function HealthView({ health }: { health: Health }) {
 
       <section aria-labelledby="saude-servicos">
         <h4 id="saude-servicos" className={styles.healthTitle}>
-          Serviços
+          {t('health.services')}
         </h4>
         <div className={styles.scroll}>
           <table className="table" aria-labelledby="saude-servicos">
@@ -154,18 +156,18 @@ function HealthView({ health }: { health: Health }) {
       {health.recent_failures.length > 0 && (
         <section aria-labelledby="saude-falhas">
           <h4 id="saude-falhas" className={styles.healthTitle}>
-            Falhas recentes
+            {t('health.recent')}
           </h4>
           <div className={styles.scroll}>
             <table className="table">
               <thead>
                 <tr>
-                  <th scope="col">Quando</th>
-                  <th scope="col">Etapa</th>
-                  <th scope="col">Código</th>
-                  <th scope="col">Mensagem</th>
+                  <th scope="col">{t('health.when')}</th>
+                  <th scope="col">{t('health.step')}</th>
+                  <th scope="col">{t('health.code')}</th>
+                  <th scope="col">{t('health.message')}</th>
                   <th scope="col">
-                    <span className="visually-hidden">Ações</span>
+                    <span className="visually-hidden">{t('health.actions')}</span>
                   </th>
                 </tr>
               </thead>
@@ -194,6 +196,7 @@ function Stat({ kicker, value, sub, danger }: { kicker: string; value: string; s
 
 /** A failure, without a link to the recording: the admin session does not open /gravacoes. */
 function FailureRow({ failure }: { failure: Failure }) {
+  const { t } = useTranslation('admin')
   const retry = useRetryJob()
   return (
     <tr>
@@ -205,16 +208,16 @@ function FailureRow({ failure }: { failure: Failure }) {
         {/* Only transcription has a job to retry (holetz/eclume#33). */}
         {failure.job_id &&
           (retry.isSuccess ? (
-            <span className="text-muted">Na fila de novo.</span>
+            <span className="text-muted">{t('health.queued')}</span>
           ) : (
             <button
               type="button"
               className={failure.retryable ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
               disabled={retry.isPending}
-              title={failure.retryable ? 'Falha passageira: tentar de novo costuma resolver.' : undefined}
+              title={failure.retryable ? t('health.transient') : undefined}
               onClick={() => retry.mutate(failure.job_id!)}
             >
-              {retry.isPending ? 'Enfileirando…' : 'Tentar de novo'}
+              {retry.isPending ? t('health.queueing') : t('health.retry')}
             </button>
           ))}
         {retry.isError && (

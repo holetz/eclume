@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
+import { i18n } from '../../i18n'
 import { AGENT_KEY } from './agent'
 
 export type AgentSkill = Schemas['AgentSkill']
@@ -18,11 +19,7 @@ export const skillsKey = [...AGENT_KEY, 'skills'] as const
 export const toolsKey = [...AGENT_KEY, 'tools'] as const
 
 /** The tool's kind, as the screen names it. */
-export const TOOL_KIND: Record<AgentTool['kind'], string> = {
-  read: 'consulta',
-  produce: 'gera arquivo',
-  action: 'propõe mudança',
-}
+export const toolKindLabel = (kind: AgentTool['kind']): string => i18n.t(`agent:toolKind.${kind}`)
 
 /** The typed name as the API stores it: without the slash and in lowercase. */
 export const normalizeSkillName = (value: string) => value.trim().replace(/^\//, '').toLowerCase()

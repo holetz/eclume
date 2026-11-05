@@ -1,13 +1,26 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import { usePageTitle } from '../../app/usePageTitle'
+import { activeLocale } from '../../i18n'
 import { ArticleBody } from './ArticleBody'
 import { getArticle, getTopic, type Article } from './catalog'
 import styles from './Help.module.css'
 
-const updatedFormat = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
+const formats = new Map<string, Intl.DateTimeFormat>()
+
+/** The article's review date, in the active locale (one formatter per locale). */
+function formatUpdated(day: string): string {
+  const locale = activeLocale()
+  let format = formats.get(locale)
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
+    formats.set(locale, format)
+  }
+  return format.format(new Date(`${day}T00:00:00Z`))
+}
 
 export function ArticlePage() {
   useHelpTopic('ajuda')
@@ -18,18 +31,19 @@ export function ArticlePage() {
 }
 
 function ArticleNotFound() {
+  const { t } = useTranslation('help')
   return (
     <section className={styles.page}>
-      <PageHead kicker="Ajuda" title="Artigo não encontrado" />
+      <PageHead kicker={t('kicker')} title={t('article.notFound')} />
       <p>
-        Este artigo não existe ou mudou de endereço. Veja os tópicos na{' '}
-        <Link to="/ajuda">central de ajuda</Link>.
+        <Trans t={t} i18nKey="article.notFoundBody" components={{ center: <Link to="/ajuda" /> }} />
       </p>
     </section>
   )
 }
 
 function ArticleView({ article }: { article: Article }) {
+  const { t } = useTranslation('help')
   usePageTitle(article.title)
   const topic = getTopic(article.topic)
   const body = useRef<HTMLDivElement>(null)
@@ -40,7 +54,7 @@ function ArticleView({ article }: { article: Article }) {
     <section className={styles.article}>
       <ol className="crumbs">
         <li>
-          <Link to="/ajuda">Ajuda</Link>
+          <Link to="/ajuda">{t('kicker')}</Link>
         </li>
         <li>
           <Link to={`/ajuda?topico=${topic.key}`}>{topic.title}</Link>
@@ -50,8 +64,8 @@ function ArticleView({ article }: { article: Article }) {
       <div className={`page-head ${styles.articleHead}`}>
         <h1>{article.title}</h1>
         <div className="article-meta">
-          <span>{article.minutes} min de leitura</span>
-          <span>Atualizado em {updatedFormat.format(new Date(`${article.updated}T00:00:00Z`))}</span>
+          <span>{t('minutes', { n: article.minutes })}</span>
+          <span>{t('article.updated', { date: formatUpdated(article.updated) })}</span>
         </div>
       </div>
       <div className="help-article">
@@ -60,7 +74,7 @@ function ArticleView({ article }: { article: Article }) {
           {related.length > 0 && (
             <nav className={styles.related} aria-labelledby="artigos-relacionados">
               <span className="kicker" id="artigos-relacionados">
-                Relacionados
+                {t('article.related')}
               </span>
               <ul className="help-links">
                 {related.map((item) => (
@@ -73,8 +87,8 @@ function ArticleView({ article }: { article: Article }) {
           )}
         </div>
         {article.headings.length > 0 && (
-          <nav className="toc" aria-label="Nesta página">
-            <span className="toc-title">Nesta página</span>
+          <nav className="toc" aria-label={t('article.onThisPage')}>
+            <span className="toc-title">{t('article.onThisPage')}</span>
             {article.headings.map((heading) => (
               <a key={heading.id} href={`#${heading.id}`} aria-current={heading.id === current ? 'true' : undefined}>
                 {heading.text}

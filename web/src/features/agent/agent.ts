@@ -7,6 +7,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { api, type Schemas } from '../../api/client'
 import { unwrap } from '../../api/problem'
 import { pollWhile } from '../../app/polling'
+import { activeLocale } from '../../i18n'
 
 export type AgentSession = Schemas['AgentSession']
 export type AgentSessionDetail = Schemas['AgentSessionDetail']
@@ -19,7 +20,6 @@ export const MAX_QUESTION = 4000
 export const MAX_ATTACHMENTS = 5
 export const MAX_FILE_BYTES = 10 * 1024 * 1024
 export const ACCEPTED_FILES = '.txt,.md,.csv,.pdf,.docx'
-export const UNTITLED = 'Conversa sem título'
 const RECENT = 20
 const PAGE = 25
 
@@ -42,7 +42,12 @@ export const fileUrl = (file: Pick<AgentFile, 'id'>) => `/api/v1/agent/files/${f
 export function sizeLabel(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`
+  const megabytes = (bytes / (1024 * 1024)).toLocaleString(activeLocale(), {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+    useGrouping: false,
+  })
+  return `${megabytes} MB`
 }
 
 /** The recent conversations, for the list beside the conversation. */

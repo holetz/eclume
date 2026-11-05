@@ -33,6 +33,9 @@ v1) has its own line and each entry cites it.
 - The library, the recording page, import, search, people, custom fields and agenda types,
   collections and tags in English and Portuguese, with the pipeline steps and reasons shared with
   the apps (#250).
+- The administration panel, the Agent, the automatic processing overview and the help center
+  (its frame, search and topic names; the articles are still Portuguese) in English and Portuguese
+  (#251).
 
 ### Fixed
 

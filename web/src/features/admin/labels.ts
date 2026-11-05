@@ -1,47 +1,84 @@
 import { ApiError } from '../../api/problem'
+import { activeLocale, i18n } from '../../i18n'
 
-// pt-BR labels for the contract values. An unknown value shows raw (the contract only grows).
-type Option = { value: string; label: string; hint?: string }
+// Labels for the contract values, read from the `admin` catalog when they are shown (getters), so a
+// locale switch takes effect. An unknown value shows raw (the contract only grows).
+type Option = { readonly value: string; readonly label: string; readonly hint?: string }
+
+function option(value: string, label: () => string, hint?: () => string): Option {
+  const entry = {
+    value,
+    get label() {
+      return label()
+    },
+  }
+  if (hint) Object.defineProperty(entry, 'hint', { enumerable: true, get: hint })
+  return entry
+}
+
+/** A contract value shown as is (a model name, a product name). */
+const raw = (value: string, label = value) => option(value, () => label)
 
 export const ENGINES: readonly Option[] = [
-  { value: 'whisperx-local', label: 'WhisperX (GPU)', hint: 'Padrão: na GPU do servidor, com alinhamento por palavra e separação de locutores.' },
-  { value: 'openai-compatible', label: 'Remoto (OpenAI-compatível)', hint: 'Um servidor como o speaches; exige o endereço.' },
-  { value: 'cpu', label: 'CPU', hint: 'faster-whisper na CPU, só para desenvolvimento: lento e sem separação de locutores.' },
+  option(
+    'whisperx-local',
+    () => 'WhisperX (GPU)',
+    () => i18n.t('admin:option.engine.whisperx-local.hint'),
+  ),
+  option(
+    'openai-compatible',
+    () => i18n.t('admin:option.engine.openai-compatible.label'),
+    () => i18n.t('admin:option.engine.openai-compatible.hint'),
+  ),
+  option(
+    'cpu',
+    () => 'CPU',
+    () => i18n.t('admin:option.engine.cpu.hint'),
+  ),
 ]
 
 export const MODELS = ['large-v3-turbo', 'large-v3', 'medium', 'small'] as const
 
 // `float16` is left out: the GTX 16xx gives NaN on it, and the server refuses it.
 export const COMPUTE_TYPES: readonly Option[] = [
-  { value: 'int8_float16', label: 'int8_float16 (recomendado na GTX 1660)' },
-  { value: 'int8', label: 'int8' },
-  { value: 'int8_float32', label: 'int8_float32' },
-  { value: 'float32', label: 'float32 (mais VRAM)' },
+  option('int8_float16', () => i18n.t('admin:option.computeType.int8_float16')),
+  raw('int8'),
+  raw('int8_float32'),
+  option('float32', () => i18n.t('admin:option.computeType.float32')),
 ]
 
-export const DENOISE_METHODS: readonly Option[] = [
-  { value: 'rnnoise', label: 'RNNoise' },
-  { value: 'afftdn', label: 'afftdn' },
-]
+export const DENOISE_METHODS: readonly Option[] = [raw('rnnoise', 'RNNoise'), raw('afftdn')]
 
 /** What a provider is for (`used_for`); each purpose has a single provider. */
 export const PURPOSES: readonly Option[] = [
-  { value: 'summaries', label: 'Resumos' },
-  { value: 'fields', label: 'Preenchimento de campos' },
-  { value: 'chat', label: 'Chat do resumo' },
-  { value: 'agenda_detection', label: 'Detecção do tipo de agenda' },
+  option('summaries', () => i18n.t('admin:option.purpose.summaries')),
+  option('fields', () => i18n.t('admin:option.purpose.fields')),
+  option('chat', () => i18n.t('admin:option.purpose.chat')),
+  option('agenda_detection', () => i18n.t('admin:option.purpose.agenda_detection')),
 ]
 
 /** The first is the type preselected on creation: one that runs in-house, never the proprietary CLI. */
 export const PROVIDER_KINDS: readonly Option[] = [
-  { value: 'ollama', label: 'Ollama', hint: 'Roda só com a fila da GPU vazia; exige o endereço.' },
-  { value: 'openai-compatible', label: 'OpenAI-compatível', hint: 'DeepSeek, Groq, OpenRouter ou um servidor local; exige o endereço.' },
-  { value: 'anthropic', label: 'API da Anthropic', hint: 'Sem chave própria, usa o segredo anthropic_api_key.' },
-  {
-    value: 'claude-cli',
-    label: 'Claude Code do servidor',
-    hint: 'Roda o claude -p no servidor, autenticado pelo token do Claude; exige a imagem construída com a CLI (ECLUME_CLAUDE_CLI=1); sem endereço.',
-  },
+  option(
+    'ollama',
+    () => 'Ollama',
+    () => i18n.t('admin:option.providerKind.ollama.hint'),
+  ),
+  option(
+    'openai-compatible',
+    () => i18n.t('admin:option.providerKind.openai-compatible.label'),
+    () => i18n.t('admin:option.providerKind.openai-compatible.hint'),
+  ),
+  option(
+    'anthropic',
+    () => i18n.t('admin:option.providerKind.anthropic.label'),
+    () => i18n.t('admin:option.providerKind.anthropic.hint'),
+  ),
+  option(
+    'claude-cli',
+    () => i18n.t('admin:option.providerKind.claude-cli.label'),
+    () => i18n.t('admin:option.providerKind.claude-cli.hint'),
+  ),
 ]
 
 export const MODEL_PLACEHOLDERS: Record<string, string> = {
@@ -55,38 +92,41 @@ export const NEEDS_BASE_URL = new Set(['ollama', 'openai-compatible'])
 
 type ProviderSecret = { label: string; stored: string; missing: string; clear: string; help?: string }
 
-const API_KEY: ProviderSecret = {
-  label: 'Chave de API',
-  stored: 'Guardada',
-  missing: 'Sem chave',
-  clear: 'Apagar a chave guardada',
-}
-
 /** The secret each provider type asks for: `claude-cli` authenticates through the `claude setup-token` token. */
-const PROVIDER_SECRETS: Record<string, ProviderSecret> = {
-  'claude-cli': {
-    label: 'Token do Claude',
-    stored: 'Token guardado',
-    missing: 'Sem token',
-    clear: 'Apagar o token guardado',
-    help:
-      'Num computador com o Claude Code logado na assinatura, rode claude setup-token, autorize no navegador e cole aqui o token sk-ant-oat01-… que ele imprime. Vale 1 ano: quando os resumos falharem por autenticação, gere outro. Uma chave de API da Anthropic (sk-ant-api…) também serve.',
-  },
-}
-
 export function providerSecret(kind: string): ProviderSecret {
-  return PROVIDER_SECRETS[kind] ?? API_KEY
+  if (kind === 'claude-cli') {
+    return {
+      label: i18n.t('admin:option.claudeToken.label'),
+      stored: i18n.t('admin:option.claudeToken.stored'),
+      missing: i18n.t('admin:option.claudeToken.missing'),
+      clear: i18n.t('admin:option.claudeToken.clear'),
+      help: i18n.t('admin:option.claudeToken.help'),
+    }
+  }
+  return {
+    label: i18n.t('admin:option.apiKey.label'),
+    stored: i18n.t('admin:option.apiKey.stored'),
+    missing: i18n.t('admin:option.apiKey.missing'),
+    clear: i18n.t('admin:option.apiKey.clear'),
+  }
 }
 
-export const SECRET_INFO: Record<string, { label: string; hint: string }> = {
-  hf_token: {
-    label: 'Token do Hugging Face',
-    hint: 'Baixa os modelos do pyannote. A conta precisa ter aceitado os termos de pyannote/speaker-diarization-community-1.',
-  },
-  anthropic_api_key: {
-    label: 'Chave da API da Anthropic',
-    hint: 'Usada pelos providers “API da Anthropic” cadastrados sem chave própria.',
-  },
+type SecretName = 'hf_token' | 'anthropic_api_key'
+
+function secretInfo(name: SecretName): { readonly label: string; readonly hint: string } {
+  return {
+    get label() {
+      return i18n.t(`admin:option.secretInfo.${name}.label`)
+    },
+    get hint() {
+      return i18n.t(`admin:option.secretInfo.${name}.hint`)
+    },
+  }
+}
+
+export const SECRET_INFO: Record<string, { readonly label: string; readonly hint: string }> = {
+  hf_token: secretInfo('hf_token'),
+  anthropic_api_key: secretInfo('anthropic_api_key'),
 }
 
 export function labelOf(options: readonly Option[], value: string | null | undefined): string {
@@ -95,16 +135,23 @@ export function labelOf(options: readonly Option[], value: string | null | undef
 }
 
 interface SpeakerPreset {
-  value: string
-  label: string
-  min: number | null
-  max: number | null
-  custom?: boolean
+  readonly value: string
+  readonly label: string
+  readonly min: number | null
+  readonly max: number | null
+  readonly custom?: boolean
 }
 
 /** "Pessoas esperadas" of Locutores: each option fixes `min_speakers` and `max_speakers`. */
 export const SPEAKER_PRESETS: readonly SpeakerPreset[] = [
-  { value: 'detectar', label: 'Detectar', min: null, max: null },
+  {
+    value: 'detectar',
+    get label() {
+      return i18n.t('admin:option.speakers.detect')
+    },
+    min: null,
+    max: null,
+  },
   { value: '2', label: '2', min: 2, max: 2 },
   { value: '3-6', label: '3–6', min: 3, max: 6 },
   { value: '7+', label: '7+', min: 7, max: null },
@@ -117,7 +164,7 @@ export function speakerPreset({ min_speakers: min, max_speakers: max }: SpeakerR
   return (
     SPEAKER_PRESETS.find((preset) => preset.min === min && preset.max === max) ?? {
       value: 'personalizado',
-      label: `Personalizado (${min ?? '…'}–${max ?? '…'})`,
+      label: i18n.t('admin:option.speakers.custom', { min: min ?? '…', max: max ?? '…' }),
       min,
       max,
       custom: true,
@@ -125,13 +172,46 @@ export function speakerPreset({ min_speakers: min, max_speakers: max }: SpeakerR
   )
 }
 
-const lastChange = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+const formats = new Map<string, Intl.DateTimeFormat>()
+const numberFormats = new Map<string, Intl.NumberFormat>()
+
+/** One number formatter per locale and options, so a locale switch formats with the new one. */
+export function numberFormat(kind: string, options: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const locale = activeLocale()
+  const key = `${locale}|${kind}`
+  let format = numberFormats.get(key)
+  if (!format) {
+    format = new Intl.NumberFormat(locale, options)
+    numberFormats.set(key, format)
+  }
+  return format
+}
+
+/** One date formatter per locale and options, so a locale switch formats with the new one. */
+export function dateFormat(kind: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const locale = activeLocale()
+  const key = `${locale}|${kind}`
+  let format = formats.get(key)
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale, options)
+    formats.set(key, format)
+  }
+  return format
+}
+
+/** The short date of a secret's last update ("02/09/2026"). */
+export function formatShortDay(iso: string): string {
+  return dateFormat('day', { dateStyle: 'short' }).format(new Date(iso))
+}
 
 /** "Última alteração por <admin> em <data>", below the platform configuration forms. */
 export function lastChangeText(settings: { updated_at: string; updated_by: { name: string } | null }): string {
   return settings.updated_by
-    ? `Última alteração por ${settings.updated_by.name} em ${lastChange.format(new Date(settings.updated_at))}.`
-    : 'Configuração padrão, ainda não alterada.'
+    ? i18n.t('admin:lastChange', {
+        name: settings.updated_by.name,
+        date: dateFormat('lastChange', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(settings.updated_at)),
+      })
+    : i18n.t('admin:defaultSettings')
 }
 
 /** Number of an optional field: empty becomes `null`. */
@@ -140,17 +220,15 @@ export function optionalInt(value: string): number | null {
   return trimmed === '' ? null : Number.parseInt(trimmed, 10)
 }
 
-const shortDateParts = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
-
 /** "02 set 2026": the short date of the panel tables. */
 export function formatShortDate(iso: string): string {
-  const parts = Object.fromEntries(shortDateParts.formatToParts(new Date(iso)).map((part) => [part.type, part.value]))
+  const parts = Object.fromEntries(dateFormat('shortDate', { day: '2-digit', month: 'short', year: 'numeric' }).formatToParts(new Date(iso)).map((part) => [part.type, part.value]))
   return `${parts.day} ${parts.month.replace('.', '')} ${parts.year}`
 }
 
 /** Compares ignoring accents and case. */
 export function foldText(value: string): string {
-  return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
+  return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase(activeLocale())
 }
 
 /** The messages of a per-field 422 (`errors[].field`), to show each one on its field. */
@@ -169,32 +247,41 @@ export function summaryOf(instructions: string): string {
 
 /** Pipeline steps (holetz/eclume#33), in the order they run. */
 export const STEPS: readonly Option[] = [
-  { value: 'received', label: 'Recebido' },
-  { value: 'preprocessing', label: 'Pré-processamento' },
-  { value: 'transcription', label: 'Transcrição' },
-  { value: 'fields', label: 'Preenchimento de campos' },
-  { value: 'agenda_type', label: 'Tipo de agenda' },
-  { value: 'summary', label: 'Resumo' },
+  option('received', () => i18n.t('admin:option.step.received')),
+  option('preprocessing', () => i18n.t('admin:option.step.preprocessing')),
+  option('transcription', () => i18n.t('admin:option.step.transcription')),
+  option('fields', () => i18n.t('admin:option.step.fields')),
+  option('agenda_type', () => i18n.t('admin:option.step.agenda_type')),
+  option('summary', () => i18n.t('admin:option.step.summary')),
 ]
 
 /** The rows of the Saúde steps table, always these and in this order. */
 export const STEP_ORDER = ['preprocessing', 'transcription', 'fields', 'agenda_type', 'summary'] as const
 
 export const SERVICES: readonly Option[] = [
-  { value: 'api', label: 'Servidor da API' },
-  { value: 'postgres', label: 'Postgres + pgvector' },
-  { value: 'redis', label: 'Redis' },
-  { value: 'storage', label: 'Armazenamento (MinIO)' },
-  { value: 'gpu_worker', label: 'Worker GPU' },
-  { value: 'cpu_worker', label: 'Worker CPU' },
-  { value: 'mcp', label: 'Servidor MCP' },
+  option('api', () => i18n.t('admin:option.service.api')),
+  raw('postgres', 'Postgres + pgvector'),
+  raw('redis', 'Redis'),
+  option('storage', () => i18n.t('admin:option.service.storage')),
+  option('gpu_worker', () => i18n.t('admin:option.service.gpu_worker')),
+  option('cpu_worker', () => i18n.t('admin:option.service.cpu_worker')),
+  option('mcp', () => i18n.t('admin:option.service.mcp')),
 ]
 
-export const SERVICE_STATUS: Record<string, { label: string; badge: string }> = {
-  healthy: { label: 'Saudável', badge: 'badge badge-success' },
-  degraded: { label: 'Degradado', badge: 'badge badge-warning' },
-  down: { label: 'Fora', badge: 'badge badge-danger' },
-  absent: { label: 'Ausente', badge: 'badge' },
+type ServiceStatus = 'healthy' | 'degraded' | 'down' | 'absent'
+
+const serviceStatus = (status: ServiceStatus, badge: string) => ({
+  badge,
+  get label() {
+    return i18n.t(`admin:option.serviceStatus.${status}`)
+  },
+})
+
+export const SERVICE_STATUS: Record<string, { readonly label: string; readonly badge: string }> = {
+  healthy: serviceStatus('healthy', 'badge badge-success'),
+  degraded: serviceStatus('degraded', 'badge badge-warning'),
+  down: serviceStatus('down', 'badge badge-danger'),
+  absent: serviceStatus('absent', 'badge'),
 }
 
 /** "m:ss" of a duration in milliseconds. */

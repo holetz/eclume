@@ -1,18 +1,32 @@
 // Help center catalog: the Markdown articles in ./articles, read at build time. Only the center and
 // the drawer body import this module, and both are on-demand chunks: the articles add no weight to
 // the initial bundle.
+import { i18n } from '../../i18n'
 import { parseFrontmatter, type FrontmatterValue } from './frontmatter'
 import { isHelpPageKey, type HelpPageKey } from './pages'
 import perguntas from './perguntas.md?raw'
 import { normalize } from './search'
 
+/** One help topic: the key, with the kicker and the title read from the `help` catalog when used. */
+function topic<K extends 'comecar' | 'processamento' | 'transcricao' | 'resumos' | 'organizar' | 'conectar'>(key: K) {
+  return {
+    key,
+    get kicker(): string {
+      return i18n.t(`help:topic.${key}.kicker`)
+    },
+    get title(): string {
+      return i18n.t(`help:topic.${key}.title`)
+    },
+  }
+}
+
 export const TOPICS = [
-  { key: 'comecar', kicker: 'Início', title: 'Primeiros passos' },
-  { key: 'processamento', kicker: 'Gravações', title: 'Processamento e falhas' },
-  { key: 'transcricao', kicker: 'Gravações', title: 'Transcrição e locutores' },
-  { key: 'resumos', kicker: 'Gravações', title: 'Resumos e chat' },
-  { key: 'organizar', kicker: 'Organizar', title: 'Campos, regras e tipos de agenda' },
-  { key: 'conectar', kicker: 'Conectar', title: 'Assistentes, tokens e aparelhos' },
+  topic('comecar'),
+  topic('processamento'),
+  topic('transcricao'),
+  topic('resumos'),
+  topic('organizar'),
+  topic('conectar'),
 ] as const
 
 export type TopicKey = (typeof TOPICS)[number]['key']

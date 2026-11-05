@@ -2,13 +2,17 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '../../api/client'
+import { setLocale } from '../../i18n'
 import { fixtures } from '../../test/fixtures'
 import { mockFetch, problem } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
 
 beforeAll(() => preloadRoute('/config/automacao'))
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(async () => {
+  vi.unstubAllGlobals()
+  await setLocale('pt-BR')
+})
 
 const TAGS: Schemas['TagAssignment'] = {
   auto_fill: true,
@@ -35,6 +39,17 @@ function mockAutomation(overrides: Record<string, Parameters<typeof mockFetch>[0
 const rows = () => within(screen.getByRole('list', { name: 'Etapas do processamento automático' })).getAllByRole('listitem')
 
 describe('Automatic processing', () => {
+  it('reads in English when the account chose English', async () => {
+    const me = fixtures.me()
+    mockAutomation({ 'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }) })
+    renderApp('/config/automacao')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Automatic processing' })).toBeInTheDocument()
+    const steps = within(screen.getByRole('list', { name: 'Steps of the automatic processing' })).getAllByRole('listitem')
+    expect(steps[0]).toHaveTextContent('1. Preprocessing and transcription')
+    expect(await within(steps[1]).findByText('Voice: links on its own from 75%')).toBeInTheDocument()
+    expect(await within(steps[5]).findByText(/Tags: only the registered ones \(12\)/)).toBeInTheDocument()
+  })
+
   it('shows the steps in pipeline order, with the state of each', async () => {
     mockAutomation()
     renderApp('/config/automacao')

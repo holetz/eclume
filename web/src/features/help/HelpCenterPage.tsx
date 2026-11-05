@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
 import { isSearchShortcut, useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
@@ -12,6 +13,7 @@ const PREVIEW = 3
 
 export function HelpCenterPage() {
   useHelpTopic('ajuda')
+  const { t } = useTranslation('help')
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
   const topicKey = TOPICS.find((topic) => topic.key === params.get('topico'))?.key
@@ -29,7 +31,7 @@ export function HelpCenterPage() {
 
   return (
     <section className={styles.page}>
-      <PageHead kicker="Ajuda" title="Central de ajuda" />
+      <PageHead kicker={t('kicker')} title={t('center')} />
       <HelpSearch
         className={styles.search}
         inputRef={searchInput}
@@ -47,26 +49,27 @@ export function HelpCenterPage() {
           <Questions />
         </>
       )}
-      <p className={`text-muted ${styles.footer}`}>Ainda com dúvida? Fale com quem administra este servidor.</p>
+      <p className={`text-muted ${styles.footer}`}>{t('footer')}</p>
     </section>
   )
 }
 
 function SearchResults({ query }: { query: string }) {
+  const { t } = useTranslation('help')
   const hits = useMemo(() => searchArticles(query, ARTICLES), [query])
   if (hits.length === 0) {
     return (
       <p className={styles.empty} role="status">
-        Nada encontrado para “{query.trim()}”. Tente outras palavras ou veja os <Link to="/ajuda">tópicos</Link>.
+        <Trans t={t} i18nKey="noResults" values={{ query: query.trim() }} components={{ topics: <Link to="/ajuda" /> }} />
       </p>
     )
   }
   return (
     <>
       <p className="visually-hidden" role="status">
-        {hits.length === 1 ? '1 artigo encontrado' : `${hits.length} artigos encontrados`}
+        {t('found', { count: hits.length })}
       </p>
-      <ul className={`list ${styles.plainList}`} aria-label="Resultados da busca">
+      <ul className={`list ${styles.plainList}`} aria-label={t('results')}>
         {hits.map(({ article, snippet }) => (
           <li key={article.slug} className="list-row">
             <Link className={`list-row-title ${styles.rowLink}`} to={`/ajuda/${article.slug}`}>
@@ -115,18 +118,20 @@ function TopicGrid() {
 }
 
 function TopicMore({ topic, count }: { topic: TopicKey; count: number }) {
+  const { t } = useTranslation('help')
   return (
     <Link className="topic-more" to={`/ajuda?topico=${topic}`}>
-      Todos os {count} artigos →
+      {t('allArticles', { n: count })}
     </Link>
   )
 }
 
 function TopicList({ topic }: { topic: Topic }) {
+  const { t } = useTranslation('help')
   return (
     <div className={styles.topicList}>
       <Link to="/ajuda" className={styles.back}>
-        ← Todos os tópicos
+        {t('allTopics')}
       </Link>
       <span className="kicker">{topic.kicker}</span>
       <h2 className={styles.sectionTitle}>{topic.title}</h2>
@@ -136,7 +141,7 @@ function TopicList({ topic }: { topic: Topic }) {
             <Link className={`list-row-title ${styles.rowLink}`} to={`/ajuda/${article.slug}`}>
               {article.title}
             </Link>
-            <span className="list-row-sub">{article.minutes} min de leitura</span>
+            <span className="list-row-sub">{t('minutes', { n: article.minutes })}</span>
           </li>
         ))}
       </ul>
@@ -145,10 +150,11 @@ function TopicList({ topic }: { topic: Topic }) {
 }
 
 function Questions() {
+  const { t } = useTranslation('help')
   return (
     <section aria-labelledby="perguntas-frequentes" className={styles.questions}>
       <h2 id="perguntas-frequentes" className={styles.sectionTitle}>
-        Perguntas frequentes
+        {t('questions')}
       </h2>
       <div className="faq">
         {QUESTIONS.map((item, index) => (

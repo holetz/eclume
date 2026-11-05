@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Navigate, Outlet, useLocation } from 'react-router'
 import { onAdminUnauthorized } from '../../api/client'
 import { errorMessage } from '../../api/problem'
@@ -12,6 +13,7 @@ import { ADMIN_LOGIN_PATH, ADMIN_ME_KEY, useAdminMe } from './adminSession'
  * with the return route. Hiding a link is not access control: the admin cookie on the server is.
  */
 export function RequireAdmin() {
+  const { t } = useTranslation('common')
   const me = useAdminMe()
   const location = useLocation()
   const queryClient = useQueryClient()
@@ -19,7 +21,7 @@ export function RequireAdmin() {
   // A 401 while in use (expired session) clears the local session, and the guard sends to sign-in.
   useEffect(() => onAdminUnauthorized(() => queryClient.setQueryData(ADMIN_ME_KEY, null)), [queryClient])
 
-  if (me.isPending) return <PageStatus>Carregando…</PageStatus>
+  if (me.isPending) return <PageStatus>{t('loading')}</PageStatus>
   // A refetch failing with the session already loaded keeps the shell up: React Query keeps the
   // data, and the failure becomes the connection banner. The error screen needs no cached session.
   if (me.isError && !me.data) {
@@ -27,7 +29,7 @@ export function RequireAdmin() {
       <PageStatus>
         <p>{errorMessage(me.error)}</p>
         <button type="button" className="btn btn-secondary" onClick={() => me.refetch()}>
-          Tentar de novo
+          {t('retry')}
         </button>
       </PageStatus>
     )
