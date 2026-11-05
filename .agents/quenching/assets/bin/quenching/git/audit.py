@@ -1,4 +1,4 @@
-"""`cq git audit` — the facts the `verifier` agent checks inside a spec's worktree, read with a
+"""`cq git audit` — the facts the `spec-verifier` agent checks inside a spec's worktree, read with a
 fixed argv so the agent needs no `Bash(git …)` grant at all.
 
 A wildcard grant such as `Bash(git -C * status:*)` admits any git command that merely ends in
@@ -14,18 +14,18 @@ driver runs; `log.showSignature` is forced off so `gpg.program` never runs; and 
 or an absent `--sha` never runs `core.sshCommand` or any other transport the config names.
 `rewrites` and `reflog` are evidence of what the worker did not erase, not proof against a worker with
 `Bash`: `git reflog delete` or `expire` removes the entries and the payload then reads empty with
-`complete: true`. The audit, like check 9 of the verifier, catches the widening a worker that follows the
+`complete: true`. The audit, like check 9 of the spec-verifier, catches the widening a worker that follows the
 protocol makes by mistake; it is not a sandbox against one who evades it on purpose (a worker with
 free `Bash` writes outside any diff anyway). A REPORT only, exit 0 on any facts, and a read that failed is
-an entry of the payload's `errors` (`complete: false`), never an empty list; judging them is the verifier's.
-An agent, command or skill is read under `.claude/`, under `plugins/<one segment>/`, and under every
+an entry of the payload's `errors` (`complete: false`), never an empty list; judging them is the spec-verifier's.
+An agent, command or skill is read under `.claude/`, under `quenching/` and `integrations/<one segment>/`, and under every
 plugin root the base or the tip declares (a `.claude-plugin/plugin.json`, a relative `source` of a
 `.claude-plugin/marketplace.json`, and the component paths either names), never by an `agents/` at
 any depth, so an OKF standard filed under `standards/agents/` is no grant. A file a CI root of the
 base or the tip includes (GitLab `include`, top level or under a job's `trigger:`, Azure `template:`,
 `@self` included, GitHub `uses: ./`, where `./` is the whole repository), transitively, is
 surface like the root itself. `generated` is the part of `changed` that is a byte-for-byte copy of its
-source file under a module the BASE's `plugins/quenching/assets/modules.json` declares (same relative
+source file under a module the BASE's `quenching/assets/modules.json` declares (same relative
 path, same blob at the tip, or absent from both); derived outputs that are no copy are never in it.
 Nothing here executes the
 audited branch's code: the gate is certified by CI before the merge, never by this verb."""
@@ -171,7 +171,7 @@ def _inert_env(cwd: str, errors: list[dict] | None = None) -> dict[str, str]:
     return env
 
 
-LOADED_ROOT = r"^(?:(?:.*/)?(?:\.claude|\.agents)/|(?:.*/)?plugins/[^/]+/)?"   # where the host loads agents, commands and skills from
+LOADED_ROOT = r"^(?:(?:.*/)?(?:\.claude|\.agents)/|(?:.*/)?(?:quenching|integrations/[^/]+)/)?"   # where the host loads agents, commands and skills from
 FRONTMATTER_GRANT = re.compile(LOADED_ROOT + r"(?:(?:agents|commands)/.+\.md|skills/.+/skill\.md)$", re.I)
 AGENT = re.compile(LOADED_ROOT + r"agents/.+\.md$", re.I)
 MANIFEST = re.compile(r"(?:^|/)\.(?:claude|codex)-plugin/(plugin|marketplace)\.json$")
@@ -181,7 +181,7 @@ SYMLINK = "120000"
 SETTINGS_AT = r"(?:^|/)(?:\.claude|\.agents)/settings[^/]*\.json$"   # an alternation, never the literal: the Codex translation rewrites it
 SETTINGS = re.compile(SETTINGS_AT)
 # the one azure pipeline template the plugin distributes, split so it is not read as a path citation
-DOCS_TEMPLATE = re.escape("/".join(("plugins", "quenching", "assets", "zensical", "azure-pipelines-docs.yml")))
+DOCS_TEMPLATE = re.escape("/".join(("quenching", "assets", "zensical", "azure-pipelines-docs.yml")))
 SURFACE = re.compile(r"^\.github/(?:workflows|actions)/|" + SETTINGS_AT + r"|(^|/)hooks/"
                      r"|(^|/)\.(?:claude|codex)-plugin/[^/]+\.json$|(^|/)\.(mcp|lsp)\.json$"
                      r"|(^|/)(?:\.gitlab-ci|bitbucket-pipelines)\.ya?ml$"
@@ -545,7 +545,7 @@ def _deny_entries(path: str, text: str | None, key: str = "deny") -> set[str]:
     return (_entries(parsed[0], DENY_KEYS) if parsed else None) or set()
 
 
-MODULES = "plugins/quenching/assets/modules.json"
+MODULES = "quenching/assets/modules.json"
 NAMESPACED = re.compile(r"(?<![\w-])quenching:([a-z][a-z-]*)")
 
 
@@ -562,8 +562,9 @@ def _modules(cwd: str, base: str, env: dict[str, str],
     try:
         manifest = json.loads(out)
         source = manifest["source"].strip("/")
+        # A schema-1 manifest (a base before spec 2160) still names published module trees.
         roots = [m["path"].strip("/") for m in manifest["modules"]
-                 if m.get("published") and ("generated" in m or "owned" in m)]
+                 if m.get("published") and m.get("path") and ("generated" in m or "owned" in m)]
         agents: list[str] | None = None
         mapping: dict[str, str] = {}
         for module in manifest["modules"]:
@@ -718,7 +719,7 @@ def _grants(cwd: str, base: str, tip: str, changed: list[str], env: dict[str, st
 TEST_PATH = re.compile(r"(^|/)(tests?|__tests__)/|(^|/)test_[^/]*$|_test\.[^/]+$|\.(test|spec)\.[^/]+$")
 TEST_NAME = re.compile(r"(^|/)test_[^/]*$|_test\.[^/]+$|\.(test|spec)\.[^/]+$")
 ASSERT = re.compile(r"\bassert\w*\b|\bexpect\s*\(")
-GATE_PATH = re.compile(r"^scripts/verify_repo\.sh$|^plugins/quenching/assets/checks/")
+GATE_PATH = re.compile(r"^scripts/verify_repo\.sh$|^quenching/assets/checks/")
 CODE_EXT = re.compile(r"\.(py|sh|js|jsx|ts|tsx|rb|go|rs|java|kt|cs)$")
 TEST_DIRECT = re.compile(r"(^|/)(tests?|__tests__)/[^/]+$")
 DISCOVER_WORD = re.compile(r"\b(discover|pytest|nosetests?|tox)\b")
@@ -787,7 +788,7 @@ def _asserts(text: str) -> int:
 def _lowered(cwd: str, base: str, tip: str, env: dict[str, str], errors: list[dict]) -> list[dict]:
     """The ways the branch lowers the bar a gate measures, read from `base...tip`, never judged for
     justification. `severity: fail` — a test file deleted, a test file left with no assert it had at
-    the base, a gate file (`scripts/verify_repo.sh`, `plugins/quenching/assets/checks/**`) deleted or
+    the base, a gate file (`scripts/verify_repo.sh`, `quenching/assets/checks/**`) deleted or
     with a removed non-comment line that no added line of that file repeats; `severity: warn` — a
     `noqa`, `type: ignore`, `skip`, `skipIf`, `skipUnless` or `xfail` added to a code file. A reworded
     gate step reads as shrunk: the conductor settles it, except a line whose `quenching:<head>`
@@ -917,8 +918,9 @@ def _generated(cwd: str, base: str, tip: str, changed: list[str], env: dict[str,
     try:
         manifest = json.loads(out)
         source = manifest["source"].strip("/")
+        # A schema-1 manifest (a base before spec 2160) still names published module trees.
         roots = [m["path"].strip("/") for m in manifest["modules"]
-                 if m.get("published") and ("generated" in m or "owned" in m)]
+                 if m.get("published") and m.get("path") and ("generated" in m or "owned" in m)]
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         errors.append(_error(("show", MODULES), 0, f"unreadable module manifest: {exc}"))
         return []

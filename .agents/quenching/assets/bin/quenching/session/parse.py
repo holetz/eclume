@@ -40,7 +40,7 @@ the conductor **once**, never returns to any command 36 times, and jumps to a th
 6 times.
 
 The consequence is not academic. In the session that answered this spec's own go/no-go,
-`/quenching-specs:specs:develop` invoked `/specs:isolate` as a stage; isolate finished at its "Isolated."
+`/quenching-specs develop` invoked `/specs:isolate` as a stage; isolate finished at its "Isolated."
 turn, and the conductor's next five question rounds (`AskUserQuestion` calls or text decision
 sheets with `### D<n>` headings) — its own spec-shape bank — are
 still stamped with the stage label `specs:isolate`. Reported naively that is "the isolation stage asked

@@ -85,7 +85,7 @@ def board_state_of(info: dict, member_states: list[dict] | None = None) -> str:
     forbids a backend deriving anything of its own, and a board-state precedence is exactly
     that kind of derivation.
 
-    PRECEDENCE: `archived` (the `archive` phase) > `reviewed` (the record `/quenching-specs:specs:conclude`
+    PRECEDENCE: `archived` (the `archive` phase) > `reviewed` (the record `/quenching-specs conclude`
     stamps) > the derived stage. `reviewed` outranks the derived stage because it is the
     fact `plugin-configuration.md`'s `azureColumns` example maps to the `Aprovação` lane —
     the derived stage alone cannot tell "approved and executing" from "reviewed and awaiting

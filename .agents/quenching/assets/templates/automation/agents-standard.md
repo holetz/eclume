@@ -14,8 +14,8 @@ maintainer: <owner>
 # Subagent authoring
 
 A **subagent** is a delegation: work runs in a fresh context and only its result returns.
-One definition per file at `.claude/agents/<name>.md`, minted by `/quenching-components-agent-new` under
-one plan → one OK, inventoried (report-only) by `/quenching-components-align`.
+One definition per file at `.claude/agents/<name>.md`, minted by `/quenching-components agent-new` under
+one plan → one OK, inventoried (report-only) by `/quenching-components align`.
 
 ## When work is a subagent — and when it is not
 
@@ -54,9 +54,9 @@ checks, recommendations citing the standard each applies. Fixes re-enter through
 command that owns authoring, under its own confirmation.
 
 <!-- MOLD (quenching · agents standard) → becomes `/docs/standards/automation/agents.md` in a
-     target repo's OKF bundle, offered by /quenching-components-agent-new on first run (never created
+     target repo's OKF bundle, offered by /quenching-components agent-new on first run (never created
      without an OK). Fill the frontmatter placeholders and keep the body; add repo-specific
      deltas below the standard text rather than rewriting it. Born `authority: background`.
      STAMP = MERGE, never clobber. The full doctrine lives in the plugin
-     (`.agents/quenching/assets/references/components-command-new/capabilities.md` §Subagents); this
+     (`.agents/quenching/references/components-command-new/capabilities.md` §Subagents); this
      standard is the target-repo projection of it. -->

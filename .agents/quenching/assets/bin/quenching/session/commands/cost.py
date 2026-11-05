@@ -111,8 +111,8 @@ def _started(transcript: Path) -> tuple:
 
 
 def latest_orchestrator(transcripts: list) -> str | None:
-    """The agent id of the most recently started `orchestrator` (orchestrators run one at a time)."""
-    found = [tr for tr in transcripts if bare_agent(_agent_type(tr)) == "orchestrator"]
+    """The agent id of the most recently started `spec-orchestrator` (or the older `orchestrator`) (orchestrators run one at a time)."""
+    found = [tr for tr in transcripts if bare_agent(_agent_type(tr)) in ("spec-orchestrator", "orchestrator")]
     return _agent_id(max(found, key=_started)) if found else None
 
 

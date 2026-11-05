@@ -40,12 +40,12 @@ them is overwritten by the next run, not merged.
      cannot usefully show a name beside itself.
 
      Two rules the tool cannot enforce, owned by
-     `.agents/quenching/assets/references/components-command-new/taxonomy.md` §registry: the zone lists
+     `.agents/quenching/references/components-command-new/taxonomy.md` §registry: the zone lists
      ONLY the repo's own surface — plugin-contributed commands (/quenching-specs-*, marketplace plugins)
      may be pointed at from the curated prose, never listed inside the markers — and the
      markers must exist before a reindex, which refuses a doc without them (`sk-no-zone`)
      rather than placing a table at a guessed anchor in prose a human wrote.
 
-     `/quenching-components-command-new` (OKF tail) and `/quenching-components-align` (verify step) are the two commands that invoke
+     `/quenching-components command-new` (OKF tail) and `/quenching-components align` (verify step) are the two commands that invoke
      the reindex; each ends its run on a second one reporting `changed: false`.
      STAMP = MERGE, never clobber the curated prose. -->

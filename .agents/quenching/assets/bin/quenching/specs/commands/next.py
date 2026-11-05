@@ -3,11 +3,11 @@
 The ranking lives here and nowhere else: four lexicographic factors, plus a live `plan/<id>-<handle>`
 ref that outranks all four in both directions.
 
-`--spec` has three live consumers — `/quenching-specs:specs:execute`, the gate bank of
-`/quenching-specs:specs:develop`, and `assets/checks/conclude-order-check.sh`. `--front` was kept
+`--spec` has three live consumers — `/quenching-specs execute`, the gate bank of
+`/quenching-specs develop`, and `assets/checks/conclude-order-check.sh`. `--front` was kept
 deliberately through a period with none, because the front's ordering logic exists nowhere else;
-`--table` gave it two — `/quenching-specs:specs:status` prints it as its whole spec block, and
-`/quenching-specs:specs:triage` prints it under `--order priority` as its closing ranking. Both quote the
+`--table` gave it two — `/quenching-specs status` prints it as its whole spec block, and
+`/quenching-specs triage` prints it under `--order priority` as its closing ranking. Both quote the
 rendering; neither re-sorts or re-tallies it."""
 from __future__ import annotations
 
@@ -26,7 +26,8 @@ from quenching.specs.parse.derive import derive_stage
 from quenching.specs.parse.epics import derive_composition, has_links, parse_items
 from quenching.specs.parse.records import spec_records
 from quenching.specs.parse.sections import ready_report
-from quenching.specs.parse.tasks import _files_bad_annotation, task_progress
+from quenching.specs.parse.tasks import (_files_bad_annotation, operational_entries,
+                                         task_progress)
 from quenching.specs.schema import load_schema
 
 
@@ -437,10 +438,21 @@ def cmd_next(args, root: str, out: Emitter) -> int:
                     "code": "sp-files-annotation",
                     "message": f"task {t['id']} declares files entries that are not "
                                f"paths: {', '.join(repr(b) for b in bad)} — remove the "
-                               f"comment; `(new)` is the only reserved `files:` annotation"})
+                               f"comment; `(new)` and `(operational)` are the only "
+                               f"reserved `files:` annotations"})
+            mixed = [] if t["operational"] else operational_entries(t["files"])
+            if mixed:
+                # `(operational)` says the task writes no repository file. Beside a path it
+                # would reach the executor as an entry that is not one — the same silence
+                # the guard above closes, refused at the same door.
+                return out.emit_err(args.json, {
+                    "code": "sp-files-operational",
+                    "message": f"task {t['id']} declares `(operational)` beside "
+                               f"{len(t['files']) - len(mixed)} path(s) — the annotation is "
+                               f"exclusive; keep it as the whole `files:`"})
             obj = {"ok": True, "action": "implement_task", "task": t["id"], "text": t["text"],
                    "verify": t["verify"], "files": t["files"], "pattern": t["pattern"],
-                   "cwd": t["cwd"],
+                   "cwd": t["cwd"], "operational": t["operational"],
                    "parallel": t["parallel"], **base,
                    "message": f"implement task {t['id']}: {t['text']}"}
             out.emit(args.json, obj, obj["message"])

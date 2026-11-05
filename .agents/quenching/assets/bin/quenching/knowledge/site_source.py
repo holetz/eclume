@@ -24,7 +24,7 @@ from quenching.knowledge.schema import EXEMPT
 PUBLISHED_HOMES = (
     "tutorials",
     "how-to",
-    "explanation",
+    "documentation",
     "project",
     "standards",
     "concepts",

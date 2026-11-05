@@ -19,7 +19,7 @@ from quenching.specs.parse.epics import (composition_cycle, composition_findings
 from quenching.specs.parse.text import body_after_frontmatter
 from quenching.specs.parse.sections import (duplicate_headings, gate_report, parse_impact_standards, ready_report,
                                             section_state, stray_headings)
-from quenching.specs.parse.tasks import _files_bad_annotation
+from quenching.specs.parse.tasks import _files_bad_annotation, operational_entries
 from quenching.specs.schema import (MERGE_ANCHORLESS_STRATEGIES, MERGE_NO_PR_STRATEGIES,
                                     MERGE_STRATEGIES, RECORD_NONE_RE, VERIFICATION_POLICIES,
                                     canonical_headings, load_schema)
@@ -152,8 +152,8 @@ def validate_spec(backend: SpecBackend, s: dict,
                                     f"names it", spec=spec_id, path=where, standard=p,
                                     remedy="add a task that writes it, or drop the declaration"))
 
-    # A `files:` entry carrying a parenthetical that is not the reserved `(new)` is a
-    # human comment the parser must not interpret — kept whole it would reach an
+    # A `files:` entry carrying a parenthetical that is not one of the reserved annotations
+    # is a human comment the parser must not interpret — kept whole it would reach an
     # executor as a path that exists nowhere, which is the exact silence `_split_files`
     # exists to stop. Refuse it at the points that hand paths out and report it here.
     for t in tasks:
@@ -163,10 +163,35 @@ def validate_spec(backend: SpecBackend, s: dict,
                 out.append(_finding("sp-files-annotation", "error",
                                     f"{where}: task {t['id'] or t['index']} declares files "
                                     f"entry {entry!r} with annotation `({note})` — only "
-                                    f"`(new)` is reserved", spec=spec_id, path=where,
-                                    task=t["id"] or t["index"], entry=entry,
-                                    remedy="remove the comment — `(new)` is the only "
-                                           "reserved `files:` annotation"))
+                                    f"`(new)` and `(operational)` are reserved", spec=spec_id,
+                                    path=where, task=t["id"] or t["index"], entry=entry,
+                                    remedy="remove the comment — `(new)` and `(operational)` "
+                                           "are the only reserved `files:` annotations"))
+
+    # `(operational)` is EXCLUSIVE. The parser hands an operational task on as `files: []`,
+    # so a path beside the marker survives here as a mixed declaration: the marker would
+    # hide that path from the verifier's collection of declared paths, which is the one
+    # guard that makes the annotation safe to trust. And a marker with no `verify:` has
+    # nothing to prove it — the annotation would then assert a task nobody can check.
+    for t in tasks:
+        if t["operational"]:
+            if not t["verify"]:
+                out.append(_finding("sp-operational-no-verify", "warn",
+                                    f"{where}: task {t['id'] or t['index']} is "
+                                    f"`(operational)` with no `verify:` — its only proof is "
+                                    f"missing", spec=spec_id, path=where,
+                                    task=t["id"] or t["index"],
+                                    remedy="declare the `verify:` the task is proved by"))
+            continue
+        mixed = operational_entries(t["files"])
+        if mixed:
+            out.append(_finding("sp-files-operational", "error",
+                                f"{where}: task {t['id'] or t['index']} declares "
+                                f"`(operational)` beside a path — the annotation is "
+                                f"exclusive: an operational task writes no repository file",
+                                spec=spec_id, path=where, task=t["id"] or t["index"],
+                                remedy="keep `(operational)` as the whole `files:`, or "
+                                       "declare only the paths the task writes"))
 
     for t in tasks:
         # `files: []` is parsed as the single entry `[]`: the explicit empty declaration.

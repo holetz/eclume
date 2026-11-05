@@ -19,7 +19,7 @@ language — [standards/agents/communication.md](standards/agents/communication.
 * [decisions/](decisions/index.md) — the history behind a contract (measurements, dates, spec chain); standards keep only the rule
 * [tutorials/](tutorials/index.md) — learning-oriented pages ("get it running")
 * [how-to/](how-to/index.md) — task-oriented recipes for a reader with a goal
-* [explanation/](explanation/index.md) — how and why, for the site's reader
+* [documentation/](documentation/index.md) — how and why, business rules included, for the site's reader (the Diátaxis explanation quadrant)
 * [project/](project/index.md) — the manual for *this* repository: its commands, its automation, its layout
 * [concepts/](concepts/index.md) — generic knowledge we hold (domain concepts, explanations, learnings); ships the fixed [glossary.md](glossary.md) term lookup
 * [external/](external/index.md) — facts about what **WE CONSUME** (external, background)
@@ -31,7 +31,7 @@ language — [standards/agents/communication.md](standards/agents/communication.
 - `concepts/` = "generic **understanding** we hold" (concepts/explanations; non-binding).
 - `external/` = "facts about what **WE CONSUME** (external, background)".
 - `catalog/` = "our **data** / domain".
-- `tutorials/` `how-to/` `explanation/` `project/` = the **reader-facing** quadrants. A page you
+- `tutorials/` `how-to/` `documentation/` `project/` = the **reader-facing** quadrants. A page you
   would publish for a human belongs to one of them; internal team understanding goes to
   `concepts/`, a current contract to `standards/`.
 - The **task inbox** is the provider-owned `specs` front, **outside** this bundle.

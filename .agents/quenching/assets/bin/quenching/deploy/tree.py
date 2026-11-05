@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 
 from quenching.common.version import VERSION
 from quenching.components.commands import bridge
+from quenching.deploy import settings as claude_settings
 from quenching.deploy import translate
 
 PAYLOAD = ".agents/quenching"
@@ -23,7 +24,9 @@ OPENCODE_AGENTS = ".opencode/agents"
 OPENCODE_CONFIG = "opencode.json"
 MODULE_SHORT = {
     "quenching-specs": "specs",
-    "quenching-align": "align",
+    "quenching-git": "git",
+    "quenching-knowledge": "knowledge",
+    "quenching-components": "components",
     "quenching-design": "design",
     "quenching-ops": "ops",
     "quenching-proof": "proof",
@@ -32,9 +35,14 @@ MODULE_SHORT = {
     "quenching-security": "security",
     "quenching-opensource": "opensource",
 }
+CORE = "specs,git,knowledge,components"
+# A manifest recorded before the split names `quenching-align`: it stood for the two verticals now apart.
+MODULE_ALIAS = {"align": "knowledge,components", "quenching-align": "knowledge,components"}
 FRONT_BY_MODULE = {
     "quenching-specs": ("specs",),
-    "quenching-align": ("knowledge", "components"),
+    "quenching-git": ("git",),
+    "quenching-knowledge": ("knowledge",),
+    "quenching-components": ("components",),
     "quenching-design": ("design",),
     "quenching-ops": ("ops",),
     "quenching-proof": ("proof",),
@@ -45,11 +53,11 @@ FRONT_BY_MODULE = {
 }
 ASSETS_BY_MODULE = {
     "quenching-specs": ("assets/specs", "assets/portal"),
-    "quenching-align": ("assets/knowledge", "assets/zensical"),
+    "quenching-knowledge": ("assets/knowledge", "assets/zensical"),
     "quenching-design": ("assets/design",),
     "quenching-opensource": ("assets/opensource",),
 }
-MARKDOWN_DIRS = ("assets/references", "assets/templates", "assets/knowledge", "assets/zensical",
+MARKDOWN_DIRS = ("references", "assets/templates", "assets/knowledge", "assets/zensical",
                  "assets/design", "assets/opensource", "assets/specs")
 IGNORE = {"__pycache__", "tests", "evals", "checks"}
 MCP_NAME = "quenching"
@@ -60,7 +68,7 @@ class DeployError(ValueError):
 
 
 def source_root() -> Path:
-    """The installed plugin root that carries `assets/` and `commands/`."""
+    """The installed plugin root that carries `assets/`, `skills/` and `references/`."""
     return Path(__file__).resolve().parents[4]
 
 
@@ -103,10 +111,13 @@ def normalize_modules(values: list[str] | None, manifest: dict) -> list[str]:
         if not token:
             continue
         if token == "core":
-            token = "specs,align"
+            token = CORE
         elif token == "all":
             token = ",".join(MODULE_SHORT[name] for name in known)
+        parts = []
         for part in token.split(","):
+            parts += MODULE_ALIAS.get(part.strip(), part).split(",")
+        for part in parts:
             part = part.strip()
             if not part:
                 continue
@@ -147,12 +158,6 @@ def _packages(selected: list[dict]) -> list[str]:
     return packages
 
 
-def _commands(source: Path) -> dict[str, Path]:
-    root = source / "commands"
-    return {path.relative_to(root).as_posix(): path
-            for path in sorted(root.rglob("*.md")) if path.is_file()}
-
-
 def _agents(source: Path) -> dict[str, Path]:
     return {path.stem: path for path in sorted((source / "agents").glob("*.md"))}
 
@@ -160,7 +165,7 @@ def _agents(source: Path) -> dict[str, Path]:
 def _agents_md(target: Path) -> str:
     docs = target / "docs" / "index.md"
     knowledge = ("- Durable knowledge: [`docs/index.md`](docs/index.md).\n" if docs.is_file()
-                 else "- Durable knowledge: run `/quenching-knowledge-align` to install the "
+                 else "- Durable knowledge: run `/quenching-knowledge align` to install the "
                       "`/docs/` bundle.\n")
     return (
         "# AGENTS.md\n\n"
@@ -179,7 +184,7 @@ def _seed_config(target: Path, profiles: list[str]) -> str:
     from quenching.config.seed import seed_document
     document = seed_document(str(target))
     # Deploy installs the surface; it does not choose a specs backend. The target's own
-    # `/quenching-knowledge-align` (or `cq doctor --setup`) records that decision.
+    # `/quenching-knowledge align` (or `cq doctor --setup`) records that decision.
     document.pop("backend", None)
     shared = document.setdefault("shared", {})
     shared["profiles"] = {"installed": profiles}
@@ -187,7 +192,7 @@ def _seed_config(target: Path, profiles: list[str]) -> str:
 
 
 def _uvx_shim(version: str) -> tuple[bytes, bytes]:
-    source = f"git+https://github.com/holetz/quenching@{version}#subdirectory=plugins/quenching"
+    source = f"git+https://github.com/holetz/quenching@{version}#subdirectory=quenching"
     sh = ("#!/usr/bin/env sh\n"
           f"exec uvx --from \"{source}\" cq \"$@\"\n")
     cmd = ("@echo off\r\n"
@@ -195,15 +200,49 @@ def _uvx_shim(version: str) -> tuple[bytes, bytes]:
     return sh.encode(), cmd.encode()
 
 
+_VENDOR_SH = '''#!/usr/bin/env python3
+"""cq — the launcher of this deployed surface, generated by `cq deploy`; do not edit.
+
+It re-executes `../assets/bin/cq` instead of importing it: that entry point reaches its `quenching`
+package through the `sys.path[0]` Python builds from the script's own directory, which an in-process
+form would point at `bin/`. `os.execv` also hands the shell cq's own exit code (0 ok / 1 findings /
+2 refusal), which every command body branches on. The root comes from `__file__`, never from a
+variable the harness expands.
+"""
+
+import os
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+REAL = os.path.join(ROOT, "assets", "bin", "cq")
+
+os.execv(sys.executable, [sys.executable, REAL, *sys.argv[1:]])
+'''
+
+_VENDOR_CMD = (
+    "@echo off\r\n"
+    "rem cq launcher for a Windows PATH: runs ..\\assets\\bin\\cq with Python and hands back its exit code.\r\n"
+    "setlocal\r\n"
+    'set "CQ=%~dp0..\\assets\\bin\\cq"\r\n'
+    "where py >nul 2>nul\r\n"
+    "if %ERRORLEVEL% EQU 0 (\r\n"
+    '  py -3 "%CQ%" %*\r\n'
+    ") else (\r\n"
+    '  python "%CQ%" %*\r\n'
+    ")\r\n"
+    "exit /b %ERRORLEVEL%\r\n"
+)
+
+
 def _bridge_tree(tree: dict, target: Path) -> None:
     """Every skill gets the marked Claude copy: generated ones and the target's own."""
     skill_files = {rel: (data, mode) for rel, (data, mode) in tree.items()
-                   if rel.startswith(SKILLS + "/") and rel.endswith("/SKILL.md")}
+                   if rel.startswith(SKILLS + "/")}
     for rel, (data, mode) in sorted(skill_files.items()):
         name = rel[len(SKILLS) + 1:].split("/", 1)[0]
-        text = bridge.with_marker(data.decode("utf-8"), name)
-        destination = CLAUDE_SKILLS + rel[len(SKILLS):]
-        _add(tree, destination, text.encode("utf-8"), mode)
+        if rel == f"{SKILLS}/{name}/SKILL.md":
+            data = bridge.with_marker(data.decode("utf-8"), name).encode("utf-8")
+        _add(tree, CLAUDE_SKILLS + rel[len(SKILLS):], data, mode)
 
     # A target may already carry its own skills. They are not deploy-owned source, but the
     # bridge is a byte copy of every skill; generating it here keeps the contract coherent.
@@ -212,6 +251,10 @@ def _bridge_tree(tree: dict, target: Path) -> None:
     if source.is_dir():
         for folder in sorted(source.iterdir()):
             if not folder.is_dir() or folder.name in generated:
+                continue
+            # `quenching-` is the deploy's namespace: a folder there that no selected module
+            # carries is legacy surface, removed by `cli`, not a target skill to bridge.
+            if folder.name.startswith("quenching-"):
                 continue
             for path in sorted(folder.rglob("*")):
                 if not path.is_file():
@@ -267,6 +310,10 @@ def _mcp_tree(tree: dict, mcp: dict, harnesses: list[str]) -> None:
              (json.dumps(document, indent=2, ensure_ascii=False) + "\n").encode())
 
 
+def _declared_hooks(selected: list[dict]) -> list[dict]:
+    return [hook for module in selected for hook in module.get("owned", {}).get("hooks", [])]
+
+
 def build_tree(source: Path, target: Path, modules: list[str], harnesses: list[str],
                runtime: str = "vendor", profiles: list[str] | None = None,
                mcp: dict | None = None) -> dict:
@@ -286,25 +333,27 @@ def build_tree(source: Path, target: Path, modules: list[str], harnesses: list[s
     if runtime == "vendor":
         for package in packages:
             _add_tree(tree, source, "assets/bin/quenching/" + package)
-        _add_tree(tree, source, "assets/bin/quenching_launch.py")
+        # quenching_launch.py is the wheel entry point only (the build maps it to launch.py);
+        # the vendored target runs the generated bin/cq, so a clone and a uvx deploy write the same tree.
         _add_tree(tree, source, "assets/bin/cq")
-        _add_tree(tree, source, "bin/cq")
-        _add_tree(tree, source, "bin/cq.cmd")
+        _add(tree, PAYLOAD + "/bin/cq", _VENDOR_SH.encode(), 0o755)
+        _add(tree, PAYLOAD + "/bin/cq.cmd", _VENDOR_CMD.encode(), 0o644)
     _add_tree(tree, source, "assets/modules.json")
     _add_tree(tree, source, "VERSION")
-    _add_tree(tree, source, ".claude-plugin/plugin.json")
-    _add_tree(tree, source, "assets/references", translate.reference_document)
+    _add_tree(tree, source, "references", translate.reference_document)
     _add_tree(tree, source, "assets/templates", translate.reference_document)
     _add_tree(tree, source, "assets/translation")
+    # The identity hooks: inert until a clone points `core.hooksPath` at them.
+    _add_tree(tree, source, "assets/githooks")
     for module in selected:
         for rel in ASSETS_BY_MODULE.get(module["name"], ()):
             _add_tree(tree, source, rel, translate.reference_document)
+    # The hooks the selected modules declare, installed in `.claude/settings.json` by `cli`; only
+    # Claude reads them, so the scripts travel only with that harness.
+    hooks = _declared_hooks(selected) if "claude" in harnesses else []
+    for hook in hooks:
+        _add_tree(tree, source, f"assets/hooks/{hook['name']}.sh")
 
-    # Every command body stays in the payload for the root conductor; only selected commands
-    # become skills.
-    for rel, path in _commands(source).items():
-        _add(tree, f"{PAYLOAD}/commands/{rel}",
-             translate.command_document(path.read_text(encoding="utf-8")).encode(), _mode(path))
     for name, path in _agents(source).items():
         _add(tree, f"{PAYLOAD}/agents/{name}.md",
              translate.agent_document(path.read_text(encoding="utf-8"), name).encode(), _mode(path))
@@ -316,23 +365,34 @@ def build_tree(source: Path, target: Path, modules: list[str], harnesses: list[s
     if mcp:
         _mcp_tree(tree, mcp, harnesses)
 
-    # Skills are generated only from the selected modules' commands.
-    selected_commands: list[str] = []
-    for module in selected:
-        for rel in module["owned"]["commands"]:
-            base = source / "commands" / rel
-            paths = [base] if base.is_file() else sorted(base.rglob("*.md"))
-            for path in paths:
-                if path.is_file():
-                    relative = path.relative_to(source / "commands").as_posix()
-                    if relative not in selected_commands:
-                        selected_commands.append(relative)
+    # A skill is its whole folder: the `SKILL.md` and the `references/` beside it.
     skill_names: list[str] = []
-    for rel in sorted(selected_commands):
-        raw = (source / "commands" / rel).read_text(encoding="utf-8")
-        name = translate.skill_name(rel)
-        skill_names.append(name)
-        _add(tree, f"{SKILLS}/{name}/SKILL.md", translate.skill_document(raw, rel).encode(), 0o644)
+    for module in selected:
+        for name in module["owned"]["skills"]:
+            if name in skill_names:
+                continue
+            skill_names.append(name)
+            root = source / "skills" / name
+            # A vendored payload carries no skill source: the installed folder is already the
+            # generated form, so it is re-asserted byte for byte.
+            installed = not root.is_dir()
+            if installed:
+                root = target / SKILLS / name
+            if not root.is_dir():
+                continue
+            for path in sorted(root.rglob("*")):
+                if not path.is_file() or _is_build(path):
+                    continue
+                rel = path.relative_to(root).as_posix()
+                if installed:
+                    data = path.read_bytes()
+                elif rel == "SKILL.md":
+                    data = translate.skill_document(path.read_text(encoding="utf-8"), name).encode("utf-8")
+                elif path.suffix == ".md":
+                    data = translate.reference_document(path.read_text(encoding="utf-8")).encode("utf-8")
+                else:
+                    data = path.read_bytes()
+                _add(tree, f"{SKILLS}/{name}/{rel}", data, _mode(path))
 
     if "claude" in harnesses:
         _bridge_tree(tree, target)
@@ -340,8 +400,8 @@ def build_tree(source: Path, target: Path, modules: list[str], harnesses: list[s
             _add(tree, f"{CLAUDE_AGENTS}/{translate.agent_name(name)}.md",
                  translate.agent_document(path.read_text(encoding="utf-8"), name).encode(), 0o644)
     if "opencode" in harnesses:
-        # OpenCode reads `.opencode/agents/`, not `.claude/agents/`; a target without the
-        # marketplace plugin would otherwise keep every skill and lose the operator agents.
+        # OpenCode reads `.opencode/agents/`, not `.claude/agents/`; without this copy a target
+        # would keep every skill and lose the operator agents.
         for name, path in _agents(source).items():
             _add(tree, f"{OPENCODE_AGENTS}/{translate.agent_name(name)}.md",
                  translate.opencode_agent_document(path.read_text(encoding="utf-8"), name).encode(),
@@ -354,7 +414,7 @@ def build_tree(source: Path, target: Path, modules: list[str], harnesses: list[s
     document = {
         "generator": "cq deploy",
         "version": VERSION,
-        "source": "plugins/quenching",
+        "source": "quenching",
         "modules": modules,
         "profiles": profiles or profiles_for(modules),
         "harnesses": harnesses,
@@ -364,4 +424,12 @@ def build_tree(source: Path, target: Path, modules: list[str], harnesses: list[s
     }
     if mcp:
         document["mcp"] = mcp
-    return {"tree": tree, "seeds": seeds, "manifest": document}
+    settings = None
+    if "claude" in harnesses:
+        # `.claude/settings.json` is the user's file: it is merged by `cli`, never listed in `files`.
+        # `attribution` holds the keys this deploy wrote; `cli` replaces it once the merge ran.
+        settings = {"hooks": claude_settings.desired_entries(hooks),
+                    "attribution": dict(claude_settings.ATTRIBUTION)}
+        document["claudeSettings"] = {"hooks": [hook["name"] for hook in hooks],
+                                      "attribution": sorted(claude_settings.ATTRIBUTION)}
+    return {"tree": tree, "seeds": seeds, "manifest": document, "settings": settings}

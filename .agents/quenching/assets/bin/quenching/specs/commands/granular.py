@@ -319,9 +319,13 @@ def cmd_section(args, root: str, out: Emitter) -> int:
 # `commitLineno` are deliberately NOT here: they are the offsets `task` upserts by, and
 # handing them to a reader is an invitation to do the string surgery `task` exists to
 # prevent. `lineno` stays, because locating a task in the file is reading, not writing.
+# `operational` stays for the opposite reason: the parser hands an operational task on as
+# `files: []`, and without the flag a reader cannot tell it from a task that declared the
+# empty list — the verifier would then excuse a sha it owes (`files: (operational)`) or
+# charge one the task does not owe.
 SHOWN_TASK_KEYS = ("index", "id", "state", "checked", "blocked", "reason", "text",
-                   "section", "parallel", "files", "pattern", "verify", "subject",
-                   "commit", "lineno")
+                   "section", "parallel", "files", "operational", "pattern", "verify",
+                   "subject", "commit", "lineno")
 
 
 def _task_view(t: dict) -> dict:

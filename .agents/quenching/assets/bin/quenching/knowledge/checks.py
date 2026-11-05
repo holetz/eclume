@@ -35,6 +35,7 @@ from quenching.knowledge.schema import (
     RECOMMENDED,
     SOURCE_MAX_WORDS,
     TYPES_WITHOUT_RESOURCE,
+    WRAPPER_QUADRANTS,
     _nonempty,
     recency,
 )
@@ -488,7 +489,7 @@ def check_okf_signature(has_root_index: bool, has_okf_version: bool,
     missing = "has no `index.md`" if not has_root_index else "`index.md` declares no `okf_version`"
     return [("ERROR", root_rel, "not-an-okf-bundle",
              f"`{root_rel}/` {missing} — it is a directory, not an OKF bundle; "
-             f"`/quenching-align:knowledge:align` converts one, and per-file OKF findings are "
+             f"`/quenching-knowledge align` converts one, and per-file OKF findings are "
              f"withheld until it does")]
 
 
@@ -501,31 +502,43 @@ def check_legacy_home(root_entries: set[str]) -> list[tuple[str, str, str, str]]
     ]
 
 
-def check_legacy_documentation_home(root_entries: set[str]) -> list[tuple[str, str, str, str]]:
-    """`okf-legacy-documentation-home` — the retired `documentation/` home still sits at the
-    bundle root. Its four Diátaxis quadrants became homes in their own right (`tutorials/`,
-    `how-to/`, `explanation/`) plus `project/`, once the bundle root itself became the site's
-    source and a wrapper home stopped earning its level.
+def check_legacy_documentation_home(root_entries: set[str],
+                                    documentation_entries: set[str] | None = None,
+                                    ) -> list[tuple[str, str, str, str]]:
+    """`okf-legacy-documentation-home` — the retired `documentation/` wrapper still sits at the
+    bundle root. Its Diátaxis quadrants became homes in their own right (`tutorials/`, `how-to/`,
+    `project/`) once the bundle root itself became the site's source, and the explanation quadrant
+    became the canonical `documentation/` home (2026-11-04).
+
+    Because `documentation/` is a canonical home again, the wrapper is told apart **by
+    structure**: it is the `documentation/` that still holds a quadrant subfolder
+    (`WRAPPER_QUADRANTS`). A flat `documentation/` is the home and is silent.
 
     Independent and idempotent like its siblings: dissolving this one site clears it, whether or
     not any other has migrated."""
     if "documentation" not in root_entries:
         return []
+    held = sorted(set(documentation_entries or ()) & set(WRAPPER_QUADRANTS))
+    if not held:
+        return []
     return [("ERROR", "documentation/", "okf-legacy-documentation-home",
-             "`documentation/` is the retired wrapper home — dissolve it into `tutorials/`, "
-             "`how-to/`, `explanation/` and `project/` at the bundle root")]
+             "`documentation/` still holds the retired wrapper's quadrants ("
+             + ", ".join(f"`{name}/`" for name in held)
+             + ") — move `tutorials/`, `how-to/` and `project/` to the bundle root and flatten "
+               "`explanation/` into `documentation/` itself")]
 
 
 def check_legacy_doc_quadrant(quadrant_entries: set[str]) -> list[tuple[str, str, str, str]]:
     """`okf-legacy-doc-quadrant` — a pre-rename Diátaxis quadrant under `documentation/`.
 
     Deliberately still aimed at `documentation/`, never at the bundle root: `LEGACY_QUADRANTS`
-    maps `concepts` -> `explanation`, and `concepts/` is a canonical home at the root. Re-aiming
-    this check upward would report the bundle's own `concepts/` as migration debt. It fires only
-    under a surviving `documentation/`, which `okf-legacy-documentation-home` already reports."""
+    names `concepts`, and `concepts/` is a canonical home at the root. Re-aiming this check upward
+    would report the bundle's own `concepts/` as migration debt. It fires only under a surviving
+    `documentation/` wrapper, which `okf-legacy-documentation-home` already reports."""
     return [
         ("ERROR", f"documentation/{old}/", "okf-legacy-doc-quadrant",
-         f"`documentation/{old}/` is the pre-rename Diátaxis name — rename it to `documentation/{new}/`")
+         f"`documentation/{old}/` is the pre-rename Diátaxis name — its pages belong in `{new}/` "
+         f"at the bundle root")
         for old, new in LEGACY_QUADRANTS.items() if old in quadrant_entries
     ]
 

@@ -1098,7 +1098,7 @@
         g.specs.length ? g.specs.map(card) : h("p", { class: "col-empty" }, "nada aqui")));
   }
   function copyCommand(id) {
-    const cmd = "/quenching-specs:specs:execute " + id;
+    const cmd = "/quenching-specs execute " + id;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(cmd).then(() => toast("Copiado: " + cmd, true), () => toast(cmd, true));
     } else toast(cmd, true);

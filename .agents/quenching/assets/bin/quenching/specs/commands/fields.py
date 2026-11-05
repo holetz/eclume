@@ -25,7 +25,7 @@ def cmd_verification(args, root: str, out: Emitter) -> int:
 
     THE ONLY WRITER USED TO BE `new --verification`, and that is the one moment nobody has an
     opinion: the policy answers how long THIS repo's suite takes and whether a section is the
-    smallest safe unit, which is what `/quenching-specs:specs:develop`'s gate bank exists to ask.
+    smallest safe unit, which is what `/quenching-specs develop`'s gate bank exists to ask.
     With no writer after capture that bank could only land its answer by editing the
     frontmatter by hand — which needs a file, and an external backend has none. So under
     `github` the policy was decidable exactly once, before anyone knew the answer, and

@@ -21,12 +21,12 @@ from quenching.common.output import finding, refuse, report_findings
 from quenching.components.commands.lint import (SURFACE_MISSING, resolve_lint_targets,
                                                      surface_root_of)
 from quenching.components.sections import markdown_sections, select_sections
-from quenching.components.surface import (REFERENCES_DIR, body_after_frontmatter,
-                                          discover_references, load_surface, rel)
+from quenching.components.surface import (body_after_frontmatter, load_surface, rel,
+                                          surface_references)
 
 
 REFERENCE_RE = re.compile(
-    r"(?:\$\{CLAUDE_PLUGIN_ROOT\}/)?assets/references/([A-Za-z0-9_./-]+\.md)"
+    r"(\.agents/(?:quenching/references|skills/[a-z0-9-]+/references)/[A-Za-z0-9_./-]+\.md)"
 )
 FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})", re.MULTILINE)
 def _bytes(text: str) -> int:
@@ -120,7 +120,7 @@ def _reference_citations(command: dict) -> list[dict]:
 
 def _reference_index(root: str) -> dict[str, dict]:
     return {item["relpath"].replace(os.sep, "/"): item
-            for item in discover_references(os.path.join(root, REFERENCES_DIR))}
+            for item in surface_references(root)}
 
 
 def measure_command(command: dict, references: dict[str, dict], root: str) -> tuple[dict, list[dict]]:

@@ -30,7 +30,7 @@ Language: pt-BR — the contract is /docs/standards/agents/communication.md
 ```
 
 That line carries **a value and a citation, and nothing else**. It never paraphrases the rule below:
-a harness file that restates a standard is precisely the drift `/quenching-components-harness-align` exists to remove,
+a harness file that restates a standard is precisely the drift `/quenching-components harness-align` exists to remove,
 while a value plus a pointer is not a restatement. It carries **one** value — a second configuration
 key on that line is a defect, not a feature.
 
@@ -69,7 +69,7 @@ Two exclusions, and only two:
    repos. That rule is not this doc's — it belongs to
    [../naming/command-surface.md](../naming/command-surface.md), and this doc only names it as its
    own boundary.
-2. **This plugin's own command surface.** Every body under `plugins/quenching/commands/**` is
+2. **This plugin's own command surface.** Every body under `quenching/skills/**` is
    English whatever a target repo declares. **Their output is not.** A question a command asks and a
    report it prints are prose aimed at the human, and they follow the tag. The body in English, the
    output in the language — translating a body is the error this distinction exists to prevent.

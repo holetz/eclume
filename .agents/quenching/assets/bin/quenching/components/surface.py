@@ -15,7 +15,7 @@ Two shapes are conformant and both resolve here:
 
 ONE FILE PER ENTRY POINT. A command file carries its own description AND its own body; a
 command's path IS its invocation and its identity: `commands/specs/develop.md` is
-`/quenching-specs:specs:develop`, one `:` per path segment. There is nothing to mirror.
+`/quenching-specs develop`, one `:` per path segment. There is nothing to mirror.
 
 `commands/**` is the ONLY tree Claude Code registers, which is why nothing else may live
 there: a `references/` folder beside a command file would surface every reference as a
@@ -44,19 +44,19 @@ SKILLS_DIR = "skills"
 SKILL_FILE = "SKILL.md"
 HOOKS_DIR = "hooks"
 
-# The prose checks reach `assets/references/**` as well as `commands/**`, decided by count:
-# of the 519 bare command citations this surface carried on 2026-07-30, 183 lived under
-# `assets/references/`, so a scope stopping at `commands/` leaves 35% of the prose with no
+# The prose checks reach the references as well as the skill bodies, decided by count:
+# of the 519 bare command citations this surface carried on 2026-07-30, 183 lived in
+# references, so a scope stopping at the bodies leaves 35% of the prose with no
 # net — and a reference is read by the same session that reads the body citing it, so a
 # body and its reference disagreeing is exactly the drift worth catching. A surface with no
 # such directory (every target repo's `.claude/`) contributes nothing and reports nothing.
-REFERENCES_DIR = os.path.join("assets", "references")
+REFERENCES_DIR = "references"
+PAYLOAD_REFERENCES = ".agents/quenching/references"
 
 SURFACE_MISSING = "—"
 
 FRONTMATTER_FENCE = "---"
 
-PLUGIN_MANIFEST = os.path.join(".claude-plugin", "plugin.json")
 
 QUOTED_RE = re.compile(r"[\"“]([^\"”]{2,}?)[\"”]")
 
@@ -127,11 +127,12 @@ def find_surface_root(root_arg: str | None) -> str:
 # --------------------------------------------------------------------------- #
 # the surface model — what every subcommand reads
 # --------------------------------------------------------------------------- #
-def command_invocation(relpath: str) -> str:
-    """`specs/develop.md` -> `/quenching-specs:specs:develop` — one `:` per path segment. The path IS
-    the identity, so this is the whole naming rule; nothing derives a second name to
-    compare it against."""
-    return "/" + ":".join(relpath[:-3].split("/"))
+def command_invocation(relpath: str, prefix: str | None = None) -> str:
+    """`specs/develop.md` -> `/quenching-specs develop` on the source surface (the `prefix` is
+    `quenching`), `/front:verb` on a target's own `.claude/commands/`. The path IS the identity,
+    so this is the whole naming rule; nothing derives a second name to compare it against."""
+    parts = relpath[:-3].split("/")
+    return "/" + "-".join([prefix, *parts]) if prefix else "/" + ":".join(parts)
 
 
 def discover_commands(commands_dir: str) -> list[dict]:
@@ -142,6 +143,7 @@ def discover_commands(commands_dir: str) -> list[dict]:
     registered entry point and must be reported as one, never filtered out here."""
     if not os.path.isdir(commands_dir):
         return []
+    prefix = plugin_prefix(os.path.dirname(os.path.abspath(commands_dir)))
     out = []
     for dirpath, _dirnames, filenames in os.walk(commands_dir):
         for fn in sorted(filenames):
@@ -153,7 +155,7 @@ def discover_commands(commands_dir: str) -> list[dict]:
             body = body_after_frontmatter(text)
             hooks, hooks_parsed = parse_frontmatter_hooks(text)
             out.append({
-                "command": command_invocation(relpath),
+                "command": command_invocation(relpath, prefix),
                 "path": path,
                 "relpath": relpath,
                 "frontmatter": parse_frontmatter(text),
@@ -187,6 +189,35 @@ def discover_references(references_dir: str) -> list[dict]:
     return sorted(out, key=lambda r: r["relpath"])
 
 
+def surface_references(root: str) -> list[dict]:
+    """Every reference of the surface rooted at `root`, keyed by the path a body cites it by.
+
+    A reference lives in one of two places: beside its skill (`skills/<name>/references/`, cited as
+    `.agents/skills/<name>/references/<path>`) or in the common set every skill shares (the
+    source's `references/`, a target's `.agents/quenching/references/`, cited as
+    `.agents/quenching/references/<path>`). `relpath` is the cited path in both."""
+    out: list[dict] = []
+    common = (os.path.join(root, "quenching", REFERENCES_DIR)
+              if os.path.basename(os.path.normpath(root)) == AGENTS_DIR
+              else os.path.join(root, REFERENCES_DIR))
+    for item in discover_references(common):
+        out.append(dict(item, relpath=f"{PAYLOAD_REFERENCES}/{item['relpath']}"))
+    skills = os.path.join(root, SKILLS_DIR)
+    if os.path.isdir(skills):
+        generated = generated_for_skills_dir(skills)
+        for name in sorted(os.listdir(skills)):
+            if name in generated:
+                continue
+            for item in discover_references(os.path.join(skills, name, "references")):
+                out.append(dict(item, relpath=f".agents/skills/{name}/references/{item['relpath']}"))
+    return out
+
+
+def skill_reference_body(skill_dir: str) -> str:
+    """The bodies of a skill's own references, joined: what a router's flows say on its behalf."""
+    return "\n".join(item["body"] for item in discover_references(os.path.join(skill_dir, "references")))
+
+
 def discover_skills(skills_dir: str) -> list[dict]:
     """Every `<skills_dir>/<name>/SKILL.md`, one entry point per skill, invoked `/<name>`.
 
@@ -212,6 +243,7 @@ def discover_skills(skills_dir: str) -> list[dict]:
             "hooks": hooks,
             "hooksParsed": hooks_parsed,
             "body": body,
+            "refBody": skill_reference_body(os.path.dirname(path)),
             "bodyLines": len(body.splitlines()),
         })
     return out
@@ -246,18 +278,13 @@ def load_surface(root: str) -> dict:
 
 
 def plugin_prefix(root: str) -> str | None:
-    """The registry prefix this surface's commands carry, from `<root>/.claude-plugin/
-    plugin.json`. `None` says the surface is a target repo's own `.claude/` — where a
-    command file IS in `.claude/commands/`, the bare form is the one that resolves, and
-    the citation check has nothing to say."""
-    text = read_text(os.path.join(root, PLUGIN_MANIFEST))
-    if text is None:
-        return None
-    try:
-        name = json.loads(text).get("name")
-    except (ValueError, AttributeError):
-        return None
-    return name.strip() if isinstance(name, str) and name.strip() else None
+    """The registry prefix this surface's commands carry: `quenching` for the source of quenching
+    (the root with `VERSION` and `assets/modules.json`). `None` says the surface is a target repo's
+    own `.claude/` — where a command file IS in `.claude/commands/`, the bare form is the one that
+    resolves, and the citation check has nothing to say."""
+    if os.path.isfile(os.path.join(root, "VERSION")) and os.path.isfile(os.path.join(root, "assets", "modules.json")):
+        return "quenching"
+    return None
 
 
 def claude_side(root: str) -> str:

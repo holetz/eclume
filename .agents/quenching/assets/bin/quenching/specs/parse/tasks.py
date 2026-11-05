@@ -81,18 +81,44 @@ def _split_files(val: str) -> list[str]:
 
 FILES_ANNOTATION_RE = re.compile(r"\s*\(([^()]*)\)\s*$")
 
+# THE RESERVED `files:` ANNOTATIONS — a closed grammar owned HERE and nowhere else, so no
+# consumer re-derives the set. `new` marks a path about to be created, which `_norm_file`
+# strips for comparisons. `operational` declares a task that writes no repository file at
+# all: its proof is the `verify:`. Read the pair through `is_operational` and
+# `operational_entries` rather than spelling either name again.
+FILES_ANNOTATIONS = ("new", "operational")
+OPERATIONAL_ANNOTATION = "operational"
+
+
+def _annotation(entry: str) -> str | None:
+    """The trailing parenthetical of one entry, trimmed; `None` when the entry carries
+    none. The reserved names are matched exactly — the grammar is closed, not a wording."""
+    m = FILES_ANNOTATION_RE.search(entry)
+    return m.group(1).strip() if m else None
+
 
 def _files_bad_annotation(entry: str) -> str | None:
-    """The single reserved `files:` annotation is `(new)` — a path about to be created,
-    which `_norm_file` strips for comparisons. Any OTHER trailing parenthetical is a
-    human comment; kept inside the entry, the executor receives a path that exists
-    nowhere with the same confidence as a real one — the silent failure this rule
-    closes. Return the annotation text so the caller can refuse the entry."""
-    m = FILES_ANNOTATION_RE.search(entry)
-    if not m:
-        return None
-    note = m.group(1)
-    return None if note == "new" else note
+    """Any trailing parenthetical that is NOT reserved is a human comment; kept inside
+    the entry, the executor receives a path that exists nowhere with the same confidence
+    as a real one — the silent failure this rule closes. Return the annotation text so
+    the caller can refuse the entry."""
+    note = _annotation(entry)
+    return None if note in FILES_ANNOTATIONS else note
+
+
+def operational_entries(files: list[str]) -> list[str]:
+    """Every entry that carries `(operational)` — non-empty beside a path means a MIXED
+    declaration, which `validate` refuses (`sp-files-operational`)."""
+    return [e for e in files if _annotation(e) == OPERATIONAL_ANNOTATION]
+
+
+def is_operational(files: list[str]) -> bool:
+    """A task that writes no repository file: `(operational)` IS its whole `files:`.
+
+    Exclusive on purpose. Beside a path the marker would hide that path from the
+    verifier's scope union — the one guard that makes the annotation safe — so the
+    declaration is either the annotation alone or plain paths."""
+    return len(files) == 1 and bool(operational_entries(files))
 
 
 def parse_tasks(text: str) -> list[dict]:
@@ -183,6 +209,7 @@ def parse_tasks(text: str) -> list[dict]:
             # This arm is why the dispatch is exhaustive rather than an `else: verify = val`:
             # under the open form, a `constraint:` line following `verify:` overwrote it, and
             # the loop would have run that prose as the task's shell command.
+        operational = is_operational(files)
         out.append({
             "index": idx,
             "id": idm.group(1) if idm else None,
@@ -203,7 +230,12 @@ def parse_tasks(text: str) -> list[dict]:
             "lineno": base + i,
             "section": section,
             "parallel": parallel,
-            "files": files,
+            # THE DECLARATION IS NORMALISED HERE, ONCE. An operational task declares no
+            # repository file, so every consumer receives `files: []` and the flag beside
+            # it — the `files:` line keeps its grammar, the chain "no files: → tick with no
+            # commit" keeps its single path, and no reader has to know the annotation.
+            "files": [] if operational else files,
+            "operational": operational,
             "pattern": pattern,
             "cwd": cwd,
             "verify": verify,

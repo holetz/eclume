@@ -76,7 +76,7 @@ def _activity_rows(bundle_root: str, ignore_globs: tuple[str, ...]) -> list[tupl
     return rows
 
 
-HOMES = ("standards", "vision", "decisions", "tutorials", "how-to", "explanation", "project",
+HOMES = ("standards", "vision", "decisions", "tutorials", "how-to", "documentation", "project",
          "concepts", "external", "catalog")
 EXEMPT_DENSITY_NAMES = {"index.md", "log.md", "CLAUDE.md", "AGENTS.md"}
 
