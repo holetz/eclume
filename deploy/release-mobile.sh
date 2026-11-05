@@ -11,7 +11,7 @@
 # Usage: bash deploy/release-mobile.sh [--plan] [--context NAME] [--publish] [--notes "text"]
 #                                      [--skip-gate "reason"] [--no-smoke]
 #   --plan       only shows what it would do (read-only).
-#   --context    the host's Docker context (default: $ECLUME_DOCKER_CONTEXT or gpu-host).
+#   --context    the host's Docker context (or $ECLUME_DOCKER_CONTEXT); required, no default.
 #   --publish    creates the tag and the GitHub Release; without it, it is a dry run and the
 #                artifacts stay on the host.
 #   --notes      release notes, which the app and /app-movel show; without it, the version's section
@@ -26,7 +26,7 @@ export MSYS_NO_PATHCONV=1
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-CONTEXT="${ECLUME_DOCKER_CONTEXT:-gpu-host}"
+CONTEXT="${ECLUME_DOCKER_CONTEXT:-}"
 REPO=holetz/eclume
 SECRETS=/srv/eclume/secrets
 KEYSTORE="$SECRETS/eclume-android.jks"
@@ -59,6 +59,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ "$PUBLISH" -eq 0 || "$SMOKE" -eq 1 ]] || { echo "--publish always runs the smoke test." >&2; exit 2; }
+[[ -n "$CONTEXT" ]] || { echo "Missing the host's Docker context: --context NAME or ECLUME_DOCKER_CONTEXT." >&2; exit 2; }
 
 export DOCKER_CONTEXT="$CONTEXT"
 unset DOCKER_HOST
