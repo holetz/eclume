@@ -3,11 +3,12 @@
 // (or checked by the person when the address came without one), and sign-in by email and password
 // or pairing code.
 import { el, replace, $ } from "../dom.js";
+import { t } from "../i18n.js";
 
 const ORIGINS = {
-  installer: "Veio com este instalador",
-  network: "Encontrado na rede",
-  typed: "Endereço digitado",
+  installer: "firstRun.origins.installer",
+  network: "firstRun.origins.network",
+  typed: "firstRun.origins.typed",
 };
 
 /** The server name and address host, as in the eclume server label. */
@@ -19,7 +20,7 @@ export function serverLabel(server) {
     // Malformed address: display it as received.
   }
   const name = server.name && server.name !== host ? server.name : "eclume";
-  return `${name} em ${host}`;
+  return t("firstRun.serverLabel", { name, host });
 }
 
 /** The typed address, adding https for a bare host; `null` if invalid. */
@@ -49,10 +50,19 @@ export function mount(section, app) {
   let busy = false;
   /** The latest choice: discard a late response from an earlier choice. */
   let request = 0;
+  let noticeKey = null;
 
-  function showNotice(text) {
+  function showNotice(text, key = null) {
+    noticeKey = key;
     notice.hidden = !text;
     $("#first-run-notice-text", notice).textContent = text ?? "";
+  }
+
+  function showSearching(key) {
+    const searching = $("#first-run-searching", section);
+    searching.dataset.i18n = key;
+    searching.textContent = t(key);
+    searching.hidden = false;
   }
 
   function canSignIn() {
@@ -82,14 +92,13 @@ export function mount(section, app) {
           el(
             "small",
             {},
-            ORIGINS[server.origin] ?? "",
+            ORIGINS[server.origin] ? t(ORIGINS[server.origin]) : "",
             " · ",
-            el("a", { href: "#", on: { click: useAnother } }, "Usar outro"),
+            el("a", { href: "#", on: { click: useAnother } }, t("firstRun.useAnother")),
           ),
         ),
       ),
     );
-    $("#first-run-searching", section).hidden = true;
   }
 
   function useAnother(event) {
@@ -114,6 +123,7 @@ export function mount(section, app) {
     prepared = null;
     trusted = false;
     drawServers();
+    $("#first-run-searching", section).hidden = true;
     drawTrust();
     showNotice(null);
     try {
@@ -128,8 +138,7 @@ export function mount(section, app) {
   }
 
   async function discover() {
-    $("#first-run-searching", section).hidden = false;
-    $("#first-run-searching", section).textContent = "Procurando o servidor na rede…";
+    showSearching("firstRun.searching");
     try {
       servers = await app.invoke("discover_servers");
     } catch (failure) {
@@ -138,7 +147,7 @@ export function mount(section, app) {
     }
     if (chosen?.origin === "typed" && !servers.some((s) => s.url === chosen.url)) servers.push(chosen);
     if (servers.length === 0) {
-      $("#first-run-searching", section).textContent = "Nenhum servidor na rede. Digite o endereço em Avançado.";
+      showSearching("firstRun.noServers");
       advanced.open = true;
       return;
     }
@@ -172,7 +181,7 @@ export function mount(section, app) {
   $("#first-run-pair", section).addEventListener("click", () => {
     const code = $("#first-run-code", section).value.trim();
     if (!code) {
-      showNotice("Digite o código de 6 caracteres mostrado na web.");
+      showNotice(t("firstRun.missingCode"), "firstRun.missingCode");
       return;
     }
     signInWith("pair", { code: code });
@@ -190,7 +199,7 @@ export function mount(section, app) {
   $("#first-run-use-address", section).addEventListener("click", () => {
     const url = typedAddress($("#first-run-address", section).value);
     if (!url) {
-      showNotice("Endereço inválido: digite o host do servidor, com ou sem https.");
+      showNotice(t("firstRun.invalidAddress"), "firstRun.invalidAddress");
       return;
     }
     const typed = { name: "", url, ca_sha256: null, origin: "typed" };
@@ -205,7 +214,7 @@ export function mount(section, app) {
     event.preventDefault();
     const url = prepared?.url ?? chosen?.url;
     if (!url) {
-      showNotice("Escolha o servidor antes de criar a conta.");
+      showNotice(t("firstRun.chooseServer"), "firstRun.chooseServer");
       return;
     }
     try {
@@ -215,6 +224,12 @@ export function mount(section, app) {
     }
   });
   $("#first-run-back", section).addEventListener("click", () => app.back());
+
+  app.onLocaleChange(() => {
+    drawServers();
+    drawTrust();
+    if (noticeKey) showNotice(t(noticeKey), noticeKey);
+  });
 
   return {
     enter() {

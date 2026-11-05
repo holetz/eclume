@@ -3,6 +3,7 @@
 // file for the person to confirm or correct, and tracks conversion through to the upload queue.
 import { $ } from "../dom.js";
 import { timer } from "./home.js";
+import { t } from "../i18n.js";
 
 /** "2026-09-19T14:02" in local time, the `datetime-local` value. */
 export function toInput(ms) {
@@ -14,8 +15,8 @@ export function toInput(ms) {
 /** The `.date-source` text by date origin. */
 export function dateOrigin(origin) {
   return origin === "file_mtime"
-    ? "Gravado em · data de modificação do arquivo; confira."
-    : "Gravado em · lida do arquivo. Mude se estiver errada.";
+    ? t("import.dateOrigin.fileMtime")
+    : t("import.dateOrigin.metadata");
 }
 
 export function mount(section, app) {
@@ -28,8 +29,10 @@ export function mount(section, app) {
   let current = null;
   let initialDate = "";
   let converting = false;
+  let errorTranslation = null;
 
-  function showError(text) {
+  function showError(text, translation = null) {
+    errorTranslation = translation;
     error.hidden = !text;
     $("#import-error-text", error).textContent = text ?? "";
   }
@@ -48,7 +51,8 @@ export function mount(section, app) {
     try {
       const probed = await app.invoke("probe_import", { path: path });
       if (!probed.has_audio) {
-        showError(`${probed.name} não tem áudio.`);
+        const vars = { name: probed.name };
+        showError(t("import.noAudio", vars), { key: "import.noAudio", vars });
         return;
       }
       current = probed;
@@ -129,6 +133,13 @@ export function mount(section, app) {
     confirm.disabled = false;
     progressText.hidden = true;
     showError(payload);
+  });
+
+  app.onLocaleChange(() => {
+    if (current) $("#import-origin", section).textContent = dateOrigin(current.date_origin);
+    if (errorTranslation) {
+      showError(t(errorTranslation.key, errorTranslation.vars), errorTranslation);
+    }
   });
 
   return {

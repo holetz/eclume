@@ -3,6 +3,7 @@
 // once a second.
 import { invoke, listen } from "./tauri.js";
 import { fillIcons } from "./icons.js";
+import { activeLocale, onLocaleChange, setLocale, startLocale, systemTag } from "./i18n.js";
 import * as home from "./views/home.js";
 import * as firstRun from "./views/first-run.js";
 import * as importView from "./views/import.js";
@@ -26,6 +27,8 @@ const app = {
   importFile,
   refresh,
   setTheme,
+  get locale() { return activeLocale(); },
+  onLocaleChange,
 };
 
 /** "system", "light" or "dark"; "system" follows `prefers-color-scheme`. */
@@ -63,6 +66,7 @@ async function refresh() {
     app.state = state;
     app.queue = queue;
     app.recent = recent;
+    if (state.locale && state.locale !== activeLocale()) setLocale(state.locale);
     if (state.theme && state.theme !== themePreference) setTheme(state.theme);
     // Without a credential (or after the server CA changes), stay on first run.
     if (state.connection === "first_run" && current !== "first-run") go("first-run");
@@ -110,6 +114,9 @@ async function importFile() {
     console.error(error);
   }
 }
+
+setLocale(startLocale());
+invoke("report_system_locale", { tag: systemTag() }).catch(console.error);
 
 register("home", home);
 register("first-run", firstRun);

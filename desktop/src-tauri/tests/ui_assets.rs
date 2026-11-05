@@ -31,6 +31,27 @@ fn read(path: &Path) -> String {
 }
 
 #[test]
+fn no_portuguese_literals_outside_the_pt_br_catalog() {
+    let root = ui_dir();
+    for path in text_files(&root) {
+        let relative = path.strip_prefix(&root).unwrap();
+        if relative == Path::new("js/locales/pt-BR.js")
+            || relative == Path::new("js/vocabulario.js")
+        {
+            continue;
+        }
+        for (index, line) in read(&path).lines().enumerate() {
+            assert!(
+                !line.contains(|character: char| "ãõçáéíóúâêôàÃÕÇÁÉÍÓÚÂÊÔÀ".contains(character)),
+                "{}:{}: move the text to js/locales/pt-BR.js and its en twin",
+                path.display(),
+                index + 1
+            );
+        }
+    }
+}
+
+#[test]
 fn eclume_css_matches_web_copy() {
     let desktop = read(&ui_dir().join("eclume.css"));
     assert!(!desktop.contains("fonts.googleapis.com"));
