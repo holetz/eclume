@@ -63,7 +63,15 @@ class VigiaDaGravacao : BroadcastReceiver() {
             schedule(context)
             return
         }
-        RecordingNotification.warn(context, NotificationTexts.INTERRUPTED, "Toque para abrir", WARNING_ID)
+        // The process may hold no core here: the warning follows the device's locale.
+        val strings = Localized.strings(context, null)
+        RecordingNotification.warn(
+            context,
+            strings,
+            NotificationTexts.interruptedTitle(strings),
+            strings.get("warning_tap_to_open"),
+            WARNING_ID,
+        )
         disarm(context)
     }
 }

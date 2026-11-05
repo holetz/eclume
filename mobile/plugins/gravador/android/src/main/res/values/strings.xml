@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The recorder's notification, action, channel and sync texts in English, the source locale.
+     Keep the keys and placeholders in step with values-pt-rBR (RecordingNotificationTest checks it). -->
+<resources>
+    <string name="notification_recording">Recording</string>
+    <string name="notification_paused">Paused · %1$s</string>
+    <string name="notification_silenced">Silenced by the system</string>
+    <string name="notification_reconnecting">Microphone disconnected · reconnecting</string>
+    <string name="notification_markers_one">%1$d marker</string>
+    <string name="notification_markers_other">%1$d markers</string>
+    <string name="notification_free_space">%1$s · room for %2$s</string>
+    <string name="action_resume">Resume</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_marker">Marker</string>
+    <string name="action_stop">Stop</string>
+    <string name="warning_stopped">The recording stopped</string>
+    <string name="warning_stopped_with_error">The recording stopped with an error</string>
+    <string name="warning_interrupted">The recording was interrupted</string>
+    <string name="warning_saved">%1$s · %2$s saved</string>
+    <string name="warning_system_ended">the system ended the service</string>
+    <string name="warning_tap_to_open">Tap to open</string>
+    <string name="channel_recording">Recording</string>
+    <string name="channel_recording_description">Shows the recording in progress, with Pause, Marker and Stop.</string>
+    <string name="channel_warnings">Recording warnings</string>
+    <string name="channel_warnings_description">Warns when the recording stops without being asked or is interrupted.</string>
+    <string name="channel_sync">Recording uploads</string>
+    <string name="channel_sync_description">Shows the upload of the recordings to the server in the background.</string>
+    <string name="sync_uploading_one">Uploading 1 recording</string>
+    <string name="sync_uploading_other">Uploading %1$d recordings</string>
+    <string name="sync_on_network">On the Wi‑Fi of the eclume server</string>
+</resources>

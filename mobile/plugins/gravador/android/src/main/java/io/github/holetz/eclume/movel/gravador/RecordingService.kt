@@ -111,12 +111,27 @@ class RecordingService : Service() {
     private var silenceWatch: AudioManager.AudioRecordingCallback? = null
     private var silenced = false
 
+    /** The core's resolved locale, from its last reply (`AppState.locale`). */
+    private var locale: String? = null
+
+    /** The texts in the core's locale; with no reply yet, it reads the state. */
+    private fun strings(): Strings {
+        if (locale == null) locale = Localized.localeOf(EclumeCore.state())
+        return Localized.strings(this, locale)
+    }
+
+    /** Reads a core reply, keeping its locale for the notification. */
+    private fun read(json: String?): CoreReply {
+        Localized.localeOf(json)?.let { locale = it }
+        return CoreReply.read(json)
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         alive = true
-        RecordingNotification.createChannels(this)
+        RecordingNotification.createChannels(this, strings())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -124,13 +139,19 @@ class RecordingService : Service() {
         if (action == END) {
             intent.getStringExtra(EXTRA_REASON)?.let { reason ->
                 val duration = if (intent.hasExtra(EXTRA_DURATION)) intent.getLongExtra(EXTRA_DURATION, 0) else null
-                RecordingNotification.warn(this, NotificationTexts.STOPPED, NotificationTexts.stopped(reason, duration))
+                val strings = strings()
+                RecordingNotification.warn(
+                    this,
+                    strings,
+                    NotificationTexts.stoppedTitle(strings),
+                    NotificationTexts.stopped(strings, reason, duration),
+                )
             }
             finish()
             return START_NOT_STICKY
         }
         val core = coreAction(action)
-        val reply = CoreReply.read(if (core != null) EclumeCore.action(core) else EclumeCore.state())
+        val reply = read(if (core != null) EclumeCore.action(core) else EclumeCore.state())
         when (reply) {
             is CoreReply.WithSession -> show(reply.session)
             CoreReply.NoSession -> {
@@ -146,7 +167,8 @@ class RecordingService : Service() {
                 Log.w(TAG, "core error on action $action: ${reply.message}")
                 if (action == STOP) {
                     // Parar always ends, so no notification is left stuck to a core in error.
-                    RecordingNotification.warn(this, NotificationTexts.STOPPED_WITH_ERROR, reply.message)
+                    val strings = strings()
+                    RecordingNotification.warn(this, strings, NotificationTexts.stoppedWithErrorTitle(strings), reply.message)
                     finish()
                 } else if (!inForeground) {
                     enterForeground(NotificationSession.NEUTRAL)
@@ -161,13 +183,13 @@ class RecordingService : Service() {
             enterForeground(session)
         } else {
             getSystemService(NotificationManager::class.java)
-                .notify(RecordingNotification.ID, RecordingNotification.build(this, session, System.currentTimeMillis()))
+                .notify(RecordingNotification.ID, RecordingNotification.build(this, strings(), session, System.currentTimeMillis()))
         }
     }
 
     /** Enters the foreground and answers `iniciarServico`; returns whether it entered. */
     private fun enterForeground(session: NotificationSession): Boolean {
-        val notification = RecordingNotification.build(this, session, System.currentTimeMillis())
+        val notification = RecordingNotification.build(this, strings(), session, System.currentTimeMillis())
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         } else {
@@ -207,7 +229,7 @@ class RecordingService : Service() {
                 val now = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && configs.any { it.isClientSilenced }
                 if (now == silenced) return
                 silenced = now
-                val reply = CoreReply.read(EclumeCore.action(if (now) "silenciado" else "audivel"))
+                val reply = read(EclumeCore.action(if (now) "silenciado" else "audivel"))
                 if (reply is CoreReply.WithSession) show(reply.session)
             }
         }
@@ -235,14 +257,18 @@ class RecordingService : Service() {
 
     override fun onDestroy() {
         // The system killed the service with the recording running: the core closes the file and warns.
-        val session = NotificationSession.fromState(EclumeCore.state())
+        val state = EclumeCore.state()
+        val session = NotificationSession.fromState(state)
         if (session != null) {
             Log.w(TAG, "service destroyed while recording; stopping the recording")
             EclumeCore.action("parar")
+            Localized.localeOf(state)?.let { locale = it }
+            val strings = strings()
             RecordingNotification.warn(
                 this,
-                NotificationTexts.STOPPED,
-                NotificationTexts.stopped("o sistema encerrou o serviço", session.audioMs),
+                strings,
+                NotificationTexts.stoppedTitle(strings),
+                NotificationTexts.stopped(strings, strings.get("warning_system_ended"), session.audioMs),
             )
         }
         stopWatchingSilence()
