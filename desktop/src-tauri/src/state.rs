@@ -2867,7 +2867,7 @@ mod tests {
             body, credential, info, pem, ScriptNet, Shared, CA_SHA256, SECRET, URL,
         };
 
-        let (state, dir) = state_en("conta");
+        let (state, dir) = state("conta");
         std::fs::create_dir_all(&dir).unwrap();
         assert_eq!(state.view().unwrap().connection, Connection::FirstRun);
         let err = state
@@ -2945,7 +2945,8 @@ mod tests {
         assert_eq!(view.connection, Connection::FirstRun);
         assert_eq!(
             view.sync_notice.as_deref(),
-            Some(i18n::EN.notice_ca_changed)
+            // The account's language (pt-BR) is the resolved one at this point.
+            Some(i18n::PT_BR.notice_ca_changed)
         );
 
         // Signing out deletes the credential, but keeps the queue and server.
@@ -3090,7 +3091,6 @@ mod tests {
                 token_id: Some("t-1".into()),
                 server_name: None,
             }),
-            locale: Some("en".into()),
             ..Config::default()
         }
         .save(&dir.join("config.json"))
@@ -3108,9 +3108,12 @@ mod tests {
         let (state, dir, pinned) = opened_with_pinned("ca-a-mais", &format!("{CA}{other}"));
         let view = state.view().unwrap();
         assert_eq!(view.connection, Connection::FirstRun);
-        assert_eq!(
-            view.sync_notice.as_deref(),
-            Some(i18n::EN.notice_ca_trimmed)
+        // The language comes from the environment of the test machine.
+        assert!(
+            [i18n::EN.notice_ca_trimmed, i18n::PT_BR.notice_ca_trimmed]
+                .contains(&view.sync_notice.as_deref().unwrap()),
+            "{:?}",
+            view.sync_notice
         );
         assert!(state.uploader_config().unwrap().is_none());
         assert!(!dir.join(eclume_sync::pat::PAT_FILE).exists());

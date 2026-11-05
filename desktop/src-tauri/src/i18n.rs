@@ -778,7 +778,9 @@ mod catalog_tests {
         };
     }
 
-    fn message_keys() -> Vec<(&'static str, fn(&Texts) -> &'static str)> {
+    type Pick = fn(&Texts) -> &'static str;
+
+    fn message_keys() -> Vec<(&'static str, Pick)> {
         keys![
             err_no_active_recording,
             err_import_running,
