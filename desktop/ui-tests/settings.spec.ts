@@ -423,6 +423,6 @@ test("Sync: Sync now requests a cycle and displays its result; help opens the ar
   const made = (await calls(page)).filter((c) => c.command === 'mirror_sync_now' || c.command === 'open_help')
   expect(made).toEqual([
     { command: 'mirror_sync_now', args: null },
-    { command: 'open_help', args: { article: 'pasta-sincronizada' } },
+    { command: 'open_help', args: { article: 'synced-folder' } },
   ])
 })

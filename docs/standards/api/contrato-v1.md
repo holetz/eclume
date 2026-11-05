@@ -296,7 +296,7 @@ mapping to `transcricao.md`) is in [contracts/README.md](/contracts/README.md).
   `create_app`). The schema FastAPI derives from the routes is not the contract (it diverges in
   examples, descriptions, scopes and `/mcp`), and its UIs fetch JS and fonts from a CDN. The
   reference is always the bundle's, at the version the server runs.
-- **What leads to the reference:** the Access tokens screen, the help article `criar-token`, the
+- **What leads to the reference:** the Access tokens screen, the help article `create-token`, the
   guide [integrar-com-a-api.md](../../how-to/integrar-com-a-api.md) and `contracts/README.md`.
 
 ## Evolution: v1 only grows

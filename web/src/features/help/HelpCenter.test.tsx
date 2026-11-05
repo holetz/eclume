@@ -1,13 +1,16 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { setLocale } from '../../i18n'
+import ptBR from '../../i18n/pt-BR/help'
 import { fixtures } from '../../test/fixtures'
 import { mockFetch } from '../../test/http'
 import { preloadRoute, renderApp } from '../../test/render'
-import { articlesByTopic, TOPICS } from './catalog'
+import { setLocale } from '../../i18n'
+import { articlesByTopic, helpCatalog, TOPIC_KEYS } from './catalog'
 
 beforeAll(() => preloadRoute('/pessoas'))
+
+const ptTopics = ptBR.topic
 
 afterEach(async () => {
   vi.unstubAllGlobals()
@@ -19,6 +22,12 @@ function openHelp(path: string) {
   return renderApp(path)
 }
 
+function openHelpIn(locale: 'en' | 'pt-BR', path: string) {
+  const me = fixtures.me()
+  mockFetch({ 'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale } }) })
+  return renderApp(path)
+}
+
 describe('help center', () => {
   it('reads its chrome in English when the account chose English', async () => {
     const me = fixtures.me()
@@ -27,7 +36,7 @@ describe('help center', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Help center' })).toBeInTheDocument()
     const card = screen.getByRole('region', { name: 'First steps' })
     expect(within(card).getByText('Start')).toBeInTheDocument()
-    expect(within(card).getAllByRole('link')[3]).toHaveTextContent(`All ${articlesByTopic('comecar').length} articles →`)
+    expect(within(card).getAllByRole('link')[3]).toHaveTextContent(`All ${articlesByTopic(helpCatalog('en'), 'comecar').length} articles →`)
     expect(screen.getByRole('region', { name: 'Frequently asked questions' })).toBeInTheDocument()
     expect(screen.getByRole('searchbox', { name: 'Search the help' })).toHaveAttribute('placeholder', 'Search articles and terms')
   })
@@ -35,11 +44,12 @@ describe('help center', () => {
   it('shows the six topics with three articles, the total and the frequently asked questions', async () => {
     openHelp('/ajuda')
     expect(await screen.findByRole('heading', { level: 1, name: 'Central de ajuda' })).toBeInTheDocument()
-    for (const topic of TOPICS) {
+    for (const key of TOPIC_KEYS) {
+      const topic = { key, ...ptTopics[key] }
       const card = screen.getByRole('region', { name: topic.title })
       expect(within(card).getByText(topic.kicker)).toBeInTheDocument()
       const links = within(card).getAllByRole('link')
-      const total = articlesByTopic(topic.key).length
+      const total = articlesByTopic(helpCatalog('pt-BR'), topic.key).length
       expect(links).toHaveLength(4)
       expect(links[3]).toHaveTextContent(`Todos os ${total} artigos →`)
       expect(links[3]).toHaveAttribute('href', `/ajuda?topico=${topic.key}`)
@@ -60,7 +70,7 @@ describe('help center', () => {
   it('lists a whole topic via ?topico=', async () => {
     openHelp('/ajuda?topico=organizar')
     const list = await screen.findByRole('list', { name: 'Campos, regras e tipos de agenda' })
-    expect(within(list).getAllByRole('listitem')).toHaveLength(articlesByTopic('organizar').length)
+    expect(within(list).getAllByRole('listitem')).toHaveLength(articlesByTopic(helpCatalog('pt-BR'), 'organizar').length)
     expect(screen.getByRole('link', { name: '← Todos os tópicos' })).toHaveAttribute('href', '/ajuda')
   })
 
@@ -72,7 +82,7 @@ describe('help center', () => {
     expect(within(results).getAllByRole('link')[0]).toHaveTextContent(/voz/i)
     expect(within(results).getByRole('link', { name: 'Como funcionam as sugestões por voz' })).toHaveAttribute(
       'href',
-      '/ajuda/sugestoes-por-voz',
+      '/ajuda/voice-suggestions',
     )
     expect(results.querySelector('mark')).toHaveTextContent(/impressão|voz/i)
     expect(screen.queryByRole('region', { name: 'Perguntas frequentes' })).not.toBeInTheDocument()
@@ -92,9 +102,28 @@ describe('help center', () => {
   })
 })
 
+describe('help center in English', () => {
+  afterEach(() => setLocale('pt-BR'))
+
+  it('shows the English topics, articles and questions, and falls back by slug', async () => {
+    openHelpIn('en', '/ajuda')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Help center' })).toBeInTheDocument()
+    const card = screen.getByRole('region', { name: 'First steps' })
+    expect(within(card).getByRole('link', { name: 'Record your first meeting' })).toHaveAttribute('href', '/ajuda/first-recording')
+    expect(screen.getByRole('region', { name: 'Frequently asked questions' })).toBeInTheDocument()
+    expect(screen.getByText('Who sees my recordings?')).toBeInTheDocument()
+  })
+
+  it('opens an article in English', async () => {
+    openHelpIn('en', '/ajuda/voice-suggestions')
+    expect(await screen.findByRole('heading', { level: 1, name: 'How voice suggestions work' })).toBeInTheDocument()
+    expect(screen.getByText('Updated on 09/30/2026')).toBeInTheDocument()
+  })
+})
+
 describe('help article', () => {
   it('shows breadcrumb, meta, body with alert, table of contents and related articles', async () => {
-    openHelp('/ajuda/sugestoes-por-voz')
+    openHelp('/ajuda/voice-suggestions')
     expect(await screen.findByRole('heading', { level: 1, name: 'Como funcionam as sugestões por voz' })).toBeInTheDocument()
     const crumbs = screen.getByRole('link', { name: 'Transcrição e locutores' })
     expect(crumbs).toHaveAttribute('href', '/ajuda?topico=transcricao')
@@ -124,7 +153,7 @@ describe('help article', () => {
   })
 
   it('a link to /downloads/ is an ordinary link', async () => {
-    openHelp('/ajuda/certificado-do-servidor')
+    openHelp('/ajuda/server-certificate')
     const download = await screen.findByRole('link', { name: '/downloads/eclume-root.crt' })
     expect(download).toHaveAttribute('href', '/downloads/eclume-root.crt')
     const next = screen.getByRole('link', { name: 'a próxima raiz' })
@@ -132,7 +161,7 @@ describe('help article', () => {
   })
 
   it('a link to another article navigates without reloading', async () => {
-    openHelp('/ajuda/conectar-assistente-mcp')
+    openHelp('/ajuda/connect-mcp-assistant')
     const body = await screen.findByRole('article')
     await userEvent.click(within(body).getByRole('link', { name: 'Crie um token de acesso' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'Crie um token de acesso' })).toBeInTheDocument()
@@ -155,7 +184,7 @@ describe('help on pages', () => {
     await screen.findByRole('heading', { level: 1, name: 'Pessoas' })
     await userEvent.click(screen.getByRole('button', { name: 'Sobre as sugestões por voz' }))
     const popover = screen.getByRole('dialog', { name: 'Sugestões por voz' })
-    expect(within(popover).getByRole('link', { name: 'Ler o artigo →' })).toHaveAttribute('href', '/ajuda/sugestoes-por-voz')
+    expect(within(popover).getByRole('link', { name: 'Ler o artigo →' })).toHaveAttribute('href', '/ajuda/voice-suggestions')
     await userEvent.keyboard('{Escape}')
 
     await userEvent.keyboard('?')

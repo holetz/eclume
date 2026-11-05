@@ -67,7 +67,7 @@ describe('MCP connection', () => {
     ).toBeInTheDocument()
     expect(within(panel).getByRole('link', { name: 'Como instalar o certificado' })).toHaveAttribute(
       'href',
-      '/ajuda/certificado-do-servidor',
+      '/ajuda/server-certificate',
     )
 
     const body = await http.requests('POST /api/v1/tokens')[0].json()

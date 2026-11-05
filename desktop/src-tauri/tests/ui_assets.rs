@@ -170,7 +170,7 @@ fn help_slugs(text: &str) -> Vec<String> {
 #[test]
 fn help_articles_requested_by_ui_exist_on_web() {
     let articles =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/src/features/help/articles");
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/src/features/help/articles/en");
     if !articles.exists() {
         return; // build outside the monorepo
     }
@@ -185,7 +185,7 @@ fn help_articles_requested_by_ui_exist_on_web() {
     for slug in requested {
         assert!(
             articles.join(format!("{slug}.md")).exists(),
-            "the desktop UI opens article {slug}, which does not exist in web/src/features/help/articles"
+            "the desktop UI opens article {slug}, which does not exist in web/src/features/help/articles/en"
         );
     }
 }

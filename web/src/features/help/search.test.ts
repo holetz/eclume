@@ -2,24 +2,24 @@ import { describe, expect, it } from 'vitest'
 import { buildCatalog } from './catalog'
 import { normalize, queryTerms, searchArticles } from './search'
 
-function art(slug: string, head: Partial<Record<'titulo' | 'topico' | 'termos' | 'ordem', string>>, body: string) {
-  const data = { titulo: 'Sem título', topico: 'comecar', termos: '[]', ordem: '1', ...head }
+function art(slug: string, head: Partial<Record<'title' | 'topic' | 'terms' | 'order', string>>, body: string) {
+  const data = { title: 'Sem título', topic: 'comecar', terms: '[]', order: '1', ...head }
   return [
-    `./articles/${slug}.md`,
-    `---\ntitulo: ${data.titulo}\ntopico: ${data.topico}\npaginas: [ajuda]\nrelacionados: []\ntermos: ${data.termos}\nordem: ${data.ordem}\natualizado: 2026-09-27\n---\n${body}`,
+    `./articles/pt-BR/${slug}.md`,
+    `---\ntitle: ${data.title}\ntopic: ${data.topic}\npages: [ajuda]\nrelated: []\nterms: ${data.terms}\norder: ${data.order}\nupdated: 2026-09-27\n---\n${body}`,
   ] as const
 }
 
 const CATALOG = buildCatalog(
   Object.fromEntries([
-    art('criar-token', { titulo: 'Crie um token de acesso', topico: 'conectar', ordem: '2' }, 'O token só aparece uma vez. Copie e guarde.'),
-    art('revogar-token', { titulo: 'Revogue um token', topico: 'conectar', ordem: '3' }, 'Revogar corta o acesso na hora.'),
+    art('criar-token', { title: 'Crie um token de acesso', topic: 'conectar', order: '2' }, 'O token só aparece uma vez. Copie e guarde.'),
+    art('revogar-token', { title: 'Revogue um token', topic: 'conectar', order: '3' }, 'Revogar corta o acesso na hora.'),
     art(
       'sugestoes',
-      { titulo: 'Como funcionam as sugestões por voz', topico: 'transcricao', termos: '[impressão de voz, LGPD]' },
+      { title: 'Como funcionam as sugestões por voz', topic: 'transcricao', terms: '[impressão de voz, LGPD]' },
       '## Consentimento e remoção\n\nA impressão de voz é dado biométrico. Um token não muda nada aqui.',
     ),
-    art('longo', { titulo: 'Um texto longo', ordem: '2' }, `${'Palavra qualquer. '.repeat(20)}O limiar decide. ${'Outra frase. '.repeat(20)}`),
+    art('longo', { title: 'Um texto longo', order: '2' }, `${'Palavra qualquer. '.repeat(20)}O limiar decide. ${'Outra frase. '.repeat(20)}`),
   ]),
 )
 

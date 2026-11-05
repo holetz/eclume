@@ -35,7 +35,7 @@ export function PeoplePage() {
         kicker={t('list.kicker')}
         title={t('list.title')}
         hint={
-          <HelpHint subject={t('list.hintSubject')} title={t('list.hintTitle')} article="sugestoes-por-voz">
+          <HelpHint subject={t('list.hintSubject')} title={t('list.hintTitle')} article="voice-suggestions">
             {t('list.hint')}
           </HelpHint>
         }

@@ -167,7 +167,7 @@ export function AutomationPage() {
     <section className={styles.page}>
       <PageHead kicker={t('kicker')} title={t('title')} />
       <p className="text-muted">
-        <Trans t={t} i18nKey="lede" components={{ how: <Link to="/ajuda/o-que-acontece-depois-da-gravacao" /> }} />
+        <Trans t={t} i18nKey="lede" components={{ how: <Link to="/ajuda/after-the-recording" /> }} />
       </p>
       <ol className={`list ${styles.list}`} aria-label={t('steps')}>
         {steps.map((step, index) => (

@@ -2,20 +2,21 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { isSearchShortcut } from '../../app/help'
-import { ARTICLES, articlesForPage } from './catalog'
+import { articlesForPage, useHelpCatalog } from './catalog'
 import { HelpSearch } from './HelpSearch'
-import { HELP_PAGES, type HelpPageKey } from './pages'
+import type { HelpPageKey } from './pages'
 import { searchArticles } from './search'
 
 const MAX_RESULTS = 6
 
-/** The help drawer body: search, the page's articles ("Nesta página") and the shortcuts. */
+/** The help drawer body: search, the page's articles ("On this page") and the shortcuts. */
 export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | null }) {
   const { t } = useTranslation('help')
+  const catalog = useHelpCatalog()
   const [query, setQuery] = useState('')
   const input = useRef<HTMLInputElement>(null)
-  const results = useMemo(() => searchArticles(query, ARTICLES, MAX_RESULTS), [query])
-  const pageArticles = pageKey ? articlesForPage(pageKey) : []
+  const results = useMemo(() => searchArticles(query, catalog.articles, MAX_RESULTS), [query, catalog])
+  const pageArticles = pageKey ? articlesForPage(catalog, pageKey) : []
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -52,8 +53,8 @@ export default function HelpDrawerBody({ pageKey }: { pageKey: HelpPageKey | nul
           pageKey &&
           pageArticles.length > 0 && (
             <div className="help-section">
-              <span className="kicker">{t('drawer.onThisPage', { page: HELP_PAGES[pageKey] })}</span>
-              <ul className="help-links" aria-label={t('drawer.articlesAbout', { page: HELP_PAGES[pageKey] })}>
+              <span className="kicker">{t('drawer.onThisPage', { page: t(`page.${pageKey}`) })}</span>
+              <ul className="help-links" aria-label={t('drawer.articlesAbout', { page: t(`page.${pageKey}`) })}>
                 {pageArticles.map((article) => (
                   <li key={article.slug}>
                     <Link to={`/ajuda/${article.slug}`}>{article.title}</Link>

@@ -33,9 +33,9 @@ test("menu items open server help and the log folder", async ({ open }) => {
   }
   const made = (await calls(page)).filter((c) => c.command === 'open_help' || c.command === 'open_log_dir')
   expect(made).toEqual([
-    { command: 'open_help', args: { article: 'primeira-gravacao' } },
-    { command: 'open_help', args: { article: 'permissoes-de-microfone' } },
-    { command: 'open_help', args: { article: 'pasta-sincronizada' } },
+    { command: 'open_help', args: { article: 'first-recording' } },
+    { command: 'open_help', args: { article: 'microphone-permissions' } },
+    { command: 'open_help', args: { article: 'synced-folder' } },
     { command: 'open_help', args: { article: null } },
     { command: 'open_log_dir', args: null },
   ])

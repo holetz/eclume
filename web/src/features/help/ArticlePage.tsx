@@ -4,30 +4,17 @@ import { Link, useParams } from 'react-router'
 import { useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import { usePageTitle } from '../../app/usePageTitle'
-import { activeLocale } from '../../i18n'
 import { ArticleBody } from './ArticleBody'
-import { getArticle, getTopic, type Article } from './catalog'
+import { getArticle, useHelpCatalog, type Article, type HelpCatalog } from './catalog'
 import styles from './Help.module.css'
-
-const formats = new Map<string, Intl.DateTimeFormat>()
-
-/** The article's review date, in the active locale (one formatter per locale). */
-function formatUpdated(day: string): string {
-  const locale = activeLocale()
-  let format = formats.get(locale)
-  if (!format) {
-    format = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
-    formats.set(locale, format)
-  }
-  return format.format(new Date(`${day}T00:00:00Z`))
-}
 
 export function ArticlePage() {
   useHelpTopic('ajuda')
   const { slug = '' } = useParams()
-  const article = getArticle(slug)
+  const catalog = useHelpCatalog()
+  const article = getArticle(catalog, slug)
   if (!article) return <ArticleNotFound />
-  return <ArticleView key={article.slug} article={article} />
+  return <ArticleView key={article.slug} article={article} catalog={catalog} />
 }
 
 function ArticleNotFound() {
@@ -42,13 +29,13 @@ function ArticleNotFound() {
   )
 }
 
-function ArticleView({ article }: { article: Article }) {
-  const { t } = useTranslation('help')
+function ArticleView({ article, catalog }: { article: Article; catalog: HelpCatalog }) {
+  const { t, i18n } = useTranslation('help')
   usePageTitle(article.title)
-  const topic = getTopic(article.topic)
+  const updatedFormat = new Intl.DateTimeFormat(i18n.language, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
   const body = useRef<HTMLDivElement>(null)
   const current = useCurrentHeading(body, article.headings[0]?.id)
-  const related = article.related.map(getArticle).filter((item): item is Article => item !== undefined)
+  const related = article.related.map((slug) => getArticle(catalog, slug)).filter((item): item is Article => item !== undefined)
 
   return (
     <section className={styles.article}>
@@ -57,7 +44,7 @@ function ArticleView({ article }: { article: Article }) {
           <Link to="/ajuda">{t('kicker')}</Link>
         </li>
         <li>
-          <Link to={`/ajuda?topico=${topic.key}`}>{topic.title}</Link>
+          <Link to={`/ajuda?topico=${article.topic}`}>{t(`topic.${article.topic}.title`)}</Link>
         </li>
         <li aria-current="page">{article.title}</li>
       </ol>
@@ -65,7 +52,7 @@ function ArticleView({ article }: { article: Article }) {
         <h1>{article.title}</h1>
         <div className="article-meta">
           <span>{t('minutes', { n: article.minutes })}</span>
-          <span>{t('article.updated', { date: formatUpdated(article.updated) })}</span>
+          <span>{t('article.updated', { date: updatedFormat.format(new Date(`${article.updated}T00:00:00Z`)) })}</span>
         </div>
       </div>
       <div className="help-article">

@@ -144,7 +144,7 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
         <div className="field">
           <div className={styles.labelRow}>
             <label htmlFor={`${id}-title`}>{t('type.recordingTitle')}</label>
-            <HelpHint subject={t('type.titleHintSubject')} title={t('type.titleHintTitle')} article="padrao-de-titulo">
+            <HelpHint subject={t('type.titleHintSubject')} title={t('type.titleHintTitle')} article="title-pattern">
               {t('type.titleHint')}
             </HelpHint>
           </div>
@@ -179,7 +179,7 @@ export function AgendaTypeEditor({ type, onDirtyChange, onSaved, onDeleted, summ
       <div className="field">
         <div className={styles.labelRow}>
           <label htmlFor={`${id}-title-rule`}>{t('type.subjectRule')}</label>
-          <HelpHint subject={t('type.subjectHintSubject')} title={t('type.subjectHintTitle')} article="padrao-de-titulo">
+          <HelpHint subject={t('type.subjectHintSubject')} title={t('type.subjectHintTitle')} article="title-pattern">
             {t('type.subjectHint', { marker: '{assunto}' })}
           </HelpHint>
         </div>

@@ -35,8 +35,9 @@ v1) has its own line and each entry cites it.
   collections and tags in English and Portuguese, with the pipeline steps and reasons shared with
   the apps (#250).
 - The administration panel, the Agent, the automatic processing overview and the help center
-  (its frame, search and topic names; the articles are still Portuguese) in English and Portuguese
-  (#251).
+  (its frame, search and topic names) in English and Portuguese (#251).
+- The help center articles and frequently asked questions in English and Portuguese: the center
+  and the drawer show the active locale's articles, with English slugs (#252).
 
 ### Fixed
 

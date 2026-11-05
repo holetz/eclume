@@ -63,11 +63,11 @@ export function wireMenu(app) {
       button.focus();
     }
   });
-  $("#help-first-steps").addEventListener("click", () => execute("open_help", { article: "primeira-gravacao" }));
+  $("#help-first-steps").addEventListener("click", () => execute("open_help", { article: "first-recording" }));
   $("#help-permissions").addEventListener("click", () =>
-    execute("open_help", { article: "permissoes-de-microfone" }),
+    execute("open_help", { article: "microphone-permissions" }),
   );
-  $("#help-folder").addEventListener("click", () => execute("open_help", { article: "pasta-sincronizada" }));
+  $("#help-folder").addEventListener("click", () => execute("open_help", { article: "synced-folder" }));
   $("#help-shortcuts").addEventListener("click", () => {
     open(false);
     app.go("shortcuts");

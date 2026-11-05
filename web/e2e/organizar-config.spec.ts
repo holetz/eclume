@@ -136,7 +136,7 @@ test('help center: search, article and the drawer with "Nesta página"', async (
   await expect(page.getByRole('heading', { level: 1, name: 'Central de ajuda' })).toBeVisible()
   await page.getByLabel('Buscar na ajuda').fill('token')
   await page.getByRole('link', { name: 'Crie um token de acesso' }).first().click()
-  await expect(page).toHaveURL(/\/ajuda\/criar-token$/)
+  await expect(page).toHaveURL(/\/ajuda\/create-token$/)
   await expect(page.getByRole('heading', { level: 1, name: 'Crie um token de acesso' })).toBeVisible()
 
   await navTo(page, 'Pessoas')

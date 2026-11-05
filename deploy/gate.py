@@ -74,7 +74,7 @@ _DESKTOP = (
     "desktop/**",
     "web/src/styles/eclume.css",
     "web/src/lib/vocabulario.js",
-    "web/src/features/help/articles/**",
+    "web/src/features/help/articles/en/**",
 )
 _MOBILE = (
     *_CI,

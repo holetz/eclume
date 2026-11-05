@@ -1,10 +1,8 @@
-// Help page keys: each screen declares its own with `useHelpTopic`, and each article's `paginas`
-// header says on which screens it appears in the drawer ("Nesta página"). `biblioteca`, `gravacao`
-// and `busca` belong to the screens of holetz/eclume#37. The names live in the `help` catalog
-// (`help:page.<key>`), read when used, so they follow the locale.
-import { i18n } from '../../i18n'
-
-const KEYS = [
+// Help page keys: each screen declares its own with `useHelpTopic`, and each article's `pages`
+// header says on which screens it appears in the drawer ("On this page"). The label of each key is
+// `help:page.<key>`. `biblioteca`, `gravacao` and `busca` belong to the screens of
+// holetz/eclume#37. The keys are wire names (route and header vocabulary), not display text.
+export const HELP_PAGES = [
   'biblioteca',
   'gravacao',
   'busca',
@@ -25,14 +23,8 @@ const KEYS = [
   'ajuda',
 ] as const
 
-export type HelpPageKey = (typeof KEYS)[number]
-
-/** Each help page's name, in the active locale. */
-export const HELP_PAGES = Object.defineProperties(
-  {},
-  Object.fromEntries(KEYS.map((key) => [key, { enumerable: true, get: () => i18n.t(`help:page.${key}`) }])),
-) as Readonly<Record<HelpPageKey, string>>
+export type HelpPageKey = (typeof HELP_PAGES)[number]
 
 export function isHelpPageKey(key: string): key is HelpPageKey {
-  return Object.hasOwn(HELP_PAGES, key)
+  return (HELP_PAGES as readonly string[]).includes(key)
 }

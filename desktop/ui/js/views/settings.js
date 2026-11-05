@@ -596,7 +596,7 @@ export function mount(section, app) {
   });
   $("#folder-help", section).addEventListener("click", (event) => {
     event.preventDefault();
-    app.invoke("open_help", { article: "pasta-sincronizada" }).catch((failure) => showNotice(String(failure)));
+    app.invoke("open_help", { article: "synced-folder" }).catch((failure) => showNotice(String(failure)));
   });
 
   $("#server-save", section).addEventListener("click", () => {

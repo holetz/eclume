@@ -437,8 +437,8 @@ mod tests {
             "https://192.168.15.199:8443/ajuda"
         );
         assert_eq!(
-            help_url("https://eclume.local", Some("primeira-gravacao")).unwrap(),
-            "https://eclume.local/ajuda/primeira-gravacao"
+            help_url("https://eclume.local", Some("first-recording")).unwrap(),
+            "https://eclume.local/ajuda/first-recording"
         );
         assert!(help_url("https://eclume.local", Some("../admin")).is_err());
         assert!(help_url("https://eclume.local", Some("")).is_err());

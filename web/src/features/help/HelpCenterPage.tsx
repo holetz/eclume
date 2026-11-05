@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router'
 import { isSearchShortcut, useHelpTopic } from '../../app/help'
 import { PageHead } from '../../app/PageHead'
 import { ArticleBody } from './ArticleBody'
-import { ARTICLES, articlesByTopic, getTopic, QUESTIONS, TOPICS, type Topic, type TopicKey } from './catalog'
+import { articlesByTopic, TOPIC_KEYS, useHelpCatalog, type HelpCatalog, type TopicKey } from './catalog'
 import styles from './Help.module.css'
 import { HelpSearch, Snippet } from './HelpSearch'
 import { searchArticles } from './search'
@@ -14,9 +14,10 @@ const PREVIEW = 3
 export function HelpCenterPage() {
   useHelpTopic('ajuda')
   const { t } = useTranslation('help')
+  const catalog = useHelpCatalog()
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
-  const topicKey = TOPICS.find((topic) => topic.key === params.get('topico'))?.key
+  const topicKey = TOPIC_KEYS.find((key) => key === params.get('topico'))
   const searchInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -40,13 +41,13 @@ export function HelpCenterPage() {
         onChange={(value) => setParams(value ? { q: value } : {}, { replace: true })}
       />
       {q.trim() ? (
-        <SearchResults query={q} />
+        <SearchResults query={q} catalog={catalog} />
       ) : topicKey ? (
-        <TopicList topic={getTopic(topicKey)} />
+        <TopicList topic={topicKey} catalog={catalog} />
       ) : (
         <>
-          <TopicGrid />
-          <Questions />
+          <TopicGrid catalog={catalog} />
+          <Questions catalog={catalog} />
         </>
       )}
       <p className={`text-muted ${styles.footer}`}>{t('footer')}</p>
@@ -54,9 +55,9 @@ export function HelpCenterPage() {
   )
 }
 
-function SearchResults({ query }: { query: string }) {
+function SearchResults({ query, catalog }: { query: string; catalog: HelpCatalog }) {
   const { t } = useTranslation('help')
-  const hits = useMemo(() => searchArticles(query, ARTICLES), [query])
+  const hits = useMemo(() => searchArticles(query, catalog.articles), [query, catalog])
   if (hits.length === 0) {
     return (
       <p className={styles.empty} role="status">
@@ -76,7 +77,7 @@ function SearchResults({ query }: { query: string }) {
               {article.title}
             </Link>
             <span className="list-row-sub">
-              <span className={styles.resultTopic}>{getTopic(article.topic).title}</span>
+              <span className={styles.resultTopic}>{t(`topic.${article.topic}.title`)}</span>
               {snippet && (
                 <>
                   {' · '}
@@ -91,16 +92,17 @@ function SearchResults({ query }: { query: string }) {
   )
 }
 
-function TopicGrid() {
+function TopicGrid({ catalog }: { catalog: HelpCatalog }) {
+  const { t } = useTranslation('help')
   return (
     <div className="topic-grid">
-      {TOPICS.map((topic) => {
-        const articles = articlesByTopic(topic.key)
+      {TOPIC_KEYS.map((key) => {
+        const articles = articlesByTopic(catalog, key)
         return (
-          <section key={topic.key} className="topic" aria-labelledby={`topico-${topic.key}`}>
-            <span className="kicker">{topic.kicker}</span>
-            <h2 className="topic-title" id={`topico-${topic.key}`}>
-              {topic.title}
+          <section key={key} className="topic" aria-labelledby={`topico-${key}`}>
+            <span className="kicker">{t(`topic.${key}.kicker`)}</span>
+            <h2 className="topic-title" id={`topico-${key}`}>
+              {t(`topic.${key}.title`)}
             </h2>
             <ul>
               {articles.slice(0, PREVIEW).map((article) => (
@@ -109,7 +111,7 @@ function TopicGrid() {
                 </li>
               ))}
             </ul>
-            <TopicMore topic={topic.key} count={articles.length} />
+            <TopicMore topic={key} count={articles.length} />
           </section>
         )
       })}
@@ -126,17 +128,17 @@ function TopicMore({ topic, count }: { topic: TopicKey; count: number }) {
   )
 }
 
-function TopicList({ topic }: { topic: Topic }) {
+function TopicList({ topic, catalog }: { topic: TopicKey; catalog: HelpCatalog }) {
   const { t } = useTranslation('help')
   return (
     <div className={styles.topicList}>
       <Link to="/ajuda" className={styles.back}>
         {t('allTopics')}
       </Link>
-      <span className="kicker">{topic.kicker}</span>
-      <h2 className={styles.sectionTitle}>{topic.title}</h2>
-      <ul className={`list ${styles.plainList}`} aria-label={topic.title}>
-        {articlesByTopic(topic.key).map((article) => (
+      <span className="kicker">{t(`topic.${topic}.kicker`)}</span>
+      <h2 className={styles.sectionTitle}>{t(`topic.${topic}.title`)}</h2>
+      <ul className={`list ${styles.plainList}`} aria-label={t(`topic.${topic}.title`)}>
+        {articlesByTopic(catalog, topic).map((article) => (
           <li key={article.slug} className="list-row">
             <Link className={`list-row-title ${styles.rowLink}`} to={`/ajuda/${article.slug}`}>
               {article.title}
@@ -149,7 +151,7 @@ function TopicList({ topic }: { topic: Topic }) {
   )
 }
 
-function Questions() {
+function Questions({ catalog }: { catalog: HelpCatalog }) {
   const { t } = useTranslation('help')
   return (
     <section aria-labelledby="perguntas-frequentes" className={styles.questions}>
@@ -157,7 +159,7 @@ function Questions() {
         {t('questions')}
       </h2>
       <div className="faq">
-        {QUESTIONS.map((item, index) => (
+        {catalog.questions.map((item, index) => (
           <details key={item.question} className="disclosure" open={index === 0}>
             <summary>{item.question}</summary>
             <div className="faq-answer">

@@ -164,7 +164,7 @@ for (const viewport of [DESKTOP, MOBILE]) {
       { name: 'app-desktop', route: '/app-desktop', heading: 'App desktop' },
       { name: 'app-movel', route: '/app-movel', heading: 'App móvel' },
       { name: 'ajuda', route: '/ajuda', heading: 'Central de ajuda' },
-      { name: 'artigo', route: '/ajuda/sugestoes-por-voz', heading: 'Como funcionam as sugestões por voz' },
+      { name: 'artigo', route: '/ajuda/voice-suggestions', heading: 'Como funcionam as sugestões por voz' },
     ]
     for (const { name, route, heading } of routes) {
       await page.goto(route)

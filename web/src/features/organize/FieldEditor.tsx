@@ -143,7 +143,7 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
       <div className="field">
         <div className={styles.labelRow}>
           <label htmlFor={`${id}-instructions`}>{t('type.identify')}</label>
-          <HelpHint subject={t('field.ruleHintSubject')} title={t('field.ruleHintTitle')} article="escrever-uma-regra">
+          <HelpHint subject={t('field.ruleHintSubject')} title={t('field.ruleHintTitle')} article="write-a-rule">
             {t('field.ruleHint')}
           </HelpHint>
         </div>
