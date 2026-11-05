@@ -49,6 +49,12 @@ v1) has its own line and each entry cites it.
 
 ### Changed
 
+- Self-hosting without the maintainer's host: `deploy/gate.sh` and `deploy/release-mobile.sh` no
+  longer default the Docker context to `gpu-host` (pass `--context NAME` or set
+  `ECLUME_DOCKER_CONTEXT`; without either they exit 2), `deploy/smoke_prod.py` guards production only
+  through `ECLUME_PUBLIC_URL`, `deploy/operator.env.example` lists the operator variables, and
+  examples, fixtures and apps use the documentation address 192.0.2.10 instead of the maintainer's
+  host. The subscription-token terms decision is recorded in the self-hosting guide (#258).
 - License: eclume is now GPL-3.0-or-later (was MIT), for the server, GPU worker, engines and web
   and for the desktop and phone apps; the desktop crates adapted from Anarlog stay MIT.
   `NOTICE.md` records the third-party licence decisions (#324).
