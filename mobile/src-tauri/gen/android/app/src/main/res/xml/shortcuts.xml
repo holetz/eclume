@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The record-now shortcut of eclume's icon (long-press the icon; it can be pinned to the home
      screen). It only opens the MainActivity with the GRAVAR_AGORA action: the UI records, through
-     the same flow as the Gravar button (the microphone service requires the Activity visible on
-     Android 14+). The targetPackage and targetClass follow the applicationId (holetz/eclume#17).
+     the same flow as the Record button (the microphone service requires the Activity visible on
+     Android 14+). The labels are English in values/ and pt-BR in values-pt-rBR/. The targetPackage and targetClass follow the applicationId (holetz/eclume#17).
      The shortcutId and the action are persisted by the launcher and keep their values. -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut

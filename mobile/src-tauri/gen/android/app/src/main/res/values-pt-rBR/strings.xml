@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The pt-BR record-now shortcut labels (values/strings.xml is English). The app name is the brand
+     and is not translated. -->
+<resources>
+    <string name="shortcut_record_short">"Gravar"</string>
+    <string name="shortcut_record_long">"Gravar agora"</string>
+</resources>
