@@ -40,11 +40,12 @@ def test_default_target_is_staging() -> None:
 @pytest.mark.parametrize(
     ("url", "public", "expected"),
     [
-        ("https://192.168.15.199:8443", None, True),
-        ("https://192.168.15.199:8443/", None, True),
+        ("https://192.0.2.10:8443", "https://192.0.2.10:8443", True),
+        ("https://192.0.2.10:8443/", "https://192.0.2.10:8443", True),
         ("https://eclume.lan:8443", "https://eclume.lan:8443", True),
         ("https://127.0.0.1:18444", "https://eclume.lan:8443", False),
-        ("https://192.168.15.199:18444", None, False),
+        ("https://192.0.2.10:18444", "https://192.0.2.10:8443", False),
+        ("https://192.0.2.10:8443", None, False),
     ],
 )
 def test_is_production(monkeypatch: pytest.MonkeyPatch, url: str, public: str | None, expected: bool) -> None:  # noqa: FBT001
@@ -56,7 +57,7 @@ def test_is_production(monkeypatch: pytest.MonkeyPatch, url: str, public: str | 
 
 
 def test_refuses_to_write_to_production_before_any_request() -> None:
-    r = run("--url", "https://192.168.15.199:8443")
+    r = run("--url", "https://192.0.2.10:8443", ECLUME_PUBLIC_URL="https://192.0.2.10:8443")
 
     assert r.returncode == 2
     assert "--read-only" in r.stderr

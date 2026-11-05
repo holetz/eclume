@@ -5,8 +5,8 @@ the given CA), a temporary read PAT with which the `mcp` SDK lists the tools, se
 recording and has the deletion refused for lack of scope, and a pairing code that becomes a device
 credential. Everything the smoke creates is revoked at the end.
 
-    ssh holetz@192.168.15.199 cat /srv/eclume/secrets/admin-password \
-      | uv run python deploy/smoke_mcp.py --ca eclume-root.crt
+    ssh <user>@<host> cat /srv/eclume/secrets/admin-password \
+      | uv run python deploy/smoke_mcp.py --base "$ECLUME_PUBLIC_URL" --ca eclume-root.crt
 
 The user account password comes from stdin (or `ECLUME_SMOKE_PASSWORD`), as in smoke_prod.py.
 Runbook: docs/project/deploy-producao.md.
@@ -116,10 +116,12 @@ async def _mcp(mcp_url: str, token: str, context: ssl.SSLContext) -> None:
 def main() -> int:
     """Runs the smoke; 0 when everything passes."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--base", default="https://192.168.15.199:8443")
+    parser.add_argument("--base", default=os.environ.get("ECLUME_PUBLIC_URL"), help="default: $ECLUME_PUBLIC_URL")
     parser.add_argument("--ca", required=True, help="the root CA published at /downloads/eclume-root.crt")
     parser.add_argument("--email", default=os.environ.get("ECLUME_ADMIN_EMAIL"), help="default: $ECLUME_ADMIN_EMAIL")
     args = parser.parse_args()
+    if not args.base:
+        _fail("give the server through --base or ECLUME_PUBLIC_URL")
     if not args.email:
         _fail("give the account through --email or ECLUME_ADMIN_EMAIL")
     password = os.environ.get("ECLUME_SMOKE_PASSWORD") or sys.stdin.readline().strip()
