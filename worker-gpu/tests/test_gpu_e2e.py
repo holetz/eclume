@@ -114,7 +114,7 @@ def test_transcribes_the_two_voice_dialogue():
     schema = json.loads((ROOT / "contracts" / "transcript.schema.json").read_text())
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(transcript)
     text = " ".join(s["text"] for s in transcript["segments"]).lower()
-    for word in ("cronograma", "lideranças", "financeiro", "sexta"):
+    for word in ("pássaro", "beleza", "pagamento", "economia", "passado"):
         assert word in text, text
     words = [w for s in transcript["segments"] for w in s.get("words", [])]
     assert words

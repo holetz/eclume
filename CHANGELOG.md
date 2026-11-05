@@ -93,6 +93,9 @@ v1) has its own line and each entry cites it.
 - Expected speakers (`min_speakers`/`max_speakers`), when re-transcribing and in the admin limits,
   now accept 1 to 30 and reject a boolean with 422, instead of failing diarization after spending
   the GPU (contract 2.26.0, #191).
+- The GPU worker's audio test fixture is now about 30 s of speech by two real speakers from
+  Common Voice (CC0), in place of Piper synthetic voices whose licence did not allow a public
+  repository; `make-test-audio.sh fixture` rebuilds it from pinned clips (#351).
 
 ### Deprecated
 
