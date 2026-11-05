@@ -265,7 +265,7 @@ def _add_inspection(sub) -> None:
     sp = add_json(sub.add_parser("estimate", help="estimated declared build reading by task section"))
     add_spec(sp, True)
     sp.add_argument("--worker-budget", type=int, default=None,
-                    help="positive policy budget in tokens (default: shared.contextBudgets.worker, else 100000); not a model limit")
+                    help="positive size estimate in tokens (default: shared.contextBudgets.worker, else 100000); not a stop limit and not a model limit")
     sp.add_argument("--task", help="project ONE task's executor context and judge the small-tier "
                                    "conditions (ADR 0014) instead of the section reading")
 

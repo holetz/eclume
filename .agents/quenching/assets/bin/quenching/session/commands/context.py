@@ -4,17 +4,21 @@ from __future__ import annotations
 import json
 import os
 import re
+import sqlite3
 import sys
 from pathlib import Path
 
 from quenching.common.output import FINDINGS, OK, REFUSAL, emit, refuse
+from quenching.session.commands.cache import opencode_db, opencode_requests
 from quenching.session.commands.cost import _meta
 from quenching.session.model import bare_agent
 from quenching.session.transcript import resolve_transcript
 
 TOKEN_KEYS = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
 BUDGETS = {"main": 200000, "worker": 100000, "conductor": 150000}
-ROLES = {"spec-runner": "worker", "orchestrator": "conductor", "autopilot": "conductor"}
+ROLES = {"spec-runner": "worker", "spec-orchestrator": "conductor", "orchestrator": "conductor",
+         "autopilot": "conductor"}
+OPENCODE_ID = "ses_"
 
 
 def token_input(usage: dict) -> int | None:
@@ -112,6 +116,27 @@ def measure_context(path: Path, budgets: dict | None = None) -> dict:
                              "Request aggregates are exposure, not measured context windows."]}
 
 
+def measure_opencode(db: Path, session: str, budgets: dict | None = None) -> dict:
+    """One OpenCode session's recorded peak. A subagent is a session of its own, so no marker is needed."""
+    anomalies: list = []
+    requests = [r for r in opencode_requests(db, None, anomalies)[0] if r.session == session]
+    role = "unknown"
+    if requests:
+        role = "main" if requests[0].role == "main" else ROLES.get(requests[0].agent, "unknown")
+    windows = [r.input + r.read + r.write for r in requests]
+    peak = max(windows) if windows else None
+    budget = (budgets or BUDGETS).get(role)
+    return {"peakContext": peak, "peakUpperBound": peak, "observedIterationPeak": peak,
+            "turns": len(requests), "measuredTurns": len(requests),
+            "integral": sum(windows) if windows else None,
+            "role": role, "agentType": requests[0].agent if requests else None, "budget": budget,
+            "remaining": budget - peak if budget is not None and peak is not None else None,
+            "exceeded": peak > budget if budget is not None and peak is not None else None,
+            "anomalies": anomalies, "currentTurnIncluded": False,
+            "measurement": "recorded-OpenCode-usage",
+            "limitations": ["The request currently in flight is absent from this snapshot."]}
+
+
 def _latest_self_call(path: Path, pattern: re.Pattern) -> str | None:
     """The timestamp of the newest Bash call in `path` that invokes `session context --self`."""
     latest = None
@@ -171,11 +196,43 @@ def effective_budgets(root) -> dict:
     return out
 
 
+def _opencode(args, selector: str) -> int:
+    session = args.agent or selector
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", session):
+        return refuse({"code": "se-invalid-agent-id", "message": "session id must be a bare identifier"}, args.json)
+    db = opencode_db(None)
+    if not db.is_file():
+        return refuse({"code": "se-no-transcript", "message": f"no OpenCode database at {db}"}, args.json)
+    try:
+        out = measure_opencode(db, session, effective_budgets(Path.cwd()))
+    except sqlite3.Error as error:
+        return refuse({"code": "se-unreadable-transcript", "message": str(error)}, args.json)
+    out.update(transcript=f"{db}#{session}", resolvedBy="OpenCode session id")
+    return _report(args, out)
+
+
+def _report(args, out: dict) -> int:
+    inconclusive = out["peakContext"] is None or out["budget"] is None
+    out["ok"] = not inconclusive
+    if inconclusive:
+        out.update(code="se-context-inconclusive", message=
+                   "no reliable context verdict: inspect usage, iteration coverage and agent metadata")
+    emit(args.json, out, f"context: peak={out['peakContext']} turns={out['turns']} "
+         f"integral={out['integral']} role={out['role']} budget={out['budget']} "
+         f"remaining={out['remaining']}" + (f"\n{out['message']}" if inconclusive else ""))
+    return REFUSAL if inconclusive else FINDINGS if out["exceeded"] else OK
+
+
 def cmd_context(args) -> int:
-    selector = args.transcript or os.environ.get("CLAUDE_CODE_SESSION_ID")
+    # OpenCode first: it is the innermost shell when one harness is opened from the other.
+    selector = (args.transcript or os.environ.get("OPENCODE_SESSION_ID")
+                or os.environ.get("CLAUDE_CODE_SESSION_ID"))
     if not selector:
         return refuse({"code": "se-no-live-session", "message":
-                       "pass a transcript/session id or set CLAUDE_CODE_SESSION_ID"}, args.json)
+                       "pass a transcript/session id or set OPENCODE_SESSION_ID or CLAUDE_CODE_SESSION_ID"},
+                      args.json)
+    if selector.startswith(OPENCODE_ID):
+        return _opencode(args, selector)
     path, how = resolve_transcript(selector, Path.cwd().resolve())
     if path is None:
         return refuse({"code": "se-no-transcript", "message": how}, args.json)
@@ -196,12 +253,4 @@ def cmd_context(args) -> int:
     except (OSError, UnicodeError) as error:
         return refuse({"code": "se-unreadable-transcript", "message": str(error)}, args.json)
     out.update(transcript=str(path), resolvedBy=how)
-    inconclusive = out["peakContext"] is None or out["budget"] is None
-    out["ok"] = not inconclusive
-    if inconclusive:
-        out.update(code="se-context-inconclusive", message=
-                   "no reliable context verdict: inspect usage, iteration coverage and agent metadata")
-    emit(args.json, out, f"context: peak={out['peakContext']} turns={out['turns']} "
-         f"integral={out['integral']} role={out['role']} budget={out['budget']} "
-         f"remaining={out['remaining']}" + (f"\n{out['message']}" if inconclusive else ""))
-    return REFUSAL if inconclusive else FINDINGS if out["exceeded"] else OK
+    return _report(args, out)

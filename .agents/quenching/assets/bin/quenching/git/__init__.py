@@ -21,6 +21,7 @@ from quenching.git.base import cmd_base
 from quenching.git.commit import cmd_commit
 from quenching.git.conventions import cmd_conventions
 from quenching.git.history import cmd_history
+from quenching.git.identity import cmd_identity
 from quenching.git.preflight import cmd_preflight
 from quenching.git.prune import cmd_prune
 from quenching.git.pull import cmd_pr
@@ -34,10 +35,11 @@ DISPATCH = {"base": cmd_base, "specs": cmd_specs, "stale": cmd_stale,
             "conventions": cmd_conventions, "worktree": cmd_worktree,
             "commit": cmd_commit, "audit": cmd_audit, "state": cmd_state,
             "push": cmd_push, "prune": cmd_prune, "pr": cmd_pr,
-            "history": cmd_history, "preflight": cmd_preflight}
+            "history": cmd_history, "preflight": cmd_preflight, "identity": cmd_identity}
 
 
-READ_VERBS = ("base", "stale", "conventions", "state", "history", "preflight", "audit")
+READ_VERBS = ("base", "stale", "conventions", "state", "history", "preflight", "audit",
+              "identity")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -191,6 +193,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--branch", required=True, metavar="BRANCH", help="the spec's work branch")
     sp.add_argument("--sha", action="append", default=[], metavar="SHA",
                     help="a sha the worker reported; repeat for each")
+    sp.add_argument("--json", action="store_true", help="machine-readable output")
+
+    sp = sub.add_parser("identity", help="read-only: refuse an author or committer email outside "
+                                          "shared.gitIdentity.allowedEmails (the shipped hooks)")
+    mode = sp.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--staged", action="store_true",
+                      help="the identity the next commit will carry (pre-commit)")
+    mode.add_argument("--pre-push", action="store_true",
+                      help="every commit named on stdin by the pre-push hook")
+    sp.add_argument("--remote", metavar="NAME",
+                    help="--pre-push: the destination remote (the hook's first argument)")
     sp.add_argument("--json", action="store_true", help="machine-readable output")
 
     for verb in READ_VERBS:

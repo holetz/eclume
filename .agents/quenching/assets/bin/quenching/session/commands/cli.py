@@ -59,6 +59,7 @@ import argparse
 
 from quenching.common.output import OK, NoAbbrevParser
 from quenching.common.version import VERSION
+from quenching.session.commands.cache import cmd_cache
 from quenching.session.commands.context import cmd_context
 from quenching.session.commands.cost import cmd_cost
 from quenching.session.commands.digest import cmd_digest
@@ -105,10 +106,22 @@ def add_subcommands(sub: argparse._SubParsersAction) -> argparse._SubParsersActi
                          "when several share the session)")
     co.add_argument("--json", action="store_true", help="machine-readable output")
     co.set_defaults(func=cmd_cost)
+    ca = sub.add_parser("cache", help="the prompt cache Claude Code and OpenCode delivered, in one shape")
+    ca.add_argument("--harness", choices=("all", "claude", "opencode"), default="all",
+                    help="which store to read (default: every store present)")
+    where = ca.add_mutually_exclusive_group()
+    where.add_argument("--directory", metavar="PATH", help="project to measure (default: this cwd)")
+    where.add_argument("--all", action="store_true", help="every project in each store")
+    ca.add_argument("--opencode-db", metavar="PATH",
+                    help="OpenCode database (default: QUENCHING_OPENCODE_DB, else the XDG data dir)")
+    ca.add_argument("--since", metavar="ISO8601", help="count only requests at or after this instant")
+    ca.add_argument("--json", action="store_true", help="machine-readable output")
+    ca.set_defaults(func=cmd_cache)
     cx = sub.add_parser("context", help="measure a live transcript's context and role budget")
-    cx.add_argument("transcript", nargs="?", help="transcript path or session id; default: CLAUDE_CODE_SESSION_ID")
+    cx.add_argument("transcript", nargs="?", help="transcript path or session id; default: OPENCODE_SESSION_ID, "
+                                                  "then CLAUDE_CODE_SESSION_ID")
     who = cx.add_mutually_exclusive_group()
-    who.add_argument("--agent", metavar="AGENT_ID", help="select this session's subagent transcript")
+    who.add_argument("--agent", metavar="AGENT_ID", help="select this session's subagent transcript; on OpenCode, the child session id")
     who.add_argument("--self", dest="self_marker", metavar="MARKER",
                      help="select the caller's own transcript: the one whose latest call carries "
                           "`session context --self MARKER`")
@@ -126,6 +139,7 @@ DISPATCH: dict = {
     "list": cmd_list,
     "digest": cmd_digest,
     "cost": cmd_cost,
+    "cache": cmd_cache,
     "context": cmd_context,
     "live": cmd_live,
 }
@@ -133,7 +147,7 @@ DISPATCH: dict = {
 
 def build_parser(prog: str = "cq components session") -> argparse.ArgumentParser:
     p = NoAbbrevParser(prog=prog,
-                                description="read a Claude Code session transcript as evidence")
+                                description="read a session transcript as evidence")
     p.add_argument("--version", action="store_true", help="print the version and exit")
     sub = p.add_subparsers(dest="cmd")
     add_subcommands(sub)

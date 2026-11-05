@@ -5,7 +5,7 @@ Learning-oriented pages that carry a newcomer from zero to a first success with 
 
 **Boundary:** a tutorial *teaches by doing* (a guided lesson); a recipe for someone who
 already knows the product is a [how-to](../how-to/index.md); an explanation of how something
-works is a [concept](../explanation/index.md).
+works is [documentation](../documentation/index.md).
 
 ## How to organize
 

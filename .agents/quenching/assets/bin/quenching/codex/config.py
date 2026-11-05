@@ -4,7 +4,7 @@ The block is optional: absent, every default holds and `crossReview` is `auto`. 
 explicit opt-out. A value of the wrong shape falls back to its default and is named in
 `warnings`, so a typo never silently changes the threshold a caller relies on.
 
-`executor` configures Codex writing one task's code inside `/quenching-specs:specs:execute`. It is
+`executor` configures Codex writing one task's code inside `/quenching-specs execute`. It is
 on by default and independent of `crossReview`: `crossReview: "off"` turns off the review, never
 the executor. Codex's native sandbox is not configurable: the executor always runs with the
 bypass, inside the worktree, under the git guard.

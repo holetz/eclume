@@ -34,8 +34,8 @@ class SpecBackend:
 
     # TRANSPORT-LEVEL READ-ONLY GUARD. Checked by the lowest-level `gh`/`az` runners for every
     # non-read call, so it holds for private helpers and future write paths alike, which a
-    # list of method names cannot promise. `quenching-specs-reader` flips it before dispatch;
-    # `QUENCHING_SPECS_READ_ONLY=1` does the same for any other embedding.
+    # list of method names cannot promise. `QUENCHING_SPECS_READ_ONLY=1` flips it for any
+    # embedding that must only read; the portal honours it beside its own `--read-only`.
     read_only = False
 
     def list_specs(self, phase: str | None = None, lean: bool = False) -> list[dict]:

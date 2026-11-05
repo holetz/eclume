@@ -370,7 +370,7 @@ def load_config(root: str, *, detect_provider_info: bool = True) -> dict:
 
     Whether `worktreeSetup` actually resolves is deliberately NOT answered here: it is judged
     relative to the freshly created worktree, whose path this tool never learns.
-    `/quenching-specs:specs:execute`'s inline isolation offer runs it there and reports the exit code."""
+    `/quenching-specs execute`'s inline isolation offer runs it there and reports the exit code."""
     envelope = load_envelope(root, detect_provider_info=detect_provider_info)
     path = envelope["path"]
     raw = envelope["data"]

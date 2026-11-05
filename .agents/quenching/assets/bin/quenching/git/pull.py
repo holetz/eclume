@@ -1,6 +1,6 @@
 """`cq git pr create|probe|view|record|merge` — the pull-request writes, with a fixed argv.
 
-The `git-steward` holds no `gh pr create`/`gh pr merge` grant and no `az repos pr` grant: a
+The `spec-orchestrator` (the only agent that publishes) holds no `gh pr create`/`gh pr merge` grant and no `az repos pr` grant: a
 pattern on the command text never fenced `-d`, `-s`, `-r`, an alias, or Azure's
 `--bypass-policy`/`--auto-complete`. Here every `gh` and `az` argv is built in this module, and
 the route is the `provider` `cq specs config --json` prints. `create` names the base and the head

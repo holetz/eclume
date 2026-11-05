@@ -25,7 +25,7 @@ allowed-tools: <only the tools the steps actually use, each SCOPED — e.g. Read
 # paths: <glob patterns binding AUTONOMOUS firing to matching files — the natural
 #   reinforcement for a domain-bound command; typed invocation is unaffected.>
 # hooks: <a check tied to THIS command's own workflow, scoped to its lifecycle — the
-#   narrowest rung of the hook ladder. Wired by /quenching-components-hook-new from the hook mold.>
+#   narrowest rung of the hook ladder. Wired by /quenching-components hook-new from the hook mold.>
 ---
 
 # /<front>:<verb> — <one-line role>
@@ -52,7 +52,7 @@ exist, exists; every step's criterion held. Report what was written.>
 <!-- MOLD (quenching · automation command) → becomes
      `.agents/skills/<folder-path>/<verb>.md` in a target repo, invocable as
      `/<folder>:<subfolder>:<verb>` — native `:` separator, one per path segment — and minted
-     by `/quenching-components-command-new` under the taxonomy rule (`/docs/standards/automation/skills.md`) and the
+     by `/quenching-components command-new` under the taxonomy rule (`/docs/standards/automation/skills.md`) and the
      writing doctrine (predictability as the root virtue).
 
      ONE FILE PER ENTRY POINT. the host merged custom commands into skills, so this file
@@ -66,7 +66,7 @@ exist, exists; every step's criterion held. Report what was written.>
      register every reference as a phantom command like the four-segment
      `knowledge:align:references:conformance`.
      Cite shared procedure by absolute path instead; in a plugin that is
-     `.agents/quenching/assets/references/<name>/<file>.md`, which substitutes inside a
+     `.agents/quenching/references/<name>/<file>.md`, which substitutes inside a
      command body.
 
      VERIFY IT, don't eyeball it: `.agents/quenching/bin/cq components lint <this-file> --json` decides every mechanical
@@ -97,5 +97,5 @@ exist, exists; every step's criterion held. Report what was written.>
          context cannot present the plan whose OK the run depends on.
        • THE EXECUTION PROFILE IS BOUGHT, NEVER COLLECTED. The default is every lever off;
          each commented field above is opened only with a stated buy, priced in
-         `.agents/quenching/assets/references/components-command-new/capabilities.md` and shown in
+         `.agents/quenching/references/components-command-new/capabilities.md` and shown in
          the mint's plan. -->

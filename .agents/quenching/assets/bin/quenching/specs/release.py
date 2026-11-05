@@ -72,11 +72,11 @@ def bump_release_artifacts(repo_root: str, new_version: str) -> dict:
                     entries = json.loads(text).get("plugins", [])
                 except ValueError:
                     return {"ok": False, "error": f"not valid JSON: {rel}", "artifacts": []}
-                expected = {m["name"] for m in manifest["modules"] if m["published"]}
+                expected = {p["name"] for p in manifest.get("plugins", []) if p["marketplace"]}
                 if (len(entries) != len(expected)
                         or {entry.get("name") for entry in entries} != expected):
                     return {"ok": False, "artifacts": [],
-                            "error": f"{rel}: entries disagree with published modules"}
+                            "error": f"{rel}: entries disagree with the marketplace plugins"}
                 if len(found) != len(entries):
                     return {"ok": False, "artifacts": [],
                             "error": f"{rel}: {len(entries)} plugin entries but "
@@ -113,16 +113,9 @@ def bump_release_artifacts(repo_root: str, new_version: str) -> dict:
 
 
 _REGENERATE_STEPS = (
-    ("generate_plugin_modules", ("scripts/generate_plugin_modules.py", "--write")),
-    ("sync_codex_plugin", ("scripts/sync_codex_plugin.py", "--source", "plugins/quenching",
-                           "--target", "plugins/codex/quenching-codex", "--write")),
-    # After the Codex step: the OpenCode tree carries the Codex `cq` payload verbatim.
-    ("sync_opencode_plugin", ("scripts/sync_opencode_plugin.py", "--write")),
-    # The Omnigent operator pins its MCP server to the version tag, so a bump rewrites config.yaml.
-    ("sync_omnigent_plugin", ("scripts/sync_omnigent_plugin.py", "--write")),
     # Last, so it copies sources already at the new version; only where a surface was deployed.
-    ("deploy_surface", ("plugins/quenching/assets/bin/cq", "deploy", "--target", ".", "--write"),
-     ("plugins/quenching/assets/bin/cq", ".agents/.quenching-deploy.json")),
+    ("deploy_surface", ("quenching/assets/bin/cq", "deploy", "--target", ".", "--write"),
+     ("quenching/assets/bin/cq", ".agents/.quenching-deploy.json")),
 )
 
 

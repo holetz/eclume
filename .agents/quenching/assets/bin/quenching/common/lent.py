@@ -1,7 +1,7 @@
 """Capabilities one pillar lends another, so the borrower never imports the lender.
 
-`cq` lends, at dispatch, what an enabled module carries; a copy without `cq` or without the
-lender's package (the `quenching-specs-reader`) lends nothing, and the borrower refuses on its own.
+`cq` lends, at dispatch, what a deployed module carries; a target deployed without the lender's
+package lends nothing, and the borrower refuses on its own.
 Only a module path is registered: the lender is imported when borrowed, never before.
 """
 from __future__ import annotations

@@ -91,7 +91,7 @@ def _wider_findings(root: str) -> list[dict]:
     """REPORT-ONLY inventory of the surfaces beside commands/: subagent definitions
     (`<root>/agents/*.md`) and the hooks wired in `<root>/settings*.json`. The sweep never
     renames or rewrites anything here — each finding names the mint that owns the fix
-    (/quenching-align:components:agent:new, /quenching-align:components:hook:new), so the confirmed plan's
+    (/quenching-components agent-new, /quenching-components hook-new), so the confirmed plan's
     write set stays exactly the command surface's."""
     findings: list[dict] = []
 
@@ -102,7 +102,7 @@ def _wider_findings(root: str) -> list[dict]:
                 f"agents/{fn} has no `description` — the agent can never be delegated to",
                 command=f"agents/{fn}", path=f"agents/{fn}",
                 remedy="add a description stating what it does and when to invoke it "
-                       "(/quenching-align:components:agent:new)"))
+                       "(/quenching-components agent-new)"))
 
     for settings_name in ("settings.json", "settings.local.json"):
         text = read_text(os.path.join(claude_side(root), settings_name))

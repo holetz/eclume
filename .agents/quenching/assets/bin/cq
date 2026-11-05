@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""cq — the plugin's one entry point, and the only thing that knows the pillar names.
+"""cq — quenching's one entry point, and the only thing that knows the pillar names.
 
-    python3 "${CLAUDE_PLUGIN_ROOT}/assets/bin/cq" [--root PATH] <pillar> <subcommand> ...
-    python3 "${CLAUDE_PLUGIN_ROOT}/assets/bin/cq" --version
+    .agents/quenching/bin/cq [--root PATH] <pillar> <subcommand> ...   (a deployed target)
+    python3 quenching/assets/bin/cq --version                  (this repository's source)
 
 The registered pillars, each answering with the same contract its launcher answered with — the
 subcommands, the `--json` payloads and the exit codes (0 ok · 1 findings · 2 refusal · 3 usage) are
@@ -78,32 +78,6 @@ def _read(path: str) -> str | None:
     except OSError:
         return None
 
-
-def enabled_module_paths(path_value: str) -> list[str]:
-    """`assets/bin` of every enabled `quenching-*` module the host put on PATH, same version only.
-
-    The host appends `<pluginRoot>/bin` for every enabled plugin whose `bin/` exists, so every
-    module ships one (`quenching-specs` with the `cq` shim, the others with a non-executable
-    marker), and PATH is the one list of enabled modules this process can see. `quenching` is a
-    namespace package: an entry appended to `sys.path` contributes its subpackages after this
-    router's own, so a package this plugin ships always wins over another module's copy.
-    """
-    own_version = _read(os.path.join(PLUGIN_ROOT, "VERSION"))
-    found = []
-    for entry in path_value.split(os.pathsep):
-        root = os.path.dirname(os.path.realpath(entry)) if os.path.basename(entry) == "bin" else None
-        if not root or root == os.path.realpath(PLUGIN_ROOT):
-            continue
-        manifest = _read(os.path.join(root, ".claude-plugin", "plugin.json")) or ""
-        if '"quenching-' not in manifest or _read(os.path.join(root, "VERSION")) != own_version:
-            continue
-        candidate = os.path.join(root, "assets", "bin")
-        if os.path.isdir(os.path.join(candidate, "quenching")) and candidate not in found:
-            found.append(candidate)
-    return found
-
-
-sys.path.extend(p for p in enabled_module_paths(os.environ.get("PATH", "")) if p not in sys.path)
 
 from quenching.common.output import CQArgumentParser, USAGE
 from quenching.common.version import VERSION
@@ -186,30 +160,23 @@ def module_owners() -> dict[str, str]:
             for package in module.get("owned", {}).get("packages", [])}
 
 
-def _plugin_name(root: str) -> str:
-    for manifest in (".claude-plugin", ".codex-plugin"):
-        try:
-            name = json.loads(_read(os.path.join(root, manifest, "plugin.json")) or "{}").get("name", "")
-        except ValueError:
-            name = ""
-        if name:
-            return name
-    return ""
+def _is_source(root: str) -> bool:
+    """The source of quenching is the root that carries `VERSION` and `assets/modules.json`."""
+    return os.path.isfile(os.path.join(root, "VERSION")) and os.path.isfile(os.path.join(root, "assets", "modules.json"))
 
 
 def package_root(package: str) -> str | None:
-    """The plugin root that OWNS `package` among the enabled ones, or None.
+    """The installed root (the source, or a target's `.agents/quenching/`) carrying `package`, or None.
 
-    A package merely copied into another module's tree (proof embeds `ops`) does not enable the
-    module that owns it: only a root whose manifest names the owner (or the monolithic source
-    `quenching`) counts, and that root is the one a conductor reads `commands/` from.
+    `cq deploy --modules` decides which packages a target carries; a package absent from this
+    tree is a module the target did not deploy.
     """
     owner = module_owners().get(package)
     for entry in sys.path:
         if os.path.basename(os.path.normpath(entry)) != "bin" or not os.path.isdir(os.path.join(entry, "quenching", package)):
             continue
         root = os.path.dirname(os.path.dirname(os.path.realpath(entry)))
-        if owner is None or _plugin_name(root) in (owner, "quenching", "quenching-codex"):
+        if owner is None or _is_source(root):
             return root
     return None
 
@@ -339,8 +306,8 @@ def _run_top_deploy(argv: list[str], command_index: int) -> int:
     try:
         from quenching.deploy.cli import main as deploy_main
     except ImportError:
-        print("cq: deploy belongs to module quenching-specs, which is not enabled; "
-              "enable it beside this module", file=sys.stderr)
+        print("cq: deploy belongs to module quenching-specs, which is not deployed here",
+              file=sys.stderr)
         return 2
     return deploy_main(argv[:command_index] + argv[command_index + 1:])
 
@@ -366,7 +333,7 @@ def main(argv: list[str]) -> int:
         rest = ["--root", args.root] + rest
     if not present(args.pillar):
         print(f"cq: {args.pillar} belongs to module {module_owners().get(args.pillar, '?')}, "
-              "which is not enabled; enable it beside quenching-specs", file=sys.stderr)
+              "which is not enabled; add it with `cq deploy --modules`", file=sys.stderr)
         return 2
     refused = _provider_refusal()
     if refused is not None:

@@ -1,7 +1,7 @@
 """`cq git specs <branch>` — the `quenching-specs:` line a branch's own description carries,
 read plain and rewritten by read-merge-write. Absorbs the `python3 -c` block that used to sit
-copy-pasted inside `assets/references/git/isolation.md` §Marking the branch with the specs it
-built: `/quenching-specs:specs:execute` writes here after every task's commit, `/quenching-specs:specs:conclude`'s
+copy-pasted inside `.agents/quenching/references/git/isolation.md` §Marking the branch with the specs it
+built: `/quenching-specs execute` writes here after every task's commit, `/quenching-specs conclude`'s
 auto-discover reads here to resolve which spec(s) built a branch with no `--spec` given.
 
 `git config branch.<name>.description` is the same slot `git branch --edit-description` opens

@@ -16,7 +16,7 @@ never a text merge, and a document that changed under the caller refuses as a st
 instead of being overwritten.
 
 Every mutation of the pending ref and of the branch funnels through `_store`, the name the
-read-only specs-reader already blocks."""
+read-only guard (`read_only`) blocks."""
 from __future__ import annotations
 
 import hashlib
@@ -29,6 +29,7 @@ import tempfile
 import time
 from datetime import datetime
 
+from quenching.common import identity
 from quenching.common.config import find_repo_root
 from quenching.common.leak import guard_store_write, patterns, scan_text, store_refusal
 from quenching.specs.backends.base import (BackendRefusal, SpecBackend, artifact_owner,
@@ -1164,15 +1165,28 @@ class GitBackend(SpecBackend):
         return {"specs": specs, "artifacts": standalone, "since": oldest, "commit": pending}
 
     def _guard_identity(self) -> None:
-        """The author and committer emails `commit-tree` will sign with, judged like the text:
-        `_store` pushes with `--no-verify`, so no hook ever sees them."""
+        """The author and committer emails `commit-tree` will sign with, judged like the text
+        and against the declared allowlist: `_store` pushes with `--no-verify`, so no hook ever
+        sees them."""
+        try:
+            allow = identity.load_allowlist(self.repo_root)
+        except identity.AllowlistInvalid as invalid:
+            raise BackendRefusal({"code": "sp-identity-allowlist-invalid", "exit": 2,
+                                  "key": identity.KEY,
+                                  "message": f"{invalid}; nothing was written"}) from None
         for var in ("GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"):
             code, out, _ = self._git("var", var)
-            email = out.decode("utf-8", "replace").partition("<")[2].partition(">")[0]
+            email = identity.ident_email(out.decode("utf-8", "replace"))
             findings = scan_text(f"git var {var}", email, patterns(require_denylist=False)) \
                 if code == 0 else []
             if findings:
                 raise BackendRefusal(store_refusal(findings))
+            if code == 0 and allow and not identity.allowed(email, allow):
+                raise BackendRefusal({
+                    "code": "sp-identity-not-allowed", "exit": 2, "where": f"git var {var}",
+                    "email": email,
+                    "message": f"{email} ({var}) is outside {identity.KEY}; "
+                               f"{identity.STAGED_REMEDY} — nothing was written"})
 
     def _commit(self, base: str | None, changes: dict[str, str | None], message: str,
                 parents: list[str], author_date: str | None = None) -> tuple[str, dict[str, str]]:

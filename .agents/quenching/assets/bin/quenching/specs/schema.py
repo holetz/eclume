@@ -27,7 +27,7 @@ ASSET_DIR = os.path.normpath(os.path.join(HERE, "..", "..", "..", "specs"))
 VERIFICATION_POLICIES = ("per-task", "per-section", "end-of-plan")
 DEFAULT_VERIFICATION = "per-section"
 OUTCOMES = ("done", "abandoned")
-# The four strategies `/quenching-specs:specs:conclude` offers. Two of them create no merge commit, so the
+# The four strategies `/quenching-specs conclude` offers. Two of them create no merge commit, so the
 # record has no subject to name and carries an explicit none instead — a fact about the
 # strategy, not a gap in the record.
 MERGE_STRATEGIES = ("merge-commit", "squash", "rebase", "fast-forward")
@@ -64,7 +64,7 @@ DEFAULT_SCHEMA: dict = {
                         "writtenBy": "develop", "writeOnce": False,
                         "label": "spec:interrogated"},
             "approved": {"fields": ["date", "by"],
-                         "by": {"levels": ["human", "low-gear", "orchestrator-forced"]},
+                         "by": {"levels": ["human", "session", "low-gear", "orchestrator-forced"]},
                          "writtenBy": "develop, or execute inline", "writeOnce": True,
                          "label": "spec:approved"},
             "branch": {"fields": ["base", "work"],
@@ -178,9 +178,9 @@ verification: <VERIFICATION>
 
 <!-- ONE spec is ONE file for its whole lifecycle. Phases enrich it; they never split it.
 
-     `cq specs new` stamps the frontmatter and `## Problem` ALONE — a captured spec is four
+     `.agents/quenching/bin/cq specs new` stamps the frontmatter and `## Problem` ALONE — a captured spec is four
      lines of body, not a thirteen-heading skeleton. Every other heading below is created on
-     first write by `cq specs section <id> "<Heading>" --write`, which inserts it in the
+     first write by `.agents/quenching/bin/cq specs section <id> "<Heading>" --write`, which inserts it in the
      canonical position with the guidance comment kept here.
 
      THE STAGE-SCOPED EXPLICIT-NONE RULE. A heading is required — and required to carry
@@ -213,9 +213,9 @@ verification: <VERIFICATION>
 
      MOMENT. Each section belongs to one of three moments on the spec's timeline: `decision`
      (the human, deciding whether to build), `build` (the executor, in step 4 of
-     `/quenching-specs:specs:execute`), `close` (`/quenching-specs:specs:conclude`, at archive time). `## Discoveries` belongs
+     `/quenching-specs execute`), `close` (`/quenching-specs conclude`, at archive time). `## Discoveries` belongs
      to none of them — captured indiscriminately while building, resolved later by
-     `/quenching-specs:specs:develop`'s triage sweep on its own schedule. An orchestrator sends an executor
+     `/quenching-specs develop`'s triage sweep on its own schedule. An orchestrator sends an executor
      exactly the `build` set; that is what lets one file serve every moment without bloating
      agent context. -->
 
@@ -248,7 +248,7 @@ verification: <VERIFICATION>
 <!-- MOMENT: build + PARSED. Gate: ready (derived).
 
      Declared scope for human review. The `### Standards this spec will write into
-     /docs/standards/` sub-heading below is PARSED by `cq specs validate`: every
+     /docs/standards/` sub-heading below is PARSED by `.agents/quenching/bin/cq specs validate`: every
      `/docs/standards/**.md` path bulleted under it must be named by a `## Tasks` item, or
      validate emits `sp-impact-uncovered` (warn). Keep that heading text verbatim — it is the
      anchor.
@@ -337,7 +337,7 @@ verification: <VERIFICATION>
 <!-- MOMENT: build. Gate: ready (derived).
 
      Checkboxes `- [ ] <id> <text>` grouped under `### N. <Section>` headings.
-     `cq specs task --spec <id> --check <task-id>` flips one mechanically — NEVER hand-edit the
+     `.agents/quenching/bin/cq specs task --spec <id> --check <task-id>` flips one mechanically — NEVER hand-edit the
      `[ ]` / `[x]` character. `--subject <line>` records the commit that implements it.
 
      AN ITEM IS EITHER A TASK OR A MEMBER SPEC. A checkbox whose text carries
@@ -350,7 +350,7 @@ verification: <VERIFICATION>
      A spec with at least one spec item is a COMPOSITE and needs no `workItemType: epic`.
      `### N.` headings are waves: one wave is a feature, more than one is an epic. A
      composite may be a member of another, and a spec may belong to several. Its items'
-     state is derived from the members and never ticked here (`cq specs link add|remove`).
+     state is derived from the members and never ticked here (`.agents/quenching/bin/cq specs link add|remove`).
 
      A checkbox MAY carry indented metadata lines directly beneath it:
 
@@ -362,8 +362,13 @@ verification: <VERIFICATION>
 
      files:    the paths this task may touch. Declaring them is what PERMITS the task to be
                handed to an executor sub-agent, and what makes a `[P]` marker checkable.
-               A trailing parenthetical is closed grammar: `(new)` is the ONLY reserved
-               annotation, and anything else is refused with `sp-files-annotation`.
+               A trailing parenthetical is closed grammar, and exactly two are reserved:
+               `(new)` marks a path about to be created; `(operational)` declares a task
+               that writes no repository file at all — the marker IS its whole `files:`,
+               its proof is the `verify:`, and the verifier accepts it with no commit sha.
+               Anything else is refused as `sp-files-annotation`; the marker beside a path
+               is refused as `sp-files-operational`, and the marker with no `verify:` is
+               warned as `sp-operational-no-verify`.
      pattern:  an existing file to imitate — the cheapest context an executor can be given.
      verify:   the command that proves the task done. WHEN it runs is the `verification`
                frontmatter policy, not this section's business. With no `verify:` line the
@@ -380,7 +385,7 @@ verification: <VERIFICATION>
 
      Set HERE, at definition time, and NEVER inferred while building. Honoured only when the
      marked tasks' `files:` sets are provably disjoint and none writes into `/docs/` —
-     `cq specs parallel` checks the disjunction mechanically rather than judging it in prose.
+     `.agents/quenching/bin/cq specs parallel` checks the disjunction mechanically rather than judging it in prose.
      Serial execution is the default and needs no marker.
 
      A BLOCKED task is a visible marker, not a hidden counter:
@@ -397,10 +402,10 @@ verification: <VERIFICATION>
 
 ## Discoveries
 
-<!-- MOMENT: none — triage, resolved by `/quenching-specs:specs:develop`'s discoveries bank whenever it runs,
+<!-- MOMENT: none — triage, resolved by `/quenching-specs develop`'s discoveries bank whenever it runs,
      not tied to one of the three. No gate — appended during execution.
 
-     One line per discovery, appended by `cq specs discover <id> "<text>"` while building.
+     One line per discovery, appended by `.agents/quenching/bin/cq specs discover <id> "<text>"` while building.
      Captured INDISCRIMINATELY: whether one is worth acting on is triage's judgment, not the
      executor's.
 
@@ -415,7 +420,7 @@ verification: <VERIFICATION>
 
      What actually happened, written at archive time: what shipped, what was left out, what
      the next reader needs to know. `outcome: done | abandoned` is stamped into the
-     frontmatter by `cq specs promote --to archive`; this section is the prose behind it.
+     frontmatter by `.agents/quenching/bin/cq specs promote --to archive`; this section is the prose behind it.
 
      For an abandoned spec, the reason it will not be built is the whole content. -->
 """
@@ -503,7 +508,7 @@ def headings_for_moment(moment: str, schema: dict | None = None) -> list[str]:
     """The canonical headings declared `moment: <moment>`, in canonical order.
 
     `## Discoveries` declares no `moment` — resolved on its own schedule by
-    `/quenching-specs:specs:develop`'s triage sweep, not one of `decision` / `build` / `close` — so it never
+    `/quenching-specs develop`'s triage sweep, not one of `decision` / `build` / `close` — so it never
     matches here, by construction rather than by exclusion list."""
     s = schema or load_schema()
     return [x["heading"] for x in sorted(s["sections"], key=lambda d: d.get("order", 0))

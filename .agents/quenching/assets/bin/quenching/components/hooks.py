@@ -123,7 +123,7 @@ def hook_ladder_findings(hooks: dict, where_in: str, where: dict) -> list[dict]:
                     "every tool call, and every iteration in the repo pays it",
                     **at,
                     remedy="add a matcher, or state where it is wired why nothing "
-                           "narrower suffices (/quenching-align:components:hook:new owns the scope "
+                           "narrower suffices (/quenching-components hook-new owns the scope "
                            "ladder)"))
             for h in entry.get("hooks") or []:
                 if isinstance(h, dict) and str(h.get("type", "")).strip() in LLM_HANDLERS:
@@ -134,5 +134,5 @@ def hook_ladder_findings(hooks: dict, where_in: str, where: dict) -> list[dict]:
                         **at,
                         remedy="decide the deterministic path with a command handler "
                                "and keep the inference for the judgment tail "
-                               "(/quenching-align:components:hook:new owns the handler ladder)"))
+                               "(/quenching-components hook-new owns the handler ladder)"))
     return out

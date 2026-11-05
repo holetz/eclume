@@ -13,8 +13,27 @@ from quenching.components.sections import (RULES_MARKER, expand_section_args, ma
                                            select_sections, split_rule_and_rationale)
 
 
+_SOURCE = pathlib.Path(__file__).resolve().parents[5]
+_INSTALLED = ((".agents/skills/", "skills/"), (".agents/quenching/references/", "references/"))
+
+
+def resolve_installed(path: pathlib.Path) -> pathlib.Path:
+    """A path in the installed form (`.agents/skills/<name>/…`, `.agents/quenching/references/…`)
+    that is not on disk reads from the source it was installed from, when this `cq` runs beside one.
+    A file that exists is never redirected."""
+    if path.is_file():
+        return path
+    text = path.as_posix()
+    for installed, source in _INSTALLED:
+        if text.startswith(installed):
+            candidate = _SOURCE / source / text[len(installed):]
+            if candidate.is_file():
+                return candidate
+    return path
+
+
 def cmd_read(args, root: str) -> int:
-    path = pathlib.Path(args.path)
+    path = resolve_installed(pathlib.Path(args.path))
     if not path.is_file():
         payload = {"ok": False, "code": "sk-read-no-file", "path": str(path),
                    "message": f"{path} is not a file"}

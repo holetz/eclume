@@ -18,7 +18,7 @@ def build_parser() -> CQArgumentParser:
     parser = CQArgumentParser(
         prog="cq mcp",
         description="serve the quenching MCP server over stdio: the catalogued verbs as tools "
-                    "and assets/references/** as quenching://references/ resources")
+                    "and every skill's references as quenching://references/ resources")
     parser.add_argument("--root", help="the workspace the tools run in (default: current directory)")
     return parser
 
