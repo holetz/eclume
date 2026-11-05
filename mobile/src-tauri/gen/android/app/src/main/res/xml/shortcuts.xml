@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- O atalho "Gravar agora" do ícone do eclume (pressionar o ícone; pode ser fixado na tela inicial).
-     Só abre a MainActivity com a ação GRAVAR_AGORA: quem grava é a UI, pelo mesmo fluxo do botão
-     Gravar (o serviço de microfone exige a Activity visível no Android 14+). O targetPackage e o
-     targetClass acompanham o applicationId (holetz/eclume#17). -->
+<!-- The record-now shortcut of eclume's icon (long-press the icon; it can be pinned to the home
+     screen). It only opens the MainActivity with the GRAVAR_AGORA action: the UI records, through
+     the same flow as the Gravar button (the microphone service requires the Activity visible on
+     Android 14+). The targetPackage and targetClass follow the applicationId (holetz/eclume#17).
+     The shortcutId and the action are persisted by the launcher and keep their values. -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut
         android:shortcutId="gravar_agora"
         android:enabled="true"
-        android:icon="@drawable/ic_atalho_gravar"
-        android:shortcutShortLabel="@string/atalho_gravar_curto"
-        android:shortcutLongLabel="@string/atalho_gravar_longo">
+        android:icon="@drawable/ic_shortcut_record"
+        android:shortcutShortLabel="@string/shortcut_record_short"
+        android:shortcutLongLabel="@string/shortcut_record_long">
         <intent
             android:action="io.github.holetz.eclume.movel.GRAVAR_AGORA"
             android:targetPackage="io.github.holetz.eclume.movel"

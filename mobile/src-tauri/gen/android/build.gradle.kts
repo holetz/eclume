@@ -14,8 +14,8 @@ allprojects {
         google()
         mavenCentral()
     }
-    // O fonte do :tauri-android mora no registro do cargo, e o build.rs de cada plugin o copia inteiro
-    // enquanto o Gradle compila. A saída vai para fora dele, para a cópia não ler uma árvore em escrita.
+    // The :tauri-android source lives in the cargo registry, and each plugin's build.rs copies it whole
+    // while Gradle compiles. The output goes outside it, so the copy never reads a tree being written.
     if (name == "tauri-android") {
         layout.buildDirectory.set(rootProject.layout.buildDirectory.dir("tauri-android"))
     }

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-  <!-- Só o cache: é onde o APK da atualização fica para o instalador. -->
+  <!-- Only the cache: it is where the update APK waits for the installer. -->
   <cache-path name="cache" path="." />
 </paths>

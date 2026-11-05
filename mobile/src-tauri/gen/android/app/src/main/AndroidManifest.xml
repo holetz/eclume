@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Declarada à frente do targetSdk 37 (Android 17), que pede acesso à rede local. -->
+    <!-- Declared ahead of targetSdk 37 (Android 17), which asks for local network access. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
-    <!-- Sem backup nem transferência entre aparelhos (Android 12+): o token, a CA fixada, a fila e
-         as gravações não saem do celular. -->
+    <!-- No backup nor device-to-device transfer (Android 12+): the token, the pinned CA, the queue
+         and the recordings never leave the phone. -->
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -25,7 +25,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- O atalho "Gravar agora" do ícone (res/xml/shortcuts.xml). -->
+            <!-- The launcher icon's record-now shortcut (res/xml/shortcuts.xml). -->
             <meta-data
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
