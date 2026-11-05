@@ -158,3 +158,79 @@ test.describe('an English account across the areas', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   })
 })
+
+test.describe('the admin panel with the browser in English', () => {
+  test.use({ locale: 'en-US' })
+
+  test('the admin login and the sections read in English', async ({ page, baseURL }) => {
+    // The same admin cookies admin.spec.ts puts on the login response: the mock sets none.
+    await page.route('**/api/v1/admin/auth/login', async (route) => {
+      const response = await route.fetch()
+      if (response.status() === 204) {
+        const domain = new URL(baseURL!).hostname
+        await page.context().addCookies([
+          { name: 'eclume_admin_session', value: 'e2e-admin', domain, path: '/api/v1/admin' },
+          { name: 'eclume_admin_csrf', value: 'csrf-admin-e2e', domain, path: '/' },
+        ])
+      }
+      await route.fulfill({ response })
+    })
+    await page.goto('/admin/usuarios')
+    await expect(page.getByRole('heading', { name: 'Sign in as admin' })).toBeVisible()
+    await page.getByLabel('Email').fill('admin@example.com')
+    await page.getByLabel('Password').fill('senha-do-admin')
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Users' })).toBeVisible()
+    const nav = page.getByRole('navigation', { name: 'Platform' })
+    for (const [section, heading] of [
+      ['Audio preprocessing', 'Audio preprocessing'],
+      ['Transcription', 'Transcription'],
+      ['Speakers', 'Speakers'],
+      ['Agents', 'Agents'],
+      ['Default agenda types', 'Default agenda types'],
+      ['Health', 'Health'],
+    ] as const) {
+      await nav.getByRole('link', { name: section }).click()
+      await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible()
+    }
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  })
+})
+
+test.describe('an English account in the agent, automation and help', () => {
+  test.use({ locale: 'en-US' })
+
+  test('the agent, the automatic processing and the help center read in English', async ({ page, baseURL }) => {
+    await session(page, baseURL!, 'en')
+    await page.goto('/entrar')
+    await login(page, { email: 'Email', password: 'Password', submit: 'Log in' })
+    await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible()
+
+    // The Agent: a new conversation, its composer and the recent conversations.
+    await page.goto('/agente')
+    await expect(page.getByRole('heading', { level: 1, name: 'New conversation' })).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Recent conversations' })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'Question' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible()
+    await page.goto('/agente/habilidades')
+    await expect(page.getByRole('heading', { level: 1, name: 'Skills' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'New skill' })).toBeVisible()
+
+    // Automatic processing: the steps in pipeline order.
+    await page.goto('/config/automacao')
+    await expect(page.getByRole('heading', { level: 1, name: 'Automatic processing' })).toBeVisible()
+    await expect(
+      page.getByRole('list', { name: 'Steps of the automatic processing' }).getByRole('listitem').first(),
+    ).toContainText('1. Preprocessing and transcription')
+
+    // The help center chrome: the topics, the questions and the search field.
+    await page.goto('/ajuda')
+    await expect(page.getByRole('heading', { level: 1, name: 'Help center' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'First steps' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Frequently asked questions' })).toBeVisible()
+    await expect(page.getByRole('searchbox', { name: 'Search the help' })).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  })
+})
