@@ -125,7 +125,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
               required
               value={endpoint}
               onChange={(e) => setEndpoint(e.target.value)}
-              placeholder="http://speaches:8000/v1"
+              placeholder="http://speaches:8000/v1" // i18n-ignore: a sample address
             />
           </div>
         )}
@@ -199,7 +199,7 @@ function TranscriptionForm({ settings }: { settings: Settings }) {
                 list={ids.models}
                 value={fallbackModel}
                 onChange={(e) => setFallbackModel(e.target.value)}
-                placeholder="medium"
+                placeholder="medium" // i18n-ignore: a model name
               />
               <datalist id={ids.models}>
                 {MODELS.map((name) => (
