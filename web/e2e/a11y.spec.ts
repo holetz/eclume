@@ -54,7 +54,7 @@ test('user screens without WCAG 2.1 A/AA violations, light and dark', async ({ p
   await page.getByLabel('Senha').fill('senha-de-teste')
   await page.getByRole('button', { name: 'Entrar' }).click()
   await page.goto('/?visao=semana&data=2026-09-21')
-  await expect(page.getByText('21–27 de setembro de 2026')).toBeVisible()
+  await expect(page.locator('.toolbar-title')).toHaveText('21–27 de setembro de 2026')
   await expectAccessible(page, 'biblioteca')
 
   await page.getByRole('link', { name: /^Planejamento semanal/ }).click()

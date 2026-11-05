@@ -151,7 +151,7 @@ test('library in the week, the month and the list, with the filter in the reques
   await login(page, '1-login')
   // The mock neither filters nor paginates: the week of 2026-09-21 is the first example of GET /recordings.
   await page.goto('/?visao=semana&data=2026-09-21')
-  await expect(page.getByText('21–27 de setembro de 2026')).toBeVisible()
+  await expect(page.locator('.toolbar-title')).toHaveText('21–27 de setembro de 2026')
   const monday = page.getByRole('list', { name: 'segunda, 21 de setembro' })
   await expect(monday.getByRole('listitem')).toHaveCount(2)
   await expect(page.getByRole('link', { name: 'Planejamento semanal, 09:00, 58 min, 2 marcadores' })).toBeVisible()
@@ -181,11 +181,11 @@ test('library in the week, the month and the list, with the filter in the reques
   await expect(page).not.toHaveURL(/tipo=/)
 
   await page.getByText('Mês', { exact: true }).click()
-  await expect(page.getByText('Setembro de 2026')).toBeVisible()
+  await expect(page.locator('.toolbar-title')).toHaveText('Setembro de 2026')
   await expect(page.getByRole('group', { name: 'terça, 22 de setembro' }).getByRole('link')).toHaveCount(2)
   await screenshot(page, '2-biblioteca-mes')
   await page.getByRole('button', { name: 'Abrir a semana de quinta, 24 de setembro' }).click()
-  await expect(page.getByText('21–27 de setembro de 2026')).toBeVisible()
+  await expect(page.locator('.toolbar-title')).toHaveText('21–27 de setembro de 2026')
 
   const listRequest = page.waitForRequest((r) => new URL(r.url()).searchParams.get('sort') === 'recorded_desc')
   await page.getByText('Lista', { exact: true }).click()
@@ -420,7 +420,7 @@ test('search with field chip, recording at the second, people, collections and t
   const results = page.getByRole('region', { name: 'Resultados' })
   await expect(results.getByRole('listitem')).toHaveCount(3)
   await expect(results.locator('mark').first()).toHaveText('turmas')
-  await expect(page.getByText('3 trechos em 1 gravação')).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: /trechos/ })).toHaveText('3 trechos em 1 gravação')
 
   // The chip of the "Cliente" field (choice) becomes `field` in the request.
   const withField = page.waitForRequest((r) =>
