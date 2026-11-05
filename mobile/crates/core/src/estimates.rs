@@ -5,6 +5,8 @@
 
 use serde::Serialize;
 
+use crate::locale::Locale;
+
 /// Below this, the home screen warns "Armazenamento quase cheio".
 pub const STORAGE_WARNING_S: u64 = 60 * 60;
 /// Below this, while recording, the app stops and saves on its own.
@@ -20,15 +22,19 @@ pub fn seconds_that_fit(free: u64, bitrate: i32) -> u64 {
     free / bytes_per_second.max(1)
 }
 
-/// "cerca de 9 h", "cerca de 40 min", "menos de 1 min" (copy the UI shows).
-pub fn about(seconds: u64) -> String {
+/// Approximate recording time in the UI's resolved locale.
+pub fn about(seconds: u64, locale: Locale) -> String {
     let minutes = seconds / 60;
+    let (less_than_one, prefix) = match locale {
+        Locale::En => ("less than 1 min", "about"),
+        Locale::PtBr => ("menos de 1 min", "cerca de"),
+    };
     if minutes < 1 {
-        "menos de 1 min".into()
+        less_than_one.into()
     } else if minutes < 60 {
-        format!("cerca de {minutes} min")
+        format!("{prefix} {minutes} min")
     } else {
-        format!("cerca de {} h", (minutes + 30) / 60)
+        format!("{prefix} {} h", (minutes + 30) / 60)
     }
 }
 
@@ -108,20 +114,25 @@ pub struct BatteryWarning {
 }
 
 /// The storage warning, when what fits is below one hour.
-pub fn storage_warning(free: u64, bitrate: i32, synced_bytes: u64) -> Option<StorageWarning> {
+pub fn storage_warning(
+    free: u64,
+    bitrate: i32,
+    synced_bytes: u64,
+    locale: Locale,
+) -> Option<StorageWarning> {
     let seconds = seconds_that_fit(free, bitrate);
     (seconds < STORAGE_WARNING_S).then(|| StorageWarning {
-        remaining: about(seconds),
+        remaining: about(seconds, locale),
         synced_bytes,
     })
 }
 
 /// The battery warning, while recording: low level and discharging.
-pub fn battery_warning(battery: &Battery) -> Option<BatteryWarning> {
+pub fn battery_warning(battery: &Battery, locale: Locale) -> Option<BatteryWarning> {
     let last = battery.last()?;
     (last.pct <= BATTERY_WARNING_PCT && !last.charging).then(|| BatteryWarning {
         pct: last.pct,
-        remaining: battery.minutes_left().map(|m| about(m * 60)),
+        remaining: battery.minutes_left().map(|m| about(m * 60, locale)),
     })
 }
 
@@ -140,16 +151,31 @@ mod tests {
     fn hours_that_fit_in_the_free_space() {
         // 24 kbps = 3,000 B/s = 10.8 MB per hour.
         assert_eq!(seconds_that_fit(108_000_000, 24_000), 36_000);
-        assert_eq!(about(seconds_that_fit(97_200_000, 24_000)), "cerca de 9 h");
-        assert_eq!(about(40 * 60), "cerca de 40 min");
-        assert_eq!(about(30), "menos de 1 min");
+        assert_eq!(
+            about(seconds_that_fit(97_200_000, 24_000), Locale::PtBr),
+            "cerca de 9 h"
+        );
+        assert_eq!(about(40 * 60, Locale::PtBr), "cerca de 40 min");
+        assert_eq!(about(30, Locale::PtBr), "menos de 1 min");
+        assert_eq!(
+            about(seconds_that_fit(97_200_000, 24_000), Locale::En),
+            "about 9 h"
+        );
+        assert_eq!(about(40 * 60, Locale::En), "about 40 min");
+        assert_eq!(about(30, Locale::En), "less than 1 min");
     }
 
     #[test]
     fn storage_warnings_and_stop() {
-        assert_eq!(storage_warning(GB, 24_000, 0), None);
-        let warning = storage_warning(7_200_000, 24_000, 1_100_000_000).unwrap();
+        assert_eq!(storage_warning(GB, 24_000, 0, Locale::PtBr), None);
+        let warning = storage_warning(7_200_000, 24_000, 1_100_000_000, Locale::PtBr).unwrap();
         assert_eq!(warning.remaining, "cerca de 40 min");
+        assert_eq!(
+            storage_warning(7_200_000, 24_000, 0, Locale::En)
+                .unwrap()
+                .remaining,
+            "about 40 min"
+        );
         assert_eq!(warning.synced_bytes, 1_100_000_000);
         assert!(!should_stop_for_storage(7_200_000, 24_000));
         assert!(should_stop_for_storage(800_000, 24_000));
@@ -166,14 +192,21 @@ mod tests {
         battery.record(reading(0, 20));
         battery.record(reading(5, 18));
         assert_eq!(battery.minutes_left(), None);
-        assert_eq!(battery_warning(&battery), None);
+        assert_eq!(battery_warning(&battery, Locale::PtBr), None);
         // 20 → 12 % in 32 min: 4 min per point, 12 points = 48 min.
         battery.record(reading(32, 12));
         assert_eq!(battery.minutes_left(), Some(48));
-        let warning = battery_warning(&battery).unwrap();
+        let warning = battery_warning(&battery, Locale::PtBr).unwrap();
         assert_eq!(
             (warning.pct, warning.remaining.as_deref()),
             (12, Some("cerca de 48 min"))
+        );
+        assert_eq!(
+            battery_warning(&battery, Locale::En)
+                .unwrap()
+                .remaining
+                .as_deref(),
+            Some("about 48 min")
         );
 
         // Plugged in, there is neither warning nor estimate.
@@ -181,8 +214,11 @@ mod tests {
             charging: true,
             ..reading(33, 12)
         });
-        assert_eq!(battery_warning(&battery), None);
+        assert_eq!(battery_warning(&battery, Locale::PtBr), None);
         battery.record(reading(34, 12));
-        assert_eq!(battery_warning(&battery).unwrap().remaining, None);
+        assert_eq!(
+            battery_warning(&battery, Locale::PtBr).unwrap().remaining,
+            None
+        );
     }
 }

@@ -45,14 +45,8 @@ pub fn client_version(version: &str) -> String {
     format!("{CLIENT_PREFIX}/{version}")
 }
 
-/// The languages the saved-recording sheet offers, besides the account default (labels are UI
-/// copy).
-const LANGUAGES: [(&str, &str); 4] = [
-    ("auto", "Detectar automaticamente"),
-    ("pt", "Português"),
-    ("es", "Español"),
-    ("en", "English"),
-];
+/// The languages the saved-recording sheet offers, with their autonyms.
+const LANGUAGES: [(&str, &str); 3] = [("pt", "Português"), ("es", "Español"), ("en", "English")];
 
 /// The name of a language from the short list (`pt-BR` becomes `pt`); outside it, the code itself.
 fn language_name(language: &str) -> &str {
@@ -100,10 +94,12 @@ pub enum StopReason {
 
 impl StopReason {
     /// The warning's short text (notification copy).
-    pub fn text(self) -> &'static str {
-        match self {
-            Self::NoSpace => "pouco espaço livre",
-            Self::SourceEnded => "o microfone parou",
+    pub fn text(self, locale: Locale) -> &'static str {
+        match (self, locale) {
+            (Self::NoSpace, Locale::En) => "low free space",
+            (Self::SourceEnded, Locale::En) => "the microphone stopped",
+            (Self::NoSpace, Locale::PtBr) => "pouco espaço livre",
+            (Self::SourceEnded, Locale::PtBr) => "o microfone parou",
         }
     }
 }
@@ -373,18 +369,18 @@ impl Core {
             sheet: self.sheet.clone(),
             pending,
             warnings: Warnings {
-                storage: self
-                    .free_space
-                    .and_then(|free| estimates::storage_warning(free, bitrate, synced)),
+                storage: self.free_space.and_then(|free| {
+                    estimates::storage_warning(free, bitrate, synced, self.locale())
+                }),
                 battery: if self.session.is_recording() {
-                    estimates::battery_warning(&self.battery)
+                    estimates::battery_warning(&self.battery, self.locale())
                 } else {
                     None
                 },
             },
-            free_space: self
-                .free_space
-                .map(|free| estimates::about(estimates::seconds_that_fit(free, bitrate))),
+            free_space: self.free_space.map(|free| {
+                estimates::about(estimates::seconds_that_fit(free, bitrate), self.locale())
+            }),
             version: self.version.clone(),
         })
     }
@@ -639,14 +635,22 @@ impl Core {
     /// short list. The empty value is the default (the recording uploads without a language and the
     /// account's applies).
     pub fn language_options(&self) -> Vec<LanguageOption> {
+        let (default_label, auto_label) = match self.locale() {
+            Locale::En => ("Account default", "Detect automatically"),
+            Locale::PtBr => ("Padrão da conta", "Detectar automaticamente"),
+        };
         let default = match self.config.account_language.as_deref() {
-            Some(language) => format!("Padrão da conta: {}", language_name(language)),
-            None => "Padrão da conta".to_string(),
+            Some(language) => format!("{default_label}: {}", language_name(language)),
+            None => default_label.to_string(),
         };
         std::iter::once(LanguageOption {
             value: String::new(),
             label: default,
         })
+        .chain(std::iter::once(LanguageOption {
+            value: "auto".to_string(),
+            label: auto_label.to_string(),
+        }))
         .chain(LANGUAGES.iter().map(|(value, label)| LanguageOption {
             value: (*value).to_string(),
             label: (*label).to_string(),
@@ -1311,6 +1315,20 @@ mod tests {
     #[test]
     fn client_version_follows_the_contract() {
         assert_eq!(client_version("0.1.0"), "eclume-android/0.1.0");
+    }
+
+    #[test]
+    fn stop_reason_text_follows_the_locale() {
+        assert_eq!(StopReason::NoSpace.text(Locale::PtBr), "pouco espaço livre");
+        assert_eq!(
+            StopReason::SourceEnded.text(Locale::PtBr),
+            "o microfone parou"
+        );
+        assert_eq!(StopReason::NoSpace.text(Locale::En), "low free space");
+        assert_eq!(
+            StopReason::SourceEnded.text(Locale::En),
+            "the microphone stopped"
+        );
     }
 
     #[test]
