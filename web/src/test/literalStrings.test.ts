@@ -6,7 +6,7 @@ import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
 /** The translated directories, relative to `web/`. */
-const COVERED = ['src/i18n', 'src/app', 'src/shared', 'src/features/auth', 'src/features/account', 'src/features/connect', 'src/features/tokens', 'src/features/environment', 'src/features/desktop', 'src/features/library', 'src/features/transcript', 'src/features/import', 'src/features/search', 'src/features/people', 'src/features/organize', 'src/features/collections', 'src/features/tags', 'src/features/admin', 'src/features/agent']
+const COVERED = ['src/i18n', 'src/app', 'src/shared', 'src/features/auth', 'src/features/account', 'src/features/connect', 'src/features/tokens', 'src/features/environment', 'src/features/desktop', 'src/features/library', 'src/features/transcript', 'src/features/import', 'src/features/search', 'src/features/people', 'src/features/organize', 'src/features/collections', 'src/features/tags', 'src/features/admin', 'src/features/agent', 'src/features/automation']
 
 /** The catalogs themselves are literal by nature. */
 const EXEMPT = [/^src\/i18n\/(en|pt-BR)\//, /\.test\.tsx?$/, /\.d\.ts$/]
