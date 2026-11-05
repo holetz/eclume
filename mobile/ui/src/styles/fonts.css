@@ -1,5 +1,6 @@
-/* Fontes do Design System servidas pelo próprio build (sem CDN): o @fontsource declara as famílias
-   "Archivo" e "IBM Plex Mono", os mesmos nomes dos tokens --font-heading, --font-body e --font-mono. */
+/* The Design System fonts served by the build itself (no CDN): @fontsource declares the "Archivo"
+   and "IBM Plex Mono" families, the same names as the --font-heading, --font-body and --font-mono
+   tokens. */
 @import '@fontsource/archivo/400.css';
 @import '@fontsource/archivo/500.css';
 @import '@fontsource/archivo/600.css';

@@ -1,6 +1,7 @@
-/* Ajustes de produto do app móvel sobre o DS (eclume.css é cópia fiel e não se edita). No
-   aparelho, a tela é o próprio `.phone-screen` do DS: a raiz ocupa a viewport, com os recortes de
-   borda a borda (Android 15+) vindos do plugin em --safe-top e --safe-bottom. */
+/* The mobile app's product adjustments over the DS (eclume.css is a faithful copy and is never
+   edited). On the device, the screen is the DS's own `.phone-screen`: the root fills the viewport,
+   with the edge-to-edge insets (Android 15+) coming from the plugin in --safe-top and
+   --safe-bottom. */
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -32,39 +33,39 @@ body {
   overflow: hidden;
 }
 
-/* Alvos de toque de 44 px ou mais. */
+/* Touch targets of 44 px or more. */
 .m-app .btn,
 .m-app .m-back,
 .m-app .m-chip {
   min-height: 44px;
 }
 
-.linha-entre {
+.row-between {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
 }
 
-.duas-colunas {
+.two-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-.stack-curta {
+.stack-tight {
   display: grid;
   gap: 8px;
 }
 
-.erro {
+.error-text {
   margin: 0;
   color: var(--color-danger);
   font-size: 14px;
 }
 
-/* A impressão digital da CA em blocos de 4, para conferir com a web. */
-.impressao {
+/* The CA fingerprint in blocks of 4, to compare with the web. */
+.fingerprint {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 17px;
@@ -73,21 +74,21 @@ body {
   letter-spacing: 0.02em;
 }
 
-/* Lendo o QR: a câmera fica atrás do WebView, e só o visor fica vazado. */
-html.lendo-codigo,
-html.lendo-codigo body,
-html.lendo-codigo #root,
-html.lendo-codigo .m-app {
+/* Reading the QR: the camera sits behind the WebView, and only the viewfinder is see-through. */
+html.scanning-code,
+html.scanning-code body,
+html.scanning-code #root,
+html.scanning-code .m-app {
   background: transparent;
 }
 
-html.lendo-codigo .viewfinder {
+html.scanning-code .viewfinder {
   background: transparent;
 }
 
 
-/* A linha de "Neste celular" é um botão que abre o detalhe. */
-.m-row-botao {
+/* A row of the phone list is a button that opens the detail. */
+.m-row-button {
   grid-row: 1 / span 2;
   grid-column: 1;
   display: grid;
@@ -102,29 +103,29 @@ html.lendo-codigo .viewfinder {
   cursor: pointer;
 }
 
-/* Listas longas rolam dentro da tela, com o topo e os botões fixos. */
-.m-rolagem {
+/* Long lists scroll inside the screen, with the top and the buttons fixed. */
+.m-scroll {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
 
-/* A faixa escura sob os botões da gravação, como no DS. */
-.m-rodape {
+/* The dark strip under the recording buttons, as in the DS. */
+.m-footer {
   height: max(28px, var(--safe-bottom));
   flex: none;
   background: var(--color-text);
 }
 
-.m-app:has(.m-rodape) {
+.m-app:has(.m-footer) {
   padding-bottom: 0;
 }
 
-.rotulo-do-campo {
+.field-label {
   font-size: 13px;
   font-weight: 600;
 }
 
-.botao-texto {
+.text-button {
   padding: 0;
   border: 0;
   background: none;
@@ -134,48 +135,48 @@ html.lendo-codigo .viewfinder {
   cursor: pointer;
 }
 
-/* Ajustes por classe no lugar de `style` fixo (o lint barra `style` que não seja custom property).
-   Espaços pela escala do DS (`--space-*`); os 6, 20 e 28 px que a escala não tem seguem os
-   recuos de tela do próprio DS. */
-.sem-topo { padding-top: 0; }
-.topo-1 { padding-top: var(--space-1); }
-.topo-6 { padding-top: var(--space-6); }
-.topo-7 { padding-top: calc(var(--space-6) + var(--space-1)); }
-.sem-base { padding-bottom: 0; }
+/* Adjustments by class instead of a fixed `style` (the lint bars any `style` that is not a custom
+   property). Spacing by the DS scale (`--space-*`); the 6, 20 and 28 px the scale lacks follow the
+   DS's own screen insets. */
+.no-top { padding-top: 0; }
+.top-1 { padding-top: var(--space-1); }
+.top-6 { padding-top: var(--space-6); }
+.top-7 { padding-top: calc(var(--space-6) + var(--space-1)); }
+.no-bottom { padding-bottom: 0; }
 .gap-1 { gap: var(--space-1); }
-.gap-curto { gap: 6px; }
+.gap-tight { gap: 6px; }
 .gap-2 { gap: var(--space-2); }
 .gap-3 { gap: var(--space-3); }
 .gap-4 { gap: var(--space-4); }
 .gap-5 { gap: 20px; }
-.margem-topo-2 { margin-top: var(--space-2); }
-.margem-topo-5 { margin-top: 20px; }
-.sem-margem { margin: 0; }
-.margem-lateral { margin: 0 20px; }
-.alerta-no-topo { margin: var(--space-3) 20px 0; }
-.recuo-lateral { padding: 0 20px; }
-.alinha-inicio { justify-self: start; }
-.alinha-topo { align-content: start; }
-.botao-inicio { justify-content: flex-start; }
-.botao-44 { width: 44px; height: 44px; }
-.borda-topo { border-top: 2px solid var(--color-divider); }
-.texto-12 { font-size: 12px; }
-.texto-13 { font-size: 13px; }
-.texto-14 { font-size: 14px; }
-.texto-15 { font-size: 15px; }
-.texto-24 { font-size: 24px; }
+.margin-top-2 { margin-top: var(--space-2); }
+.margin-top-5 { margin-top: 20px; }
+.no-margin { margin: 0; }
+.margin-x { margin: 0 20px; }
+.alert-on-top { margin: var(--space-3) 20px 0; }
+.padding-x { padding: 0 20px; }
+.align-start { justify-self: start; }
+.align-top { align-content: start; }
+.button-start { justify-content: flex-start; }
+.button-44 { width: 44px; height: 44px; }
+.border-top { border-top: 2px solid var(--color-divider); }
+.text-12 { font-size: 12px; }
+.text-13 { font-size: 13px; }
+.text-14 { font-size: 14px; }
+.text-15 { font-size: 15px; }
+.text-24 { font-size: 24px; }
 
-.m-top-voltar { padding-left: var(--space-3); }
-.m-row-alta { min-height: 52px; padding: 6px 0; }
-.m-row-title-corpo { font-weight: 600; font-family: var(--font-body); }
-.m-net-detalhe { display: grid; gap: 6px; padding: 10px 20px; }
-.campo-e-botao { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
+.m-top-back { padding-left: var(--space-3); }
+.m-row-tall { min-height: 52px; padding: 6px 0; }
+.m-row-title-body { font-weight: 600; font-family: var(--font-body); }
+.m-net-detail { display: grid; gap: 6px; padding: 10px 20px; }
+.field-and-button { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
 
-.marca-grande { font-size: 24px; }
-.medidor-pausado { color: var(--color-divider); }
+.brand-large { font-size: 24px; }
+.meter-paused { color: var(--color-divider); }
 
-/* O motivo de cada etapa pulada ou com falha, em texto sob a barra de etapas (nunca só na cor). */
-.motivos-das-etapas {
+/* The reason of each skipped or failed step, as text under the step bar (never by color alone). */
+.step-reasons {
   margin: 0;
   padding: 0;
   list-style: none;

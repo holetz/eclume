@@ -145,7 +145,7 @@ async function abrirApp(device) {
 
 function servicoEmPrimeiroPlano() {
   const saida = adb('shell', 'dumpsys', 'activity', 'services', PACOTE)
-  return saida.includes('ServicoDeGravacao') && /isForeground=true/.test(saida) ? saida : null
+  return saida.includes('RecordingService') && /isForeground=true/.test(saida) ? saida : null
 }
 
 /** Toca numa ação da notificação da gravação, pela aba de notificações do sistema. O driver do

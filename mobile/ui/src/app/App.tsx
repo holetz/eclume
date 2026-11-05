@@ -1,113 +1,114 @@
 import { useEffect, useRef, useState } from 'react'
-import { usePonte } from '../ponte/ponte'
-import type { EstadoApp } from '../ponte/tipos'
-import { Configuracoes } from '../telas/Configuracoes'
-import { Detalhe } from '../telas/Detalhe'
-import { Endereco } from '../telas/Endereco'
-import { Entrar } from '../telas/Entrar'
-import { Gravando } from '../telas/Gravando'
-import { Inicio } from '../telas/Inicio'
-import { LerCodigo } from '../telas/LerCodigo'
-import { Servidor } from '../telas/Servidor'
-import { useEstadoApp } from './estado'
-import { Marca } from './Marca'
-import { useRota } from './rotas'
-import { aplicarRecortes, seguirTemaDoSistema } from './tema'
+import { useBridge } from '../bridge/bridge'
+import type { AppState } from '../bridge/types'
+import { Address } from '../screens/Address'
+import { Detail } from '../screens/Detail'
+import { Home } from '../screens/Home'
+import { Recording } from '../screens/Recording'
+import { ScanCode } from '../screens/ScanCode'
+import { Server } from '../screens/Server'
+import { Settings } from '../screens/Settings'
+import { SignIn } from '../screens/SignIn'
+import { Brand } from './Brand'
+import { useRoute } from './routes'
+import { useAppState } from './state'
+import { applyInsets, followSystemTheme } from './theme'
 
 /**
- * A casca do app: a tela sai do `EstadoApp` (conexão, sessão) e da rota do hash. O atalho "Gravar
- * agora" do ícone é consumido na abertura e a cada volta à visibilidade: na fase `conectado`, sem
- * gravação nem folha, ele leva ao Início e roda o fluxo do botão Gravar; com uma gravação em curso,
- * a tela dela já está; em outra fase, é descartado (a tela da fase diz o que falta).
+ * The app's shell: the screen comes from the `AppState` (connection, session) and the hash route.
+ * The launcher icon's record-now shortcut is consumed on open and every time the app becomes visible
+ * again: in the `conectado` phase, with no recording nor sheet, it goes to Home and runs the Gravar
+ * button's flow; with a recording running, its screen is already there; in another phase, it is
+ * dropped (the phase's screen says what is missing).
  */
 export default function App() {
-  const ponte = usePonte()
-  const estado = useEstadoApp()
-  const [rota, ir] = useRota()
-  const [pedidoDeGravar, setPedidoDeGravar] = useState(0)
-  // O estado e a navegação do render mais recente, para a resposta do atalho, que chega depois.
-  const atual = useRef({ estado, ir })
+  const bridge = useBridge()
+  const state = useAppState()
+  const [route, go] = useRoute()
+  const [recordRequest, setRecordRequest] = useState(0)
+  // The state and navigation of the latest render, for the shortcut's reply, which arrives later.
+  const latest = useRef({ state, go })
   useEffect(() => {
-    atual.current = { estado, ir }
+    latest.current = { state, go }
   })
-  const aberto = estado !== null
+  const opened = state !== null
 
   useEffect(() => {
-    if (!aberto) return
-    const consumir = () =>
-      ponte
-        .consumirAtalho()
-        .then((gravar) => {
-          const { estado: agora, ir: irPara } = atual.current
-          if (!gravar || agora?.conexao.fase !== 'conectado' || agora.sessao || agora.folha) return
-          irPara('/')
-          setPedidoDeGravar((n) => n + 1)
+    if (!opened) return
+    const consume = () =>
+      bridge
+        .consumeShortcut()
+        .then((record) => {
+          const { state: now, go: goTo } = latest.current
+          if (!record || now?.conexao.fase !== 'conectado' || now.sessao || now.folha) return
+          goTo('/')
+          setRecordRequest((n) => n + 1)
         })
         .catch(() => {})
-    void consumir()
-    const aoVoltar = () => {
-      if (document.visibilityState === 'visible') void consumir()
+    void consume()
+    const onReturn = () => {
+      if (document.visibilityState === 'visible') void consume()
     }
-    document.addEventListener('visibilitychange', aoVoltar)
-    return () => document.removeEventListener('visibilitychange', aoVoltar)
-  }, [ponte, aberto])
+    document.addEventListener('visibilitychange', onReturn)
+    return () => document.removeEventListener('visibilitychange', onReturn)
+  }, [bridge, opened])
 
-  useEffect(() => seguirTemaDoSistema(), [])
+  useEffect(() => followSystemTheme(), [])
 
   useEffect(() => {
-    ponte
-      .recortes()
-      .then(aplicarRecortes)
+    bridge
+      .insets()
+      .then(applyInsets)
       .catch(() => {})
-    const aoMudar = () => ponte.visibilidade(document.visibilityState === 'visible').catch(() => {})
-    document.addEventListener('visibilitychange', aoMudar)
-    return () => document.removeEventListener('visibilitychange', aoMudar)
-  }, [ponte])
+    const onChange = () => bridge.visibility(document.visibilityState === 'visible').catch(() => {})
+    document.addEventListener('visibilitychange', onChange)
+    return () => document.removeEventListener('visibilitychange', onChange)
+  }, [bridge])
 
   return (
     <main className="m-app">
-      {estado ? <Tela estado={estado} rota={rota} ir={ir} pedidoDeGravar={pedidoDeGravar} /> : <Abrindo />}
+      {state ? <Screen state={state} route={route} go={go} recordRequest={recordRequest} /> : <Opening />}
     </main>
   )
 }
 
-function Tela({
-  estado,
-  rota,
-  ir,
-  pedidoDeGravar,
+function Screen({
+  state,
+  route,
+  go,
+  recordRequest,
 }: {
-  estado: EstadoApp
-  rota: string
-  ir: (rota: string) => void
-  pedidoDeGravar: number
+  state: AppState
+  route: string
+  go: (route: string) => void
+  recordRequest: number
 }) {
-  // Uma gravação (ou a folha "Gravação salva") em curso fica na tela, seja qual for a fase da
-  // conexão: um 401 no meio da gravação não tira Pausar, Marcador e Parar.
-  if (estado.sessao || estado.folha) return <Gravando estado={estado} />
-  const conexao = estado.conexao
-  switch (conexao.fase) {
+  // A recording (or the saved-recording sheet) in progress stays on screen, whatever the
+  // connection phase: a 401 in the middle of the recording does not take Pausar, Marcador and Parar away.
+  if (state.sessao || state.folha) return <Recording state={state} />
+  const connection = state.conexao
+  switch (connection.fase) {
     case 'sem_servidor':
-      if (rota === '/ler-codigo') return <LerCodigo ir={ir} voltarPara="/servidor" />
-      if (rota === '/servidor/endereco') return <Endereco conferir={null} ir={ir} />
-      return <Servidor ir={ir} />
+      if (route === '/scan-code') return <ScanCode go={go} backTo="/server" />
+      if (route === '/server/address') return <Address confirm={null} go={go} />
+      return <Server go={go} />
     case 'confirmar_ca':
-      return <Endereco conferir={conexao} ir={ir} />
+      return <Address confirm={connection} go={go} />
     case 'sem_credencial':
-      if (rota === '/ler-codigo') return <LerCodigo ir={ir} voltarPara="/entrar" />
-      return <Entrar servidor={conexao.servidor} motivo={conexao.motivo} ir={ir} />
+      if (route === '/scan-code') return <ScanCode go={go} backTo="/sign-in" />
+      return <SignIn server={connection.servidor} reason={connection.motivo} go={go} />
     case 'conectado':
-      if (rota === '/configuracoes') return <Configuracoes ir={ir} espacoLivre={estado.espaco_livre} />
-      if (rota.startsWith('/gravacao/')) return <Detalhe id={decodeURIComponent(rota.slice(10))} ir={ir} />
-      return <Inicio estado={estado} ir={ir} pedidoDeGravar={pedidoDeGravar} />
+      if (route === '/settings') return <Settings go={go} freeSpace={state.espaco_livre} />
+      if (route.startsWith('/recording/')) return <Detail id={decodeURIComponent(route.slice(11))} go={go} />
+      return <Home state={state} go={go} recordRequest={recordRequest} />
   }
 }
 
-function Abrindo() {
+function Opening() {
   return (
     <div className="m-body">
       <div className="m-top">
-        <Marca />
+        <Brand />
       </div>
     </div>
   )

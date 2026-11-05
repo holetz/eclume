@@ -20,14 +20,14 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
-      // Estilo por classe (app.css): `style` só leva custom property (`--h` do medidor), como o
-      // ui_assets do desktop exige da UI estática.
+      // Style by class (app.css): `style` carries only a custom property (the meter's `--h`), as the
+      // desktop's ui_assets requires of the static UI.
       'no-restricted-syntax': [
         'error',
         {
           selector:
             "JSXAttribute[name.name='style'] ObjectExpression > Property:not([key.type='Literal'][key.value=/^--/]):not([computed=true])",
-          message: 'Sem `style` fixo: use uma classe do app.css; `style` só com custom property (--nome).',
+          message: 'No fixed `style`: use an app.css class; `style` only with a custom property (--name).',
         },
       ],
     },

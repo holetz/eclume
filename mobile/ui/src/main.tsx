@@ -4,13 +4,13 @@ import './styles/app.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './app/App.tsx'
-import { PonteContexto } from './ponte/ponte.ts'
-import { ponteTauri } from './ponte/tauri.ts'
+import { BridgeContext } from './bridge/bridge.ts'
+import { tauriBridge } from './bridge/tauri.ts'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <PonteContexto.Provider value={ponteTauri}>
+    <BridgeContext.Provider value={tauriBridge}>
       <App />
-    </PonteContexto.Provider>
+    </BridgeContext.Provider>
   </StrictMode>,
 )
