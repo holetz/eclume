@@ -1,12 +1,12 @@
+import { useTranslation } from 'react-i18next'
 import type { Schemas } from '../../api/client'
 import { errorMessage } from '../../api/problem'
 import styles from './Organize.module.css'
 import { fieldTestRows, type PreviewRun } from './usePreview'
 
-const NO_PROVIDER = 'Nenhum agente está configurado para preencher campos. Peça a quem administra o servidor.'
-
 /** The result of "Testar numa gravação": the draft rule on the latest transcribed recordings. */
 export function FieldTest({ test }: { test: PreviewRun<Schemas['FieldPreviewRequest']> }) {
+  const { t } = useTranslation('organize')
   const { state, preview, elapsedMs, error } = test
   if (state === 'idle') return null
 
@@ -14,9 +14,9 @@ export function FieldTest({ test }: { test: PreviewRun<Schemas['FieldPreviewRequ
     return (
       <p className="alert" role="status">
         <span>
-          Testando a regra nas últimas 3 gravações…{' '}
+          {t('test.running')}{' '}
           <span className="tabular" aria-hidden="true">
-            {Math.floor(elapsedMs / 1000)} s
+            {t('seconds', { seconds: Math.floor(elapsedMs / 1000) })}
           </span>
         </span>
       </p>
@@ -26,7 +26,7 @@ export function FieldTest({ test }: { test: PreviewRun<Schemas['FieldPreviewRequ
   if (state === 'expired') {
     return (
       <p className="alert alert-warning" role="alert">
-        O teste expirou antes de terminar. Teste de novo.
+        {t('test.expired')}
       </p>
     )
   }
@@ -35,7 +35,7 @@ export function FieldTest({ test }: { test: PreviewRun<Schemas['FieldPreviewRequ
     const failure = preview?.error
     return (
       <p className="alert alert-error" role="alert">
-        {failure ? (failure.code === 'no_provider' ? NO_PROVIDER : failure.message) : errorMessage(error)}
+        {failure ? (failure.code === 'no_provider' ? t('test.noProvider') : failure.message) : errorMessage(error)}
       </p>
     )
   }
@@ -44,19 +44,19 @@ export function FieldTest({ test }: { test: PreviewRun<Schemas['FieldPreviewRequ
   if (rows.length === 0) {
     return (
       <p className="alert" role="status">
-        Você ainda não tem gravações transcritas para testar.
+        {t('test.none')}
       </p>
     )
   }
   return (
     <div className="alert" role="status">
       <span className="alert-title">
-        {rows.length === 1 ? 'Na última gravação' : `Nas últimas ${rows.length} gravações`}
+        {t('test.last', { count: rows.length })}
       </span>
-      <ul className={styles.testRows} aria-label="Resultado do teste">
+      <ul className={styles.testRows} aria-label={t('test.result')}>
         {rows.map((row) => (
           <li key={row.recordingId}>
-            {row.recordingTitle} → {row.value === null ? <em>vazio</em> : <strong>{row.value}</strong>}
+            {row.recordingTitle} → {row.value === null ? <em>{t('test.empty')}</em> : <strong>{row.value}</strong>}
           </li>
         ))}
       </ul>

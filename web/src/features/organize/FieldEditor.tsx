@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { errorMessage } from '../../api/problem'
 import { Dialog } from '../../app/Dialog'
 import { HelpHint } from '../../app/HelpHint'
@@ -7,13 +8,13 @@ import styles from './Organize.module.css'
 import {
   cleanDraft,
   invalidFields,
-  KIND_LABELS,
+  FIELD_KINDS,
+  kindLabel,
   startFieldPreview,
   useDeleteField,
   useSaveField,
   type Field,
   type FieldDraft,
-  type FieldKind,
 } from './queries'
 import { TagInput } from './TagInput'
 import { usePreview } from './usePreview'
@@ -40,6 +41,7 @@ interface FieldEditorProps {
 }
 
 export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldEditorProps) {
+  const { t } = useTranslation(['organize', 'common'])
   const id = useId()
   const initial = draftOf(field)
   const [draft, setDraft] = useState<FieldDraft>(initial)
@@ -78,18 +80,18 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
     errors[name] || hasText ? `${id}-${name}-hint` : undefined
 
   return (
-    <form className="panel" onSubmit={submit} aria-label={field ? `Editar ${field.name}` : 'Novo campo'}>
+    <form className="panel" onSubmit={submit} aria-label={field ? t('type.editLabel', { name: field.name }) : t('fields.new')}>
       <div className={styles.panelHead}>
-        <h4>{field ? field.name : 'Novo campo'}</h4>
+        <h4>{field ? field.name : t('fields.new')}</h4>
         {field && !builtin && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(true)}>
-            Excluir campo
+            {t('field.delete')}
           </button>
         )}
       </div>
 
       <div className="field">
-        <label htmlFor={`${id}-name`}>Nome</label>
+        <label htmlFor={`${id}-name`}>{t('type.name')}</label>
         <input
           id={`${id}-name`}
           className="input"
@@ -103,9 +105,9 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
       </div>
 
       <fieldset className={`field ${styles.fieldset}`} aria-describedby={describedBy('kind', builtin)}>
-        <legend className="field-label">Tipo</legend>
+        <legend className="field-label">{t('field.kind')}</legend>
         <div className="seg">
-          {(Object.keys(KIND_LABELS) as FieldKind[]).map((kind) => (
+          {FIELD_KINDS.map((kind) => (
             <label key={kind} className="seg-opt">
               <input
                 type="radio"
@@ -115,35 +117,34 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
                 disabled={builtin}
                 onChange={() => set({ kind })}
               />
-              {KIND_LABELS[kind]}
+              {kindLabel(kind)}
             </label>
           ))}
         </div>
-        {hint('kind', builtin ? 'O tipo de um campo embutido não muda.' : undefined)}
+        {hint('kind', builtin ? t('field.builtinKind') : undefined)}
       </fieldset>
 
       {draft.kind === 'choice' && (
         <div className="field">
-          <label htmlFor={`${id}-options`}>Opções</label>
+          <label htmlFor={`${id}-options`}>{t('field.options')}</label>
           <TagInput
             id={`${id}-options`}
             value={options}
             onChange={(value) => set({ options: value })}
-            listLabel="Opções"
-            itemLabel="opção"
+            listLabel={t('field.options')}
+            itemLabel={t('field.option')}
             invalid={Boolean(errors.options)}
             describedBy={describedBy('options', true)}
           />
-          {hint('options', 'Ao menos uma. O agente escolhe uma delas, ou deixa vazio.')}
+          {hint('options', t('field.optionsHint'))}
         </div>
       )}
 
       <div className="field">
         <div className={styles.labelRow}>
-          <label htmlFor={`${id}-instructions`}>Como identificar</label>
-          <HelpHint subject="como escrever uma regra" title="Como escrever uma regra" article="escrever-uma-regra">
-            Diga o que procurar na conversa, a forma do valor e quando deixar vazio. O agente segue a
-            regra depois de cada transcrição.
+          <label htmlFor={`${id}-instructions`}>{t('type.identify')}</label>
+          <HelpHint subject={t('field.ruleHintSubject')} title={t('field.ruleHintTitle')} article="escrever-uma-regra">
+            {t('field.ruleHint')}
           </HelpHint>
         </div>
         <textarea
@@ -158,7 +159,7 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
       </div>
 
       <Switch checked={draft.auto_fill ?? true} onChange={(autoFill) => set({ auto_fill: autoFill })}>
-        Preencher automaticamente depois da transcrição
+        {t('field.autoFill')}
       </Switch>
 
       {save.isError && !Object.keys(errors).length && (
@@ -171,7 +172,7 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
 
       <div className={styles.actions}>
         <button type="submit" className="btn btn-primary" disabled={!canSave}>
-          {save.isPending ? 'Salvando…' : 'Salvar'}
+          {save.isPending ? t('saving') : t('common:save')}
         </button>
         {/* Tests the draft as it is, without saving. */}
         <button
@@ -180,7 +181,7 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
           disabled={!complete || testing}
           onClick={() => test.run({ field: cleanDraft(draft) })}
         >
-          Testar numa gravação
+          {t('field.test')}
         </button>
       </div>
 
@@ -192,17 +193,18 @@ export function FieldEditor({ field, onDirtyChange, onSaved, onDeleted }: FieldE
 }
 
 function DeleteFieldDialog({ field, onClose, onDeleted }: { field: Field; onClose: () => void; onDeleted: () => void }) {
+  const { t } = useTranslation('organize')
   const remove = useDeleteField()
   return (
     <Dialog
       plain
-      title={`Excluir ${field.name}?`}
-      message="O campo sai de todas as gravações, com os valores já preenchidos."
+      title={t('deleteTitle', { name: field.name })}
+      message={t('field.deleteText')}
       onClose={onClose}
       actions={
         <>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Manter
+            {t('keep')}
           </button>
           <button
             type="button"
@@ -211,7 +213,7 @@ function DeleteFieldDialog({ field, onClose, onDeleted }: { field: Field; onClos
             // The list reloads before the mutate ends and unmounts this panel: the promise carries on anyway.
             onClick={() => remove.mutateAsync(field.id).then(onDeleted, () => {})}
           >
-            Excluir campo
+            {t('field.delete')}
           </button>
         </>
       }

@@ -52,6 +52,21 @@ function mockFields(
 const list = () => screen.findByRole('list', { name: 'Campos' })
 const row = (name: string) => within(screen.getByRole('list', { name: 'Campos' })).getByRole('button', { name }).closest('li')!
 
+describe('custom fields in English', () => {
+  it('reads in English when the account chose English', async () => {
+    const me = fixtures.me()
+    mockFetch({
+      'GET /api/v1/me': () => ({ ...me, user: { ...me.user, locale: 'en' } }),
+      'GET /api/v1/fields': () => fixtures.fieldPage(),
+    })
+    renderApp('/config/campos')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Custom fields' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New field' })).toBeInTheDocument()
+    expect(await screen.findByRole('group', { name: 'Type' })).toHaveTextContent('TextListChoice')
+    expect(screen.getByRole('button', { name: 'Test on a recording' })).toBeInTheDocument()
+  })
+})
+
 describe('custom fields', () => {
   it('lists only the user fields, with Automático, and opens the first one in the panel', async () => {
     mockFields()
