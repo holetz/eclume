@@ -3,8 +3,14 @@
 # push, in the background on the GPU host, never blocking the push: an unreachable host becomes a
 # warning; the gate of a SHA that `main` has already moved past exits without running (--supersedable).
 # Activation, once per clone: git config core.hooksPath .githooks
+# and the host's Docker context: git config eclume.gateContext <name> (or $ECLUME_DOCKER_CONTEXT).
 # `git push --no-verify` skips the hook. Contract: docs/standards/code/monorepo.md.
 root="$(git rev-parse --show-toplevel)" || exit 0
+if [ -z "${ECLUME_DOCKER_CONTEXT:-}" ] && [ -z "$(git config --get eclume.gateContext 2>/dev/null)" ]; then
+  echo "ERROR: the quality gate was NOT fired: no Docker context for the gate host is configured." >&2
+  echo "       Fix it once per clone: git config eclume.gateContext <name>   (or export ECLUME_DOCKER_CONTEXT)." >&2
+  exit 0
+fi
 targets="$(python3 "$root/deploy/gate.py" push-targets)" || exit 0
 for sha in $targets; do
   bash "$root/deploy/gate.sh" --background --supersedable "$sha" \

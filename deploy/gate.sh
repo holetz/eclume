@@ -16,7 +16,8 @@
 #                   "superseded by <sha>"); the pre-push hook uses it, a manual request is never abandoned.
 #   --status        shows the commit's `eclume/gate` status and the tail of the host log.
 #   --plan          only shows what it would do (read-only).
-#   --context       the host's Docker context (or $ECLUME_DOCKER_CONTEXT); required, no default.
+#   --context       the host's Docker context; else $ECLUME_DOCKER_CONTEXT; else `git config eclume.gateContext`
+#                   (set once per clone: git config eclume.gateContext <name>). Required, no default.
 # Variables: ECLUME_SSH (when the context is not ssh://); ECLUME_DISK_LIMIT and ECLUME_GPU_E2E_WAIT
 #            (minutes gpu-e2e waits for a free GPU; the deprecated ECLUME_GPU_E2E_ESPERA still works)
 #            go on to the host.
@@ -48,13 +49,15 @@ while [[ $# -gt 0 ]]; do
     --context)
       [[ $# -ge 2 && -n "$2" ]] || { echo "--context needs the name of a Docker context." >&2; exit 2; }
       CONTEXT="$2"; shift 2 ;;
-    --help|-h) sed -n '2,23p' "$0"; exit 0 ;;
+    --help|-h) sed -n '2,24p' "$0"; exit 0 ;;
     -*) echo "Unknown flag: $1 (see --help)" >&2; exit 2 ;;
     *) REF="$1"; shift ;;
   esac
 done
 
-[[ -n "$CONTEXT" ]] || { echo "Missing the host's Docker context: --context NAME or ECLUME_DOCKER_CONTEXT." >&2; exit 2; }
+[[ -n "$CONTEXT" ]] || CONTEXT="$(git config --get eclume.gateContext || true)"
+[[ -n "$CONTEXT" ]] || {
+  echo "Missing the host's Docker context: --context NAME, ECLUME_DOCKER_CONTEXT, or git config eclume.gateContext <name>." >&2; exit 2; }
 SHA="$(git rev-parse --verify "$REF^{commit}")"
 [[ -z "$PILLARS" || "$ALL" -eq 0 ]] || { echo "--all and --pillars do not go together." >&2; exit 2; }
 if [[ -n "$PILLARS" ]]; then

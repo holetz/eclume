@@ -381,6 +381,9 @@ it waives only the status (clean tree and commit on GitHub are still required) a
 `git config core.hooksPath .githooks`, fires `bash deploy/gate.sh --background --supersedable <sha>` for each
 update of `refs/heads/main` in the push: the gate runs on the host in the background and the push never waits
 nor fails because of it (an unreachable host becomes a warning). Work branches run the gate by hand.
+The host's Docker context has no default: `deploy/gate.sh` takes `--context NAME`, else `ECLUME_DOCKER_CONTEXT`,
+else `git config eclume.gateContext` (set once per clone, together with the hook activation). When none
+resolves, the hook prints an error naming `git config eclume.gateContext <name>` and still lets the push through.
 
 macOS and Windows stay out of PR CI while the repository is private; the desktop's Windows-only code
 compiles at every gate (`windows` pillar), and the manual workflow

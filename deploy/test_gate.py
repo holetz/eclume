@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
@@ -486,9 +487,9 @@ def test_gate_prunes_logs_old_images_and_abandoned_trees() -> None:
     assert "-name 'src-*' -mtime +1" in host
 
 
-@pytest.mark.parametrize("script", ["gate.sh", "release-mobile.sh"])
+@pytest.mark.parametrize("script", ["release-mobile.sh"])
 def test_host_scripts_have_no_default_docker_context(script: str) -> None:
-    """The host comes from `--context` or `ECLUME_DOCKER_CONTEXT`; without either the script refuses with exit 2."""
+    """(gate.sh has its own tests: it also reads the git config.) The host comes from `--context` or `ECLUME_DOCKER_CONTEXT`; without either the script refuses with exit 2."""
     env = {k: v for k, v in os.environ.items() if k != "ECLUME_DOCKER_CONTEXT"}
     r = subprocess.run(  # noqa: S603 — fixed script of the repository
         ["bash", str(ROOT / "deploy" / script), "--plan"],  # noqa: S607
@@ -500,3 +501,86 @@ def test_host_scripts_have_no_default_docker_context(script: str) -> None:
     )
     assert r.returncode == USAGE_ERROR
     assert "ECLUME_DOCKER_CONTEXT" in r.stderr
+
+
+def _gate_sandbox(tmp_path: Path, *, config: str | None) -> tuple[Path, dict[str, str]]:
+    """A throwaway git repo carrying a copy of gate.sh, with a fake `docker` on the PATH."""
+    repo = tmp_path / "repo"
+    (repo / "deploy").mkdir(parents=True)
+    shutil.copy(ROOT / "deploy" / "gate.sh", repo / "deploy" / "gate.sh")
+    shutil.copy(ROOT / "deploy" / "gate.py", repo / "deploy" / "gate.py")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    fake = bindir / "docker"
+    fake.write_text('#!/bin/sh\necho "ssh://user@host-$3"\n', encoding="utf-8")
+    fake.chmod(0o755)
+    env = {k: v for k, v in os.environ.items() if k != "ECLUME_DOCKER_CONTEXT"}
+    env.update(
+        PATH=f"{bindir}:{env['PATH']}",
+        GIT_CONFIG_GLOBAL=os.devnull,
+        GIT_CONFIG_SYSTEM=os.devnull,
+        GIT_AUTHOR_NAME="t",
+        GIT_AUTHOR_EMAIL="t@example.test",
+        GIT_COMMITTER_NAME="t",
+        GIT_COMMITTER_EMAIL="t@example.test",
+    )
+    for cmd in (["init", "-q"], ["commit", "-q", "--allow-empty", "-m", "x"]):
+        subprocess.run(["git", "-C", str(repo), *cmd], check=True, env=env)  # noqa: S603, S607
+    if config:
+        subprocess.run(["git", "-C", str(repo), "config", "eclume.gateContext", config], check=True, env=env)  # noqa: S603, S607
+    return repo, env
+
+
+def _gate_plan(repo: Path, env: dict[str, str], *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603 — copy of the repository's script
+        ["bash", str(repo / "deploy" / "gate.sh"), "--plan", *args],  # noqa: S607
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+        timeout=30,
+    )
+
+
+def test_gate_context_falls_back_to_git_config(tmp_path: Path) -> None:
+    """Without flag or env, `eclume.gateContext` supplies the context."""
+    repo, env = _gate_sandbox(tmp_path, config="fromconfig")
+    r = _gate_plan(repo, env)
+    assert r.returncode == 0, r.stderr
+    assert "(context fromconfig)" in r.stderr
+
+
+def test_gate_context_precedence_is_flag_then_env_then_git_config(tmp_path: Path) -> None:
+    """`--context` beats the environment, which beats the git config."""
+    repo, env = _gate_sandbox(tmp_path, config="fromconfig")
+    env["ECLUME_DOCKER_CONTEXT"] = "fromenv"
+    assert "(context fromenv)" in _gate_plan(repo, env).stderr
+    assert "(context fromflag)" in _gate_plan(repo, env, "--context", "fromflag").stderr
+
+
+def test_gate_without_any_context_names_all_three_sources(tmp_path: Path) -> None:
+    """With nothing configured, exit 2 naming the flag, the variable and the git config key."""
+    repo, env = _gate_sandbox(tmp_path, config=None)
+    r = _gate_plan(repo, env)
+    assert r.returncode == USAGE_ERROR
+    assert "--context" in r.stderr
+    assert "ECLUME_DOCKER_CONTEXT" in r.stderr
+    assert "eclume.gateContext" in r.stderr
+
+
+def test_pre_push_without_context_is_loud_and_never_blocks(tmp_path: Path) -> None:
+    """No context resolves: the hook prints the `git config eclume.gateContext <name>` fix and exits 0."""
+    repo, env = _gate_sandbox(tmp_path, config=None)
+    r = subprocess.run(  # noqa: S603 — the repository's hook
+        ["bash", str(ROOT / ".githooks" / "pre-push")],  # noqa: S607
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=repo,
+        input="",
+        check=False,
+        timeout=30,
+    )
+    assert r.returncode == 0
+    assert "git config eclume.gateContext <name>" in r.stderr
+    assert "NOT fired" in r.stderr

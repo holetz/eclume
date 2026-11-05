@@ -183,6 +183,12 @@ docker --context gpu-host run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu24.0
 
 Builds and deploys use `--context gpu-host`. The development loop stays local.
 
+To let the pre-push hook fire the quality gate, record the context once per clone:
+`git config eclume.gateContext gpu-host` (activation of the hook is `git config core.hooksPath .githooks`).
+`deploy/gate.sh` resolves the context as `--context`, then `ECLUME_DOCKER_CONTEXT`, then this git config; the
+repository ships no default. Without any of them the hook prints an error naming this command and the push
+still goes through.
+
 ## 10. Caddy certificate (after the first deploy)
 
 Each stack uses Caddy with `tls internal`, and each has its own CA. HTTPS is mandatory for
