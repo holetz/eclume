@@ -245,5 +245,232 @@ export default {
       "metadata": "Recorded on · read from the file. Change it if incorrect."
     },
     "noAudio": "{name} has no audio."
+  },
+  "settings": {
+    "title": "Settings",
+    "back": "Back",
+    "tabs": {
+      "general": "General",
+      "meetings": "Meetings",
+      "audio": "Audio",
+      "storage": "Storage",
+      "folder": "Folder",
+      "server": "Server"
+    },
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "themeHint": "Light, dark or follow the system",
+    "themeSystem": "System",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "recentWindow": "Recent recordings in the window",
+    "recentWindowHint": "Status, alerts and Copy summary at the top of the main window",
+    "hide": "Hide",
+    "recentTray": "Recent recordings in the tray menu",
+    "recentTrayHint": "Title, status and actions in the icon menu next to the clock",
+    "startup": "Startup",
+    "startWithSystem": "Start with the computer",
+    "startupHint": "eclume opens automatically in the tray when you sign in to your computer, so you never miss a meeting.",
+    "notifications": "Notifications",
+    "notifySummary": "Notify when a recording finishes processing",
+    "notificationsHint": "For all recordings in the account: summary ready (with \"Copy\"), ready without a summary or failed.",
+    "detect": "Detect meetings",
+    "detectHint": "eclume watches which app uses the microphone. Recording always appears in the tray.",
+    "meetingStarts": "When a meeting starts in",
+    "restoreDefaults": "Restore defaults",
+    "meetingStopHint": "Automatic recording stops when the meeting ends. A recording you start continues until you stop it.",
+    "sources": "Sources",
+    "microphone": "Microphone",
+    "systemAudio": "System audio",
+    "sourcesHint": "Captures the other people on the call through the speakers or headphones. Both sources become one file; \"None\" leaves one out.",
+    "test": {
+      "mic": "Speak to test",
+      "system": "Play something to test"
+    },
+    "transcription": "Transcription",
+    "transcriptionLanguage": "Transcription language",
+    "accountDefault": "Account default",
+    "languages": {
+      "auto": "Detect automatically",
+      "pt": "Portuguese",
+      "es": "Spanish",
+      "en": "English"
+    },
+    "transcriptionHint": "Applies to future meetings and notes you upload. Choose the account default on the web, under Account.",
+    "shortcutsTitle": "Shortcuts anywhere on the computer",
+    "voiceNotes": "Voice notes",
+    "silence": "Stop after silence",
+    "silenceHint": "Ends the note when you stop speaking",
+    "never": "Never",
+    "retentionTitle": "After the server confirms a recording",
+    "deleteLocal": "Delete the local copy",
+    "deleteLocalHint": "Frees up space immediately",
+    "keepDays": "Keep for a few days",
+    "keepDaysHint": "Default · up to 3650 days",
+    "daysLabel": "Days",
+    "days": "days",
+    "keepForever": "Keep forever",
+    "keepForeverHint": "Nothing is deleted from this computer",
+    "retentionHint": "Recordings that have not been uploaded are never deleted.",
+    "localFolder": "Local folder",
+    "showFolder": "Show",
+    "retry": "Retry failed uploads",
+    "folderEnable": "Sync summaries to a folder",
+    "folderHint": "Each recording’s summary becomes a Markdown file and its transcript a JSONL file in a folder on this computer. Applies to your entire library, including recordings made elsewhere.",
+    "folderDestination": "Destination folder",
+    "noneFemale": "None",
+    "folderChoose": "Choose folder…",
+    "folderTranscripts": "Include transcripts (.jsonl)",
+    "folder": {
+      "off": "Off",
+      "choose": "Choose a folder to start",
+      "syncing": "Syncing…",
+      "waiting": "Waiting for the first cycle",
+      "synced": "Synced at {time} · {loaded} in the last cycle",
+      "recordings": {
+        "one": "1 recording read",
+        "other": "{count} recordings read"
+      }
+    },
+    "folderNow": "Sync now",
+    "folderLayout": "How the folder is organized",
+    "folderRules": {
+      "collectionsTitle": "Collections become subfolders, each divided by month.",
+      "example": "Example:",
+      "examplePath": "Clients/2026-09/",
+      "collectionsBody": ". A recording in several collections appears in each; those without a collection go in",
+      "uncollected": "sem-colecao",
+      "collectionsEnd": ". Organize collections in eclume on the web.",
+      "nameTitle": "Names that sort by date.",
+      "nameBody": ": date, time and recording reference (the same \"ref.\" as eclume on the web). The title goes inside the file, rather than in its name.",
+      "filesTitle": "Summary and transcript side by side.",
+      "summaryPrefix": "The summary is a",
+      "transcriptPrefix": "with properties at the top; the transcript is a",
+      "filesEnd": "with the same name.",
+      "obsidianTitle": "Obsidian vault.",
+      "obsidianPrefix": "Open the folder as a vault: Obsidian reads",
+      "obsidianMiddle": "and ignores",
+      "obsidianEnd": ", so transcripts do not clutter search or the graph.",
+      "agentTitle": "Agent workspace folder.",
+      "agentPrefix": "The app maintains an",
+      "agentEnd": "at the root explaining to an agent (such as Claude Code) how to read and search the files.",
+      "mirrorTitle": "It is a mirror.",
+      "mirrorBody": "eclume overwrites the files it generated; edit a copy. Your own files in the folder are never touched."
+    },
+    "folderHelp": "Learn more in help",
+    "signIn": "Sign in with email and password",
+    "signOut": "Sign out",
+    "serverAddress": "Server address",
+    "advanced": "Advanced",
+    "advancedHint": "For servers with a separate API or their own certificate",
+    "apiAddress": "API address",
+    "apiPlaceholder": "Same as the server",
+    "extraCa": "Extra certificate authority",
+    "remove": "Remove",
+    "choose": "Choose…",
+    "caHint": "PEM file. Only needed when the server uses its own certificate.",
+    "save": "Save",
+    "testConnection": "Test connection",
+    "locale": {
+      "title": "Language",
+      "automatic": "Automatic (account, then system)",
+      "en": "English",
+      "ptBR": "Portugu\u00eas (Brasil)"
+    },
+    "mode": {
+      "portal": "Through the system shortcut portal. Confirm the combinations if asked.",
+      "system": "In this session (Wayland), create a system shortcut for each command below.",
+      "created": "In this session (Wayland), GNOME shortcuts call eclume.",
+      "create": "In this session (Wayland), create GNOME shortcuts so eclume can receive keyboard commands."
+    },
+    "connection": {
+      "empty": "Connected · no uploads yet",
+      "upload": "Connected · last upload {time}"
+    },
+    "shortcutBackground": "Works with eclume in the background",
+    "capture": "Press the combination…",
+    "cancel": "Cancel",
+    "change": "Change",
+    "gnome": {
+      "remove": "Remove GNOME shortcuts",
+      "create": "Create GNOME shortcuts",
+      "creating": "Creating shortcuts…",
+      "removing": "Removing shortcuts…",
+      "created": "Shortcuts created in GNOME.",
+      "removed": "Shortcuts removed from GNOME."
+    },
+    "modifierRequired": "Use Ctrl, Alt, Shift or ⌘ with the key.",
+    "systemDefault": "System default",
+    "none": "None",
+    "followOutput": "Follow the current output",
+    "stop": "Stop",
+    "account": {
+      "personal": "Connected with a personal token",
+      "empty": "No account on this computer",
+      "replaceToken": "Sign in with email and password to replace the token with your account",
+      "signInHint": "Sign in to upload recordings",
+      "connected": "Connected to {server}"
+    },
+    "invalidDays": "Use 1 to 3650 days.",
+    "retrySuccess": "Failed uploads will be retried.",
+    "serverSaved": "Server settings saved.",
+    "testing": "Testing…",
+    "apps": {
+      "teams": {
+        "title": "Microsoft Teams",
+        "subtitle": "App or browser tab"
+      },
+      "zoom": {
+        "title": "Zoom",
+        "subtitle": "App or browser tab"
+      },
+      "meet": {
+        "title": "Google Meet",
+        "subtitle": "Browser tab"
+      },
+      "webex": {
+        "title": "Webex",
+        "subtitle": "App or browser tab"
+      },
+      "slack": {
+        "title": "Slack",
+        "subtitle": "Calls"
+      },
+      "whatsapp": {
+        "title": "WhatsApp",
+        "subtitle": "App or WhatsApp Web tab"
+      },
+      "navegador": {
+        "title": "Browser",
+        "subtitle": "Microphone in use, meeting not recognized"
+      },
+      "outro": {
+        "title": "Other app",
+        "subtitle": "Dictation, voice recorders, games"
+      }
+    },
+    "policy": {
+      "auto": "Record",
+      "ask": "Confirm",
+      "ignore": "Ignore"
+    },
+    "accountDefaultNamed": "Account default: {name}",
+    "systemDefaultNamed": "System default · {name}",
+    "disconnectedMic": "{name} (disconnected)",
+    "disconnectedOutput": "{name} (disconnected)",
+    "shortcut": {
+      "record": "Start or stop recording",
+      "note": "New note",
+      "marker": "Add marker"
+    },
+    "registration": {
+      "in_use": "In use by another app",
+      "unavailable": "Unavailable in this session",
+      "system": "Create the shortcut in the system"
+    },
+    "storageUsed": {
+      "one": "1 recording · {size} on this computer",
+      "other": "{count} recordings · {size} on this computer"
+    }
   }
 };

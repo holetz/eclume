@@ -245,5 +245,232 @@ export default {
       "metadata": "Gravado em · lida do arquivo. Mude se estiver errada."
     },
     "noAudio": "{name} não tem áudio."
+  },
+  "settings": {
+    "title": "Configurações",
+    "back": "Voltar",
+    "tabs": {
+      "general": "Geral",
+      "meetings": "Reuniões",
+      "audio": "Áudio",
+      "storage": "Armazenamento",
+      "folder": "Pasta",
+      "server": "Servidor"
+    },
+    "appearance": "Aparência",
+    "theme": "Tema",
+    "themeHint": "Claro, escuro ou como o sistema",
+    "themeSystem": "Sistema",
+    "themeLight": "Claro",
+    "themeDark": "Escuro",
+    "recentWindow": "Gravações recentes na janela",
+    "recentWindowHint": "Estado, alertas e Copiar resumo no topo da janela principal",
+    "hide": "Ocultar",
+    "recentTray": "Gravações recentes no menu da bandeja",
+    "recentTrayHint": "Título, estado e ações no menu do ícone ao lado do relógio",
+    "startup": "Início",
+    "startWithSystem": "Iniciar com o computador",
+    "startupHint": "O eclume abre sozinho, só na bandeja, quando você entra no computador, para não perder uma reunião.",
+    "notifications": "Avisos",
+    "notifySummary": "Avisar quando uma gravação terminar de processar",
+    "notificationsHint": "De todas as gravações da conta: resumo pronto (com \"Copiar\"), pronta sem resumo ou com falha.",
+    "detect": "Detectar reuniões",
+    "detectHint": "O eclume observa qual app usa o microfone. Nunca grava sem mostrar na bandeja.",
+    "meetingStarts": "Quando uma reunião começa no",
+    "restoreDefaults": "Restaurar padrões",
+    "meetingStopHint": "Gravar para sozinho quando a reunião acaba. Uma gravação que você inicia segue até você parar.",
+    "sources": "Fontes",
+    "microphone": "Microfone",
+    "systemAudio": "Áudio do sistema",
+    "sourcesHint": "Capta as outras pessoas da chamada pelos alto-falantes ou pelo fone. As duas fontes viram um arquivo só; \"Nenhum\" deixa uma delas de fora.",
+    "test": {
+      "mic": "Fale para testar",
+      "system": "Toque algo para testar"
+    },
+    "transcription": "Transcrição",
+    "transcriptionLanguage": "Idioma da transcrição",
+    "accountDefault": "Padrão da conta",
+    "languages": {
+      "auto": "Detectar automaticamente",
+      "pt": "Português",
+      "es": "Español",
+      "en": "English"
+    },
+    "transcriptionHint": "Vale para as próximas reuniões e notas enviadas. O padrão da conta se escolhe na web, em Conta.",
+    "shortcutsTitle": "Atalhos em qualquer lugar do computador",
+    "voiceNotes": "Notas de voz",
+    "silence": "Parar depois de silêncio",
+    "silenceHint": "Encerra a nota quando você para de falar",
+    "never": "Nunca",
+    "retentionTitle": "Depois que o servidor confirma uma gravação",
+    "deleteLocal": "Apagar a cópia local",
+    "deleteLocalHint": "Libera espaço na hora",
+    "keepDays": "Manter por alguns dias",
+    "keepDaysHint": "Padrão · até 3650 dias",
+    "daysLabel": "Dias",
+    "days": "dias",
+    "keepForever": "Manter para sempre",
+    "keepForeverHint": "Nada é apagado deste computador",
+    "retentionHint": "Gravações ainda não enviadas nunca são apagadas.",
+    "localFolder": "Pasta local",
+    "showFolder": "Mostrar",
+    "retry": "Tentar de novo as falhas",
+    "folderEnable": "Sincronizar resumos numa pasta",
+    "folderHint": "O resumo de cada gravação vira um arquivo Markdown e a transcrição, um arquivo JSONL, numa pasta deste computador. Vale para toda a sua biblioteca, não só para o que este computador gravou.",
+    "folderDestination": "Pasta de destino",
+    "noneFemale": "Nenhuma",
+    "folderChoose": "Escolher pasta…",
+    "folderTranscripts": "Incluir as transcrições (.jsonl)",
+    "folder": {
+      "off": "Desligada",
+      "choose": "Escolha a pasta para começar",
+      "syncing": "Sincronizando…",
+      "waiting": "Aguardando o primeiro ciclo",
+      "synced": "Sincronizada às {time} · {loaded} no último ciclo",
+      "recordings": {
+        "one": "1 gravação lida",
+        "other": "{count} gravações lidas"
+      }
+    },
+    "folderNow": "Sincronizar agora",
+    "folderLayout": "Como a pasta é organizada",
+    "folderRules": {
+      "collectionsTitle": "Coleções viram subpastas, e cada uma se divide por mês.",
+      "example": "Ex.:",
+      "examplePath": "Clientes/2026-09/",
+      "collectionsBody": ". Uma gravação em mais de uma coleção aparece em cada uma; as sem coleção ficam em",
+      "uncollected": "sem-colecao",
+      "collectionsEnd": ". Organize as coleções no eclume web.",
+      "nameTitle": "Nome que ordena por data.",
+      "nameBody": ": data, hora e a referência da gravação (a mesma \"ref.\" do eclume web). O título fica dentro do arquivo, não no nome.",
+      "filesTitle": "Resumo e transcrição lado a lado.",
+      "summaryPrefix": "O resumo é um",
+      "transcriptPrefix": "com propriedades no topo; a transcrição é um",
+      "filesEnd": "com o mesmo nome.",
+      "obsidianTitle": "Vault do Obsidian.",
+      "obsidianPrefix": "Abra a pasta como vault: o Obsidian lê os",
+      "obsidianMiddle": "e ignora os",
+      "obsidianEnd": ", então as transcrições não poluem a busca nem o grafo.",
+      "agentTitle": "Pasta de trabalho de agente.",
+      "agentPrefix": "O app mantém um",
+      "agentEnd": "na raiz que explica a um agente (como o Claude Code) como ler e pesquisar os arquivos.",
+      "mirrorTitle": "É um espelho.",
+      "mirrorBody": "O eclume sobrescreve os arquivos que gerou; edite uma cópia. Arquivos seus na pasta nunca são tocados."
+    },
+    "folderHelp": "Saiba mais na ajuda",
+    "signIn": "Entrar com e-mail e senha",
+    "signOut": "Sair",
+    "serverAddress": "Endereço do servidor",
+    "advanced": "Avançado",
+    "advancedHint": "Para servidores com API separada ou certificado próprio",
+    "apiAddress": "Endereço da API",
+    "apiPlaceholder": "O mesmo do servidor",
+    "extraCa": "Autoridade certificadora extra",
+    "remove": "Remover",
+    "choose": "Escolher…",
+    "caHint": "Arquivo PEM. Só é preciso quando o servidor usa um certificado próprio.",
+    "save": "Salvar",
+    "testConnection": "Testar conexão",
+    "locale": {
+      "title": "Idioma",
+      "automatic": "Automático (conta, depois sistema)",
+      "en": "English",
+      "ptBR": "Português (Brasil)"
+    },
+    "mode": {
+      "portal": "Pelo portal de atalhos do sistema. Se ele pedir, confirme as combinações.",
+      "system": "Nesta sessão (Wayland), crie no sistema um atalho para cada comando abaixo.",
+      "created": "Nesta sessão (Wayland), os atalhos são do GNOME e chamam o eclume.",
+      "create": "Nesta sessão (Wayland), o eclume não ouve o teclado sozinho: crie os atalhos no GNOME."
+    },
+    "connection": {
+      "empty": "Conectado · nenhum envio ainda",
+      "upload": "Conectado · último envio {time}"
+    },
+    "shortcutBackground": "Funciona com o eclume em segundo plano",
+    "capture": "Pressione a combinação…",
+    "cancel": "Cancelar",
+    "change": "Alterar",
+    "gnome": {
+      "remove": "Remover atalhos do GNOME",
+      "create": "Criar atalhos no GNOME",
+      "creating": "Criando atalhos…",
+      "removing": "Removendo atalhos…",
+      "created": "Atalhos criados no GNOME.",
+      "removed": "Atalhos removidos do GNOME."
+    },
+    "modifierRequired": "Use Ctrl, Alt, Shift ou ⌘ junto da tecla.",
+    "systemDefault": "Padrão do sistema",
+    "none": "Nenhum",
+    "followOutput": "Seguir a saída em uso",
+    "stop": "Parar",
+    "account": {
+      "personal": "Conectado com um token pessoal",
+      "empty": "Nenhuma conta neste computador",
+      "replaceToken": "Entre com e-mail e senha para trocar o token pela conta",
+      "signInHint": "Entre para enviar as gravações",
+      "connected": "Conectado ao {server}"
+    },
+    "invalidDays": "Use de 1 a 3650 dias.",
+    "retrySuccess": "As falhas vão ser enviadas de novo.",
+    "serverSaved": "Configurações do servidor salvas.",
+    "testing": "Testando…",
+    "apps": {
+      "teams": {
+        "title": "Microsoft Teams",
+        "subtitle": "App ou aba do navegador"
+      },
+      "zoom": {
+        "title": "Zoom",
+        "subtitle": "App ou aba do navegador"
+      },
+      "meet": {
+        "title": "Google Meet",
+        "subtitle": "Aba do navegador"
+      },
+      "webex": {
+        "title": "Webex",
+        "subtitle": "App ou aba do navegador"
+      },
+      "slack": {
+        "title": "Slack",
+        "subtitle": "Chamadas"
+      },
+      "whatsapp": {
+        "title": "WhatsApp",
+        "subtitle": "App ou aba do WhatsApp Web"
+      },
+      "navegador": {
+        "title": "Navegador",
+        "subtitle": "Microfone em uso, reunião não reconhecida"
+      },
+      "outro": {
+        "title": "Outro app",
+        "subtitle": "Ditado, gravadores de voz, jogos"
+      }
+    },
+    "policy": {
+      "auto": "Gravar",
+      "ask": "Confirmar",
+      "ignore": "Ignorar"
+    },
+    "accountDefaultNamed": "Padrão da conta: {name}",
+    "systemDefaultNamed": "Padrão do sistema · {name}",
+    "disconnectedMic": "{name} (desconectado)",
+    "disconnectedOutput": "{name} (desconectada)",
+    "shortcut": {
+      "record": "Iniciar ou parar a gravação",
+      "note": "Nova nota",
+      "marker": "Adicionar marcador"
+    },
+    "registration": {
+      "in_use": "Em uso por outro app",
+      "unavailable": "Indisponível nesta sessão",
+      "system": "Crie o atalho no sistema"
+    },
+    "storageUsed": {
+      "one": "1 gravação · {size} neste computador",
+      "other": "{count} gravações · {size} neste computador"
+    }
   }
 };
