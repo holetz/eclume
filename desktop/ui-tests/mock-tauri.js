@@ -3,6 +3,7 @@
 // `scenario(name)` changes state, `emit(event, payload)` fires a Rust event, and
 // `calls` records commands for frozen fixtures; `window.__MOCK_SCENARIO` sets the initial scenario.
 (() => {
+  const defaultLocale = window.__MOCK_LOCALE ?? "pt-BR";
   const now = Date.now();
   const MIN = 60_000;
   const today = (h, m) => {
@@ -69,6 +70,8 @@
         recording_kind: null,
         note_silence_s: 4,
         theme: "system",
+        locale: defaultLocale,
+        locale_choice: null,
         marker_count: 0,
         last_marker: null,
         recording_auto: false,
@@ -353,6 +356,16 @@
 
   const commands = {
     status: (e) => e.status,
+    set_locale(e, { choice }) {
+      e.status.locale_choice = choice;
+      e.status.locale = choice ?? defaultLocale;
+      mock.emit("status-changed");
+      return null;
+    },
+    report_system_locale(e, { tag }) {
+      e.systemLocale = tag;
+      return null;
+    },
     recordings: (e) => e.recordings,
     settings: (e) => e.settings,
     open_web: () => null,
