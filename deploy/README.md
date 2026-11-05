@@ -89,7 +89,7 @@ bash deploy/deploy.sh --plan --context <context>
 bash deploy/deploy.sh --context <context>
 bash deploy/release-desktop.sh --plan
 bash deploy/bootstrap-admin.sh
-ssh <user>@<host> cat /srv/eclume/secrets/admin-password | python3 deploy/smoke_prod.py --url "$ECLUME_PUBLIC_URL" --ca eclume-root.crt
+ssh <user>@<host> cat /srv/eclume/secrets/admin-password | python3 deploy/smoke_prod.py --url "$ECLUME_PUBLIC_URL" --ca eclume-root.crt --read-only
 ssh <user>@<host> cat /srv/eclume/secrets/admin-password | uv run python deploy/smoke_mcp.py --base "$ECLUME_PUBLIC_URL" --ca eclume-root.crt
 ```
 
