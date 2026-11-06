@@ -8,8 +8,12 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-06
+
 ### Adicionado
 
+- Error and notice text sent by the app's core (sign-in, recording, sync and the synced folder)
+  follows the app language too, in English or Portuguese (Brazil) (holetz/eclume#363).
 - The desktop app in English and Portuguese (Brazil): the window, the help view, the tray menu and
   the notifications follow the account language, then the system language, with English as the
   default; Settings → General has a language switcher (Automatic, English, Português (Brasil))
@@ -17,6 +21,10 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ### Alterado
 
+- The app identifier is now `io.github.holetz.eclume` (holetz/eclume#247). The app keeps its data
+  in new folders, so an existing install must copy `~/.config/br.com.eloysekonell.eclume` and
+  `~/.local/share/br.com.eloysekonell.eclume` to the `io.github.holetz.eclume` names before the first
+  start, or pair again.
 - Dependencies raised to the releases that fix the RustSec advisories on rustls, tokio and the bundled
   root certificates (holetz/eclume#298).
 - O `.md` da pasta sincronizada avisa quando o resumo é de uma versão anterior da transcrição: a
