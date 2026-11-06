@@ -16,7 +16,7 @@ opus = "0.4"
 serde = { version = "1", features = ["derive"] }
 # Pure Rust (MPL-2.0, unmodified). The default features bring FLAC, MKV/WebM, Ogg, PCM,
 # Vorbis and WAV; AAC, ALAC, MP3 and the MP4/MOV/M4A container are added.
-symphonia = { version = "0.5", features = ["aac", "alac", "mp3", "isomp4"] }
+symphonia = { version = "0.6", features = ["aac", "alac", "mp3", "isomp4"] }
 
 [dev-dependencies]
 ogg = "0.9"

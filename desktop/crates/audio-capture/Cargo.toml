@@ -22,15 +22,15 @@ backends = ["mic", "dep:pipewire", "dep:libpulse-binding", "dep:wasapi", "dep:ci
 [dependencies]
 anyhow = "1"
 log = "0.4"
-ringbuf = "0.4.8"
-cpal = { version = "0.17", optional = true }
+ringbuf = "0.5.3"
+cpal = { version = "0.18", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libpulse-binding = { version = "2.30.1", optional = true }
-pipewire = { version = "0.9.2", optional = true }
+pipewire = { version = "0.10.1", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-wasapi = { version = "0.25.0", optional = true }
+wasapi = { version = "0.26.0", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-cidre = { version = "0.15", optional = true, default-features = false, features = ["app", "async", "av", "ax", "blocks", "cm", "core_audio", "dispatch", "io_kit", "io_pm", "macos_15_0"] }
+cidre = { version = "0.29", optional = true, default-features = false, features = ["app", "async", "av", "ax", "blocks", "cm", "core_audio", "dispatch", "io_kit", "io_pm", "macos_15_0"] }
