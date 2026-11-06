@@ -16,7 +16,7 @@ ARG ECLUME_CLAUDE_CLI=0
 FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS claudecli-0
 RUN mkdir /out
 
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS claudecli-1
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS claudecli-1
 RUN npm install -g @anthropic-ai/claude-code@2.1.282 \
  && mkdir /out \
  && cp /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe /out/claude
