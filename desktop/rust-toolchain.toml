@@ -2,6 +2,6 @@
 # checks it). rustup reads this file in CI, in the release workflows, in the build image
 # (desktop/build.Dockerfile) and on the workstation. Updates: a Dependabot PR (rust-toolchain).
 [toolchain]
-channel = "1.98.1"
+channel = "1.99.1"
 components = ["clippy", "rustfmt"]
 profile = "minimal"
