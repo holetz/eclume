@@ -13,17 +13,17 @@
 # in bin/claude.exe: only it goes into the final image, without Node. Pinned version.
 ARG ECLUME_CLAUDE_CLI=0
 
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS claudecli-0
+FROM python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9 AS claudecli-0
 RUN mkdir /out
 
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS claudecli-1
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS claudecli-1
 RUN npm install -g @anthropic-ai/claude-code@2.1.282 \
  && mkdir /out \
  && cp /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe /out/claude
 
 FROM claudecli-${ECLUME_CLAUDE_CLI} AS claudecli
 
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS build
+FROM python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9 AS build
 COPY --from=ghcr.io/astral-sh/uv:0.11@sha256:77280f2f771df71f90786c314fe1bbc1e023feac652969bbf139c280babf2eb7 /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -43,7 +43,7 @@ COPY server/src server/src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --package eclume-server --no-editable
 
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
+FROM python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9
 COPY --from=claudecli /out/ /usr/local/bin/
 COPY --from=build /app/.venv /app/.venv
 # uid 1000 owns /srv/eclume on the host. The claude-cli credential does not come from the host: the
