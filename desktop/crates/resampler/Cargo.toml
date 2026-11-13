@@ -8,6 +8,6 @@ license = "MIT"
 publish = false
 
 [dependencies]
-audioadapter-buffers = "2.0"
-rubato = "1.0.1"
+audioadapter-buffers = "5.2"
+rubato = "5.0.1"
 thiserror = "2"
