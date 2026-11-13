@@ -1,7 +1,7 @@
 # The mobile app's Rust: an exact version, the same as desktop/rust-toolchain.toml (deploy/test_pins.py
 # checks it), with the universal APK's Android targets. Update: a Dependabot PR (rust-toolchain).
 [toolchain]
-channel = "1.98.1"
+channel = "1.100.0"
 components = ["clippy", "rustfmt"]
 targets = ["aarch64-linux-android", "armv7-linux-androideabi"]
 profile = "minimal"
