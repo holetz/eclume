@@ -232,7 +232,7 @@ services:
     # The host OOM killer picks another one before the database; the default shm (64 MB) is not enough for parallelism.
     oom_score_adj: -800
     shm_size: 256m
-    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    image: pgvector/pgvector:pg16@sha256:484e838076e04939d27d3e176e91c86eea96236126023be8d3059761122e579f
     environment:
       # Superuser: the schema owner, used only by the `migrate` one-shot (and by the backup). The
       # application connects as eclume_server (docs/standards/code/server-nucleo.md §Papéis do banco).
