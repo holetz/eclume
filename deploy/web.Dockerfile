@@ -8,7 +8,7 @@
 # Build from the repository ROOT (context filtered by deploy/web.Dockerfile.dockerignore):
 #   docker compose -f deploy/docker-compose.prod.yml build caddy
 
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS build
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS build
 # The build's `tsc -b` also checks the tests, which import contracts/fixtures by relative path, and
 # the build generates the API reference (/referencia-api.html) from contracts/openapi-v1.bundled.yaml:
 # the web/ + contracts/ tree is reproduced as in the repository.
@@ -20,7 +20,7 @@ COPY contracts/openapi-v1.bundled.yaml /app/contracts/openapi-v1.bundled.yaml
 COPY web/ ./
 RUN npm run build
 
-FROM caddy:2.11@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
+FROM caddy:2.11@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b
 COPY deploy/web.Caddyfile /etc/caddy/spa.caddy
 COPY <<'EOF' /etc/caddy/Caddyfile
 {
