@@ -49,11 +49,11 @@ tokio = { version = "1", features = ["time", "sync", "macros"] }
 # Wayland `GlobalShortcuts` portal (KDE, GNOME 48+): `global-hotkey` only listens to X11 windows.
 # `async-io`, never `tokio`: with `tokio`, `zbus::block_on` (keyring, notifications) uses its own
 # Tokio runtime and panics when called from a Tokio thread (`async` command).
-ashpd = { version = "0.13", default-features = false, features = ["global_shortcuts", "async-io"] }
+ashpd = { version = "0.14", default-features = false, features = ["global_shortcuts", "async-io"] }
 futures-util = { version = "0.3", default-features = false }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-tauri-winrt-notification = "0.7"
+tauri-winrt-notification = "0.8"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 mac-notification-sys = "0.6"
