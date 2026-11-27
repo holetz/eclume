@@ -6,7 +6,7 @@ name: eclume-test
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    image: pgvector/pgvector:pg16@sha256:484e838076e04939d27d3e176e91c86eea96236126023be8d3059761122e579f
     environment:
       POSTGRES_USER: eclume
       POSTGRES_PASSWORD: eclume
@@ -22,7 +22,7 @@ services:
       retries: 30
 
   redis:
-    image: valkey/valkey:9.1.3-alpine@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
+    image: valkey/valkey:9.2.0-alpine@sha256:c8e2d17498838af5d91e12eb7c11220b3434a7b7131a333e3af52ad5e0b80882
     ports:
       - "127.0.0.1:${ECLUME_TEST_REDIS_PORT:-56479}:6379"
     healthcheck:
